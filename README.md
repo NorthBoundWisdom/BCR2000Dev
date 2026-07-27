@@ -81,6 +81,8 @@ python3 configs/source_roots.py status --format json
 python3 configs/source_roots.py verify
 python3 configs/macos_workflow.py test
 python3 configs/macos_workflow.py build
+python3 configs/codex_schema.py generate  # 首次锁定/更新 schema 后执行
+python3 configs/codex_schema.py verify
 git diff --check
 ```
 

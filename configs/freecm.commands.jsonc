@@ -29,6 +29,32 @@
             "source_roots.lock.jsonc"
           ]
         }
+      },
+      {
+        "id": "codex-schema",
+        "label": "Codex Schema",
+        "description": "Generate Codex app-server JSON schema for CLI 0.145.0",
+        "command": "python3",
+        "args": [
+          "configs/codex_schema.py",
+          "generate"
+        ],
+        "platforms": [
+          "darwin"
+        ]
+      },
+      {
+        "id": "codex-schema-verify",
+        "label": "Verify Codex Schema",
+        "description": "Verify local Codex app-server JSON schema for CLI 0.145.0",
+        "command": "python3",
+        "args": [
+          "configs/codex_schema.py",
+          "verify"
+        ],
+        "platforms": [
+          "darwin"
+        ]
       }
     ],
     "build": [

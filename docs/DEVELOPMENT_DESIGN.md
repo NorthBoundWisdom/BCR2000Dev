@@ -849,6 +849,37 @@ errors.log
 - [ ] M6 — 稳定性与发布
 - [ ] M7 — 完整映射与可配置性
 
+### 15.1 下一阶段开发清单（Todolist）
+
+- [ ] P0-S1（Codex 生命周期）
+  - [ ] App Server 进程启动失败重试策略（指数退避，最多 3 次）
+  - [ ] `stdin/stdout/stderr` 分流与停止时序（先停输入，等终结，再清理）
+  - [ ] 进程异常退出事件带时间戳上报到诊断事件流
+- [ ] P0-S2（Handshake）
+  - [ ] `initialize` / `initialized` 完整链路（含异常重放保护）
+  - [ ] `account/read` + `model/list` 分页读取与筛选
+  - [ ] 约束 `model/list` 回包与 Schema 校验失败直接进入失败态
+- [ ] P0-S3（Turn）
+  - [ ] `thread/start` 与 `thread/resume` 按 slot 单例模型接入
+  - [ ] `turn/start` 填充 `intent`（model/effort/permission/timeout）
+  - [ ] `turn/interrupt` 与 turn 完成事件回收状态
+- [ ] P0-S4（安全审批）
+  - [ ] 硬件 approve/decline 绑定 `slot/request-id/可见性/时间窗`
+  - [ ] `commandExecution` 与 `fileChange` 两类 server request 的一次性响应路径
+  - [ ] 审批被拒绝、超时、重复请求的幂等策略
+- [ ] P0-S5（交付质量）
+  - [ ] 最小集成测试：mock app-server 协议链 + 升级 schema 的合同测试
+  - [ ] `Stop All` 在 `disconnect`/`reconnect` 后行为回归
+  - [ ] 审计日志字段脱敏（token/password/env/prompt）
+
+本轮已完成：Codex/安全基础落地文件已新增。
+
+- `configs/codex_schema.py`：固定 CLI 版本 `0.145.0` 并提供 `generate/verify`。
+- `Sources/BCRAgentCore/CodexProtocol.swift`：JSON-RPC envelope、request-id、权限基元与 turn intent。
+- `Sources/BCRAgentCore/CodexTransport.swift`：JSONL in-memory transport，可用于自动化验收。
+- `Sources/BCRAgentCore/CodexRPCClient.swift`：request-id 跟踪、超时、失效响应与回调分发。
+- `Sources/BCRAgentCore/WorkspacePolicy.swift`：工作目录与 writableRoot 规范化与越界校验。
+
 ### M0 — 工程骨架
 
 交付：
