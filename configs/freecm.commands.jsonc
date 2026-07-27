@@ -1,0 +1,177 @@
+{
+  "version": 2,
+  "commands": {
+    "config": [
+      {
+        "id": "local-swift",
+        "label": "Local Swift",
+        "description": "Prepare local build settings and validate Swift package and plugin commands without downloading dependencies",
+        "command": "python3",
+        "args": [
+          "configs/setup_local_project.py"
+        ],
+        "platforms": [
+          "darwin"
+        ],
+        "default": true,
+        "defaults": {
+          "build": "debug-app",
+          "run": "debug-app",
+          "test": "unit",
+          "package": "release-dmg"
+        },
+        "readiness": {
+          "inputs": [
+            "Package.swift",
+            "configs/app_build.json",
+            "configs/build.local.example.json",
+            "configs/setup_local_project.py",
+            "configs/build_environment.py",
+            "configs/app_build.py",
+            "configs/macos_workflow.py",
+            "assets/AppIcon.png",
+            "build.local.json"
+          ],
+          "outputs": [
+            "build/configured.json"
+          ]
+        }
+      },
+      {
+        "id": "codex-schema",
+        "label": "Codex Schema",
+        "description": "Generate Codex app-server JSON schema for CLI 0.145.0",
+        "command": "python3",
+        "args": [
+          "configs/codex_schema.py",
+          "generate"
+        ],
+        "platforms": [
+          "darwin"
+        ],
+        "defaults": {}
+      },
+      {
+        "id": "codex-schema-verify",
+        "label": "Verify Codex Schema",
+        "description": "Verify local Codex app-server JSON schema for CLI 0.145.0",
+        "command": "python3",
+        "args": [
+          "configs/codex_schema.py",
+          "verify"
+        ],
+        "platforms": [
+          "darwin"
+        ],
+        "defaults": {}
+      }
+    ],
+    "build": [
+      {
+        "id": "debug-app",
+        "label": "Debug App",
+        "description": "Build and ad-hoc sign the local BCRAgentConsole.app with its application icon",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "build",
+          "--configuration",
+          "debug"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      },
+      {
+        "id": "release-app",
+        "label": "Release App",
+        "description": "Build and ad-hoc sign the local BCRAgentConsole.app with its application icon",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "build",
+          "--configuration",
+          "release"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "run": [
+      {
+        "id": "debug-app",
+        "label": "Debug App",
+        "description": "Build and run the app-bundle executable in the FreeCM terminal",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "run"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "test": [
+      {
+        "id": "unit",
+        "label": "Unit Tests",
+        "description": "Run Swift domain, MIDI codec, mapping, and state-machine tests",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "test"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "package": [
+      {
+        "id": "release-dmg",
+        "label": "Release DMG + ZIP",
+        "description": "Build and ad-hoc sign the Release app; create DMG, ZIP, SHA-256 checksums and build records",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "package"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      },
+      {
+        "id": "release-zip",
+        "label": "Release ZIP",
+        "description": "Build and ad-hoc sign a Release ZIP with SHA-256 checksums and a build record",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "package",
+          "--format",
+          "zip"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      },
+      {
+        "id": "developer-id",
+        "label": "Developer ID DMG + ZIP",
+        "description": "Use configured Developer ID identity and notarytool Keychain profile to sign, notarize and package for distribution",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "package",
+          "--distribution",
+          "developer-id"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ]
+  }
+}

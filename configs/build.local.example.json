@@ -1,0 +1,7 @@
+{
+  "environment": {
+    "BCR_SIGNING_IDENTITY": "",
+    "BCR_NOTARY_KEYCHAIN_PROFILE": ""
+  },
+  "path": []
+}

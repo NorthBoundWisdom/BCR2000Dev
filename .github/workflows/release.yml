@@ -1,0 +1,131 @@
+name: macOS release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Build-only version (major.minor.patch); manual runs do not publish'
+        required: true
+        default: '0.1.0'
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - id: version
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
+        run: python3 configs/ci_release.py metadata
+      - run: python3 configs/setup_local_project.py
+      - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
+      - run: python3 configs/macos_workflow.py test
+      - name: Build and package both CPU architectures
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.version }}
+          ARCHIVE_ID: '1'
+        run: python3 configs/macos_workflow.py package --architecture universal
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-universal
+          path: build/package/*
+          if-no-files-found: error
+          compression-level: 0
+  package-smoke:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: configs
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos-universal
+          path: build/package
+      - name: Launch final ZIP and installed DMG payloads on a fresh runner
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          packages = sorted(p for p in Path('build/package').iterdir() if p.suffix in {'.zip', '.dmg'})
+          if len(packages) != 2:
+              raise SystemExit('Expected both ZIP and DMG')
+          for package in packages:
+              subprocess.run(['python3', 'configs/macos_workflow.py', 'check-package', '--archive', str(package)], check=True)
+          PY
+  verify:
+    needs: [package, package-smoke]
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos-universal
+          path: build/package
+      - name: Verify source commit, architectures, metadata and checksums
+        env:
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
+        run: python3 configs/ci_release.py verify
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verified-release
+          path: build/package/*
+          if-no-files-found: error
+          compression-level: 0
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [verify]
+    runs-on: macos-15
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verified-release
+          path: build/package
+      - name: Publish the explicitly pushed version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import subprocess
+          assets = sorted(str(p) for p in Path('build/package').iterdir() if p.is_file())
+          tag = os.environ['RELEASE_TAG']
+          subprocess.run(['gh', 'release', 'create', tag, '--verify-tag', '--title', tag,
+                          '--notes-file', 'configs/RELEASE_NOTES.md', *assets], check=True)
+          PY
