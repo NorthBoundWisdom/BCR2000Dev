@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 5,
+  "cmakeEnvironment": {},
+  "cmakeCacheVariables": {
+    "win": {},
+    "mac": {}
+  },
+  "terminalPath": {
+    "win": [],
+    "mac": []
+  },
+  "AppConfigs": {
+    "DevMode": false,
+    "XCODE_DEVELOPMENT_TEAM": "",
+    "MARKETING_VERSION": "0.1.0",
+    "ARCHIVE_ID": "1"
+  },
+  "depsMode": "pinned",
+  "depsManualPath": {},
+  "dependencies": {}
+}

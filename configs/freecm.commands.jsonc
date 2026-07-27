@@ -1,0 +1,112 @@
+{
+  "version": 2,
+  "commands": {
+    "config": [
+      {
+        "id": "local-swift",
+        "label": "Local Swift",
+        "description": "Prepare the local lock file and validate the Swift package without network access",
+        "command": "python3",
+        "args": [
+          "configs/setup_local_project.py"
+        ],
+        "platforms": [
+          "darwin"
+        ],
+        "default": true,
+        "defaults": {
+          "build": "debug-app",
+          "run": "debug-app",
+          "test": "unit",
+          "package": "release-zip"
+        },
+        "readiness": {
+          "inputs": [
+            "Package.swift",
+            "source_roots.lock.jsonc.in"
+          ],
+          "outputs": [
+            "source_roots.lock.jsonc"
+          ]
+        }
+      }
+    ],
+    "build": [
+      {
+        "id": "debug-app",
+        "label": "Debug App",
+        "description": "Build an unsigned local BCRAgentConsole.app",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "build",
+          "--configuration",
+          "debug"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      },
+      {
+        "id": "release-app",
+        "label": "Release App",
+        "description": "Build an unsigned release BCRAgentConsole.app",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "build",
+          "--configuration",
+          "release"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "run": [
+      {
+        "id": "debug-app",
+        "label": "Debug App",
+        "description": "Build and run the app-bundle executable in the FreeCM terminal",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "run"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "test": [
+      {
+        "id": "unit",
+        "label": "Unit Tests",
+        "description": "Run Swift domain, MIDI codec, mapping, and state-machine tests",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "test"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ],
+    "package": [
+      {
+        "id": "release-zip",
+        "label": "Release ZIP",
+        "description": "Build the release app and create a local unsigned ZIP",
+        "command": "python3",
+        "args": [
+          "configs/macos_workflow.py",
+          "package"
+        ],
+        "configurations": [
+          "local-swift"
+        ]
+      }
+    ]
+  }
+}

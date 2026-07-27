@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# FreeCM local state
+source_roots.lock.jsonc
+.freecm/
+.freecm.workspace.lock
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+Secrets/
+*.local.json
+
+# Runtime output
+Logs/
+logs/
+captures/local/
+*.trace
+tmp/
+
+# Editors
+.idea/
+*.swp
+*~
