@@ -4,10 +4,8 @@ import SwiftUI
 struct HardwareMirrorView: View {
     @ObservedObject var model: ConsoleViewModel
 
-    private let encoderColumns = Array(
-        repeating: GridItem(.flexible(), spacing: 12),
-        count: 8
-    )
+    private let encoderRows = 4
+    private let encodersPerRow = 8
     private let buttonColumns = [
         GridItem(.adaptive(minimum: 118, maximum: 180), spacing: 12),
     ]
@@ -20,8 +18,8 @@ struct HardwareMirrorView: View {
         model.surfaceControls.filter { $0.id.kind == .note }
     }
 
-    private var encoderSlotCount: Int {
-        max(32, controlChanges.count)
+    private var displayedControlChanges: [MIDIControlSnapshot] {
+        Array(controlChanges.prefix(encoderRows * encodersPerRow))
     }
 
     var body: some View {
@@ -39,7 +37,7 @@ struct HardwareMirrorView: View {
             VStack(alignment: .leading, spacing: 5) {
                 Label("HARDWARE MIRROR", systemImage: "dial.medium.fill")
                     .font(.system(.title2, design: .rounded, weight: .bold))
-                Text("实时显示 BCR2000 输入与软件 feedback，布局按实际 MIDI 通道和编号排序。")
+                Text("实时显示 BCR2000 输入与软件 feedback，卡片位置按首次收到控件的顺序固定。")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -101,24 +99,84 @@ struct HardwareMirrorView: View {
                 }
             }
 
-            LazyVGrid(columns: encoderColumns, spacing: 12) {
-                ForEach(0..<encoderSlotCount, id: \.self) { index in
-                    if index < controlChanges.count {
-                        DAWKnob(snapshot: controlChanges[index])
-                    } else {
-                        EmptyDAWKnob(index: index)
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: 9) {
+                    HStack {
+                        Text("BCR2000 · PORT 1")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .tracking(1.2)
+                            .foregroundStyle(.cyan.opacity(0.82))
+                        Spacer()
+                        Text("4 BANKS × 8 ENCODERS")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.56))
                     }
+                    .padding(.horizontal, 12)
+
+                    ForEach(0..<encoderRows, id: \.self) { row in
+                        encoderRow(row)
+                    }
+                }
+                .padding(12)
+                .frame(minWidth: 870)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.035, green: 0.16, blue: 0.27),
+                            Color(red: 0.02, green: 0.075, blue: 0.13),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    in: RoundedRectangle(cornerRadius: 12)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.cyan.opacity(0.28), lineWidth: 1)
                 }
             }
 
             Text(
-                "空位会在旋转新的 CC 控件后自动出现。BCR2000 Preset 可改变 CC/通道，"
-                    + "因此这里显示真实消息身份，而不是猜测固定旋钮编号。"
+                "清空后按实体面板顺序转动旋钮，控件会依次填入 4 × 8 硬件槽位；"
+                    + "之后同一控件始终更新原位置。每个槽位显示实际 CC 与通道。"
             )
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .mirrorPanel()
+    }
+
+    private func encoderRow(_ row: Int) -> some View {
+        HStack(spacing: 7) {
+            VStack(spacing: 2) {
+                Text(row == 0 ? "PUSH" : "ROTARY")
+                Text("\(row + 1)")
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.cyan)
+            }
+            .font(.system(size: 9, weight: .bold, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.56))
+            .frame(width: 42)
+
+            ForEach(0..<encodersPerRow, id: \.self) { column in
+                let index = row * encodersPerRow + column
+                if index < displayedControlChanges.count {
+                    DAWKnob(
+                        snapshot: displayedControlChanges[index],
+                        slotIndex: index,
+                        onAdjust: model.adjustSurfaceControl
+                    )
+                } else {
+                    EmptyDAWKnob(index: index)
+                }
+            }
+        }
+        .padding(7)
+        .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 8))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.white.opacity(0.08))
+        }
     }
 
     private var notePanel: some View {
@@ -244,6 +302,8 @@ private struct MirrorMetric: View {
 
 private struct DAWKnob: View {
     let snapshot: MIDIControlSnapshot
+    let slotIndex: Int
+    let onAdjust: (MIDIControlID, Int) -> Void
 
     private var value: Double {
         snapshot.normalizedValue
@@ -254,7 +314,7 @@ private struct DAWKnob: View {
     }
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 5) {
             ZStack {
                 ForEach(0..<11, id: \.self) { tick in
                     Capsule()
@@ -264,7 +324,7 @@ private struct DAWKnob: View {
                                 : Color.white.opacity(0.13)
                         )
                         .frame(width: 2, height: 6)
-                        .offset(y: -38)
+                        .offset(y: -32)
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
                 }
 
@@ -284,12 +344,12 @@ private struct DAWKnob: View {
                             .stroke(Color.white.opacity(0.10), lineWidth: 1)
                     }
                     .shadow(color: accent.opacity(0.24), radius: 9)
-                    .frame(width: 62, height: 62)
+                    .frame(width: 54, height: 54)
 
                 Capsule()
                     .fill(accent)
                     .frame(width: 3, height: 23)
-                    .offset(y: -12)
+                    .offset(y: -10)
                     .rotationEffect(.degrees(-135 + value * 270))
 
                 Circle()
@@ -299,11 +359,17 @@ private struct DAWKnob: View {
                 Text("\(snapshot.displayedValue)")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.85))
-                    .offset(y: 19)
+                    .frame(width: 36, height: 17)
+                    .overlay {
+                        KnobValueInput { delta in
+                            onAdjust(snapshot.id, delta)
+                        }
+                    }
+                    .offset(y: 16)
             }
-            .frame(width: 88, height: 84)
+            .frame(width: 82, height: 72)
 
-            Text(snapshot.id.description)
+            Text("E\(String(format: "%02d", slotIndex + 1))  CC \(snapshot.id.number)")
                 .font(.caption2.bold().monospaced())
                 .lineLimit(1)
 
@@ -312,16 +378,18 @@ private struct DAWKnob: View {
                 valueBadge("OUT", snapshot.outputValue, color: .purple)
             }
 
-            Text("#\(snapshot.eventCount) events")
-                .font(.system(size: 9, design: .monospaced))
+            Text(
+                "\(slotIndex < 8 ? "PUSH" : "ROTARY") · CH \(snapshot.id.channel + 1) · #\(snapshot.eventCount)"
+            )
+                .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.13), in: RoundedRectangle(cornerRadius: 11))
+        .padding(.vertical, 7)
+        .padding(.horizontal, 4)
+        .frame(width: 94)
+        .background(Color.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
-            RoundedRectangle(cornerRadius: 11)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(accent.opacity(0.32))
         }
     }
@@ -337,13 +405,13 @@ private struct EmptyDAWKnob: View {
     let index: Int
 
     var body: some View {
-        VStack(spacing: 7) {
+        VStack(spacing: 5) {
             ZStack {
                 ForEach(0..<11, id: \.self) { tick in
                     Capsule()
                         .fill(Color.white.opacity(0.055))
                         .frame(width: 2, height: 5)
-                        .offset(y: -38)
+                    .offset(y: -32)
                         .rotationEffect(.degrees(-135 + Double(tick) * 27))
                 }
                 Circle()
@@ -352,30 +420,30 @@ private struct EmptyDAWKnob: View {
                         Circle()
                             .stroke(Color.white.opacity(0.06))
                     }
-                    .frame(width: 62, height: 62)
+                    .frame(width: 54, height: 54)
                 Text("--")
                     .font(.caption.monospaced())
                     .foregroundStyle(.tertiary)
             }
-            .frame(width: 88, height: 84)
+            .frame(width: 82, height: 72)
 
-            Text("ENC \(String(format: "%02d", index + 1))")
+            Text("E\(String(format: "%02d", index + 1)) · --")
                 .font(.caption2.bold().monospaced())
                 .foregroundStyle(.tertiary)
-            Text("等待 CC")
-                .font(.system(size: 9, design: .monospaced))
+            Text("等待 CC 输入")
+                .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .padding(.vertical, 2)
-            Text("未发现")
-                .font(.system(size: 9, design: .monospaced))
+            Text("--")
+                .font(.system(size: 8, design: .monospaced))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity)
-        .background(Color.black.opacity(0.07), in: RoundedRectangle(cornerRadius: 11))
+        .padding(.vertical, 7)
+        .padding(.horizontal, 4)
+        .frame(width: 94)
+        .background(Color.black.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
         .overlay {
-            RoundedRectangle(cornerRadius: 11)
+            RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.white.opacity(0.04))
         }
     }

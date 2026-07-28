@@ -70,6 +70,17 @@ public enum MIDIVoiceMessage: Equatable, Sendable {
             "Note Off ch\(channel + 1) #\(number) = \(velocity)"
         }
     }
+
+    public var midi1Bytes: [UInt8] {
+        switch self {
+        case let .controlChange(channel, number, value):
+            [0xB0 | channel, number, value]
+        case let .noteOn(channel, number, velocity):
+            [0x90 | channel, number, velocity]
+        case let .noteOff(channel, number, velocity):
+            [0x80 | channel, number, velocity]
+        }
+    }
 }
 
 /// Stateless MIDI 1.0 Universal MIDI Packet encoder/decoder.

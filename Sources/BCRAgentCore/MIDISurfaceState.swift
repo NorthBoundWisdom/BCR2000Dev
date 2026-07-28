@@ -59,19 +59,12 @@ public struct MIDIControlSnapshot: Identifiable, Equatable, Sendable {
 
 public struct MIDISurfaceState: Sendable {
     private var snapshots: [MIDIControlID: MIDIControlSnapshot] = [:]
+    private var discoveryOrder: [MIDIControlID] = []
 
     public init() {}
 
     public var controls: [MIDIControlSnapshot] {
-        snapshots.values.sorted {
-            if $0.id.kind != $1.id.kind {
-                return $0.id.kind.rawValue < $1.id.kind.rawValue
-            }
-            if $0.id.channel != $1.id.channel {
-                return $0.id.channel < $1.id.channel
-            }
-            return $0.id.number < $1.id.number
-        }
+        discoveryOrder.compactMap { snapshots[$0] }
     }
 
     @discardableResult
@@ -102,10 +95,12 @@ public struct MIDISurfaceState: Sendable {
             observedAt: observedAt
         )
         snapshots[control] = snapshot
+        discoveryOrder.append(control)
         return snapshot
     }
 
     public mutating func reset() {
         snapshots.removeAll()
+        discoveryOrder.removeAll()
     }
 }

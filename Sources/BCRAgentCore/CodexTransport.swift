@@ -16,12 +16,21 @@ public actor InMemoryJSONLTransport: CodexLineTransport {
     private var waitingInput: [CheckedContinuation<String?, Error>] = []
     private var output: [String] = []
     private var isClosed = false
+    private let maxBufferedLines: Int
 
-    public init() {}
+    public init(maxBufferedLines: Int = 128) {
+        self.maxBufferedLines = max(16, maxBufferedLines)
+    }
 
     public func enqueueIncoming(_ line: String) async {
+        guard !isClosed else {
+            return
+        }
         if waitingInput.isEmpty {
             inputQueue.append(line)
+            if inputQueue.count > maxBufferedLines {
+                inputQueue.removeFirst(inputQueue.count - maxBufferedLines)
+            }
             return
         }
 
@@ -56,6 +65,13 @@ public actor InMemoryJSONLTransport: CodexLineTransport {
         return snapshot
     }
 
+    public func consumeNextSentLine() -> String? {
+        guard !output.isEmpty else {
+            return nil
+        }
+        return output.removeFirst()
+    }
+
     public func close() async {
         isClosed = true
 
@@ -68,5 +84,9 @@ public actor InMemoryJSONLTransport: CodexLineTransport {
 
     public func clear() async {
         output.removeAll()
+    }
+
+    public func clearInput() async {
+        inputQueue.removeAll()
     }
 }

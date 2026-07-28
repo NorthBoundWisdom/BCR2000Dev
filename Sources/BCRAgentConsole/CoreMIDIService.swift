@@ -161,19 +161,26 @@ final class CoreMIDIService: @unchecked Sendable {
                 throw CoreMIDIServiceError.outputUnavailable
             }
 
-            var eventList = MIDIEventList()
-            let packet = MIDIEventListInit(&eventList, ._1_0)
-            var word = MIDI1UMPCodec.encode(message)
-            _ = MIDIEventListAdd(
-                &eventList,
-                MemoryLayout<MIDIEventList>.size,
-                packet,
-                0,
-                1,
-                &word
-            )
+            var packetList = MIDIPacketList()
+            let packet = MIDIPacketListInit(&packetList)
+            let addedPacket = message.midi1Bytes.withUnsafeBufferPointer { bytes -> UnsafeMutablePointer<MIDIPacket>? in
+                guard let baseAddress = bytes.baseAddress else {
+                    return nil
+                }
+                return MIDIPacketListAdd(
+                    &packetList,
+                    MemoryLayout<MIDIPacketList>.size,
+                    packet,
+                    0,
+                    bytes.count,
+                    baseAddress
+                )
+            }
+            guard addedPacket != nil else {
+                throw CoreMIDIServiceError.eventListFull
+            }
 
-            let status = MIDISendEventList(outputPort, destination, &eventList)
+            let status = MIDISend(outputPort, destination, &packetList)
             try Self.check(status, operation: "发送 MIDI Feedback")
         }
     }

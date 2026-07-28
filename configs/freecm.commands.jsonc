@@ -41,7 +41,8 @@
         ],
         "platforms": [
           "darwin"
-        ]
+        ],
+        "defaults": {}
       },
       {
         "id": "codex-schema-verify",
@@ -54,7 +55,8 @@
         ],
         "platforms": [
           "darwin"
-        ]
+        ],
+        "defaults": {}
       }
     ],
     "build": [

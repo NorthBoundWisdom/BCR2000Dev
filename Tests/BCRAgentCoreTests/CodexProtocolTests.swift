@@ -42,6 +42,7 @@ final class CodexProtocolTests: XCTestCase {
             try await Task.sleep(nanoseconds: 10_000_000)
             sentLines = await transport.consumeSentLines()
         }
+
         let request = try CodexEnvelope.decodeJSON(sentLines[0])
         let response = try CodexEnvelope(
             id: request.id,
@@ -57,6 +58,7 @@ final class CodexProtocolTests: XCTestCase {
         } else {
             XCTFail("reply.result 应返回 object payload")
         }
+
         await client.stop()
     }
 
@@ -73,5 +75,58 @@ final class CodexProtocolTests: XCTestCase {
         }
 
         await client.stop()
+    }
+
+    func testModelListPageParsing() throws {
+        let page = try CodexModelListPage(
+            from: .object([
+                "models": .array([
+                    .object([
+                        "id": .string("model-a"),
+                        "displayName": .string("Model A"),
+                        "isDefault": .bool(true),
+                        "defaultReasoningEffort": .string("medium"),
+                        "supportedReasoningEfforts": .array([.string("low"), .string("medium")]),
+                        "hidden": .bool(false)
+                    ]),
+                    .object([
+                        "id": .string("model-b"),
+                        "displayName": .string("Hidden"),
+                        "isDefault": .bool(false),
+                        "hidden": .bool(true)
+                    ])
+                ]),
+                "nextCursor": .string("cursor-2")
+            ])
+        )
+
+        XCTAssertEqual(page.nextCursor, "cursor-2")
+        XCTAssertEqual(page.models.count, 2)
+        XCTAssertEqual(page.models.first?.id, "model-a")
+    }
+
+    func testServerEventParsing() throws {
+        let startedEnvelope = CodexEnvelope(
+            id: .string("1"),
+            method: CodexMethod.turnStarted.rawValue,
+            params: .object([
+                "threadId": .string("t1"),
+                "turnId": .string("u1")
+            ])
+        )
+        let parsed = try XCTUnwrap(try startedEnvelope.asServerEvent())
+        guard case let .turnStarted(threadID, turnID) = parsed else {
+            return XCTFail("expect turnStarted")
+        }
+        XCTAssertEqual(threadID, "t1")
+        XCTAssertEqual(turnID, "u1")
+    }
+
+    func testSanitizeSensitiveLog() {
+        let input = "AUTHORIZATION=token-abc123 API_KEY=super-secret"
+        let scrubbed = CodexLogSanitizer.sanitize(input)
+        XCTAssertNotEqual(input, scrubbed)
+        XCTAssertFalse(scrubbed.contains("token-abc123"))
+        XCTAssertFalse(scrubbed.contains("super-secret"))
     }
 }

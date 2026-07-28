@@ -7,21 +7,27 @@ public enum CodexRPCError: Error, LocalizedError, Sendable {
     case transport(String)
     case responseWithoutRequest(CodexRequestID)
     case requestRejected(code: Int, message: String)
+    case malformedResponse(CodexRequestID)
+    case unexpectedMessageShape(String)
 
     public var errorDescription: String? {
         switch self {
         case .disconnected:
             "Codex 连接未建立"
         case let .timeout(id):
-            "请求 \(id) 超时"
+            "请求 \(id.stringValue) 超时"
         case let .invalidMessage(text):
             "无效消息：\(text)"
         case let .transport(text):
             "传输错误：\(text)"
         case let .responseWithoutRequest(id):
-            "未匹配到请求 ID \(id) 的 pending 回调"
+            "未匹配到请求 ID \(id.stringValue) 的 pending 回调"
         case let .requestRejected(code, message):
             "服务端拒绝（code: \(code)）：\(message)"
+        case let .malformedResponse(id):
+            "响应 ID \(id.stringValue) 不包含 result 或 error"
+        case let .unexpectedMessageShape(text):
+            "异常消息结构：\(text)"
         }
     }
 }
@@ -35,17 +41,20 @@ public actor CodexRPCClient {
 
     private let transport: CodexLineTransport
     private var running = false
-    private var nextRequestID = 1
+    private var nextRequestIDValue = 1
     private var readTask: Task<Void, Never>?
     private var pending: [CodexRequestID: PendingRequest] = [:]
     private let defaultTimeout: Duration
+    private let maxLineLength: Int
 
     public init(
         transport: CodexLineTransport,
-        defaultTimeout: Duration = .seconds(30)
+        defaultTimeout: Duration = .seconds(30),
+        maxLineLength: Int = 16_384
     ) {
         self.transport = transport
         self.defaultTimeout = defaultTimeout
+        self.maxLineLength = max(maxLineLength, 1)
     }
 
     deinit {
@@ -68,11 +77,19 @@ public actor CodexRPCClient {
         readTask?.cancel()
         readTask = nil
 
-        for pending in pending.values {
-            pending.complete(continuation: nil, error: CodexRPCError.disconnected)
+        for request in pending.values {
+            request.complete(error: CodexRPCError.disconnected)
         }
         pending.removeAll()
         await transport.close()
+    }
+
+    public func setEventHandlers(
+        onServerRequest: ServerRequestHandler?,
+        onNotification: NotificationHandler?
+    ) {
+        self.onServerRequest = onServerRequest
+        self.onNotification = onNotification
     }
 
     public func sendRequest(
@@ -83,26 +100,33 @@ public actor CodexRPCClient {
         guard running else {
             throw CodexRPCError.disconnected
         }
-        let id = nextID()
-        let envelope = CodexEnvelope(
-            id: id,
+
+        let requestID = nextRequestID()
+        let line = try CodexEnvelope(
+            id: requestID,
             method: method.rawValue,
-            params: params,
-        )
-        let line = try envelope.encodeJSON()
-        try await transport.sendLine(line)
+            params: params
+        ).encodeJSON()
 
         return try await withCheckedThrowingContinuation { continuation in
             let timeoutValue = timeout ?? defaultTimeout
-            let timeoutTask = Task {
+            let timeoutTask = Task { [requestID, weak self] in
                 try? await Task.sleep(for: timeoutValue)
-                Task { await self.failPendingRequest(id, error: CodexRPCError.timeout(id)) }
+                await self?.failPendingRequest(requestID, error: CodexRPCError.timeout(requestID))
             }
-            pending[id] = PendingRequest(
-                id: id,
+            pending[requestID] = PendingRequest(
+                id: requestID,
                 continuation: continuation,
                 timeoutTask: timeoutTask
             )
+
+            Task { [requestID, line, weak self] in
+                do {
+                    try await self?.transport.sendLine(line)
+                } catch {
+                    await self?.failPendingRequest(requestID, error: CodexRPCError.transport(error.localizedDescription))
+                }
+            }
         }
     }
 
@@ -111,9 +135,13 @@ public actor CodexRPCClient {
         try await transport.sendLine(line)
     }
 
-    private func nextID() -> CodexRequestID {
-        let id = nextRequestID
-        nextRequestID += 1
+    public func sendEnvelope(_ envelope: CodexEnvelope) async throws {
+        try await transport.sendLine(envelope.encodeJSON())
+    }
+
+    private func nextRequestID() -> CodexRequestID {
+        let id = nextRequestIDValue
+        nextRequestIDValue += 1
         return .number(id)
     }
 
@@ -124,82 +152,152 @@ public actor CodexRPCClient {
                     await stop()
                     break
                 }
-                let message = try CodexEnvelope.decodeJSON(line)
+                let trimmed = line.trimmingCharacters(in: .newlines)
+                if trimmed.isEmpty {
+                    continue
+                }
+                if trimmed.utf8.count > maxLineLength {
+                    await stopWithError(CodexRPCError.invalidMessage("行长度超限"))
+                    break
+                }
+
+                let message: CodexEnvelope
+                do {
+                    message = try CodexEnvelope.decodeJSON(trimmed)
+                } catch {
+                    await stopWithError(CodexRPCError.invalidMessage(error.localizedDescription))
+                    break
+                }
+
                 if message.isResponse {
                     await deliverResponse(message)
                     continue
                 }
-                await dispatchServerMessage(message)
+
+                if message.method != nil {
+                    await dispatchServerMessage(message)
+                    continue
+                }
+
+                await stopWithError(CodexRPCError.unexpectedMessageShape("缺少 method/id 结构"))
             } catch is CancellationError {
                 break
             } catch {
-                await stop()
+                await stopWithError(CodexRPCError.transport(error.localizedDescription))
+                break
             }
         }
     }
 
+    private func stopWithError(_ error: CodexRPCError) async {
+        for request in pending.values {
+            request.complete(error: error)
+        }
+        pending.removeAll()
+        await stop()
+    }
+
     private func deliverResponse(_ message: CodexEnvelope) async {
         guard let id = message.id else {
+            await failResponseWithoutId(message)
             return
         }
-        guard let pending = pending.removeValue(forKey: id) else {
+
+        guard let request = pending.removeValue(forKey: id) else {
+            await stopWithError(CodexRPCError.responseWithoutRequest(id))
             return
         }
-        pending.cancelTimeout()
-        if let error = message.error {
-            pending.complete(
-                continuation: nil,
-                error: CodexRPCError.requestRejected(code: error.code, message: error.message)
+        request.cancelTimeout()
+
+        if let errorPayload = message.error {
+            request.complete(
+                error: CodexRPCError.requestRejected(
+                    code: errorPayload.code,
+                    message: errorPayload.message
+                )
             )
             return
         }
-        pending.complete(continuation: nil, error: nil, response: message)
+
+        guard message.result != nil || message.error != nil else {
+            request.complete(error: CodexRPCError.malformedResponse(id))
+            return
+        }
+
+        request.complete(response: message)
+    }
+
+    private func failResponseWithoutId(_ message: CodexEnvelope) async {
+        await stopWithError(CodexRPCError.unexpectedMessageShape("响应缺少 id: \(message)"))
     }
 
     private func dispatchServerMessage(_ message: CodexEnvelope) async {
-        if let handler = onServerRequest, message.id != nil {
-            await handler(message)
+        if message.id != nil {
+            if let handler = onServerRequest {
+                await handler(message)
+            } else {
+                await sendServerRequestError(message)
+            }
             return
         }
-        if let handler = onNotification, message.method != nil {
+
+        if let handler = onNotification {
             await handler(message)
+        }
+    }
+
+    private func sendServerRequestError(_ message: CodexEnvelope) async {
+        guard let id = message.id else { return }
+        let response = CodexEnvelope(
+            id: id,
+            error: CodexErrorPayload(
+                code: -32601,
+                message: "Server request unhandled"
+            )
+        )
+        do {
+            let payload = try response.encodeJSON()
+            try await transport.sendLine(payload)
+        } catch {
+            await stopWithError(CodexRPCError.transport(error.localizedDescription))
         }
     }
 
     private func failPendingRequest(_ id: CodexRequestID, error: Error) async {
-        guard let pending = pending.removeValue(forKey: id) else {
+        guard let request = pending.removeValue(forKey: id) else {
             return
         }
-        pending.cancelTimeout()
-        pending.complete(continuation: nil, error: error)
+        request.cancelTimeout()
+        request.complete(error: error)
     }
 }
 
 private final class PendingRequest: @unchecked Sendable {
-    private let id: CodexRequestID
     private let continuation: CheckedContinuation<CodexEnvelope, Error>
     private let timeoutTask: Task<Void, Never>
+    private var done = false
 
     init(
-        id: CodexRequestID,
+        id _: CodexRequestID,
         continuation: CheckedContinuation<CodexEnvelope, Error>,
         timeoutTask: Task<Void, Never>
     ) {
-        self.id = id
         self.continuation = continuation
         self.timeoutTask = timeoutTask
     }
 
-    func complete(
-        continuation _: CheckedContinuation<CodexEnvelope, Error>? = nil,
-        error: Error?,
-        response: CodexEnvelope? = nil
-    ) {
-        if let error {
-            continuation.resume(throwing: error)
+    func complete(response: CodexEnvelope? = nil, error: Error? = nil) {
+        guard !done else {
             return
         }
-        continuation.resume(returning: response ?? CodexEnvelope())
+        done = true
+        timeoutTask.cancel()
+
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume(returning: response ?? CodexEnvelope())
+        }
     }
 
     func cancelTimeout() {

@@ -33,28 +33,58 @@ final class MIDISurfaceStateTests: XCTestCase {
         XCTAssertEqual(surface.controls[0].displayedValue, 0)
     }
 
-    func testControlsSortByKindChannelAndNumber() {
+    func testControlsKeepFirstDiscoveryOrderWhenCCNumbersDiffer() {
         var surface = MIDISurfaceState()
         surface.observe(
-            .noteOn(channel: 0, number: 1, velocity: 1),
+            .controlChange(channel: 0, number: 57, value: 1),
             direction: .input
         )
         surface.observe(
-            .controlChange(channel: 2, number: 1, value: 1),
+            .controlChange(channel: 0, number: 58, value: 1),
             direction: .input
         )
         surface.observe(
-            .controlChange(channel: 0, number: 9, value: 1),
+            .controlChange(channel: 0, number: 81, value: 1),
+            direction: .input
+        )
+        surface.observe(
+            .controlChange(channel: 0, number: 55, value: 1),
+            direction: .input
+        )
+        surface.observe(
+            .controlChange(channel: 0, number: 55, value: 67),
             direction: .input
         )
 
         XCTAssertEqual(
             surface.controls.map(\.id),
             [
-                MIDIControlID(kind: .controlChange, channel: 0, number: 9),
-                MIDIControlID(kind: .controlChange, channel: 2, number: 1),
-                MIDIControlID(kind: .note, channel: 0, number: 1),
+                MIDIControlID(kind: .controlChange, channel: 0, number: 57),
+                MIDIControlID(kind: .controlChange, channel: 0, number: 58),
+                MIDIControlID(kind: .controlChange, channel: 0, number: 81),
+                MIDIControlID(kind: .controlChange, channel: 0, number: 55),
             ]
         )
+        XCTAssertEqual(surface.controls[3].inputValue, 67)
+    }
+
+    func testFeedbackUpdatesTheExistingHardwareControl() {
+        var surface = MIDISurfaceState()
+        let control = MIDIControlID(kind: .controlChange, channel: 0, number: 55)
+
+        surface.observe(
+            .controlChange(channel: 0, number: 55, value: 40),
+            direction: .input
+        )
+        surface.observe(
+            MIDI1UMPCodec.feedback(control: control, value: 67),
+            direction: .output
+        )
+
+        XCTAssertEqual(surface.controls.count, 1)
+        XCTAssertEqual(surface.controls[0].id, control)
+        XCTAssertEqual(surface.controls[0].inputValue, 40)
+        XCTAssertEqual(surface.controls[0].outputValue, 67)
+        XCTAssertEqual(surface.controls[0].displayedValue, 67)
     }
 }

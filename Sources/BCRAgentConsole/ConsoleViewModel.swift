@@ -243,6 +243,43 @@ final class ConsoleViewModel: ObservableObject {
         diagnostics = []
     }
 
+    func adjustSurfaceControl(_ control: MIDIControlID, by delta: Int) {
+        guard control.kind == .controlChange, delta != 0 else {
+            return
+        }
+        guard let snapshot = surfaceControls.first(where: { $0.id == control }) else {
+            return
+        }
+
+        let boundedDelta = min(max(delta, -127), 127)
+        let adjustedValue = UInt8(
+            min(max(Int(snapshot.displayedValue) + boundedDelta, 0), 127)
+        )
+        guard adjustedValue != snapshot.displayedValue else {
+            return
+        }
+        guard connection.connectedDestination != nil, let midi else {
+            let message = "BCR2000 输出端口未连接，无法回写 CC \(control.number)。"
+            connection.lastError = message
+            notice = message
+            appendDiagnostic("反馈失败：\(message)")
+            return
+        }
+
+        let message = MIDI1UMPCodec.feedback(control: control, value: adjustedValue)
+        do {
+            try midi.send(message)
+            recentFeedback[control] = (adjustedValue, .now)
+            surfaceState.observe(message, direction: .output)
+            surfaceControls = surfaceState.controls
+            appendDiagnostic("UI \(message.diagnosticDescription)")
+        } catch {
+            connection.lastError = error.localizedDescription
+            notice = "旋钮反馈失败：\(error.localizedDescription)"
+            appendDiagnostic("反馈失败：\(error.localizedDescription)")
+        }
+    }
+
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
         let wasConnected = connection.isConnected
         connection = snapshot

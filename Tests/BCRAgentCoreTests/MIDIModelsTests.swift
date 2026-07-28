@@ -15,6 +15,21 @@ final class MIDIModelsTests: XCTestCase {
         XCTAssertEqual(MIDI1UMPCodec.decode(word: word), message)
     }
 
+    func testMIDI1ByteEncodingMatchesVoiceMessage() {
+        XCTAssertEqual(
+            MIDIVoiceMessage.controlChange(channel: 3, number: 21, value: 127).midi1Bytes,
+            [0xB3, 21, 127]
+        )
+        XCTAssertEqual(
+            MIDIVoiceMessage.noteOn(channel: 2, number: 60, velocity: 100).midi1Bytes,
+            [0x92, 60, 100]
+        )
+        XCTAssertEqual(
+            MIDIVoiceMessage.noteOff(channel: 2, number: 60, velocity: 0).midi1Bytes,
+            [0x82, 60, 0]
+        )
+    }
+
     func testNoteOnAndOffRoundTrip() {
         let messages: [MIDIVoiceMessage] = [
             .noteOn(channel: 2, number: 60, velocity: 100),
