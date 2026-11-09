@@ -48,6 +48,7 @@ public enum ParameterDefinitionError: Error, Equatable, LocalizedError, Sendable
     case invalidRange(minimum: Double, maximum: Double)
     case duplicateIdentifier(ParameterID)
     case unknownParameter(ParameterID)
+    case nonFiniteDefault
 
     public var errorDescription: String? {
         switch self {
@@ -56,6 +57,7 @@ public enum ParameterDefinitionError: Error, Equatable, LocalizedError, Sendable
         case let .invalidRange(minimum, maximum): "范围无效：最小值 \(minimum) 必须小于最大值 \(maximum)"
         case let .duplicateIdentifier(id): "参数 ID \(id) 已存在"
         case let .unknownParameter(id): "未知参数 \(id)"
+        case .nonFiniteDefault: "默认值必须是有限数值"
         }
     }
 }
@@ -101,32 +103,36 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let id = try c.decode(ParameterID.self, forKey: .id)
+        func field<T: Decodable>(_ type: T.Type, _ key: CodingKeys, _ fallback: T) throws -> T {
+            c.contains(key) ? try c.decode(type, forKey: key) : fallback
+        }
         self.init(
             id: id, name: try c.decode(String.self, forKey: .name),
-            group: try c.decodeIfPresent(String.self, forKey: .group) ?? "",
-            unit: try c.decodeIfPresent(String.self, forKey: .unit) ?? "",
-            minimum: try c.decodeIfPresent(Double.self, forKey: .minimum) ?? 0,
-            maximum: try c.decodeIfPresent(Double.self, forKey: .maximum) ?? 127,
-            defaultValue: try c.decodeIfPresent(Double.self, forKey: .defaultValue),
-            kind: try c.decodeIfPresent(ParameterKind.self, forKey: .kind) ?? .continuous,
-            agentWritable: try c.decodeIfPresent(Bool.self, forKey: .agentWritable) ?? (id != "arm.enabled")
+            group: try field(String.self, .group, ""),
+            unit: try field(String.self, .unit, ""),
+            minimum: try field(Double.self, .minimum, 0),
+            maximum: try field(Double.self, .maximum, 127),
+            defaultValue: c.contains(.defaultValue) ? try c.decode(Double.self, forKey: .defaultValue) : nil,
+            kind: try field(ParameterKind.self, .kind, .continuous),
+            agentWritable: try field(Bool.self, .agentWritable, (id != "arm.enabled"))
         )
     }
 
     public func validate() throws {
-        guard !id.rawValue.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !id.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ParameterDefinitionError.emptyIdentifier
         }
-        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ParameterDefinitionError.emptyName
         }
-        guard minimum.isFinite, maximum.isFinite, minimum < maximum else {
+        guard minimum.isFinite, maximum.isFinite, minimum < maximum, (maximum - minimum).isFinite else {
             throw ParameterDefinitionError.invalidRange(minimum: minimum, maximum: maximum)
         }
+        guard defaultValue.isFinite else { throw ParameterDefinitionError.nonFiniteDefault }
     }
 
     public var midpoint: Double {
-        (minimum + maximum) / 2
+        minimum + (maximum - minimum) / 2
     }
 
     /// Clamps to the range; toggles snap to `minimum` or `maximum`.
@@ -255,6 +261,19 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         self.assignments = assignments.sorted { $0.control < $1.control }
     }
 
+    private enum CodingKeys: String, CodingKey { case version, name, parameters, assignments }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            version: try container.decode(Int.self, forKey: .version),
+            name: try container.decode(String.self, forKey: .name),
+            parameters: try container.decode([ParameterDefinition].self, forKey: .parameters),
+            assignments: try container.decode([ControlAssignment].self, forKey: .assignments)
+        )
+        try validate()
+    }
+
     public var parameterGroups: [String] {
         var seen = Set<String>()
         return parameters.map(\.group).filter { seen.insert($0).inserted }
@@ -279,9 +298,12 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         if case let .parameter(id) = assignment.target, parameter(id) == nil {
             throw ControlAssignmentError.unknownParameter(id)
         }
-        assignments.removeAll { $0.control == assignment.control }
-        assignments.append(assignment)
-        assignments.sort { $0.control < $1.control }
+        var candidate = self
+        candidate.assignments.removeAll { $0.control == assignment.control }
+        candidate.assignments.append(assignment)
+        candidate.assignments.sort { $0.control < $1.control }
+        try candidate.validate()
+        self = candidate
     }
 
     public mutating func clearAssignment(for control: BCRControlID) {
@@ -293,7 +315,10 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         guard parameter(definition.id) == nil else {
             throw ParameterDefinitionError.duplicateIdentifier(definition.id)
         }
-        parameters.append(definition)
+        var candidate = self
+        candidate.parameters.append(definition)
+        try candidate.validate()
+        self = candidate
     }
 
     public mutating func updateParameter(_ definition: ParameterDefinition) throws {
@@ -303,13 +328,20 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         }
         var definition = definition
         definition.defaultValue = definition.clamp(definition.defaultValue)
-        parameters[position] = definition
+        var candidate = self
+        candidate.parameters[position] = definition
+        try candidate.validate()
+        self = candidate
     }
 
     /// Removes the parameter and every assignment that targets it.
     public mutating func removeParameter(_ id: ParameterID) {
+        let previousGroup = parameter(id)?.group
         parameters.removeAll { $0.id == id }
         assignments.removeAll { $0.target == .parameter(id) }
+        if let previousGroup, !parameterGroups.contains(previousGroup) {
+            assignments.removeAll { $0.target == .resetGroup(previousGroup) }
+        }
     }
 
     /// A free parameter ID with the given prefix, e.g. `custom.3`.

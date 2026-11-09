@@ -54,6 +54,8 @@ struct WorkspaceTabsView: View {
 private struct ParameterListView: View {
     @ObservedObject var model: ConsoleViewModel
     @State private var confirmsDemo = false
+    @State private var confirmsImport = false
+    @State private var pendingImport: SurfaceConfiguration?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -67,6 +69,30 @@ private struct ParameterListView: View {
                 } label: {
                     Label("新建参数", systemImage: "plus")
                 }
+                Button("导入配置…") {
+                    Task {
+                        pendingImport = await model.chooseConfigurationImport()
+                        confirmsImport = pendingImport != nil
+                    }
+                }
+                .accessibilityLabel("导入配置")
+                .accessibilityIdentifier("configuration.import")
+                .help("导入参数与功能分配，确认后替换当前配置")
+                .confirmationDialog("替换当前全部参数与分配？", isPresented: $confirmsImport) {
+                    Button("导入并替换", role: .destructive) {
+                        if let pendingImport { model.installConfiguration(pendingImport) }
+                        pendingImport = nil
+                    }
+                    Button("取消", role: .cancel) { pendingImport = nil }
+                } message: {
+                    if let pendingImport {
+                        Text("“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。")
+                    }
+                }
+                Button("导出配置…") { Task { await model.chooseConfigurationExport() } }
+                    .accessibilityLabel("导出配置")
+                    .accessibilityIdentifier("configuration.export")
+                    .help("导出参数与功能分配，不包含实体映射")
                 Button("恢复示例配置…") { confirmsDemo = true }
                     .confirmationDialog("恢复机械臂示例配置？", isPresented: $confirmsDemo) {
                         Button("恢复", role: .destructive) { model.restoreDemoConfiguration() }

@@ -3,6 +3,8 @@
 import argparse
 import json
 import os
+import plistlib
+import shutil
 from pathlib import Path
 import secrets
 import subprocess
@@ -37,7 +39,25 @@ def main():
         "BCR_INTEGRATION_DIRECTORY": str(directory), "BCR_INTEGRATION_TOKEN": token,
         "BCR_MCP_TOKEN": token, "BCR_MCP_URL": f"http://127.0.0.1:{args.port}/mcp",
     })
-    executable = args.bundle.resolve() / "Contents/MacOS/BCRAgentConsole"
+    # Give this artifact a unique app/process identity so native automation cannot
+    # accidentally resolve the production app with the same bundle identifier/name.
+    bundle = directory / "Integration.app"
+    shutil.copytree(args.bundle.resolve(), bundle)
+    info_path = bundle / "Contents/Info.plist"
+    with info_path.open("rb") as source:
+        info = plistlib.load(source)
+    executable_name = "BCRTest-" + secrets.token_hex(4)
+    original_executable = bundle / "Contents/MacOS" / info["CFBundleExecutable"]
+    executable = original_executable.with_name(executable_name)
+    original_executable.rename(executable)
+    info["CFBundleExecutable"] = executable_name
+    info["CFBundleName"] = executable_name
+    info["CFBundleDisplayName"] = executable_name
+    info["CFBundleIdentifier"] = "dev.bcragentconsole.integration." + executable_name.lower()
+    with info_path.open("wb") as destination:
+        plistlib.dump(info, destination)
+    subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)],
+                   check=True, capture_output=True)
     with (directory / "app.log").open("w") as log:
         app = subprocess.Popen([str(executable), "--integration-test"], env=environment, stdout=log, stderr=subprocess.STDOUT)
         environment["BCR_INTEGRATION_APP_PID"] = str(app.pid)

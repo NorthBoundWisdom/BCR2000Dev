@@ -1,0 +1,60 @@
+# WP4 交接：持久化加固与配置导入导出
+
+本机 main 验收完成，按用户要求不推送；继续 WP5–WP7。
+
+## 改动与取舍
+
+- AgentSlotID/MIDIControlID 手写范围解码；SurfaceConfiguration/HardwareMap 整体校验并拒绝非法编码数据。
+- 结构化问题列表涵盖版本、参数定义、重复 ID/控件、悬空参数、编码器触发、越界 Agent 和未知复位组。
+- 原始文件失败加载不改写，指纹备份精确保留原始字节；保存前保护非法/旧版原文，备份失败禁止覆盖。
+- 原生 NSSavePanel/NSOpenPanel 导入导出；导入验证、确认、先保存后应用，失败保持当前配置/参数/映射。
+- App UI-only ParameterDraftState 处理自动刷新与冲突；持久化错误可直接重试。
+- 配置替换的学习中断发出语义事件；该项原列 WP2，因本包导入流程需要而一并完成，WP2 其他内容不变。
+
+JSON 表示未改变，版本仍为功能配置 v2、硬件映射 v3。校验不会通过 precondition 处理持久化数据。
+文件大小上限 4 MiB；超过上限保留原文件并明确拒绝覆盖。导出不含实体映射、MCP 凭据与运行状态。
+没有自动合并编辑草稿：冲突时需用户明确选择，避免丢失本地未应用内容。
+
+## 验证
+
+- 新增 25 条测试，总计 106 Core + 34 Console = 140 条通过；无新增编译警告。
+- 19 条 BuildWorkflowTests、命令校验、compileall、workflow help、diff 检查通过。
+- App build、原生 startup smoke 通过。
+- 两版 tools/mcp_smoke.py 在隔离运行的真实 Debug App 上通过。
+- 原生 1200×760 内容区完成：MCP 改同 ID 定义时未编辑草稿刷新；编辑草稿发生冲突后采用新值；
+  NSSavePanel 导出；NSOpenPanel 无效导入可见拒绝；有效导入需确认后应用；MCP 读回新默认值，绑定保持。
+- 原生自动化最初遇到同名 App/IME/缺少 SwiftUI AX 标识等选择器问题，已改为唯一测试 App 身份、
+  标准窗口选择、直接 AX 文本设置和语义 help 定位，最终完整流程通过；没有操作用户生产参数。
+
+## 新增测试名单
+
+- PersistenceValidationTests.testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer
+- PersistenceValidationTests.testMIDIDecoderRejectsInvalidChannelsAndNumbers
+- PersistenceValidationTests.testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted
+- PersistenceValidationTests.testWholeConfigurationReportsMultipleConcreteIssues
+- PersistenceValidationTests.testEveryInvalidParameterRuleIsRejected
+- PersistenceValidationTests.testLargeFiniteRangeHasFiniteMidpoint
+- PersistenceValidationTests.testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic
+- PersistenceValidationTests.testDecodedDuplicateParametersAndInvalidAgentSlotsAreRejected
+- PersistenceValidationTests.testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes
+- PersistenceValidationTests.testRemovingLastGroupParameterClearsDanglingResetAction
+- PersistenceValidationTests.testConfigurationReplacementStopsLearningWithVisibleEventAndRejectsInvalidState
+- ConfigurationPersistenceTests.testInvalidLoadPreservesOriginalAndBacksUpExactBytesBeforeLaterSave
+- ConfigurationPersistenceTests.testFailedBackupBlocksSaveAndKeepsInvalidOriginal
+- ConfigurationPersistenceTests.testMigrationIsVisibleAndOriginalIsUntouchedUntilExplicitSave
+- ConfigurationPersistenceTests.testInvalidImportDoesNotReplaceConfigurationParametersOrMapping
+- ConfigurationPersistenceTests.testImportSaveFailureDoesNotReplaceLiveState
+- ConfigurationPersistenceTests.testValidImportExportsOnlyVersionedConfigurationAndKeepsHardwareMap
+- ConfigurationPersistenceTests.testOversizedOriginalIsNeverReplaced
+- ConfigurationPersistenceTests.testInvalidHardwareMapIsPreservedAndNeverFallsBackToMockPreset
+- ConfigurationPersistenceTests.testRetrySaveClearsVisibleStorageFailureWithoutRequiringAnotherEdit
+- ConfigurationPersistenceTests.testClampedDefinitionSaveCanBeAdoptedAsCleanDraft
+- ParameterDraftTests.testPristineDraftRefreshesWhenSameParameterChangesExternally
+- ParameterDraftTests.testDirtyDraftRetainsEditsAndRequiresExplicitConflictResolution
+- ParameterDraftTests.testReloadAndMatchingExternalSaveClearDraft
+- ParameterDraftTests.testExternalRevertClearsConflictWithoutDiscardingLocalEdits
+
+## 发现与审查重点
+
+无新增实机假设，实体行为仍待 R1。重点看校验发生在引擎创建之前、备份失败保护、导入先持久化再替换、
+草稿确认行为与学习中断通知顺序。文件系统外部并发编辑的合并/监听不在本包内。

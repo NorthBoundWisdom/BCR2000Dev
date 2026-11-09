@@ -40,6 +40,15 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         self.entries = entries.sorted { $0.control < $1.control }
     }
 
+    private enum CodingKeys: String, CodingKey { case version, entries }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(version: try container.decode(Int.self, forKey: .version),
+                  entries: try container.decode([HardwareMapEntry].self, forKey: .entries))
+        try validate()
+    }
+
     public var boundCount: Int {
         entries.count
     }

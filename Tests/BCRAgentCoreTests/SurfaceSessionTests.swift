@@ -235,7 +235,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.engine.hardwareMap.boundCount, 0)
     }
 
-    func testAgentTriggerAndFeedbackRunThroughSessionAndSurviveConfigurationReset() async {
+    func testAgentTriggerAndFeedbackRunThroughSessionAndSurviveConfigurationReset() async throws {
         let f = SessionFixture()
         let button = BCRControlID.button(row: 1, 1)
         f.session.press(button)
@@ -246,7 +246,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.mock.value(of: button), 96)
         XCTAssertEqual(f.triggers.count, 1)
         f.session.clearMonitor()
-        f.session.replaceConfiguration(.robotArmDemo())
+        try f.session.replaceConfiguration(.robotArmDemo())
         XCTAssertEqual(f.session.mock.value(of: button), 96)
         XCTAssertEqual(f.session.events.filter { $0.control == button }.count, 1)
     }

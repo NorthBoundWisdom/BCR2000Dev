@@ -204,7 +204,7 @@ final class MCPHTTPServerTests: XCTestCase {
         let model = ConsoleViewModel(stores: stores, startsMIDI: false)
         XCTAssertEqual(model.configuration.version, 2)
         XCTAssertFalse(model.configuration.parameter("arm.enabled")!.agentWritable)
-        XCTAssertTrue(model.notice?.text.contains("迁移") == true)
+        XCTAssertTrue(model.persistenceNotice?.text.contains("迁移") == true)
         XCTAssertEqual(try Data(contentsOf: stores.configuration.fileURL), data)
     }
 

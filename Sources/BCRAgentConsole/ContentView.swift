@@ -7,6 +7,11 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HeaderBar(model: model)
+            if let persistence = model.persistenceNotice {
+                NoticeBanner(notice: persistence, model: model, onDismiss: { model.clearPersistenceNotice() })
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 10)
+            }
             if let notice = model.notice {
                 NoticeBanner(notice: notice, model: model)
                     .padding(.horizontal, 18)
@@ -206,6 +211,7 @@ private struct DeviceStatus: View {
 private struct NoticeBanner: View {
     let notice: ConsoleNotice
     @ObservedObject var model: ConsoleViewModel
+    var onDismiss: (() -> Void)? = nil
 
     private var color: Color {
         switch notice.level {
@@ -227,8 +233,12 @@ private struct NoticeBanner: View {
                 Button("切换到实体") { model.performNoticeAction(.switchToHardware) }
                     .controlSize(.small)
             }
+            if notice.action == .retryConfigurationSave {
+                Button("重试保存") { model.performNoticeAction(.retryConfigurationSave) }
+                    .controlSize(.small)
+            }
             Button {
-                model.clearNotice()
+                if let onDismiss { onDismiss() } else { model.clearNotice() }
             } label: {
                 Image(systemName: "xmark")
             }

@@ -20,6 +20,7 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
     case sourceChanged(DeviceSource)
     case connected(MIDIConnectionSnapshot)
     case touched(BCRControlID)
+    case learningInterruptedByConfiguration(BCRControlID)
     case learned(BCRControlID, MIDIControlID, next: BCRControlID?)
     case learnRejected(BCRControlID, HardwareBindingError)
     case failed(Operation, String)
@@ -169,9 +170,18 @@ public final class SurfaceSession {
         onChange?()
     }
 
-    public func replaceConfiguration(_ configuration: SurfaceConfiguration) {
+    public func replaceConfiguration(_ configuration: SurfaceConfiguration, persist: Bool = true) throws {
+        let configuration = try configuration.migrated()
+        let learning = engine.learnTarget
         engine.replaceConfiguration(configuration)
+        if let learning { onEvent?(.learningInterruptedByConfiguration(learning)) }
         perform(engine.fullFeedback(at: now()))
+        if persist { persistConfiguration() }
+        else { lastConfigurationPersistenceError = nil }
+        onChange?()
+    }
+
+    public func retryConfigurationPersistence() {
         persistConfiguration()
         onChange?()
     }

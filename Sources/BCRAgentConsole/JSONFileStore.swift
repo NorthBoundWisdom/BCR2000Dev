@@ -29,13 +29,14 @@ struct JSONFileStore<Value: Codable & Sendable>: Sendable {
     }
 
     func save(_ value: Value) throws {
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try encoder.encode(value).write(to: fileURL, options: .atomic)
+        try writeEncoded(encoder.encode(value))
+    }
+
+    func writeEncoded(_ data: Data) throws {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: fileURL, options: .atomic)
     }
 }
 

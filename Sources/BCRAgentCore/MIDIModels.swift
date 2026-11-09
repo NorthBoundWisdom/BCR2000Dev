@@ -19,6 +19,19 @@ public struct MIDIControlID: Hashable, Codable, Sendable, CustomStringConvertibl
         self.number = number
     }
 
+    private enum CodingKeys: String, CodingKey { case kind, channel, number }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(MIDIControlKind.self, forKey: .kind)
+        let channel = try container.decode(Int.self, forKey: .channel)
+        let number = try container.decode(Int.self, forKey: .number)
+        guard (0...15).contains(channel), (0...127).contains(number) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: container.codingPath, debugDescription: "Invalid MIDI control channel/number"))
+        }
+        self.init(kind: kind, channel: UInt8(channel), number: UInt8(number))
+    }
+
     public var description: String {
         let prefix = kind == .controlChange ? "CC" : "Note"
         return "\(prefix) \(number) · Ch \(channel + 1)"

@@ -1,4 +1,6 @@
+import AppKit
 import BCRAgentCore
+import UniformTypeIdentifiers
 import Combine
 import Foundation
 
@@ -20,6 +22,7 @@ struct ConsoleNotice: Equatable {
 
     enum Action: Equatable {
         case switchToHardware
+        case retryConfigurationSave
     }
 
     let level: Level
@@ -30,6 +33,7 @@ struct ConsoleNotice: Equatable {
 @MainActor
 final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
+    private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
     var source: DeviceSource { session.source }
     var engine: SurfaceEngine { session.engine }
@@ -39,6 +43,7 @@ final class ConsoleViewModel: ObservableObject {
     var droppedFeedbackCount: Int { session.droppedFeedbackCount }
     @Published private(set) var slots: [AgentSlot]
     @Published private(set) var notice: ConsoleNotice?
+    @Published private(set) var persistenceNotice: ConsoleNotice?
     @Published private(set) var visibleGroup = 1
     @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
     /// Select whichever control was last touched on the device.
@@ -51,42 +56,24 @@ final class ConsoleViewModel: ObservableObject {
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false) {
         slots = AgentStateMachine().slots
 
-        var notices: [String] = []
-        var loadedMap = HardwareMap()
-        do {
-            if let map = try stores.hardwareMap.load() {
-                if map.version == HardwareMap.currentVersion {
-                    loadedMap = map
-                } else {
-                    notices.append("硬件映射版本 \(map.version) 已过期，请在实体模式下重新学习。")
-                }
-            }
-        } catch {
-            notices.append("硬件映射读取失败：\(error.localizedDescription)")
-        }
-
-        var configuration = SurfaceConfiguration.robotArmDemo()
-        do {
-            if let stored = try stores.configuration.load() {
-                if stored.version == SurfaceConfiguration.currentVersion {
-                    configuration = stored
-                } else if stored.version == 1 {
-                    configuration = stored
-                    configuration.version = SurfaceConfiguration.currentVersion
-                    notices.append("功能配置已从 v1 迁移到 v2；机械臂使能不允许 Agent 写入。")
-                } else {
-                    notices.append("功能配置版本 \(stored.version) 不受支持，已载入机械臂示例。")
-                }
-            }
-        } catch {
-            notices.append("功能配置读取失败，已载入机械臂示例：\(error.localizedDescription)")
+        let configurationFile = ProtectedJSONFile.configuration(stores.configuration)
+        self.configurationFile = configurationFile
+        let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)
+        let mapRead = hardwareFile.load()
+        let configRead = configurationFile.load()
+        let loadedMap = mapRead.value
+        let configuration = configRead.value
+        let messages = [mapRead.message, configRead.message].compactMap { $0 }
+        if !messages.isEmpty {
+            persistenceNotice = ConsoleNotice(level: mapRead.failed || configRead.failed ? .error : .info,
+                                              text: messages.joined(separator: " "))
         }
 
         let midi = CoreMIDIService()
         session = SurfaceSession(
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
-            saveHardwareMap: { try stores.hardwareMap.save($0) },
-            saveConfiguration: { try stores.configuration.save($0) }
+            saveHardwareMap: { try hardwareFile.save($0) },
+            saveConfiguration: { try configurationFile.save($0) }
         )
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
@@ -96,9 +83,6 @@ final class ConsoleViewModel: ObservableObject {
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
         if integrationTest {
             notice = ConsoleNotice(level: .info, text: "隔离集成测试：使用独立配置与内存凭据，不连接实体设备。")
-        }
-        if !notices.isEmpty {
-            notice = ConsoleNotice(level: .error, text: notices.joined(separator: " "))
         }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
@@ -186,12 +170,15 @@ final class ConsoleViewModel: ObservableObject {
         }
     }
 
-    func updateParameter(_ definition: ParameterDefinition) {
+    @discardableResult
+    func updateParameter(_ definition: ParameterDefinition) -> ParameterDefinition? {
         do {
             notice = ConsoleNotice(level: .info, text: "参数“\(definition.name)”已更新。")
             try session.updateParameter(definition)
+            return configuration.parameter(definition.id)
         } catch {
             report(error)
+            return nil
         }
     }
 
@@ -201,7 +188,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func restoreDemoConfiguration() {
         notice = ConsoleNotice(level: .info, text: "已恢复机械臂示例配置。")
-        session.replaceConfiguration(.robotArmDemo())
+        do { try session.replaceConfiguration(.robotArmDemo()) }
+        catch { report(error) }
     }
 
     // MARK: Assignments
@@ -251,10 +239,93 @@ final class ConsoleViewModel: ObservableObject {
         notice = nil
     }
 
+    func clearPersistenceNotice() {
+        persistenceNotice = nil
+    }
+
     func performNoticeAction(_ action: ConsoleNotice.Action) {
         switch action {
         case .switchToHardware:
             selectSource(.hardware)
+        case .retryConfigurationSave:
+            session.retryConfigurationPersistence()
+            if session.lastConfigurationPersistenceError == nil {
+                notice = ConsoleNotice(level: .info, text: "配置已保存。")
+            }
+        }
+    }
+
+    // MARK: Configuration transfer
+
+    func readConfiguration(from url: URL) throws -> SurfaceConfiguration {
+        try ConfigurationTransfer.decode(Data(contentsOf: url, options: .mappedIfSafe))
+    }
+
+    @discardableResult
+    func installConfiguration(_ candidate: SurfaceConfiguration) -> Bool {
+        do {
+            let candidate = try candidate.migrated()
+            // Commit the durable configuration before changing the live engine.
+            try configurationFile.save(candidate)
+            notice = ConsoleNotice(level: .info, text: "已导入“\(candidate.name)”；实体映射保留。")
+            try session.replaceConfiguration(candidate, persist: false)
+            return true
+        } catch { report(error); return false }
+    }
+
+    private func presentConfigurationPanel(_ panel: NSSavePanel) async -> NSApplication.ModalResponse? {
+        guard let window = NSApp.windows.first(where: {
+            $0.isVisible && $0.canBecomeMain && $0.attachedSheet == nil
+        }) else {
+            notice = ConsoleNotice(level: .error, text: "无法打开配置面板：请先关闭其他对话框。")
+            return nil
+        }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        return await withCheckedContinuation { continuation in
+            panel.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+        }
+    }
+
+    func chooseConfigurationImport() async -> SurfaceConfiguration? {
+        let panel = NSOpenPanel()
+        panel.title = "导入参数与功能分配"
+        panel.prompt = "导入"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        let response = await presentConfigurationPanel(panel)
+        guard response == .OK, let url = panel.url else { return nil }
+        do { return try readConfiguration(from: url) }
+        catch {
+            notice = ConsoleNotice(level: .error, text: "配置导入失败：\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func exportConfiguration(to url: URL) throws {
+        let data = try ConfigurationTransfer.encode(configuration)
+        if url.standardizedFileURL == configurationFile.store.fileURL.standardizedFileURL {
+            try configurationFile.save(configuration)
+        } else {
+            try JSONFileStore<SurfaceConfiguration>(fileURL: url).writeEncoded(data)
+        }
+    }
+
+    func chooseConfigurationExport() async {
+        let panel = NSSavePanel()
+        panel.title = "导出参数与功能分配"
+        panel.prompt = "导出"
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "surface-configuration.json"
+        panel.canCreateDirectories = true
+        let response = await presentConfigurationPanel(panel)
+        guard response == .OK, let url = panel.url else { return }
+        do {
+            try exportConfiguration(to: url)
+            notice = ConsoleNotice(level: .info, text: "配置已导出，不含实体映射。")
+        } catch {
+            notice = ConsoleNotice(level: .error, text: "配置导出失败：\(error.localizedDescription)")
         }
     }
 
@@ -287,6 +358,10 @@ final class ConsoleViewModel: ObservableObject {
             if control.section == .pushEncoder || control.section == .pushEncoderButton {
                 selectGroup(control.row)
             }
+        case let .learningInterruptedByConfiguration(control):
+            let previous = notice?.text ?? ""
+            notice = ConsoleNotice(level: notice?.level ?? .info,
+                text: previous + " 配置替换已停止 \(control.shortName) 的学习。", action: notice?.action)
         case let .learned(control, midi, next):
             selectedControl = next ?? control
             notice = ConsoleNotice(level: .info, text: next.map {
@@ -301,7 +376,8 @@ final class ConsoleViewModel: ObservableObject {
             case .hardwareMapPersistence: prefix = "硬件映射保存失败"
             case .configurationPersistence: prefix = "功能配置保存失败"
             }
-            notice = ConsoleNotice(level: .error, text: "\(prefix)：\(message)")
+            notice = ConsoleNotice(level: .error, text: "\(prefix)：\(message)",
+                action: operation == .configurationPersistence ? .retryConfigurationSave : nil)
         }
     }
 

@@ -262,13 +262,13 @@ private struct FunctionSection: View {
 private struct ParameterEditor: View {
     @ObservedObject var model: ConsoleViewModel
     let definition: ParameterDefinition
-    @State private var draft: ParameterDefinition
+    @State private var draftState: ParameterDraftState
     @State private var confirmsRemoval = false
 
     init(model: ConsoleViewModel, definition: ParameterDefinition) {
         self.model = model
         self.definition = definition
-        _draft = State(initialValue: definition)
+        _draftState = State(initialValue: ParameterDraftState(definition))
     }
 
     var body: some View {
@@ -302,27 +302,48 @@ private struct ParameterEditor: View {
                 }
             }
 
+            if let conflict = draftState.conflict {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("参数已在其他位置修改，请处理草稿冲突。").foregroundStyle(.orange)
+                    HStack {
+                        Button("采用新值") { draftState.reload(conflict) }
+                            .accessibilityLabel("采用新值")
+                            .accessibilityIdentifier("parameter.adoptExternal")
+                            .help("采用外部参数定义，放弃当前草稿")
+                        Button("保留草稿") { draftState.keepDraft() }
+                            .accessibilityLabel("保留草稿")
+                            .accessibilityIdentifier("parameter.keepDraft")
+                            .help("保留当前草稿，稍后应用将覆盖外部修改")
+                    }
+                    Text("保留草稿后再应用，将覆盖新定义。").foregroundStyle(.secondary)
+                }
+                .font(.caption)
+                .controlSize(.small)
+            }
+
             Form {
-                TextField("名称", text: $draft.name)
-                TextField("分组", text: $draft.group)
-                TextField("单位", text: $draft.unit)
-                Picker("类型", selection: $draft.kind) {
+                TextField("名称", text: $draftState.value.name)
+                TextField("分组", text: $draftState.value.group)
+                TextField("单位", text: $draftState.value.unit)
+                Picker("类型", selection: $draftState.value.kind) {
                     ForEach(ParameterKind.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
-                TextField("最小值", value: $draft.minimum, format: .number)
-                TextField("最大值", value: $draft.maximum, format: .number)
-                TextField("默认值", value: $draft.defaultValue, format: .number)
-                Toggle("允许 Agent 写入", isOn: $draft.agentWritable)
+                TextField("最小值", value: $draftState.value.minimum, format: .number)
+                TextField("最大值", value: $draftState.value.maximum, format: .number)
+                TextField("默认值", value: $draftState.value.defaultValue, format: .number)
+                Toggle("允许 Agent 写入", isOn: $draftState.value.agentWritable)
             }
             .formStyle(.columns)
             .controlSize(.small)
 
             HStack {
-                Button("应用修改") { model.updateParameter(draft) }
+                Button("应用修改") {
+                    if let applied = model.updateParameter(draftState.value) { draftState.reload(applied) }
+                }
                     .buttonStyle(.borderedProminent)
-                    .disabled(draft == definition)
-                Button("还原") { draft = definition }
-                    .disabled(draft == definition)
+                    .disabled(!draftState.isDirty || draftState.conflict != nil)
+                Button("还原") { draftState.reload(definition) }
+                    .disabled(!draftState.isDirty && draftState.conflict == nil)
                 Spacer()
                 Button("删除参数…", role: .destructive) { confirmsRemoval = true }
                     .confirmationDialog("删除参数“\(definition.name)”？", isPresented: $confirmsRemoval) {
@@ -334,5 +355,6 @@ private struct ParameterEditor: View {
             .controlSize(.small)
         }
         .panelStyle()
+        .onChange(of: definition) { _, updated in draftState.receive(updated) }
     }
 }
