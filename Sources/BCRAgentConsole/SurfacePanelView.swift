@@ -51,19 +51,50 @@ extension ConsoleViewModel {
     }
 }
 
+/// Panel geometry at a given scale. Every panel dimension derives from these base values so the
+/// overall size is predictable: `naturalSize * scale`.
+struct PanelMetrics: Equatable {
+    /// Natural panel size at scale 1, used by the window layout to pick a scale.
+    static let naturalSize = CGSize(width: 800, height: 755)
+    static let scaleRange: ClosedRange<CGFloat> = 1...1.6
+
+    var scale: CGFloat = 1
+
+    func callAsFunction(_ value: CGFloat) -> CGFloat {
+        value * scale
+    }
+
+    func font(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
+        .system(size: size * scale, weight: weight, design: design)
+    }
+}
+
+private struct PanelMetricsKey: EnvironmentKey {
+    static let defaultValue = PanelMetrics()
+}
+
+extension EnvironmentValues {
+    var panelMetrics: PanelMetrics {
+        get { self[PanelMetricsKey.self] }
+        set { self[PanelMetricsKey.self] = newValue }
+    }
+}
+
 struct SurfacePanelView: View {
     @ObservedObject var model: ConsoleViewModel
+    @Environment(\.panelMetrics) private var m
 
-    private let spacing: CGFloat = 6
+    // Base widths: 18 + 28 + 6 + 8 × 74 + 7 × 6 + 16 + 80 + 18 = 800 (PanelMetrics.naturalSize).
+    private var spacing: CGFloat { m(6) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: m(12)) {
             header
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: m(16)) {
+                VStack(alignment: .leading, spacing: m(10)) {
                     row("组\(model.visibleGroup)") {
                         ForEach(1...8, id: \.self) { index in
-                            VStack(spacing: 4) {
+                            VStack(spacing: m(4)) {
                                 knob(.pushEncoder(group: model.visibleGroup, index))
                                 pushButton(.pushEncoderButton(group: model.visibleGroup, index))
                             }
@@ -85,34 +116,38 @@ struct SurfacePanelView: View {
                 sideColumn
             }
         }
-        .padding(18)
-        .background(
-            LinearGradient(colors: [Theme.chassisTop, Theme.chassisBottom], startPoint: .top, endPoint: .bottom),
-            in: RoundedRectangle(cornerRadius: 18)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 18).stroke(Color.white.opacity(0.12))
+        .padding(m(18))
+        .frame(width: PanelMetrics.naturalSize.width * m.scale, alignment: .leading)
+        .background {
+            // Shadow the chassis shape, not the full subtree of controls and native views.
+            // A subtree-wide shadow stalls WindowServer composition during window movement.
+            RoundedRectangle(cornerRadius: m(18))
+                .fill(LinearGradient(colors: [Theme.chassisTop, Theme.chassisBottom], startPoint: .top, endPoint: .bottom))
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
         }
-        .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+        .overlay {
+            RoundedRectangle(cornerRadius: m(18)).stroke(Color.white.opacity(0.12))
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: m(10)) {
             Text("BCR2000")
-                .font(.system(size: 17, weight: .heavy, design: .rounded))
-                .tracking(2)
+                .font(m.font(17, weight: .heavy, design: .rounded))
+                .tracking(2 * m.scale)
             Text(model.source == .mock ? "MOCK DEVICE" : "HARDWARE MIRROR")
-                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .font(m.font(9.5, weight: .bold, design: .monospaced))
+                .padding(.horizontal, m(7))
+                .padding(.vertical, m(3))
                 .foregroundStyle(model.source == .mock ? Theme.parameter : Theme.selection)
                 .background((model.source == .mock ? Theme.parameter : Theme.selection).opacity(0.14), in: Capsule())
             Spacer()
             Text(model.source == .mock
                 ? "拖动旋钮 / 按下按键 = 模拟实体操作"
                 : "拖动旋钮 / 按下按键 = 软件修改并回写硬件")
-                .font(.caption2)
+                .font(m.font(10))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
     }
 
@@ -120,40 +155,40 @@ struct SurfacePanelView: View {
         Rectangle()
             .fill(Color.white.opacity(0.06))
             .frame(height: 1)
-            .padding(.leading, 34)
+            .padding(.leading, m(34))
     }
 
     private func row<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .top, spacing: spacing) {
             Text(title)
-                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .font(m.font(9.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
-                .frame(width: 28)
-                .padding(.top, 24)
+                .frame(width: m(28))
+                .padding(.top, m(24))
             content()
         }
     }
 
     private var sideColumn: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: m(10)) {
             Text("GROUP")
-                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                .font(m.font(8.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.fixed(34)), GridItem(.fixed(34))], spacing: 6) {
+            LazyVGrid(columns: [GridItem(.fixed(m(34))), GridItem(.fixed(m(34)))], spacing: m(6)) {
                 ForEach(BCRLayout.encoderGroups, id: \.self) { group in
                     Button {
                         model.selectGroup(group)
                     } label: {
-                        VStack(spacing: 3) {
+                        VStack(spacing: m(3)) {
                             Capsule()
                                 .fill(group == model.visibleGroup ? Theme.led : Theme.ledOff)
-                                .frame(width: 18, height: 3)
+                                .frame(width: m(18), height: m(3))
                                 .shadow(color: group == model.visibleGroup ? Theme.led : .clear, radius: 3)
                             Text("\(group)")
-                                .font(.caption.bold().monospacedDigit())
+                                .font(m.font(10, weight: .bold).monospacedDigit())
                         }
-                        .frame(width: 34, height: 30)
-                        .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 6))
+                        .frame(width: m(34), height: m(30))
+                        .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: m(6)))
                     }
                     .buttonStyle(.plain)
                 }
@@ -162,16 +197,16 @@ struct SurfacePanelView: View {
                 ? "切换 Mock 设备的编码器组（与实体一样不发送 MIDI）"
                 : "实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。")
 
-            Spacer(minLength: 24)
+            Spacer(minLength: m(24))
 
             Text("USER")
-                .font(.system(size: 8.5, weight: .bold, design: .monospaced))
+                .font(m.font(8.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
-            VStack(spacing: 6) {
+            VStack(spacing: m(6)) {
                 ForEach(1...4, id: \.self) { index in pad(.userButton(index)) }
             }
         }
-        .frame(width: 80)
+        .frame(width: m(80))
     }
 
     private func knob(_ control: BCRControlID) -> some View {
@@ -203,17 +238,18 @@ struct SurfacePanelView: View {
 
 private struct CellChrome: ViewModifier {
     let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
 
     func body(content: Content) -> some View {
         content
-            .frame(width: 74)
-            .padding(.vertical, 5)
+            .frame(width: m(74))
+            .padding(.vertical, m(5))
             .background(
                 presentation.isSelected ? Theme.selection.opacity(0.14) : Color.black.opacity(0.18),
-                in: RoundedRectangle(cornerRadius: 9)
+                in: RoundedRectangle(cornerRadius: m(9))
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 9)
+                RoundedRectangle(cornerRadius: m(9))
                     .stroke(
                         presentation.isLearnTarget ? Theme.learn
                             : (presentation.isSelected ? Theme.selection : Color.white.opacity(0.04)),
@@ -223,9 +259,9 @@ private struct CellChrome: ViewModifier {
             .overlay(alignment: .topTrailing) {
                 if !presentation.isBound {
                     Image(systemName: "questionmark.circle.fill")
-                        .font(.system(size: 9))
+                        .font(m.font(9))
                         .foregroundStyle(.orange)
-                        .padding(4)
+                        .padding(m(4))
                         .help("此控件尚未学习 MIDI 身份")
                 }
             }
@@ -234,33 +270,35 @@ private struct CellChrome: ViewModifier {
 
 private struct CellLabels: View {
     let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
 
     var body: some View {
         VStack(spacing: 1) {
             Text(presentation.control.shortName)
-                .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                .font(m.font(8.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.tertiary)
             Text(presentation.label ?? "未分配")
-                .font(.system(size: 10, weight: .semibold))
+                .font(m.font(10, weight: .semibold))
                 .foregroundStyle(presentation.label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(presentation.detail ?? "\(presentation.value)")
-                .font(.system(size: 9, design: .monospaced))
+                .font(m.font(9, design: .monospaced))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 3)
+        .padding(.horizontal, m(3))
     }
 }
 
 private struct KnobCell: View {
     let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
     let onTouch: () -> Void
     let onTurn: (Int) -> Void
 
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: m(3)) {
             ZStack {
                 LEDRing(value: presentation.value)
                 Circle()
@@ -272,16 +310,16 @@ private struct KnobCell: View {
                         )
                     )
                     .overlay { Circle().stroke(Color.white.opacity(0.12)) }
-                    .frame(width: 38, height: 38)
+                    .frame(width: m(38), height: m(38))
                     .shadow(color: .black.opacity(0.6), radius: 3, y: 2)
                 Capsule()
                     .fill(Color.white.opacity(0.85))
-                    .frame(width: 2.5, height: 11)
-                    .offset(y: -12)
+                    .frame(width: m(2.5), height: m(11))
+                    .offset(y: m(-12))
                     .rotationEffect(.degrees(-135 + Double(presentation.value) / 127 * 270))
                 KnobValueInput(onTouch: onTouch, onDelta: onTurn)
             }
-            .frame(width: 60, height: 60)
+            .frame(width: m(60), height: m(60))
             CellLabels(presentation: presentation)
         }
         .modifier(CellChrome(presentation: presentation))
@@ -296,6 +334,7 @@ private struct KnobCell: View {
 
 private struct LEDRing: View {
     let value: UInt8
+    @Environment(\.panelMetrics) private var m
     private let count = 13
 
     var body: some View {
@@ -304,9 +343,9 @@ private struct LEDRing: View {
             ForEach(0..<count, id: \.self) { led in
                 Circle()
                     .fill(led < lit ? Theme.led : Theme.ledOff)
-                    .frame(width: 4, height: 4)
+                    .frame(width: m(4), height: m(4))
                     .shadow(color: led < lit ? Theme.led.opacity(0.9) : .clear, radius: 2.5)
-                    .offset(y: -27)
+                    .offset(y: m(-27))
                     .rotationEffect(.degrees(-135 + Double(led) * 270 / Double(count - 1)))
             }
         }
@@ -336,13 +375,14 @@ private struct PressGesture: ViewModifier {
 
 private struct PadCell: View {
     let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
     let onPress: () -> Void
     let onRelease: () -> Void
     @State private var isDown = false
 
     var body: some View {
-        VStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 6)
+        VStack(spacing: m(4)) {
+            RoundedRectangle(cornerRadius: m(6))
                 .fill(
                     LinearGradient(
                         colors: isDown ? [Color(white: 0.22), Color(white: 0.16)] : [Color(white: 0.30), Color(white: 0.18)],
@@ -350,15 +390,15 @@ private struct PadCell: View {
                         endPoint: .bottom
                     )
                 )
-                .overlay { RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.12)) }
+                .overlay { RoundedRectangle(cornerRadius: m(6)).stroke(Color.white.opacity(0.12)) }
                 .overlay {
                     let level = Double(presentation.value) / 127
                     Capsule()
                         .fill(level > 0 ? Theme.led.opacity(0.35 + 0.65 * level) : Theme.ledOff)
-                        .frame(width: 24, height: 4)
+                        .frame(width: m(24), height: m(4))
                         .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 4)
                 }
-                .frame(width: 52, height: 28)
+                .frame(width: m(52), height: m(28))
                 .scaleEffect(isDown ? 0.95 : 1)
                 .modifier(PressGesture(isDown: $isDown, onPress: onPress, onRelease: onRelease))
             CellLabels(presentation: presentation)
@@ -376,20 +416,21 @@ private struct PadCell: View {
 
 private struct PushButtonCell: View {
     let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
     let onPress: () -> Void
     let onRelease: () -> Void
     @State private var isDown = false
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: m(3)) {
             Image(systemName: "arrow.down.to.line.compact")
-                .font(.system(size: 8, weight: .bold))
+                .font(m.font(8, weight: .bold))
             Text(presentation.label ?? "PUSH")
-                .font(.system(size: 8.5, weight: .semibold))
+                .font(m.font(8.5, weight: .semibold))
                 .lineLimit(1)
         }
         .foregroundStyle(presentation.label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
-        .frame(width: 70, height: 16)
+        .frame(width: m(70), height: m(16))
         .background(isDown ? Color.white.opacity(0.16) : Color.black.opacity(0.3), in: Capsule())
         .overlay {
             Capsule().stroke(

@@ -23,31 +23,49 @@ struct ArmPreviewView: View {
                 speed: value("arm.speed") ?? 0,
                 enabled: (value("arm.enabled") ?? 1) >= 0.5
             )
-            HStack(alignment: .top, spacing: 16) {
-                SideView(pose: pose)
-                    .frame(height: 240)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+            // Side by side when wide enough, otherwise the side view stacks above the readouts.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    sideView(pose).frame(minWidth: 260)
+                    details(pose)
+                }
                 VStack(spacing: 12) {
-                    TopView(pose: pose)
-                        .frame(width: 150, height: 150)
-                        .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
-                    VStack(alignment: .leading, spacing: 4) {
-                        readout("J5 腕旋", pose.wristRoll, "°")
-                        readout("J6 末端", pose.toolRoll, "°")
-                        readout("夹爪", pose.gripper, "%")
-                        readout("速度", pose.speed, "%")
-                        Text(pose.enabled ? "● 已使能" : "○ 未使能（B2-1 切换）")
-                            .font(.caption.bold())
-                            .foregroundStyle(pose.enabled ? .green : .orange)
+                    sideView(pose)
+                    HStack(alignment: .top, spacing: 12) {
+                        details(pose)
+                        Spacer(minLength: 0)
                     }
-                    .frame(width: 150, alignment: .leading)
                 }
             }
         } else {
             Text("当前配置不含 arm.j1–arm.j4 参数。可在“参数”页“恢复示例配置”查看机械臂示例。")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 120)
+        }
+    }
+
+    private func sideView(_ pose: ArmPose) -> some View {
+        SideView(pose: pose)
+            .frame(height: 240)
+            .frame(maxWidth: .infinity)
+            .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func details(_ pose: ArmPose) -> some View {
+        VStack(spacing: 12) {
+            TopView(pose: pose)
+                .frame(width: 150, height: 150)
+                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                readout("J5 腕旋", pose.wristRoll, "°")
+                readout("J6 末端", pose.toolRoll, "°")
+                readout("夹爪", pose.gripper, "%")
+                readout("速度", pose.speed, "%")
+                Text(pose.enabled ? "● 已使能" : "○ 未使能（B2-1 切换）")
+                    .font(.caption.bold())
+                    .foregroundStyle(pose.enabled ? .green : .orange)
+            }
+            .frame(width: 150, alignment: .leading)
         }
     }
 

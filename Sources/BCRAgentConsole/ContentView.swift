@@ -13,22 +13,98 @@ struct ContentView: View {
                     .padding(.bottom, 10)
             }
             Divider()
-            HStack(spacing: 0) {
-                ScrollView([.vertical, .horizontal]) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        SurfacePanelView(model: model)
-                        WorkspaceTabsView(model: model)
-                    }
-                    .padding(18)
-                    .frame(minWidth: 860)
+            GeometryReader { proxy in
+                let inspectorWidth = min(max(proxy.size.width * 0.24, 330), 400)
+                HStack(spacing: 0) {
+                    SurfaceArea(model: model)
+                    Divider()
+                    ControlInspectorView(model: model)
+                        .frame(width: inspectorWidth)
                 }
-                Divider()
-                ControlInspectorView(model: model)
-                    .frame(width: 330)
             }
         }
         .background(Theme.background)
         .preferredColorScheme(.dark)
+    }
+}
+
+/// Chooses the panel scale and arrangement for the space left of the inspector.
+///
+/// - Side by side: the workspace sits right of the panel when at least `minWorkspace` points
+///   remain; the panel grows up to the available height.
+/// - Stacked: the workspace sits below; the panel grows with width but leaves `peek` points of
+///   the workspace visible.
+/// Either way the content is centered and only scrolls horizontally below the natural width.
+struct ConsoleLayout: Equatable {
+    static let padding: CGFloat = 18
+    static let gap: CGFloat = 16
+    static let minWorkspace: CGFloat = 400
+    static let maxWorkspace: CGFloat = 720
+    static let peek: CGFloat = 180
+
+    let scale: CGFloat
+    let isSideBySide: Bool
+    let workspaceWidth: CGFloat
+
+    var panelWidth: CGFloat {
+        PanelMetrics.naturalSize.width * scale
+    }
+
+    var contentWidth: CGFloat {
+        isSideBySide ? panelWidth + Self.gap + workspaceWidth : panelWidth
+    }
+
+    init(available: CGSize) {
+        let natural = PanelMetrics.naturalSize
+        let range = PanelMetrics.scaleRange
+        let width = available.width - Self.padding * 2
+        let height = available.height - Self.padding * 2
+        func clamp(_ value: CGFloat) -> CGFloat {
+            min(max(value, range.lowerBound), range.upperBound)
+        }
+
+        let sideScale = clamp(min((width - Self.gap - Self.minWorkspace) / natural.width, height / natural.height))
+        let remaining = width - Self.gap - natural.width * sideScale
+        if remaining >= Self.minWorkspace {
+            scale = sideScale
+            isSideBySide = true
+            workspaceWidth = min(remaining, Self.maxWorkspace)
+        } else {
+            scale = clamp(min(width / natural.width, (height - Self.peek) / natural.height))
+            isSideBySide = false
+            workspaceWidth = natural.width * scale
+        }
+    }
+}
+
+private struct SurfaceArea: View {
+    @ObservedObject var model: ConsoleViewModel
+
+    var body: some View {
+        GeometryReader { proxy in
+            let layout = ConsoleLayout(available: proxy.size)
+            ScrollView([.vertical, .horizontal]) {
+                Group {
+                    if layout.isSideBySide {
+                        HStack(alignment: .top, spacing: ConsoleLayout.gap) {
+                            SurfacePanelView(model: model)
+                            WorkspaceTabsView(model: model)
+                                .frame(width: layout.workspaceWidth)
+                        }
+                    } else {
+                        VStack(spacing: ConsoleLayout.gap) {
+                            SurfacePanelView(model: model)
+                            WorkspaceTabsView(model: model)
+                                .frame(width: layout.workspaceWidth)
+                        }
+                    }
+                }
+                .environment(\.panelMetrics, PanelMetrics(scale: layout.scale))
+                .padding(ConsoleLayout.padding)
+                // Centered whenever the window is wider than the content.
+                .frame(minWidth: proxy.size.width, alignment: .top)
+            }
+        }
     }
 }
 

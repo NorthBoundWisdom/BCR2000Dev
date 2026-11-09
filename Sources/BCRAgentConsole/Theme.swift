@@ -42,6 +42,7 @@ struct PanelStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay {
                 RoundedRectangle(cornerRadius: 12).stroke(Theme.stroke)

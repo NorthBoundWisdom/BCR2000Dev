@@ -101,48 +101,79 @@ private struct ParameterRow: View {
     let definition: ParameterDefinition
 
     var body: some View {
-        let value = model.engine.value(of: definition.id) ?? definition.defaultValue
-        HStack(spacing: 12) {
-            Text(definition.name)
-                .frame(width: 120, alignment: .leading)
-                .lineLimit(1)
-            if definition.kind == .toggle {
+        // One line when there is room for a usable slider, otherwise slider on its own line.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                name.frame(width: 120, alignment: .leading)
+                control.frame(minWidth: 160)
+                valueText.frame(width: 80, alignment: .trailing)
+                chips.frame(width: 130, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    name
+                    Spacer(minLength: 4)
+                    valueText
+                    chips
+                }
+                control
+            }
+        }
+    }
+
+    private var value: Double {
+        model.engine.value(of: definition.id) ?? definition.defaultValue
+    }
+
+    private var name: some View {
+        Text(definition.name).lineLimit(1)
+    }
+
+    private var valueText: some View {
+        Text(definition.formatted(value))
+            .font(.system(.body, design: .monospaced))
+            .foregroundStyle(Theme.parameter)
+            .lineLimit(1)
+    }
+
+    @ViewBuilder
+    private var control: some View {
+        if definition.kind == .toggle {
+            HStack {
                 Toggle("", isOn: Binding(
                     get: { value >= definition.midpoint },
                     set: { model.setParameter(definition.id, to: $0 ? definition.maximum : definition.minimum) }
                 ))
                 .labelsHidden()
-                Spacer()
-            } else {
-                Slider(
-                    value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
-                    in: definition.minimum...definition.maximum
-                )
+                Spacer(minLength: 0)
             }
-            Text(definition.formatted(value))
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(Theme.parameter)
-                .frame(width: 80, alignment: .trailing)
-            HStack(spacing: 4) {
-                let controls = model.configuration.controls(targeting: .parameter(definition.id))
-                if controls.isEmpty {
-                    Text("未绑定").font(.caption2).foregroundStyle(.tertiary)
-                }
-                ForEach(controls) { control in
-                    Button(control.shortName) {
-                        model.selectedControl = control
-                        if control.section == .pushEncoder || control.section == .pushEncoderButton {
-                            model.selectGroup(control.row)
-                        }
+        } else {
+            Slider(
+                value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
+                in: definition.minimum...definition.maximum
+            )
+        }
+    }
+
+    private var chips: some View {
+        HStack(spacing: 4) {
+            let controls = model.configuration.controls(targeting: .parameter(definition.id))
+            if controls.isEmpty {
+                Text("未绑定").font(.caption2).foregroundStyle(.tertiary)
+            }
+            ForEach(controls) { control in
+                Button(control.shortName) {
+                    model.selectedControl = control
+                    if control.section == .pushEncoder || control.section == .pushEncoderButton {
+                        model.selectGroup(control.row)
                     }
-                    .buttonStyle(.plain)
-                    .font(.caption2.monospaced().bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Theme.selection.opacity(model.selectedControl == control ? 0.35 : 0.14), in: Capsule())
                 }
+                .buttonStyle(.plain)
+                .font(.caption2.monospaced().bold())
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Theme.selection.opacity(model.selectedControl == control ? 0.35 : 0.14), in: Capsule())
             }
-            .frame(width: 130, alignment: .leading)
         }
     }
 }
@@ -153,7 +184,7 @@ private struct AgentGridView: View {
     @ObservedObject var model: ConsoleViewModel
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
             ForEach(model.slots) { slot in
                 let controls = model.configuration.controls(targeting: .agentPrimaryAction(slot.id))
                 VStack(alignment: .leading, spacing: 8) {
@@ -231,10 +262,11 @@ private struct MIDIMonitorView: View {
                             Text(event.source == .mock ? "MOCK" : "HW  ")
                                 .foregroundStyle(.secondary)
                             Text(event.message.diagnosticDescription)
-                                .frame(width: 190, alignment: .leading)
+                                .lineLimit(1)
+                                .layoutPriority(1)
+                            Spacer(minLength: 4)
                             Text(event.control?.shortName ?? "未映射")
                                 .foregroundStyle(event.control == nil ? .orange : .secondary)
-                            Spacer()
                         }
                         .font(.system(size: 11, design: .monospaced))
                         .opacity(event.ignored ? 0.45 : 1)
