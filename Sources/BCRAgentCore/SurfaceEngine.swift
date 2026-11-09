@@ -170,8 +170,12 @@ public struct SurfaceEngine: Sendable {
         parameterValues[id] = nil
     }
 
+    /// Configuration replacement resets parameters, while Agent state belongs to the session.
+    /// Preserve its LED snapshot so the next full feedback can restore it in a single pass.
     public mutating func replaceConfiguration(_ configuration: SurfaceConfiguration) {
+        let feedback = agentFeedback
         self = SurfaceEngine(hardwareMap: hardwareMap, configuration: configuration)
+        agentFeedback = feedback
     }
 
     // MARK: Hardware map / learning

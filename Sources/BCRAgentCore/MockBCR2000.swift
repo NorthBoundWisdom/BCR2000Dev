@@ -5,6 +5,7 @@ import Foundation
 /// Like the real device it keeps an internal 7-bit value per control, sends absolute CC values
 /// when an encoder is turned, sends 127/0 for momentary buttons, and updates its LED rings and
 /// button LEDs when it receives parameter feedback. It never echoes received feedback.
+/// These device-behaviour assumptions (including group switching) are 待 R1 实机验证.
 public struct MockBCR2000: Sendable {
     public let preset: HardwareMap
     public private(set) var values: [BCRControlID: UInt8] = [:]

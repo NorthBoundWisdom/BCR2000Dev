@@ -35,6 +35,11 @@ CC/Note 按键，在 SwiftUI 与确定性 Mock Agent 之间共享同一状态机
 - 默认载入“机械臂示例”：P1-1…P1-8 = J1–J6、夹爪、速度；B1 行 = Agent 1–8；
   B2-1 = 使能；B2-8 = 复位机械臂。
 
+`SurfaceSession` 在 Core 中统一执行效果、设备路由、学习、反馈丢弃计数与 MIDI 日志；
+`SurfaceDevice` 由 Mock 适配器和 App 层的 CoreMIDI 适配器实现。设备断线期间的反馈只计数，
+连接恢复时回写当前软件快照；Mock 模式下实体输入只记录。会话整合测试使用假设备，无需真机。
+UI 保留选中项、跟随触碰与提示文案，Mock Agent 时间线通过会话层触发并回写 LED。
+
 分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md)。
 
 ## 快速开始

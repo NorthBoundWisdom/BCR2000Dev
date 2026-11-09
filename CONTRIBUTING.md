@@ -54,7 +54,7 @@ python3 configs/macos_workflow.py smoke
 - `BCRAgentCore`：纯值类型、无 UI、无 CoreMIDI，可单元测试。状态转换都在这里。
 - `BCRAgentConsole`：SwiftUI、CoreMIDI 生命周期、持久化与依赖装配。
   视图只渲染状态、发出意图，不直接发送 MIDI，不包含业务规则。
-- 所有设备写回都通过 `SurfaceEngine` 返回的 `SurfaceEffect` 走 `ConsoleViewModel.perform`，
+- 所有设备写回都通过 `SurfaceEngine` 返回的 `SurfaceEffect` 走 `SurfaceSession` 的效果管线，
   不另开旁路。
 - 软件参数是唯一事实来源；硬件输入改参数，参数决定反馈。
 - **Mock 与实体一致**：任何设备行为的假设必须同时体现在 `MockBCR2000` 中并有测试；

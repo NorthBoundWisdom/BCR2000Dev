@@ -21,6 +21,22 @@ final class SurfaceEngineTests: XCTestCase {
         effects.compactMap { if case let .send(message) = $0 { message } else { nil } }
     }
 
+    func testConfigurationReplacementResetsParametersAndPreservesAgentSnapshot() {
+        let slot = AgentSlotID(1)
+        let control = BCRControlID.button(row: 1, 1)
+        var engine = makeEngine([ControlAssignment(control: control, target: .agentPrimaryAction(slot))])
+        _ = engine.setParameter("j", to: 90, at: t0)
+        _ = engine.setAgentFeedback(slot, value: 96, at: t0)
+        engine.beginLearning(control)
+        let configuration = engine.configuration
+        engine.replaceConfiguration(configuration)
+        XCTAssertEqual(engine.value(of: "j"), 0)
+        XCTAssertNil(engine.learnTarget)
+        XCTAssertEqual(sent(engine.fullFeedback(at: t0)), [
+            MIDI1UMPCodec.feedback(control: midi(control), value: 96),
+        ])
+    }
+
     func testEncoderInputMovesParameterAndMirrorsOnlyToOtherBoundControls() {
         let a = BCRControlID.pushEncoder(group: 1, 1)
         let b = BCRControlID.encoder(row: 1, 1)

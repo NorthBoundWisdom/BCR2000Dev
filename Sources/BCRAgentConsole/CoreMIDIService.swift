@@ -2,18 +2,6 @@ import BCRAgentCore
 import CoreMIDI
 import Foundation
 
-struct MIDIConnectionSnapshot: Equatable, Sendable {
-    var sourceNames: [String] = []
-    var destinationNames: [String] = []
-    var connectedSource: String?
-    var connectedDestination: String?
-    var lastError: String?
-
-    var isConnected: Bool {
-        connectedSource != nil && connectedDestination != nil
-    }
-}
-
 enum CoreMIDIServiceError: Error, LocalizedError {
     case operation(name: String, status: OSStatus)
     case outputUnavailable
@@ -31,9 +19,47 @@ enum CoreMIDIServiceError: Error, LocalizedError {
     }
 }
 
+/// Main-actor device boundary. The transport only decodes and hands off value batches;
+/// connection state and session callbacks are accessed exclusively on the main actor.
+@MainActor
+final class CoreMIDIService: SurfaceDevice {
+    private(set) var connection = MIDIConnectionSnapshot()
+    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
+    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
+    private var transport: CoreMIDITransport?
+
+    func start() throws {
+        guard transport == nil else { return }
+        let transport = CoreMIDITransport(
+            onMessages: { [weak self] messages in
+                Task { @MainActor [weak self] in self?.onMessages?(messages) }
+            },
+            onConnection: { [weak self] snapshot in
+                Task { @MainActor [weak self] in
+                    self?.connection = snapshot
+                    self?.onConnection?(snapshot)
+                }
+            }
+        )
+        do {
+            try transport.start()
+            self.transport = transport
+        } catch {
+            connection.lastError = error.localizedDescription
+            onConnection?(connection)
+            throw error
+        }
+    }
+
+    func send(_ message: MIDIVoiceMessage) throws {
+        guard let transport else { throw CoreMIDIServiceError.outputUnavailable }
+        try transport.send(message)
+    }
+}
+
 /// Owns CoreMIDI objects on a private serial queue. The receive callback only copies/decodes
 /// packet words and immediately hands value types to the application.
-final class CoreMIDIService: @unchecked Sendable {
+private final class CoreMIDITransport: @unchecked Sendable {
     typealias MessageHandler = @Sendable ([MIDIVoiceMessage]) -> Void
     typealias ConnectionHandler = @Sendable (MIDIConnectionSnapshot) -> Void
 
