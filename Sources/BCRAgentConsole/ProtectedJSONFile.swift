@@ -106,7 +106,7 @@ extension ProtectedJSONFile where Value == SurfaceConfiguration {
 
 extension ProtectedJSONFile where Value == HardwareMap {
     static func hardware(_ store: JSONFileStore<Value>) -> Self {
-        Self(store: store, title: "硬件映射", normalize: { try $0.validate(); return $0 },
+        Self(store: store, title: "硬件映射", normalize: { try $0.migrated() },
              version: { $0.version }, fallback: { HardwareMap() })
     }
 }

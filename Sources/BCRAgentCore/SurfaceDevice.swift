@@ -54,7 +54,16 @@ public final class MockSurfaceDevice: SurfaceDevice {
     }
 
     public func send(_ message: MIDIVoiceMessage) throws {
+        try message.validate()
         model.receive(message)
+    }
+
+    public func configureModes(_ configuration: SurfaceConfiguration) {
+        model.encoderModes = Dictionary(uniqueKeysWithValues: configuration.assignments.map { ($0.control, $0.encoderMode) })
+    }
+
+    public func setNRPN(_ enabled: Bool, for control: BCRControlID) throws {
+        try model.setNRPN(enabled, for: control)
     }
 
     public func selectGroup(_ group: Int) {
@@ -62,7 +71,16 @@ public final class MockSurfaceDevice: SurfaceDevice {
     }
 
     public func turn(_ control: BCRControlID, by delta: Int) {
-        if let message = model.turn(control, by: delta) { onMessages?([message]) }
+        if let message = model.turn(control, by: delta) {
+            if case .nrpn = message {
+                // Emit the same four CCs as the wire, as one decoded callback batch.
+                let bytes = message.midi1Bytes
+                let parts: [MIDIVoiceMessage] = stride(from: 0, to: bytes.count, by: 3).map {
+                    .controlChange(channel: bytes[$0] & 15, number: bytes[$0 + 1], value: bytes[$0 + 2])
+                }
+                onMessages?(parts)
+            } else { onMessages?([message]) }
+        }
     }
 
     public func press(_ control: BCRControlID) {

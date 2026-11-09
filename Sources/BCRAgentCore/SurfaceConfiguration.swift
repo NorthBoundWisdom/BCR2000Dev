@@ -244,12 +244,41 @@ public enum ControlTarget: Codable, Hashable, Sendable {
     }
 }
 
+/// BCR manual §4.3: Relative 1 is two's complement, Relative 2 is binary offset.
+/// Exact device acceleration/feedback behaviour is modelled in Mock only; 待 R1 实机验证.
+public enum EncoderMode: String, Codable, CaseIterable, Sendable {
+    case absolute, relative1, relative2
+
+    public func delta(value: UInt16, maximum: UInt16) -> Int {
+        guard self != .absolute, value <= maximum else { return 0 }
+        let center = (Int(maximum) + 1) / 2
+        switch self {
+        case .absolute: return 0
+        case .relative1: return Int(value) < center ? Int(value) : Int(value) - Int(maximum) - 1
+        case .relative2: return Int(value) - center
+        }
+    }
+
+    public func encoded(delta: Int, maximum: UInt16) -> UInt16 {
+        let center = (Int(maximum) + 1) / 2
+        let bounded = min(max(delta, -center + 1), center - 1)
+        switch self {
+        case .absolute: return 0
+        case .relative1: return UInt16(bounded < 0 ? Int(maximum) + 1 + bounded : bounded)
+        case .relative2: return UInt16(center + bounded)
+        }
+    }
+}
+
 public struct ControlAssignment: Codable, Equatable, Sendable, Identifiable {
     public let control: BCRControlID
     public var target: ControlTarget
     public var buttonBehavior: ButtonBehavior
     /// Reverses the direction of an encoder or the on/off sense of a button.
     public var inverted: Bool
+    public var encoderMode: EncoderMode
+    /// Units per relative tick; encoded magnitude is the acceleration factor.
+    public var encoderStep: Double
 
     public var id: BCRControlID { control }
 
@@ -257,12 +286,27 @@ public struct ControlAssignment: Codable, Equatable, Sendable, Identifiable {
         control: BCRControlID,
         target: ControlTarget,
         buttonBehavior: ButtonBehavior = .toggle,
-        inverted: Bool = false
+        inverted: Bool = false,
+        encoderMode: EncoderMode = .absolute,
+        encoderStep: Double = 1
     ) {
         self.control = control
         self.target = target
         self.buttonBehavior = buttonBehavior
         self.inverted = inverted
+        self.encoderMode = encoderMode
+        self.encoderStep = encoderStep
+    }
+
+    private enum CodingKeys: String, CodingKey { case control, target, buttonBehavior, inverted, encoderMode, encoderStep }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(control: try c.decode(BCRControlID.self, forKey: .control),
+                  target: try c.decode(ControlTarget.self, forKey: .target),
+                  buttonBehavior: try c.decode(ButtonBehavior.self, forKey: .buttonBehavior),
+                  inverted: try c.decode(Bool.self, forKey: .inverted),
+                  encoderMode: c.contains(.encoderMode) ? try c.decode(EncoderMode.self, forKey: .encoderMode) : .absolute,
+                  encoderStep: c.contains(.encoderStep) ? try c.decode(Double.self, forKey: .encoderStep) : 1)
     }
 }
 
@@ -281,7 +325,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 3
+    public static let currentVersion = 4
 
     public var version: Int
     public var name: String

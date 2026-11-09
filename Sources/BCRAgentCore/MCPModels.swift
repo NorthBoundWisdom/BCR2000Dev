@@ -118,6 +118,8 @@ public enum MCPToolCatalog {
         ])]),
         "buttonBehavior": .object(["type": .string("string"), "enum": .array([.string("toggle"), .string("momentary")])]),
         "inverted": boolean,
+        "encoderMode": .object(["type": .string("string"), "enum": .array(EncoderMode.allCases.map { .string($0.rawValue) })]),
+        "encoderStep": .object(["type": .string("number"), "exclusiveMinimum": .number(0)]),
     ], required: ["control", "target", "buttonBehavior", "inverted"])
 
     private static func schema(_ properties: [String: JSONValue], required: [String] = []) -> JSONValue {

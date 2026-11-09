@@ -52,6 +52,7 @@ final class CoreMIDIService: SurfaceDevice {
     }
 
     func send(_ message: MIDIVoiceMessage) throws {
+        try message.validate()
         guard let transport else { throw CoreMIDIServiceError.outputUnavailable }
         try transport.send(message)
     }
@@ -182,6 +183,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
     }
 
     func send(_ message: MIDIVoiceMessage) throws {
+        try message.validate()
         try managementQueue.sync {
             guard isStarted, outputPort != 0, destination != 0 else {
                 throw CoreMIDIServiceError.outputUnavailable

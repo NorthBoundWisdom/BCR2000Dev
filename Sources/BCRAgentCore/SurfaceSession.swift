@@ -1,5 +1,7 @@
 import Foundation
 
+public enum MIDILearnFormat: String, CaseIterable, Sendable { case voice, nrpn14 }
+
 public enum SurfaceWriteOrigin: String, Equatable, Sendable {
     case software, agent, external
 }
@@ -54,6 +56,8 @@ public final class SurfaceSession {
     private let saveConfiguration: @MainActor (SurfaceConfiguration) throws -> Void
     private var hardwareMap: HardwareMap
     private var nextEventID = 0
+    public private(set) var learnFormat: MIDILearnFormat = .voice
+    private var nrpnAssembler = NRPNAssembler()
     private var writeOrigin: SurfaceWriteOrigin = .software
 
     public init(
@@ -73,6 +77,7 @@ public final class SurfaceSession {
         self.saveConfiguration = saveConfiguration
         connection = hardwareDevice.connection
         engine = SurfaceEngine(hardwareMap: mockDevice.model.preset, configuration: configuration)
+        mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
         hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
         hardwareDevice.onConnection = { [weak self] in self?.handleConnection($0) }
@@ -95,6 +100,7 @@ public final class SurfaceSession {
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
         source = newSource
+        nrpnAssembler.reset()
         engine.echoWindow = newSource == .mock ? 0 : 0.18
         engine.replaceHardwareMap(newSource == .mock ? mock.preset : hardwareMap)
         droppedFeedbackCount = 0
@@ -177,6 +183,8 @@ public final class SurfaceSession {
         let configuration = try configuration.migrated()
         let learning = engine.learnTarget
         engine.replaceConfiguration(configuration)
+        mockDevice.configureModes(configuration)
+        nrpnAssembler.reset()
         if let learning { onEvent?(.learningInterruptedByConfiguration(learning)) }
         perform(engine.fullFeedback(at: now()))
         if persist { persistConfiguration() }
@@ -207,19 +215,23 @@ public final class SurfaceSession {
     public func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) throws {
         if let assignment { perform(try engine.assign(assignment, at: now())) }
         else { engine.clearAssignment(for: control) }
+        mockDevice.configureModes(engine.configuration)
         persistConfiguration()
         onChange?()
     }
 
     public func applyBulkAssignment(_ plan: BulkAssignmentPlan) throws {
         perform(try engine.apply(plan, at: now()))
+        mockDevice.configureModes(engine.configuration)
         persistConfiguration()
         onChange?()
     }
 
     @discardableResult
-    public func beginLearning(at control: BCRControlID) -> Bool {
+    public func beginLearning(at control: BCRControlID, format: MIDILearnFormat = .voice) -> Bool {
         guard source == .hardware else { return false }
+        learnFormat = format
+        nrpnAssembler.reset()
         engine.beginLearning(control)
         onChange?()
         return true
@@ -227,6 +239,7 @@ public final class SurfaceSession {
 
     public func stopLearning() {
         engine.stopLearning()
+        nrpnAssembler.reset()
         onChange?()
     }
 
@@ -244,18 +257,44 @@ public final class SurfaceSession {
         onChange?()
     }
 
+    public func setMockNRPN(_ enabled: Bool, for control: BCRControlID) throws {
+        guard source == .mock else { return }
+        try mockDevice.setNRPN(enabled, for: control)
+        engine.replaceHardwareMap(mock.preset)
+        nrpnAssembler.reset()
+        perform(engine.fullFeedback(at: now()))
+        onChange?()
+    }
+
     public func clearMonitor() {
         events.removeAll()
         onChange?()
     }
 
     private func receive(_ messages: [MIDIVoiceMessage], from inputSource: DeviceSource) {
-        for message in messages {
+        for rawMessage in messages {
             let ignored = inputSource != source
             let map = inputSource == .hardware ? hardwareMap : mock.preset
-            let control = map.control(for: message.controlID)
-            log(.input, message, source: inputSource, control: control, ignored: ignored)
+            let rawControl = map.control(for: rawMessage.controlID)
+            log(.input, rawMessage, source: inputSource, control: rawControl, ignored: ignored)
             guard !ignored else { continue }
+            var message = rawMessage
+            if case let .controlChange(channel, number, _) = rawMessage {
+                let learningNRPN = engine.learnTarget != nil && learnFormat == .nrpn14
+                let mappedNRPN = map.entries.contains { $0.midi.kind == .nrpn && $0.midi.channel == channel }
+                if learningNRPN || mappedNRPN {
+                    let assembled = nrpnAssembler.consume(rawMessage, at: now())
+                    if [6, 38, 98, 99, 100, 101, 121].contains(number) {
+                        guard let assembled else { continue }
+                        message = assembled
+                    } else if learningNRPN { continue }
+                }
+            }
+            if engine.learnTarget != nil {
+                let isNRPN = message.controlID.kind == .nrpn
+                if (learnFormat == .nrpn14) != isNRPN { continue }
+            }
+            let control = map.control(for: message.controlID)
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
             perform(engine.handleInput(message, at: now()))
         }
@@ -293,6 +332,7 @@ public final class SurfaceSession {
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
         let wasConnected = connection.isConnected
+        if snapshot.isConnected != wasConnected { nrpnAssembler.reset() }
         connection = snapshot
         if snapshot.isConnected, !wasConnected {
             onEvent?(.connected(snapshot))
@@ -321,6 +361,7 @@ public final class SurfaceSession {
     }
 
     private func persistConfiguration() {
+        mockDevice.configureModes(engine.configuration)
         do {
             try saveConfiguration(engine.configuration)
             lastConfigurationPersistenceError = nil

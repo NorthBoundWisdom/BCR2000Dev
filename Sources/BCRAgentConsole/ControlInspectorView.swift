@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ControlInspectorView: View {
     @ObservedObject var model: ConsoleViewModel
+    @State private var learnFormat: MIDILearnFormat = .voice
     @State private var confirmsMapReset = false
 
     var body: some View {
@@ -44,6 +45,9 @@ struct ControlInspectorView: View {
                 valueBadge("面板", "\(model.displayValue(of: control))", color: .primary)
                 valueBadge("IN", state.lastInput.map(String.init) ?? "—", color: Theme.parameter)
                 valueBadge("OUT", state.lastOutput.map(String.init) ?? "—", color: Theme.selection)
+                if model.engine.hardwareMap.midi(for: control)?.kind == .nrpn {
+                    valueBadge("14-bit", "\(state.rawValue)", color: Theme.parameter)
+                }
                 valueBadge("事件", "\(state.eventCount)", color: .secondary)
             }
         }
@@ -71,17 +75,29 @@ struct ControlInspectorView: View {
 
             switch model.source {
             case .mock:
-                Text("Mock 设备使用自带预设（全部为通道 1 的 CC），不需要学习。")
+                Text("Mock 默认预设为通道 1 的 CC。可临时切换单个编码器到通道 16 NRPN，不写入实体映射。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if control.isContinuous {
+                    Toggle("Mock 14-bit NRPN", isOn: Binding(
+                        get: { model.engine.hardwareMap.midi(for: control)?.kind == .nrpn },
+                        set: { model.setMockNRPN($0, for: control) }
+                    ))
+                    .help("仅切换所选 Mock 编码器的 14-bit NRPN 预设")
+                }
             case .hardware:
+                Picker("学习消息格式", selection: $learnFormat) {
+                    Text("CC / Note").tag(MIDILearnFormat.voice)
+                    Text("14-bit NRPN").tag(MIDILearnFormat.nrpn14)
+                }
+                .disabled(model.isLearning)
                 HStack {
                     if model.isLearning {
                         Button("停止学习") { model.stopLearning() }
                             .buttonStyle(.borderedProminent)
                             .tint(.orange)
                     } else {
-                        Button("从这里开始学习") { model.beginLearning(at: control) }
+                        Button("从这里开始学习") { model.beginLearning(at: control, format: learnFormat) }
                             .buttonStyle(.borderedProminent)
                     }
                     Button("清除绑定") { model.unbind(control) }
@@ -185,6 +201,28 @@ private struct FunctionSection: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                if control.isContinuous {
+                    Picker("编码器模式", selection: Binding(
+                        get: { assignment?.encoderMode ?? .absolute },
+                        set: { value in modify { $0.encoderMode = value } }
+                    )) {
+                        Text("绝对").tag(EncoderMode.absolute)
+                        Text("相对 1").tag(EncoderMode.relative1)
+                        Text("相对 2").tag(EncoderMode.relative2)
+                    }
+                    .pickerStyle(.segmented)
+                    .help("相对模式：1 为补码，2 为二进制偏移；待 R1 实机验证")
+                    if assignment?.encoderMode != .absolute {
+                        TextField("相对步长", value: Binding(
+                            get: { assignment?.encoderStep ?? 1 },
+                            set: { value in modify { $0.encoderStep = value } }
+                        ), format: .number)
+                        .accessibilityLabel("相对步长")
+                        .help("设置相对编码器每格步长")
+                        Text("每格步长 × 消息幅度（加速度）。灯环保持绝对位置；参数吸附仍生效。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Toggle("反向", isOn: Binding(
                     get: { assignment?.inverted ?? false },
                     set: { inverted in modify { $0.inverted = inverted } }
@@ -271,6 +309,7 @@ private struct FunctionSection: View {
     private func update(target: ControlTarget) {
         var next = assignment ?? ControlAssignment(control: control, target: target)
         next.target = target
+        if target.isTrigger || target.parameterID.flatMap({ model.configuration.parameter($0) })?.kind != .continuous { next.encoderMode = .absolute }
         model.setAssignment(next, for: control)
     }
 
@@ -307,7 +346,7 @@ private struct ParameterEditor: View {
 
             if let value = model.engine.value(of: definition.id) {
                 HStack {
-                    Text(definition.formatted(value))
+                    Text(definition.formatted(value, minimumFractionDigits: model.parameterFractionDigits(definition.id)))
                         .font(.system(.title3, design: .monospaced).bold())
                         .foregroundStyle(Theme.parameter)
                         .frame(minWidth: 90, alignment: .leading)

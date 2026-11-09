@@ -226,8 +226,8 @@ final class ConsoleViewModel: ObservableObject {
 
     // MARK: Hardware map / learning
 
-    func beginLearning(at control: BCRControlID) {
-        guard session.beginLearning(at: control) else {
+    func beginLearning(at control: BCRControlID, format: MIDILearnFormat = .voice) {
+        guard session.beginLearning(at: control, format: format) else {
             notice = ConsoleNotice(level: .warning, text: "Mock 设备的预设已知，学习只用于实体 BCR2000。")
             return
         }
@@ -236,6 +236,17 @@ final class ConsoleViewModel: ObservableObject {
             level: .info,
             text: "学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。"
         )
+    }
+
+    func parameterFractionDigits(_ id: ParameterID) -> Int {
+        configuration.controls(targetingParameter: id).contains {
+            configuration.assignment(for: $0)?.encoderMode != .absolute || engine.hardwareMap.midi(for: $0)?.kind == .nrpn
+        } ? 3 : 0
+    }
+
+    func setMockNRPN(_ enabled: Bool, for control: BCRControlID) {
+        do { try session.setMockNRPN(enabled, for: control) }
+        catch { report(error) }
     }
 
     func stopLearning() {

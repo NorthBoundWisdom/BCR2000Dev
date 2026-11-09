@@ -45,10 +45,10 @@ final class SurfaceEngineTests: XCTestCase {
             ControlAssignment(control: b, target: .parameter("j")),
         ])
 
-        let effects = engine.handleInput(.controlChange(channel: 0, number: midi(a).number, value: 127), at: t0)
+        let effects = engine.handleInput(.controlChange(channel: 0, number: UInt8(midi(a).number), value: 127), at: t0)
 
         XCTAssertEqual(engine.value(of: "j"), 90)
-        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: midi(b).number, value: 127)])
+        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: UInt8(midi(b).number), value: 127)])
         XCTAssertEqual(engine.state(of: a).lastInput, 127)
     }
 
@@ -59,7 +59,7 @@ final class SurfaceEngineTests: XCTestCase {
         let effects = engine.setParameter("j", to: 90, at: t0)
 
         // Inverted: the parameter maximum is the ring minimum.
-        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: midi(a).number, value: 0)])
+        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: UInt8(midi(a).number), value: 0)])
         XCTAssertEqual(engine.state(of: a).lastOutput, 0)
     }
 
@@ -68,18 +68,18 @@ final class SurfaceEngineTests: XCTestCase {
         var engine = makeEngine([ControlAssignment(control: a, target: .parameter("j"))])
         _ = engine.setParameter("j", to: 90, at: t0)
 
-        let echo = MIDIVoiceMessage.controlChange(channel: 0, number: midi(a).number, value: 127)
+        let echo = MIDIVoiceMessage.controlChange(channel: 0, number: UInt8(midi(a).number), value: 127)
         XCTAssertTrue(engine.handleInput(echo, at: t0.addingTimeInterval(0.05)).isEmpty)
         XCTAssertEqual(engine.state(of: a).lastInput, nil)
 
-        _ = engine.handleInput(.controlChange(channel: 0, number: midi(a).number, value: 0), at: t0.addingTimeInterval(1))
+        _ = engine.handleInput(.controlChange(channel: 0, number: UInt8(midi(a).number), value: 0), at: t0.addingTimeInterval(1))
         XCTAssertEqual(engine.value(of: "j"), -90)
     }
 
     func testToggleButtonFlipsOnPressAndHoldsLEDOnRelease() {
         let button = BCRControlID.button(row: 2, 1)
         var engine = makeEngine([ControlAssignment(control: button, target: .parameter("on"))])
-        let number = midi(button).number
+        let number = UInt8(midi(button).number)
 
         let press = engine.handleInput(.controlChange(channel: 0, number: number, value: 127), at: t0)
         XCTAssertEqual(engine.value(of: "on"), 1)
@@ -107,7 +107,7 @@ final class SurfaceEngineTests: XCTestCase {
         let button = BCRControlID.button(row: 1, 3)
         let slot = AgentSlotID(3)
         var engine = makeEngine([ControlAssignment(control: button, target: .agentPrimaryAction(slot))])
-        let number = midi(button).number
+        let number = UInt8(midi(button).number)
 
         let first = engine.handleInput(.controlChange(channel: 0, number: number, value: 127), at: t0)
         XCTAssertTrue(first.contains(.triggerAgent(slot)))
@@ -138,7 +138,7 @@ final class SurfaceEngineTests: XCTestCase {
         let effects = engine.press(home, isDown: true, at: t0)
 
         XCTAssertEqual(engine.value(of: "g"), 25)
-        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: midi(encoder).number, value: 32)])
+        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: UInt8(midi(encoder).number), value: 32)])
     }
 
     func testSoftwareAdjustOfUnassignedEncoderWritesRawRingValue() {
@@ -147,7 +147,7 @@ final class SurfaceEngineTests: XCTestCase {
 
         let effects = engine.adjust(encoder, by: 5, at: t0)
 
-        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: midi(encoder).number, value: 5)])
+        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: UInt8(midi(encoder).number), value: 5)])
     }
 
     func testSoftwareAdjustStartsFromTheParameterPosition() {
@@ -156,7 +156,7 @@ final class SurfaceEngineTests: XCTestCase {
 
         let effects = engine.adjust(encoder, by: 1, at: t0)
 
-        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: midi(encoder).number, value: 65)])
+        XCTAssertEqual(sent(effects), [.controlChange(channel: 0, number: UInt8(midi(encoder).number), value: 65)])
     }
 
     func testUnmappedInputIsReported() {

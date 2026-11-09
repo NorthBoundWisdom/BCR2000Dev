@@ -159,7 +159,7 @@ private struct ParameterRow: View {
     }
 
     private var valueText: some View {
-        Text(definition.formatted(value))
+        Text(definition.formatted(value, minimumFractionDigits: model.parameterFractionDigits(definition.id)))
             .font(.system(.body, design: .monospaced))
             .foregroundStyle(Theme.parameter)
             .lineLimit(1)

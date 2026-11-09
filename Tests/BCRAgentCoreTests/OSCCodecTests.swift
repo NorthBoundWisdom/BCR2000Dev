@@ -77,7 +77,7 @@ final class OSCCodecTests: XCTestCase {
         XCTAssertEqual(engine.state(of: control).value, 19)
         engine.echoWindow = 0
         let midi = engine.hardwareMap.midi(for: control)!
-        _ = engine.handleInput(.controlChange(channel: midi.channel, number: midi.number, value: 100))
+        _ = engine.handleInput(.controlChange(channel: midi.channel, number: UInt8(midi.number), value: 100))
         XCTAssertEqual(engine.value(of: "x"), 80)
         XCTAssertEqual(engine.state(of: control).value, 19)
         _ = engine.setParameter("x", to: 90)

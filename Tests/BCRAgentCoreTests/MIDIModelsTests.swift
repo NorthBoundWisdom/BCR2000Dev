@@ -2,14 +2,14 @@ import XCTest
 @testable import BCRAgentCore
 
 final class MIDIModelsTests: XCTestCase {
-    func testControlChangeUMPEncodingMatchesMIDI10Layout() {
+    func testControlChangeUMPEncodingMatchesMIDI10Layout() throws {
         let message = MIDIVoiceMessage.controlChange(
             channel: 0,
             number: 74,
             value: 127
         )
 
-        let word = MIDI1UMPCodec.encode(message)
+        let word = try MIDI1UMPCodec.encode(message)
 
         XCTAssertEqual(word, 0x20B04A7F)
         XCTAssertEqual(MIDI1UMPCodec.decode(word: word), message)
@@ -30,7 +30,7 @@ final class MIDIModelsTests: XCTestCase {
         )
     }
 
-    func testNoteOnAndOffRoundTrip() {
+    func testNoteOnAndOffRoundTrip() throws {
         let messages: [MIDIVoiceMessage] = [
             .noteOn(channel: 2, number: 60, velocity: 100),
             .noteOff(channel: 2, number: 60, velocity: 12),
@@ -38,7 +38,7 @@ final class MIDIModelsTests: XCTestCase {
 
         for message in messages {
             XCTAssertEqual(
-                MIDI1UMPCodec.decode(word: MIDI1UMPCodec.encode(message)),
+                MIDI1UMPCodec.decode(word: try MIDI1UMPCodec.encode(message)),
                 message
             )
         }

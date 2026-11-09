@@ -4,7 +4,7 @@ public struct SurfaceValidationIssue: Equatable, Sendable {
     public enum Code: String, Equatable, Sendable {
         case unsupportedVersion, emptyName, invalidParameter, duplicateParameter, duplicateAssignment
         case unknownParameter, encoderTrigger, invalidAgentSlot, unknownGroup, invalidFunction
-        case duplicateControlBinding, duplicateMIDIBinding, encoderMessageKind
+        case invalidEncoderMode, conflictingNRPNChannel, duplicateControlBinding, duplicateMIDIBinding, encoderMessageKind
     }
     public let code: Code
     public let subject: String
@@ -58,6 +58,15 @@ public extension SurfaceConfiguration {
             if let id = assignment.target.parameterID, !identifiers.contains(id) {
                 issues.append(.init(.unknownParameter, subject: id.rawValue, detail: "\(label)：未知参数 \(id)"))
             }
+            if !assignment.encoderStep.isFinite || assignment.encoderStep <= 0 {
+                issues.append(.init(.invalidEncoderMode, subject: label, detail: "\(label)：相对步长必须为有限正数"))
+            }
+            if assignment.encoderMode != .absolute {
+                let definition = assignment.target.parameterID.flatMap { parameter($0) }
+                if !assignment.control.isContinuous || assignment.target.isTrigger || definition?.kind != .continuous {
+                    issues.append(.init(.invalidEncoderMode, subject: label, detail: "\(label)：相对模式只适用于连续参数编码器"))
+                }
+            }
             switch assignment.target {
             case .parameter: break
             case let .stepParameter(_, step, _):
@@ -104,7 +113,7 @@ public extension SurfaceConfiguration {
 public extension HardwareMap {
     func validate() throws {
         var issues: [SurfaceValidationIssue] = []
-        if version != Self.currentVersion {
+        if !(3...Self.currentVersion).contains(version) {
             issues.append(.init(.unsupportedVersion, subject: String(version), detail: "不支持硬件映射版本 \(version)，需要重新学习"))
         }
         var controls = Set<BCRControlID>()
@@ -116,10 +125,24 @@ public extension HardwareMap {
             if !identities.insert(entry.midi).inserted {
                 issues.append(.init(.duplicateMIDIBinding, subject: entry.midi.description, detail: "MIDI 身份重复：\(entry.midi)"))
             }
-            if entry.control.isContinuous, entry.midi.kind != .controlChange {
-                issues.append(.init(.encoderMessageKind, subject: entry.control.shortName, detail: "\(entry.control.shortName)：编码器只能绑定 CC"))
+            if entry.control.isContinuous, entry.midi.kind == .note {
+                issues.append(.init(.encoderMessageKind, subject: entry.control.shortName, detail: "\(entry.control.shortName)：编码器只能绑定 CC 或 NRPN"))
+            }
+        }
+        let nrpnChannels = Set(entries.filter { $0.midi.kind == .nrpn }.map { $0.midi.channel })
+        for entry in entries where entry.midi.kind == .controlChange && nrpnChannels.contains(entry.midi.channel) {
+            if [6, 38, 98, 99, 100, 101, 121].contains(Int(entry.midi.number)) {
+                issues.append(.init(.conflictingNRPNChannel, subject: entry.control.shortName,
+                    detail: "\(entry.control.shortName)：此通道的 CC \(entry.midi.number) 已保留给 NRPN，请改用其他通道或控制器"))
             }
         }
         if !issues.isEmpty { throw SurfaceValidationError(issues) }
+    }
+
+    func migrated() throws -> HardwareMap {
+        try validate()
+        var result = self
+        result.version = Self.currentVersion
+        return result
     }
 }

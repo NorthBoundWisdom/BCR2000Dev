@@ -65,10 +65,10 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable/step；
 id 和 name 必需，其余默认与 App 创建参数一致。update_parameter 接收完整定义，不是补丁。
 step 可缺省或为 null（不吸附），启用时为正数；kind 是 continuous 或 toggle；数值必须有限，minimum < maximum，默认值在范围内。
-参数信息另包含 value、writable 和绑定的 controls。
+参数信息另包含 value、writable、只读 actualValue/outputValue 和绑定的 controls；更新定义时不回传这些运行字段。
 
 控件使用 section、row、index，范围由 section 决定。分配包含 control、target、
-buttonBehavior（toggle/momentary）和 inverted。target 与版本化 SurfaceConfiguration 共用 JSON 编码。
+buttonBehavior（toggle/momentary）、inverted，以及可选 encoderMode（absolute/relative1/relative2）和正数 encoderStep。target 与版本化 SurfaceConfiguration 共用 JSON 编码。
 例如给 E1-1 绑定 J1：
 
     {"assignment":{"control":{"section":"encoder","row":1,"index":1},
@@ -88,7 +88,7 @@ buttonBehavior（toggle/momentary）和 inverted。target 与版本化 SurfaceCo
 错误 token 与非法 Origin 检查。它恢复原参数值并清理旧会话，不打印凭据。
 MCP 设置里的“复制连接命令”给出通用 curl server/discover 请求，不需要特定 Agent CLI。
 
-当前配置 v3；v1→v2 新增 agentWritable，v2→v3 新增 step 和触发参数功能。旧定义缺省为可写，arm.enabled 缺省不可写；
+当前配置 v4；v1→v2 新增 agentWritable，v2→v3 新增 step 和触发参数功能，v3→v4 新增编码器模式与相对步长。旧定义缺省为可写，arm.enabled 缺省不可写；
 App 显示迁移提示，并保持原文件直到用户后续修改配置。
 
 ## 隔离原生验收

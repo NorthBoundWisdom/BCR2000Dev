@@ -182,4 +182,24 @@ final class ConfigurationPersistenceTests: XCTestCase {
         XCTAssertNil(state.conflict)
     }
 
+    func testV3HardwareMapMigratesVisiblyAndBacksUpExactBytes() throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = stores(directory).hardwareMap
+        let map = HardwareMap(version: 3, entries: [.init(control: .encoder(row: 1, 1),
+            midi: .init(kind: .controlChange, channel: 0, number: 5))])
+        let original = try JSONEncoder().encode(map)
+        try original.write(to: store.fileURL)
+        let file = ProtectedJSONFile.hardware(store)
+        let read = file.load()
+        XCTAssertFalse(read.failed)
+        XCTAssertTrue(read.message?.contains("迁移") == true)
+        XCTAssertEqual(read.value.version, 4)
+        XCTAssertEqual(read.value.entries, map.entries)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), original)
+        try file.save(read.value)
+        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0 != store.fileURL }
+        XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == original })
+    }
+
 }

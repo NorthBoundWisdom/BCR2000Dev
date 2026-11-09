@@ -23,7 +23,7 @@ extension ConsoleViewModel {
         case let .parameter(id)?:
             if let definition = configuration.parameter(id), let value = engine.value(of: id) {
                 label = definition.name
-                detail = definition.formatted(value)
+                detail = definition.formatted(value, minimumFractionDigits: parameterFractionDigits(id))
                 accent = Theme.parameter
             }
         case let .agentPrimaryAction(slotID)?:
