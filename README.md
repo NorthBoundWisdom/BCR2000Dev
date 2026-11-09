@@ -106,6 +106,17 @@ Developer ID 签名、公证、最终安装包检查和 CI 发布参见 [打包�
 DMG + ZIP，也提供单独 ZIP 和 Developer ID 公证选项。
 `configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。
 
+## 通用 MCP 控制接口
+
+顶栏 MCP 设置可开启仅绑定 127.0.0.1 的 Streamable HTTP 服务，默认端口 8787、默认关闭。
+Token 首次启用时生成并存入 Keychain；权限、逐参数 agentWritable、限速和调用记录可在 App 查看。
+支持通用 MCP 2026-07-28，并兼容 2025-11-25 标准握手；不依赖某个厂商的客户端。
+
+Agent 写入经过与滑块相同的会话管线，MIDI 监视器显示 AGENT；示例 arm.enabled 默认不可写。
+使用设置中的通用 curl 连接命令，或设置本机 BCR_MCP_TOKEN 环境变量后运行
+tools/mcp_smoke.py（现代版）及 tools/mcp_smoke.py --legacy（兼容版）。
+协议、工具 schema、权限与验收细节见 [MCP 文档](docs/MCP.md)。
+
 ## 验证
 
 ```bash

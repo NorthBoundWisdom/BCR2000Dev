@@ -312,6 +312,7 @@ private struct ParameterEditor: View {
                 TextField("最小值", value: $draft.minimum, format: .number)
                 TextField("最大值", value: $draft.maximum, format: .number)
                 TextField("默认值", value: $draft.defaultValue, format: .number)
+                Toggle("允许 Agent 写入", isOn: $draft.agentWritable)
             }
             .formStyle(.columns)
             .controlSize(.small)

@@ -30,6 +30,7 @@ struct ConsoleNotice: Equatable {
 @MainActor
 final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
+    let mcp: MCPController
     var source: DeviceSource { session.source }
     var engine: SurfaceEngine { session.engine }
     var mock: MockBCR2000 { session.mock }
@@ -46,7 +47,8 @@ final class ConsoleViewModel: ObservableObject {
     var agentMachine = AgentStateMachine()
     var mockTasks: [AgentSlotID: Task<Void, Never>] = [:]
 
-    init(stores: ConsoleStores = .standard, startsMIDI: Bool = true) {
+    init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
+         mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false) {
         slots = AgentStateMachine().slots
 
         var notices: [String] = []
@@ -68,6 +70,10 @@ final class ConsoleViewModel: ObservableObject {
             if let stored = try stores.configuration.load() {
                 if stored.version == SurfaceConfiguration.currentVersion {
                     configuration = stored
+                } else if stored.version == 1 {
+                    configuration = stored
+                    configuration.version = SurfaceConfiguration.currentVersion
+                    notices.append("功能配置已从 v1 迁移到 v2；机械臂使能不允许 Agent 写入。")
                 } else {
                     notices.append("功能配置版本 \(stored.version) 不受支持，已载入机械臂示例。")
                 }
@@ -82,13 +88,20 @@ final class ConsoleViewModel: ObservableObject {
             saveHardwareMap: { try stores.hardwareMap.save($0) },
             saveConfiguration: { try stores.configuration.save($0) }
         )
+        mcp = MCPController(session: session, store: JSONFileStore(fileURL:
+            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
+            credentials: mcpCredentials ?? KeychainMCPCredentialStore(), integrationTest: integrationTest)
         session.onChange = { [weak self] in self?.objectWillChange.send() }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
+        if integrationTest {
+            notice = ConsoleNotice(level: .info, text: "隔离集成测试：使用独立配置与内存凭据，不连接实体设备。")
+        }
         if !notices.isEmpty {
             notice = ConsoleNotice(level: .error, text: notices.joined(separator: " "))
         }
         session.synchronize()
+        Task { @MainActor [weak mcp] in await mcp?.restore() }
         guard startsMIDI else { return }
         do { try midi.start() }
         catch { notice = ConsoleNotice(level: .error, text: "CoreMIDI 启动失败：\(error.localizedDescription)") }

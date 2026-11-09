@@ -66,28 +66,28 @@ R5 的安全门同时约束硬件、滑块和 MCP 三种来源的写入。
 
 目标：后续 Agent 不通过界面，直接用 MCP 工具操控软件，实现参数读写；效果与人在面板上操作一致。
 
-1. **嵌入式服务**：App 内置 MCP 服务（Streamable HTTP，`POST /mcp`），只绑定 `127.0.0.1`。
+1. [x] **嵌入式服务**：App 内置 MCP 服务（Streamable HTTP，`POST /mcp`），只绑定 `127.0.0.1`。
    默认关闭，在 UI 中开启；端口固定可配置，被占用时明确报错。
-2. **统一写入路径**：MCP 写入与滑块写入一样经过 `SurfaceSession`，同步回写 Mock / 实体 LED。
+2. [x] **统一写入路径**：MCP 写入与滑块写入一样经过 `SurfaceSession`，同步回写 Mock / 实体 LED。
    监视器中标注来源 `AGENT`；R5 的安全门对 MCP 写入同样生效。
-3. **安全**：
+3. [x] **安全**：
    - Bearer token 存放在 Keychain；校验 `Origin`；
    - 权限分级（只读 / 参数写入 / 配置写入）；
    - 参数级 `agentWritable` 开关（`arm.enabled` 等安全相关参数默认不可写）；
    - 写入限速；每次调用有记录，可一键停止服务。
-4. **首批工具**：`get_status`、`list_parameters`、`get_parameter`、`set_parameter`、
+4. [x] **首批工具**：`get_status`、`list_parameters`、`get_parameter`、`set_parameter`、
    `set_parameters`（原子批量）、`nudge_parameter`、`reset_group`、`list_controls`；
    配置写入权限下另有 `assign_control`、`create_parameter`、`update_parameter`。
    协议与 schema 记录在 `docs/MCP.md`。
-5. **验收工具**：`tools/mcp_smoke.py` 对运行中的 App 做端到端冒烟，之后每轮验收都要执行。
+5. [x] **验收工具**：`tools/mcp_smoke.py` 对运行中的 App 做端到端冒烟，之后每轮验收都要执行。
 6. **后续**（不在首版）：
-   - 参数变化订阅（resources + SSE 通知），让 Agent 实时感知硬件操作；
+   - 标准参数订阅与请求级 SSE，让 Agent 实时感知硬件操作；
    - 触发 Agent 槽位、切换设备源等更多工具；
    - 给只支持 stdio 的客户端提供桥接。
 
-验收：Claude Code 用一条 `claude mcp add` 命令接入后，`set_parameter arm.j1 = 90` 让参数滑块和
-P1-1 灯环同步移动；面板上的操作能被 `get_parameter` 读到；`arm.enabled` 写入被拒绝；错误 token
-返回 401；关闭服务后连接被拒绝。
+验收：使用通用 MCP 客户端或 Python 标准库脚本，写入 arm.j1=90 后滑块和 P1-1 LED 同步；
+面板操作可由 get_parameter 读回；保护参数、鉴权、Origin 和停止服务均按规则拒绝。
+2026-07-28 主协议与 2025-11-25 标准旧版模式均已在本机 App 验证，详见 docs/MCP.md。
 
 ## R3 精度与编码器模式（P1）
 

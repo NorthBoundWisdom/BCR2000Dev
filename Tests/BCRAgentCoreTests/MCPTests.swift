@@ -1,0 +1,272 @@
+import Foundation
+import XCTest
+@testable import BCRAgentCore
+
+@MainActor
+private final class MCPFakeDevice: SurfaceDevice {
+    let connection = MIDIConnectionSnapshot()
+    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
+    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
+    func send(_ message: MIDIVoiceMessage) throws {}
+}
+
+@MainActor
+private final class MCPTestClock {
+    var time = Date(timeIntervalSinceReferenceDate: 1_000)
+}
+
+@MainActor
+final class MCPTests: XCTestCase {
+    private func makeService(clock: MCPTestClock = MCPTestClock()) -> AgentControlService {
+        AgentControlService(session: SurfaceSession(
+            hardwareDevice: MCPFakeDevice(), now: { clock.time },
+            saveHardwareMap: { _ in }, saveConfiguration: { _ in }
+        ), now: { clock.time })
+    }
+
+    private func modern(_ method: String, params: [String: JSONValue] = [:], id: JSONValue = .number(1)) throws -> Data {
+        var params = params
+        params["_meta"] = .object([
+            "io.modelcontextprotocol/protocolVersion": .string(MCPVersions.current),
+            "io.modelcontextprotocol/clientCapabilities": .object([:]),
+        ])
+        return try JSONEncoder().encode(JSONValue.object([
+            "jsonrpc": .string("2.0"), "id": id, "method": .string(method), "params": .object(params),
+        ]))
+    }
+
+    private func headers(_ method: String, name: String? = nil) -> [String: String] {
+        var headers = ["mcp-protocol-version": MCPVersions.current, "mcp-method": method]
+        if let name { headers["mcp-name"] = name }
+        return headers
+    }
+
+    func testToolSchemasAndReadToolsAreClientNeutral() async throws {
+        let service = makeService()
+        XCTAssertEqual(MCPToolCatalog.tools.count, 11)
+        for tool in MCPToolCatalog.tools {
+            let object = try XCTUnwrap(tool.objectValue)
+            XCTAssertNotNil(object["inputSchema"]?.objectValue?["properties"])
+            XCTAssertNotNil(object["outputSchema"]?.objectValue?["properties"])
+            XCTAssertNotNil(object["annotations"])
+        }
+        XCTAssertFalse(service.call("get_status").isError)
+        XCTAssertEqual(service.call("list_parameters").value.arrayValue?.count, 9)
+        XCTAssertEqual(service.call("list_controls").value.arrayValue?.count, 108)
+        XCTAssertFalse(service.call("get_parameter", arguments: .object(["id": .string("arm.j1")])).isError)
+        XCTAssertTrue(service.call("get_parameter", arguments: .object(["id": .string("missing")])).isError)
+        XCTAssertTrue(service.call("missing").isError)
+        XCTAssertTrue(service.call("get_status", arguments: .object(["unexpected": .number(1)])).isError)
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.j1")])).isError)
+    }
+
+    func testAgentWriteClampsUpdatesMockAndMarksOrigin() async {
+        let service = makeService()
+        let result = service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .number(999)]))
+        XCTAssertFalse(result.isError)
+        XCTAssertEqual(result.value.objectValue?["value"], .double(180))
+        XCTAssertEqual(result.value.objectValue?["clamped"], .bool(true))
+        XCTAssertEqual(service.session.mock.value(of: .pushEncoder(group: 1, 1)), 127)
+        XCTAssertEqual(service.session.events.last?.origin, .agent)
+        service.session.setParameter("arm.j1", to: 0)
+        XCTAssertEqual(service.session.events.last?.origin, .software)
+        XCTAssertFalse(service.call("nudge_parameter", arguments: .object(["id": .string("arm.j1"), "delta": .number(10)])).isError)
+        XCTAssertEqual(service.session.engine.value(of: "arm.j1"), 10)
+        XCTAssertTrue(service.call("nudge_parameter", arguments: .object(["id": .string("missing"), "delta": .number(10)])).isError)
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .double(.nan)])).isError)
+    }
+
+    func testProtectedParametersReadOnlyAndAtomicBatchFailures() async {
+        let service = makeService()
+        let before = service.session.engine.parameterValues
+        let batch: JSONValue = .object(["values": .array([
+            .object(["id": .string("arm.j1"), "value": .number(90)]),
+            .object(["id": .string("arm.enabled"), "value": .number(1)]),
+        ])])
+        XCTAssertTrue(service.call("set_parameters", arguments: batch).isError)
+        XCTAssertEqual(service.session.engine.parameterValues, before)
+        XCTAssertTrue(service.session.events.isEmpty)
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.enabled"), "value": .number(1)])).isError)
+        XCTAssertTrue(service.call("reset_group", arguments: .object(["group": .string(SurfaceConfiguration.robotArmGroup)])).isError)
+        XCTAssertEqual(service.session.engine.parameterValues, before)
+        service.permissions.parameterWrite = false
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .number(90)])).isError)
+        XCTAssertFalse(service.call("get_status").isError)
+    }
+
+    func testBatchSuccessDuplicateAndUnknownParameterFailures() async {
+        let service = makeService()
+        let valid: JSONValue = .object(["values": .array([
+            .object(["id": .string("arm.j1"), "value": .number(90)]),
+            .object(["id": .string("arm.j2"), "value": .number(20)]),
+        ])])
+        XCTAssertFalse(service.call("set_parameters", arguments: valid).isError)
+        XCTAssertEqual(service.session.engine.value(of: "arm.j1"), 90)
+        XCTAssertEqual(service.session.engine.value(of: "arm.j2"), 20)
+        let before = service.session.engine.parameterValues
+        for id in ["arm.j1", "missing"] {
+            XCTAssertTrue(service.call("set_parameters", arguments: .object(["values": .array([
+                .object(["id": .string("arm.j1"), "value": .number(0)]),
+                .object(["id": .string(id), "value": .number(1)]),
+            ])])).isError)
+            XCTAssertEqual(service.session.engine.parameterValues, before)
+        }
+        XCTAssertTrue(service.call("set_parameters", arguments: .object(["values": .array([])])).isError)
+    }
+
+    func testConfigurationToolsRequirePermissionAndValidateBeforeChangingState() async throws {
+        let service = makeService()
+        var definition = ParameterDefinition(id: "test", name: "Test", group: "test", defaultValue: 10)
+        let create: JSONValue = .object(["definition": try .encoded(definition)])
+        XCTAssertTrue(service.call("create_parameter", arguments: create).isError)
+        XCTAssertTrue(service.call("update_parameter", arguments: create).isError)
+        let assignment = ControlAssignment(control: .encoder(row: 1, 1), target: .parameter("test"))
+        let assign: JSONValue = .object(["assignment": try .encoded(assignment)])
+        XCTAssertTrue(service.call("assign_control", arguments: assign).isError)
+        service.permissions.configurationWrite = true
+        XCTAssertFalse(service.call("create_parameter", arguments: create).isError)
+        XCTAssertTrue(service.call("create_parameter", arguments: create).isError)
+        XCTAssertFalse(service.call("assign_control", arguments: assign).isError)
+        definition.name = "Renamed"
+        XCTAssertFalse(service.call("update_parameter", arguments: .object(["definition": try .encoded(definition)])).isError)
+        XCTAssertEqual(service.session.engine.configuration.parameter("test")?.name, "Renamed")
+        XCTAssertFalse(service.call("set_parameter", arguments: .object(["id": .string("test"), "value": .number(80)])).isError)
+        XCTAssertFalse(service.call("reset_group", arguments: .object(["group": .string("test")])).isError)
+        XCTAssertEqual(service.session.engine.value(of: "test"), 10)
+        XCTAssertTrue(service.call("reset_group", arguments: .object(["group": .string("missing")])).isError)
+        definition.maximum = -1
+        let before = service.session.engine.configuration
+        XCTAssertTrue(service.call("update_parameter", arguments: .object(["definition": try .encoded(definition)])).isError)
+        XCTAssertEqual(service.session.engine.configuration, before)
+        XCTAssertTrue(service.call("assign_control", arguments: .object(["assignment": try .encoded(
+            ControlAssignment(control: .encoder(row: 1, 1), target: .agentPrimaryAction(AgentSlotID(1)))
+        )])).isError)
+    }
+
+    func testWriteRateLimitUsesInjectedClockAndCountsBatchMembers() async {
+        let clock = MCPTestClock()
+        let service = makeService(clock: clock)
+        service.permissions.writesPerSecond = 2
+        let one: JSONValue = .object(["id": .string("arm.j1"), "value": .number(30)])
+        XCTAssertFalse(service.call("set_parameter", arguments: one).isError)
+        XCTAssertTrue(service.call("set_parameters", arguments: .object(["values": .array([
+            .object(["id": .string("arm.j1"), "value": .number(50)]),
+            .object(["id": .string("arm.j2"), "value": .number(50)]),
+        ])])).isError)
+        XCTAssertEqual(service.session.engine.value(of: "arm.j1"), 30)
+        XCTAssertFalse(service.call("set_parameter", arguments: one).isError)
+        XCTAssertTrue(service.call("set_parameter", arguments: one).isError)
+        clock.time.addTimeInterval(1)
+        XCTAssertFalse(service.call("set_parameter", arguments: one).isError)
+    }
+
+    func testAuditIsBoundedAndDoesNotRetainRequestArguments() async {
+        let service = makeService()
+        for _ in 0..<110 { _ = service.call("get_status") }
+        XCTAssertEqual(service.audit.count, 100)
+        XCTAssertTrue(service.audit.allSatisfy { $0.method == "get_status" && $0.detail == "完成" })
+    }
+
+    func testModernDiscoveryToolCallsAndVersionMetadata() async throws {
+        let router = MCPRouter(service: makeService())
+        let discovery = router.handle(try modern("server/discover"), headers: headers("server/discover"))
+        XCTAssertEqual(discovery.status, 200)
+        XCTAssertNil(discovery.sessionID)
+        XCTAssertEqual(discovery.body?.objectValue?["result"]?.objectValue?["resultType"], .string("complete"))
+        XCTAssertEqual(router.sessionCount, 0)
+        let tools = router.handle(try modern("tools/list"), headers: headers("tools/list"))
+        XCTAssertEqual(tools.body?.objectValue?["result"]?.objectValue?["tools"]?.arrayValue?.count, 11)
+        let call = router.handle(try modern("tools/call", params: [
+            "name": .string("set_parameter"), "arguments": .object(["id": .string("arm.j1"), "value": .number(90)]),
+        ]), headers: headers("tools/call", name: "set_parameter"))
+        XCTAssertEqual(call.body?.objectValue?["result"]?.objectValue?["isError"], .bool(false))
+        XCTAssertEqual(router.service.session.engine.value(of: "arm.j1"), 90)
+        XCTAssertEqual(router.handle(try modern("ping"), headers: headers("ping")).status, 200)
+        XCTAssertEqual(router.handle(try modern("unknown"), headers: headers("unknown")).status, 404)
+    }
+
+    func testHeaderMismatchMalformedRequestsAndUnsupportedVersionsAreExplicit() async throws {
+        let router = MCPRouter(service: makeService())
+        XCTAssertEqual(router.handle(try modern("ping"), headers: headers("tools/list")).status, 400)
+        XCTAssertEqual(router.handle(Data("{".utf8), headers: [:]).body?.objectValue?["error"]?.objectValue?["code"], .number(-32700))
+        XCTAssertEqual(router.handle(Data("[]".utf8), headers: [:]).status, 400)
+        XCTAssertEqual(router.handle(try modern("ping", id: .bool(true)), headers: headers("ping")).status, 400)
+        var raw = try JSONDecoder().decode(JSONValue.self, from: modern("ping")).objectValue!
+        var params = raw["params"]!.objectValue!
+        var meta = params["_meta"]!.objectValue!
+        meta["io.modelcontextprotocol/protocolVersion"] = .string("2099-01-01")
+        params["_meta"] = .object(meta); raw["params"] = .object(params)
+        let reply = router.handle(try JSONEncoder().encode(JSONValue.object(raw)),
+                                  headers: ["mcp-method": "ping", "mcp-protocol-version": "2099-01-01"])
+        XCTAssertEqual(reply.status, 400)
+        XCTAssertEqual(reply.body?.objectValue?["error"]?.objectValue?["code"], .number(-32022))
+    }
+
+    func testLegacyHandshakeSessionExpiryAndStop() async throws {
+        let clock = MCPTestClock()
+        let router = MCPRouter(service: makeService(clock: clock), now: { clock.time })
+        let initialization: JSONValue = .object([
+            "jsonrpc": .string("2.0"), "id": .number(1), "method": .string("initialize"),
+            "params": .object(["protocolVersion": .string(MCPVersions.legacy), "capabilities": .object([:]),
+                               "clientInfo": .object(["name": .string("generic-test"), "version": .string("1")])]),
+        ])
+        let reply = router.handle(try JSONEncoder().encode(initialization), headers: [:])
+        let session = try XCTUnwrap(reply.sessionID)
+        let h = ["mcp-session-id": session, "mcp-protocol-version": MCPVersions.legacy]
+        let ping = try JSONEncoder().encode(JSONValue.object(["jsonrpc": .string("2.0"), "id": .number(2), "method": .string("ping")]))
+        XCTAssertNotNil(router.handle(ping, headers: h).body?.objectValue?["error"])
+        let ready = try JSONEncoder().encode(JSONValue.object(["jsonrpc": .string("2.0"), "method": .string("notifications/initialized")]))
+        XCTAssertEqual(router.handle(ready, headers: h).status, 202)
+        XCTAssertEqual(router.handle(ping, headers: h).status, 200)
+        clock.time.addTimeInterval(1_801)
+        XCTAssertEqual(router.handle(ping, headers: h).status, 404)
+        XCTAssertEqual(router.sessionCount, 0)
+        _ = router.handle(try JSONEncoder().encode(initialization), headers: [:])
+        router.stop()
+        XCTAssertEqual(router.sessionCount, 0)
+        XCTAssertEqual(router.deleteSession(session).status, 404)
+    }
+
+    func testConfigurationPersistenceFailureIsReturnedToMCPCaller() async throws {
+        let session = SurfaceSession(hardwareDevice: MCPFakeDevice(), saveHardwareMap: { _ in }, saveConfiguration: { _ in
+            throw MCPToolFailure("test store unavailable")
+        })
+        let service = AgentControlService(session: session, permissions: MCPPermissions(configurationWrite: true))
+        let result = service.call("create_parameter", arguments: .object([
+            "definition": try .encoded(ParameterDefinition(id: "x", name: "X")),
+        ]))
+        XCTAssertTrue(result.isError)
+        XCTAssertTrue(result.value.objectValue?["error"]?.stringValue?.contains("内存") == true)
+        XCTAssertNotNil(session.engine.configuration.parameter("x"))
+        XCTAssertEqual(session.lastConfigurationPersistenceError, "test store unavailable")
+    }
+
+    func testNestedSchemasRejectUnknownPropertiesAndFractionalControlIDs() async throws {
+        let service = makeService()
+        service.permissions.configurationWrite = true
+        var definition = try JSONValue.encoded(ParameterDefinition(id: "x", name: "X")).objectValue!
+        definition["unknown"] = .bool(true)
+        XCTAssertTrue(service.call("create_parameter", arguments: .object(["definition": .object(definition)])).isError)
+        let invalid: JSONValue = .object(["assignment": .object([
+            "control": .object(["section": .string("encoder"), "row": .double(1.5), "index": .number(1)]),
+            "target": .object(["parameter": .object(["_0": .string("arm.j1")])]),
+            "buttonBehavior": .string("toggle"), "inverted": .bool(false),
+        ])])
+        XCTAssertTrue(service.call("assign_control", arguments: invalid).isError)
+        XCTAssertNil(service.session.engine.configuration.parameter("x"))
+        XCTAssertNil(service.session.engine.configuration.assignment(for: .encoder(row: 1, 1)))
+    }
+
+    func testV1ParameterMigrationProtectsEnableAndRoundTripsV2() async throws {
+        let definition = ParameterDefinition(id: "arm.enabled", name: "Enable", minimum: 0, maximum: 1)
+        var object = try JSONValue.encoded(definition).objectValue!
+        object.removeValue(forKey: "agentWritable")
+        let decoded = try JSONValue.object(object).decoded(ParameterDefinition.self)
+        XCTAssertFalse(decoded.agentWritable)
+        let demo = SurfaceConfiguration.robotArmDemo()
+        XCTAssertEqual(demo.version, 2)
+        XCTAssertFalse(demo.parameter("arm.enabled")!.agentWritable)
+        XCTAssertTrue(demo.parameter("arm.j1")!.agentWritable)
+        XCTAssertEqual(try JSONValue.encoded(demo).decoded(SurfaceConfiguration.self), demo)
+    }
+}

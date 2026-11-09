@@ -1,5 +1,9 @@
 import Foundation
 
+public enum SurfaceWriteOrigin: String, Equatable, Sendable {
+    case software, agent, external
+}
+
 public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let id: Int
     public let time: Date
@@ -8,6 +12,7 @@ public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let message: MIDIVoiceMessage
     public let control: BCRControlID?
     public let ignored: Bool
+    public let origin: SurfaceWriteOrigin
 }
 
 /// Semantic notifications let the app own wording, selection and follow-touch policy.
@@ -34,6 +39,7 @@ public final class SurfaceSession {
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
     public private(set) var droppedFeedbackCount = 0
+    public private(set) var lastConfigurationPersistenceError: String?
 
     public var onChange: (@MainActor () -> Void)?
     public var onEvent: (@MainActor (SurfaceSessionEvent) -> Void)?
@@ -46,6 +52,7 @@ public final class SurfaceSession {
     private let saveConfiguration: @MainActor (SurfaceConfiguration) throws -> Void
     private var hardwareMap: HardwareMap
     private var nextEventID = 0
+    private var writeOrigin: SurfaceWriteOrigin = .software
 
     public init(
         hardwareDevice: any SurfaceDevice,
@@ -67,6 +74,14 @@ public final class SurfaceSession {
         hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
         hardwareDevice.onConnection = { [weak self] in self?.handleConnection($0) }
         mockDevice.onMessages = { [weak self] in self?.receive($0, from: .mock) }
+    }
+
+    /// Source attribution is scoped to synchronous effect execution, including nested calls.
+    public func withWriteOrigin<T>(_ origin: SurfaceWriteOrigin, _ operation: () throws -> T) rethrows -> T {
+        let previous = writeOrigin
+        writeOrigin = origin
+        defer { writeOrigin = previous }
+        return try operation()
     }
 
     public func synchronize() {
@@ -261,7 +276,7 @@ public final class SurfaceSession {
     ) {
         nextEventID += 1
         events.append(MonitorEvent(id: nextEventID, time: now(), direction: direction,
-                                   source: source, message: message, control: control, ignored: ignored))
+                                   source: source, message: message, control: control, ignored: ignored, origin: writeOrigin))
         if events.count > 300 { events.removeFirst(events.count - 300) }
     }
 
@@ -272,7 +287,12 @@ public final class SurfaceSession {
     }
 
     private func persistConfiguration() {
-        do { try saveConfiguration(engine.configuration) }
-        catch { onEvent?(.failed(.configurationPersistence, error.localizedDescription)) }
+        do {
+            try saveConfiguration(engine.configuration)
+            lastConfigurationPersistenceError = nil
+        } catch {
+            lastConfigurationPersistenceError = error.localizedDescription
+            onEvent?(.failed(.configurationPersistence, error.localizedDescription))
+        }
     }
 }

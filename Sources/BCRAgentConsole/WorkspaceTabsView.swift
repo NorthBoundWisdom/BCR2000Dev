@@ -259,7 +259,7 @@ private struct MIDIMonitorView: View {
                             Text(event.direction == .input ? "IN " : "OUT")
                                 .foregroundStyle(event.direction == .input ? Theme.parameter : Theme.selection)
                                 .bold()
-                            Text(event.source == .mock ? "MOCK" : "HW  ")
+                            Text(event.origin == .agent ? "AGENT" : (event.source == .mock ? "MOCK" : "HW  "))
                                 .foregroundStyle(.secondary)
                             Text(event.message.diagnosticDescription)
                                 .lineLimit(1)

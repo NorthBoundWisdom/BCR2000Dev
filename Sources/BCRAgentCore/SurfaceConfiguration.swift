@@ -70,6 +70,7 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     public var maximum: Double
     public var defaultValue: Double
     public var kind: ParameterKind
+    public var agentWritable: Bool
 
     public init(
         id: ParameterID,
@@ -79,7 +80,8 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         minimum: Double = 0,
         maximum: Double = 127,
         defaultValue: Double? = nil,
-        kind: ParameterKind = .continuous
+        kind: ParameterKind = .continuous,
+        agentWritable: Bool = true
     ) {
         self.id = id
         self.name = name
@@ -89,6 +91,26 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         self.maximum = maximum
         self.defaultValue = defaultValue ?? minimum
         self.kind = kind
+        self.agentWritable = agentWritable
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, group, unit, minimum, maximum, defaultValue, kind, agentWritable
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try c.decode(ParameterID.self, forKey: .id)
+        self.init(
+            id: id, name: try c.decode(String.self, forKey: .name),
+            group: try c.decodeIfPresent(String.self, forKey: .group) ?? "",
+            unit: try c.decodeIfPresent(String.self, forKey: .unit) ?? "",
+            minimum: try c.decodeIfPresent(Double.self, forKey: .minimum) ?? 0,
+            maximum: try c.decodeIfPresent(Double.self, forKey: .maximum) ?? 127,
+            defaultValue: try c.decodeIfPresent(Double.self, forKey: .defaultValue),
+            kind: try c.decodeIfPresent(ParameterKind.self, forKey: .kind) ?? .continuous,
+            agentWritable: try c.decodeIfPresent(Bool.self, forKey: .agentWritable) ?? (id != "arm.enabled")
+        )
     }
 
     public func validate() throws {
@@ -214,7 +236,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var name: String
@@ -316,7 +338,7 @@ public extension SurfaceConfiguration {
             .init(id: "arm.j6", name: "J6 末端旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
             .init(id: "arm.gripper", name: "夹爪开合", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 40),
             .init(id: "arm.speed", name: "运动速度", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 50),
-            .init(id: "arm.enabled", name: "使能", group: group, minimum: 0, maximum: 1, defaultValue: 0, kind: .toggle),
+            .init(id: "arm.enabled", name: "使能", group: group, minimum: 0, maximum: 1, defaultValue: 0, kind: .toggle, agentWritable: false),
         ]
 
         var assignments: [ControlAssignment] = []

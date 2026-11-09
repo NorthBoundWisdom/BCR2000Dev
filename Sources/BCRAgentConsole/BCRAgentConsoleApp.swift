@@ -46,6 +46,25 @@ struct BCRAgentConsoleApp: App {
 
     init() {
         let smoke = CommandLine.arguments.contains("--startup-smoke")
+        if CommandLine.arguments.contains("--integration-test") {
+            #if DEBUG
+            do {
+                guard !smoke else { throw MCPHTTPParseError(reason: "集成测试与 startup-smoke 不能同时启用") }
+                let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
+                _model = StateObject(wrappedValue: ConsoleViewModel(
+                    stores: context.stores, startsMIDI: false,
+                    mcpCredentials: context.credentials, integrationTest: true
+                ))
+                return
+            } catch {
+                FileHandle.standardError.write(Data(("隔离测试启动失败：" + error.localizedDescription + "\n").utf8))
+                Darwin.exit(2)
+            }
+            #else
+            FileHandle.standardError.write(Data("隔离测试仅支持 Debug 构建。\n".utf8))
+            Darwin.exit(2)
+            #endif
+        }
         _model = StateObject(wrappedValue: ConsoleViewModel(stores: smoke ? .temporary() : .standard, startsMIDI: !smoke))
     }
 

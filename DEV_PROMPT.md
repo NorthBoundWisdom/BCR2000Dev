@@ -130,62 +130,41 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 
 **验收**：拖动滑块不会刷屏（MIDI 监视器可见合并效果）；随机测试通过；界面行为不变。
 
-### WP3：MCP 控制接口（R8 第 1–5 项）
+### WP3：通用 MCP 控制接口（R8 第 1–5 项）
 
-**目标**：App 内置 MCP 服务，让外部 Agent（Claude Code、Codex 等）通过本机端口读取并修改参数。
-Agent 写入与滑块写入**完全等价**：都经过 `SurfaceSession` 效果管线，界面、Mock / 实体 LED 同步更新。
+**目标**：App 内置符合通用 MCP 规范的服务，供任意支持 Streamable HTTP 的客户端读取和修改参数。
+不依赖特定厂商、Agent 产品或客户端私有扩展。写入与滑块完全等价，都经过 SurfaceSession 效果管线。
 
 **要求**：
 
-1. **分层**：
-   - Core：MCP / JSON-RPC 2.0 消息模型、协议版本协商、工具定义（含 JSON Schema）、参数校验、
-     权限判断与工具执行（`AgentControlService` 一类的 `@MainActor` 类型，调用 `SurfaceSession`）。纯逻辑，可单元测试。
-   - App：基于 `Network.framework` 的 HTTP 监听、请求解析、鉴权、UI 设置与状态展示。
-   - 默认自行实现所需的最小协议子集，**不引入第三方依赖**。如果你认为官方 Swift MCP SDK 明显更合适，
-     先停下来说明理由，由开发者决定。
-2. **传输**：MCP Streamable HTTP，单一端点 `POST /mcp`，返回 `application/json`。
-   - 支持 `initialize`、`notifications/initialized`、`ping`、`tools/list`、`tools/call`，以及会话头 `Mcp-Session-Id`。
-   - 首版不要求 SSE 推送；不支持的方法返回规范的 JSON-RPC 错误。
-   - 实现时以当时最新的稳定规范版本为准，在 `docs/MCP.md` 中写明协议版本。
-3. **安全**（缺一不可）：
-   - 只绑定 `127.0.0.1`；默认关闭，用户在 UI 中开启后持久化。
-   - 端口固定、可配置。被占用时明确报错，**不得**自动改用随机端口。
-   - Bearer token 首次启用时随机生成，保存在 Keychain，不进仓库和日志。缺少或错误的 token 返回 401。
-   - 校验 `Origin` 头，拒绝非本机来源，防止 DNS rebinding。
-   - 权限分级：`只读`、`参数写入`（默认开启）、`配置写入`（默认关闭，用于改分配和参数定义）。
-   - 参数级开关 `agentWritable`：提升 `SurfaceConfiguration.currentVersion` 并迁移旧数据；
-     示例配置中 `arm.enabled` 设为不可写。
-   - 写入限速（可配置）；超限时返回明确错误，不静默丢弃。
-4. **首批工具**（输入输出 schema 写入 `docs/MCP.md`）：
-   - `get_status`：设备源、连接、丢弃计数、MCP 权限。
-   - `list_parameters`：id、名称、分组、单位、范围、类型、当前值、是否可写、绑定控件。
-   - `get_parameter`。
-   - `set_parameter`：返回实际写入值；超出范围时返回 `clamped: true`，不得静默截断。
-   - `set_parameters`：批量写入，先全部校验，任一失败则全部不写。
-   - `nudge_parameter`：按增量修改。
-   - `reset_group`。
-   - `list_controls`：物理控件、分配、绑定状态、当前值。
-   - `assign_control`、`create_parameter`、`update_parameter`：仅在开启“配置写入”时可用。
-   - 工具执行失败返回 `isError: true` 和可读的原因（未知参数、无权限、限速、校验失败）。
-5. **可见性**：
-   - 顶栏显示 MCP 状态：关闭 / 监听中 / 活跃会话数。
-   - 设置面板：端口、权限、复制 token、复制连接命令（例如
-     `claude mcp add --transport http bcr-console http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"`）、
-     最近 100 次调用记录。
-   - MIDI 监视器中，Agent 发起的写入标注来源 `AGENT`。
-   - 一键停止服务（立即断开所有会话）。
-6. **测试**：
-   - Core 测试：协商、`tools/list` schema、每个工具的成功与失败路径、权限拒绝、批量原子性、
-     clamp 标记、限速（时钟注入），以及“Agent 写入 → Mock LED 更新”的闭环。
-   - Console 测试：本机回环的 HTTP 集成测试（端口 0），覆盖鉴权、Origin、会话头、端口占用报错。
-   - 新增 `tools/mcp_smoke.py`（仅用 Python 标准库），对运行中的 App 执行
-     initialize → tools/list → set_parameter → get_parameter，作为验收脚本。
+1. Core 拥有 JSON-RPC 2.0/MCP 消息、版本处理、工具 JSON Schema、参数校验、权限与工具执行；
+   App 拥有 Network.framework HTTP、鉴权、Keychain、设置和状态展示。不引入第三方依赖。
+2. 单一 POST /mcp，application/json 响应，以当时最新稳定通用 MCP 规范实现。
+   当前为 2026-07-28：server/discover、逐请求元数据和镜像头校验、tools/list、tools/call、ping。
+   兼容标准 2025-11-25 的 initialize、notifications/initialized、Mcp-Session-Id；
+   两个版本分别按各自规则执行，不将旧握手或会话作为现代版的前提。不要求 SSE。
+3. 安全：仅绑定 127.0.0.1，默认关闭，启用设置持久化；固定可配置端口，占用明确报错，不自动换端口。
+   随机 Bearer token 首次启用时生成并存入 Keychain，不进入仓库或日志；缺少/错误 token 返回 401。
+   校验 Host/Origin，拒绝非本机来源。参数写入默认开启、配置写入默认关闭，支持只读；
+   逐参数 agentWritable，示例 arm.enabled 不可写；提升配置版本并可见迁移。
+   写入限速可配置，超限明确返回错误。
+4. 工具：get_status、list_parameters、get_parameter、set_parameter、set_parameters、
+   nudge_parameter、reset_group、list_controls、assign_control、create_parameter、update_parameter。
+   写入返回实际值和 clamped；批量全部校验后才写；配置工具受额外权限限制。
+   失败返回 isError 与可读原因。输入/输出 JSON Schema 记录在 docs/MCP.md。
+5. UI：顶栏显示关闭/启动/监听/错误及兼容会话数；设置端口、权限、限速，复制 token 与
+   客户端无关的连接命令，最近 100 次调用记录；一键停止并断开所有连接/会话。
+   Agent 写入在 MIDI 监视器中标为 AGENT。
+6. 测试：Core 覆盖版本、工具 schema、每个工具成功/失败、权限、原子性、clamp、注入时钟限速、
+   Agent→Mock LED；Console 使用端口 0 回环测试鉴权、Origin、会话头、端口占用。
+   tools/mcp_smoke.py 仅用 Python 标准库，同时验证现代通用 MCP 和标准旧版相容模式。
+   验收不以安装某个特定 MCP 客户端为前提。
 
-**验收**（在 Mock 模式下）：
-- 用 Claude Code 通过上面的连接命令接入，列出工具后调用 `set_parameter arm.j1 = 90`：参数滑块和 P1-1 灯环同步移动。
-- 在面板上转动 P1-1 后，`get_parameter` 读到新值。
-- 写入 `arm.enabled` 被拒绝；错误 token 返回 401；关闭服务后连接被拒绝。
-- `tools/mcp_smoke.py` 通过。
+**验收**（Mock）：
+- 通用 MCP 客户端写入 arm.j1=90，滑块和 P1-1 LED 同步；
+  面板旋钮操作后的新值可通过 get_parameter 读到。
+- arm.enabled 写入拒绝、错误 token 返回 401、非法 Origin 拒绝、停止后连接失败。
+- 两种协议模式的 tools/mcp_smoke.py 通过。
 
 ### WP4：持久化加固与配置导入导出（R4 第 2 项 + 规范第 5 节）
 

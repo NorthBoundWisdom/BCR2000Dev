@@ -151,6 +151,7 @@ private struct HeaderBar: View {
                 .controlSize(.small)
                 .help("操作设备上的控件时自动在检查器中选中它")
 
+            MCPStatusButton(controller: model.mcp)
             DeviceStatus(model: model)
         }
         .padding(.horizontal, 18)
