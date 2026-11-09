@@ -38,8 +38,11 @@ enum MCPInputValidation {
             if schema["type"] == .string("integer"), number.rounded() != number { throw MCPToolFailure("参数必须是整数") }
             if let minimum = schema["minimum"]?.finiteNumber, number < minimum { throw MCPToolFailure("数值小于允许范围") }
             if let maximum = schema["maximum"]?.finiteNumber, number > maximum { throw MCPToolFailure("数值超过允许范围") }
+            if let minimum = schema["exclusiveMinimum"]?.finiteNumber, number <= minimum { throw MCPToolFailure("数值必须大于最小边界") }
         case "string":
             guard value.stringValue != nil else { throw MCPToolFailure("参数必须是字符串") }
+        case "null":
+            guard value == .null else { throw MCPToolFailure("参数必须为空值") }
         case "boolean":
             guard value.boolValue != nil else { throw MCPToolFailure("参数必须是布尔值") }
         case nil: break

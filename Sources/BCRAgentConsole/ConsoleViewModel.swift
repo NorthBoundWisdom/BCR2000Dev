@@ -199,6 +199,27 @@ final class ConsoleViewModel: ObservableObject {
         catch { report(error) }
     }
 
+    func setCycleValues(_ text: String, parameter: ParameterID, for control: BCRControlID) {
+        let fields = text.replacingOccurrences(of: "，", with: ",").split(separator: ",", omittingEmptySubsequences: false)
+        let values = fields.compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        guard values.count == fields.count else { report(ConfigurationFileError(reason: "循环值必须是逗号分隔的数值")); return }
+        setAssignment(ControlAssignment(control: control, target: .cycleParameter(id: parameter, values: values)), for: control)
+    }
+
+    func bulkAssignmentPlan(section: BCRSection, row: Int, group: String) -> BulkAssignmentPlan? {
+        do { return try BulkAssignmentPlan(configuration: configuration, section: section, row: row, group: group) }
+        catch { report(error); return nil }
+    }
+
+    @discardableResult
+    func applyBulkAssignment(_ plan: BulkAssignmentPlan) -> Bool {
+        do {
+            notice = ConsoleNotice(level: .info, text: "已批量分配 \(plan.changes.count) 个控件。")
+            try session.applyBulkAssignment(plan)
+            return session.lastConfigurationPersistenceError == nil
+        } catch { report(error); return false }
+    }
+
     // MARK: Hardware map / learning
 
     func beginLearning(at control: BCRControlID) {

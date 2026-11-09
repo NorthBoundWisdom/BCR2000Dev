@@ -50,7 +50,7 @@ public struct SurfaceEngine: Sendable {
         self.hardwareMap = hardwareMap
         self.configuration = configuration
         parameterValues = Dictionary(
-            uniqueKeysWithValues: configuration.parameters.map { ($0.id, $0.defaultValue) }
+            uniqueKeysWithValues: configuration.parameters.map { ($0.id, $0.clamp($0.defaultValue)) }
         )
     }
 
@@ -124,7 +124,7 @@ public struct SurfaceEngine: Sendable {
             return []
         }
         parameterValues[id] = definition.clamp(value)
-        return feedback(to: configuration.controls(targeting: .parameter(id)), at: now)
+        return feedback(to: configuration.controls(targetingParameter: id), at: now)
     }
 
     public mutating func resetGroup(_ group: String, at now: Date = .now) -> [SurfaceEffect] {
@@ -248,13 +248,17 @@ public struct SurfaceEngine: Sendable {
             guard let definition = configuration.parameter(id) else {
                 return []
             }
-            let bound = configuration.controls(targeting: assignment.target)
+            let bound = configuration.controls(targetingParameter: id)
             if control.isContinuous {
                 let input = assignment.inverted ? 127 - value : value
                 parameterValues[id] = definition.value(fromMIDI: input)
                 // The moved encoder already shows its position; only mirror it elsewhere.
-                let others = fromDevice ? bound.filter { $0 != control } : bound
-                return feedback(to: others, at: now)
+                let projected = definition.midiValue(for: parameterValues[id]!)
+                let expected = assignment.inverted ? 127 - projected : projected
+                // A snapped value can differ from the device's local ring. Correct the
+                // origin only in that case; unchanged absolute inputs still mirror others.
+                let targets = fromDevice && expected == value ? bound.filter { $0 != control } : bound
+                return feedback(to: targets, at: now)
             }
 
             switch assignment.buttonBehavior {
@@ -268,6 +272,22 @@ public struct SurfaceEngine: Sendable {
                 }
             }
             return feedback(to: bound, at: now)
+
+        case let .stepParameter(id, step, wraps):
+            guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
+            guard let definition = configuration.parameter(id), let current = self.value(of: id) else { return [] }
+            return setParameter(id, to: steppedValue(current, definition: definition, step: step, wraps: wraps), at: now)
+
+        case let .setParameter(id, value):
+            guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
+            return setParameter(id, to: value, at: now)
+
+        case let .cycleParameter(id, values):
+            guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
+            guard let definition = configuration.parameter(id), let current = self.value(of: id), !values.isEmpty else { return [] }
+            let previous = values.firstIndex { approximatelyEqual(definition.clamp($0), current) }
+            let next = previous.map { ($0 + 1) % values.count } ?? 0
+            return setParameter(id, to: values[next], at: now)
 
         case let .agentPrimaryAction(slot):
             var effects: [SurfaceEffect] = []
@@ -284,6 +304,16 @@ public struct SurfaceEngine: Sendable {
             }
             return resetGroup(group, at: now)
         }
+    }
+
+    private func steppedValue(_ current: Double, definition: ParameterDefinition, step: Double, wraps: Bool) -> Double {
+        if step > 0, step > definition.maximum - current { return wraps ? definition.minimum : definition.maximum }
+        if step < 0, -step > current - definition.minimum { return wraps ? definition.maximum : definition.minimum }
+        return definition.clamp(current + step)
+    }
+
+    private func approximatelyEqual(_ lhs: Double, _ rhs: Double) -> Bool {
+        lhs == rhs || abs(lhs - rhs) <= max(lhs.ulp, rhs.ulp) * 4
     }
 
     private mutating func acceptTrigger(_ control: BCRControlID, at now: Date) -> Bool {
@@ -307,6 +337,15 @@ public struct SurfaceEngine: Sendable {
             }
             let midi = definition.midiValue(for: value)
             return assignment.inverted ? 127 - midi : midi
+        case let .stepParameter(id, step, wraps):
+            guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
+            return approximatelyEqual(steppedValue(current, definition: definition, step: step, wraps: wraps), current) ? 0 : 127
+        case let .setParameter(id, preset):
+            guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
+            return approximatelyEqual(definition.clamp(preset), current) ? 127 : 0
+        case let .cycleParameter(id, values):
+            guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
+            return values.contains { approximatelyEqual(definition.clamp($0), current) } ? 127 : 0
         case let .agentPrimaryAction(slot):
             return agentFeedback[slot] ?? 0
         case .resetGroup:

@@ -62,9 +62,9 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | update_parameter | definition: 参数定义对象 | 更新后的参数信息，需要配置写入 |
 
 所有 inputSchema 都是 object、additionalProperties=false，required 字段见上表。
-参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable；
+参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable/step；
 id 和 name 必需，其余默认与 App 创建参数一致。update_parameter 接收完整定义，不是补丁。
-kind 是 continuous 或 toggle；数值必须有限，minimum < maximum，默认值在范围内。
+step 可缺省或为 null（不吸附），启用时为正数；kind 是 continuous 或 toggle；数值必须有限，minimum < maximum，默认值在范围内。
 参数信息另包含 value、writable 和绑定的 controls。
 
 控件使用 section、row、index，范围由 section 决定。分配包含 control、target、
@@ -88,7 +88,7 @@ buttonBehavior（toggle/momentary）和 inverted。target 与版本化 SurfaceCo
 错误 token 与非法 Origin 检查。它恢复原参数值并清理旧会话，不打印凭据。
 MCP 设置里的“复制连接命令”给出通用 curl server/discover 请求，不需要特定 Agent CLI。
 
-配置版本从 v1 升到 v2，新增 agentWritable。旧定义缺省为可写，arm.enabled 缺省不可写；
+当前配置 v3；v1→v2 新增 agentWritable，v2→v3 新增 step 和触发参数功能。旧定义缺省为可写，arm.enabled 缺省不可写；
 App 显示迁移提示，并保持原文件直到用户后续修改配置。
 
 ## 隔离原生验收
@@ -98,3 +98,8 @@ App 显示迁移提示，并保持原文件直到用户后续修改配置。
 它不读取用户 Keychain，也不接触用户配置或实体 MIDI；Release 构建拒绝该测试模式。
 可用 --script 指定额外本机验收脚本；脚本通过本地环境取得测试端点、测试凭据及测试 App PID。
 测试环境缺失或格式错误时明确失败，不回退到用户数据。
+
+新增 target JSON 分支可通过同一个 assign_control 工具使用，无客户端专属工具：
+stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {id, values}。
+例如 target={"stepParameter":{"id":"arm.j1","step":0.5,"wraps":false}}。
+这些功能同样受配置写入权限和整体校验限制；普通参数写入返回的 clamped 也标明吸附造成的调整。

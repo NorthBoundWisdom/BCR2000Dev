@@ -257,6 +257,30 @@ final class MCPTests: XCTestCase {
         XCTAssertNil(service.session.engine.configuration.assignment(for: .encoder(row: 1, 1)))
     }
 
+    func testStepAndNewAssignmentTargetsAreAvailableThroughGenericSchemas() async throws {
+        let service = makeService()
+        service.permissions.configurationWrite = true
+        var definition = service.session.engine.configuration.parameter("arm.j1")!
+        definition.step = 0.5
+        XCTAssertFalse(service.call("update_parameter", arguments: .object(["definition": try .encoded(definition)])).isError)
+        let value = service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .double(90.26)]))
+        XCTAssertEqual(value.value.objectValue?["value"], .double(90.5))
+        XCTAssertEqual(value.value.objectValue?["clamped"], .bool(true))
+        for target in [
+            ControlTarget.stepParameter(id: "arm.j1", step: 0.5, wraps: false),
+            .setParameter(id: "arm.j1", value: 45),
+            .cycleParameter(id: "arm.j1", values: [-90, 0, 90]),
+        ] {
+            XCTAssertFalse(service.call("assign_control", arguments: .object(["assignment": try .encoded(
+                ControlAssignment(control: .userButton(1), target: target)
+            )])).isError)
+        }
+        var raw = try JSONValue.encoded(definition).objectValue!
+        raw["step"] = .null
+        XCTAssertFalse(service.call("update_parameter", arguments: .object(["definition": .object(raw)])).isError)
+        XCTAssertNil(service.session.engine.configuration.parameter("arm.j1")?.step)
+    }
+
     func testV1ParameterMigrationProtectsEnableAndRoundTripsV2() async throws {
         let definition = ParameterDefinition(id: "arm.enabled", name: "Enable", minimum: 0, maximum: 1)
         var object = try JSONValue.encoded(definition).objectValue!
@@ -264,7 +288,7 @@ final class MCPTests: XCTestCase {
         let decoded = try JSONValue.object(object).decoded(ParameterDefinition.self)
         XCTAssertFalse(decoded.agentWritable)
         let demo = SurfaceConfiguration.robotArmDemo()
-        XCTAssertEqual(demo.version, 2)
+        XCTAssertEqual(demo.version, SurfaceConfiguration.currentVersion)
         XCTAssertFalse(demo.parameter("arm.enabled")!.agentWritable)
         XCTAssertTrue(demo.parameter("arm.j1")!.agentWritable)
         XCTAssertEqual(try JSONValue.encoded(demo).decoded(SurfaceConfiguration.self), demo)

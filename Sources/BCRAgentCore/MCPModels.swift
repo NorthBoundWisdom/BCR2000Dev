@@ -90,6 +90,10 @@ public enum MCPToolCatalog {
         "minimum": number, "maximum": number, "defaultValue": number,
         "kind": .object(["type": .string("string"), "enum": .array([.string("continuous"), .string("toggle")])]),
         "agentWritable": boolean,
+        "step": .object(["oneOf": .array([
+            .object(["type": .string("number"), "exclusiveMinimum": .number(0)]),
+            .object(["type": .string("null")]),
+        ])]),
     ], required: ["id", "name"])
     private static let control: JSONValue = .object(["oneOf": .array(BCRSection.allCases.map { section in
         schema([
@@ -106,6 +110,11 @@ public enum MCPToolCatalog {
                 "type": .string("integer"), "minimum": .number(1), "maximum": .number(8),
             ])], required: ["rawValue"])], required: ["_0"])], required: ["agentPrimaryAction"]),
             schema(["resetGroup": schema(["_0": string], required: ["_0"])], required: ["resetGroup"]),
+            schema(["stepParameter": schema(["id": string, "step": number, "wraps": boolean], required: ["id", "step", "wraps"])], required: ["stepParameter"]),
+            schema(["setParameter": schema(["id": string, "value": number], required: ["id", "value"])], required: ["setParameter"]),
+            schema(["cycleParameter": schema(["id": string, "values": .object([
+                "type": .string("array"), "items": number, "minItems": .number(1), "maxItems": .number(256),
+            ])], required: ["id", "values"])], required: ["cycleParameter"]),
         ])]),
         "buttonBehavior": .object(["type": .string("string"), "enum": .array([.string("toggle"), .string("momentary")])]),
         "inverted": boolean,

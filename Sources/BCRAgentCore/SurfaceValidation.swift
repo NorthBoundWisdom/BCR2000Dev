@@ -3,7 +3,7 @@ import Foundation
 public struct SurfaceValidationIssue: Equatable, Sendable {
     public enum Code: String, Equatable, Sendable {
         case unsupportedVersion, emptyName, invalidParameter, duplicateParameter, duplicateAssignment
-        case unknownParameter, encoderTrigger, invalidAgentSlot, unknownGroup
+        case unknownParameter, encoderTrigger, invalidAgentSlot, unknownGroup, invalidFunction
         case duplicateControlBinding, duplicateMIDIBinding, encoderMessageKind
     }
     public let code: Code
@@ -55,10 +55,30 @@ public extension SurfaceConfiguration {
             if assignment.control.isContinuous, assignment.target.isTrigger {
                 issues.append(.init(.encoderTrigger, subject: label, detail: "\(label)：触发功能只能分配给按键"))
             }
+            if let id = assignment.target.parameterID, !identifiers.contains(id) {
+                issues.append(.init(.unknownParameter, subject: id.rawValue, detail: "\(label)：未知参数 \(id)"))
+            }
             switch assignment.target {
-            case let .parameter(id):
-                if !identifiers.contains(id) {
-                    issues.append(.init(.unknownParameter, subject: id.rawValue, detail: "\(label)：未知参数 \(id)"))
+            case .parameter: break
+            case let .stepParameter(_, step, _):
+                if !step.isFinite || step == 0 {
+                    issues.append(.init(.invalidFunction, subject: label, detail: "\(label)：步进值必须有限且不为零"))
+                }
+            case let .setParameter(id, value):
+                if !value.isFinite || parameter(id).map({ value < $0.minimum || value > $0.maximum }) == true {
+                    issues.append(.init(.invalidFunction, subject: label, detail: "\(label)：指定值必须在参数范围内"))
+                }
+            case let .cycleParameter(id, values):
+                let finite = values.allSatisfy(\.isFinite)
+                var invalid = values.isEmpty || values.count > 256 || !finite
+                if let definition = parameter(id) {
+                    invalid = invalid || values.contains { $0 < definition.minimum || $0 > definition.maximum }
+                    if finite, (try? definition.validate()) != nil {
+                        invalid = invalid || Set(values.map(definition.clamp)).count != values.count
+                    }
+                }
+                if invalid {
+                    issues.append(.init(.invalidFunction, subject: label, detail: "\(label)：循环值需为 1–256 个范围内的不同值（吸附后也不可重复）"))
                 }
             case let .agentPrimaryAction(slot):
                 if !(1...8).contains(slot.rawValue) {

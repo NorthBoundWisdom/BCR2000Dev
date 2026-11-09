@@ -49,6 +49,7 @@ public enum ParameterDefinitionError: Error, Equatable, LocalizedError, Sendable
     case duplicateIdentifier(ParameterID)
     case unknownParameter(ParameterID)
     case nonFiniteDefault
+    case invalidStep
 
     public var errorDescription: String? {
         switch self {
@@ -58,6 +59,7 @@ public enum ParameterDefinitionError: Error, Equatable, LocalizedError, Sendable
         case let .duplicateIdentifier(id): "参数 ID \(id) 已存在"
         case let .unknownParameter(id): "未知参数 \(id)"
         case .nonFiniteDefault: "默认值必须是有限数值"
+        case .invalidStep: "步长必须是正的有限数值，并能表示当前范围"
         }
     }
 }
@@ -73,6 +75,7 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     public var defaultValue: Double
     public var kind: ParameterKind
     public var agentWritable: Bool
+    public var step: Double?
 
     public init(
         id: ParameterID,
@@ -83,7 +86,8 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         maximum: Double = 127,
         defaultValue: Double? = nil,
         kind: ParameterKind = .continuous,
-        agentWritable: Bool = true
+        agentWritable: Bool = true,
+        step: Double? = nil
     ) {
         self.id = id
         self.name = name
@@ -94,10 +98,11 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         self.defaultValue = defaultValue ?? minimum
         self.kind = kind
         self.agentWritable = agentWritable
+        self.step = step
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, group, unit, minimum, maximum, defaultValue, kind, agentWritable
+        case id, name, group, unit, minimum, maximum, defaultValue, kind, agentWritable, step
     }
 
     public init(from decoder: any Decoder) throws {
@@ -114,7 +119,8 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
             maximum: try field(Double.self, .maximum, 127),
             defaultValue: c.contains(.defaultValue) ? try c.decode(Double.self, forKey: .defaultValue) : nil,
             kind: try field(ParameterKind.self, .kind, .continuous),
-            agentWritable: try field(Bool.self, .agentWritable, (id != "arm.enabled"))
+            agentWritable: try field(Bool.self, .agentWritable, (id != "arm.enabled")),
+            step: try c.decodeIfPresent(Double.self, forKey: .step)
         )
     }
 
@@ -129,6 +135,11 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
             throw ParameterDefinitionError.invalidRange(minimum: minimum, maximum: maximum)
         }
         guard defaultValue.isFinite else { throw ParameterDefinitionError.nonFiniteDefault }
+        if let step {
+            guard step.isFinite, step > 0, (minimum / step).isFinite, (maximum / step).isFinite else {
+                throw ParameterDefinitionError.invalidStep
+            }
+        }
     }
 
     public var midpoint: Double {
@@ -138,10 +149,14 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     /// Clamps to the range; toggles snap to `minimum` or `maximum`.
     public func clamp(_ value: Double) -> Double {
         let bounded = min(max(value, minimum), maximum)
-        guard kind == .toggle else {
-            return bounded
-        }
-        return bounded >= midpoint ? maximum : minimum
+        if kind == .toggle { return bounded >= midpoint ? maximum : minimum }
+        guard let step else { return bounded }
+        // Include both endpoints. Equal-distance ties select the lower value so
+        // parameter snapping and the 7-bit projection have a stable round trip.
+        let quotient = bounded / step
+        let lower = min(max(quotient.rounded(.down) * step, minimum), maximum)
+        let upper = min(max(quotient.rounded(.up) * step, minimum), maximum)
+        return abs(bounded - lower) <= abs(upper - bounded) ? lower : upper
     }
 
     public func normalized(_ value: Double) -> Double {
@@ -159,7 +174,7 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         if kind == .toggle {
             return midi >= 64 ? maximum : minimum
         }
-        return minimum + (maximum - minimum) * Double(midi) / 127
+        return clamp(minimum + (maximum - minimum) * Double(midi) / 127)
     }
 
     public func formatted(_ value: Double) -> String {
@@ -195,12 +210,22 @@ public enum ControlTarget: Codable, Hashable, Sendable {
     case agentPrimaryAction(AgentSlotID)
     /// Returns every parameter of a group to its default value (e.g. robot arm "home").
     case resetGroup(String)
+    case stepParameter(id: ParameterID, step: Double, wraps: Bool)
+    case setParameter(id: ParameterID, value: Double)
+    case cycleParameter(id: ParameterID, values: [Double])
+
+    public var parameterID: ParameterID? {
+        switch self {
+        case let .parameter(id), let .stepParameter(id, _, _), let .setParameter(id, _), let .cycleParameter(id, _): id
+        case .agentPrimaryAction, .resetGroup: nil
+        }
+    }
 
     /// Triggers fire once per press and only make sense on buttons.
     public var isTrigger: Bool {
         switch self {
         case .parameter: false
-        case .agentPrimaryAction, .resetGroup: true
+        case .agentPrimaryAction, .resetGroup, .stepParameter, .setParameter, .cycleParameter: true
         }
     }
 }
@@ -242,7 +267,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+    public static let currentVersion = 3
 
     public var version: Int
     public var name: String
@@ -291,11 +316,15 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         assignments.filter { $0.target == target }.map(\.control)
     }
 
+    public func controls(targetingParameter id: ParameterID) -> [BCRControlID] {
+        assignments.filter { $0.target.parameterID == id }.map(\.control)
+    }
+
     public mutating func assign(_ assignment: ControlAssignment) throws {
         if assignment.target.isTrigger, assignment.control.isContinuous {
             throw ControlAssignmentError.triggerRequiresButton(assignment.control)
         }
-        if case let .parameter(id) = assignment.target, parameter(id) == nil {
+        if let id = assignment.target.parameterID, parameter(id) == nil {
             throw ControlAssignmentError.unknownParameter(id)
         }
         var candidate = self
@@ -338,7 +367,7 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     public mutating func removeParameter(_ id: ParameterID) {
         let previousGroup = parameter(id)?.group
         parameters.removeAll { $0.id == id }
-        assignments.removeAll { $0.target == .parameter(id) }
+        assignments.removeAll { $0.target.parameterID == id }
         if let previousGroup, !parameterGroups.contains(previousGroup) {
             assignments.removeAll { $0.target == .resetGroup(previousGroup) }
         }

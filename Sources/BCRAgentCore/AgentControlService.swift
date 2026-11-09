@@ -159,7 +159,7 @@ public final class AgentControlService {
         }
         info["value"] = .double(value)
         info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable)
-        info["controls"] = .array(try session.engine.configuration.controls(targeting: .parameter(id)).map(JSONValue.encoded))
+        info["controls"] = .array(try session.engine.configuration.controls(targetingParameter: id).map(JSONValue.encoded))
         return .object(info)
     }
 

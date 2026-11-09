@@ -72,6 +72,7 @@ public final class SurfaceSession {
         self.saveConfiguration = saveConfiguration
         connection = hardwareDevice.connection
         engine = SurfaceEngine(hardwareMap: mockDevice.model.preset, configuration: configuration)
+        engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
         hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
         hardwareDevice.onConnection = { [weak self] in self?.handleConnection($0) }
         mockDevice.onMessages = { [weak self] in self?.receive($0, from: .mock) }
@@ -93,6 +94,7 @@ public final class SurfaceSession {
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
         source = newSource
+        engine.echoWindow = newSource == .mock ? 0 : 0.18
         engine.replaceHardwareMap(newSource == .mock ? mock.preset : hardwareMap)
         droppedFeedbackCount = 0
         onEvent?(.sourceChanged(newSource))
@@ -189,6 +191,12 @@ public final class SurfaceSession {
     public func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) throws {
         if let assignment { perform(try engine.assign(assignment, at: now())) }
         else { engine.clearAssignment(for: control) }
+        persistConfiguration()
+        onChange?()
+    }
+
+    public func applyBulkAssignment(_ plan: BulkAssignmentPlan) throws {
+        perform(try engine.apply(plan, at: now()))
         persistConfiguration()
         onChange?()
     }

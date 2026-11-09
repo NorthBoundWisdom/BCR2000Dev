@@ -35,6 +35,18 @@ extension ConsoleViewModel {
         case let .resetGroup(group)?:
             label = "复位 \(group)"
             accent = Theme.trigger
+        case let .stepParameter(id, step, _)?:
+            label = step > 0 ? "步进 +" : "步进 −"
+            detail = configuration.parameter(id)?.name
+            accent = Theme.trigger
+        case let .setParameter(id, value)?:
+            label = "设为 " + (configuration.parameter(id)?.formatted(value) ?? String(value))
+            detail = configuration.parameter(id)?.name
+            accent = Theme.trigger
+        case let .cycleParameter(id, values)?:
+            label = "循环 \(values.count) 个值"
+            detail = configuration.parameter(id)?.name
+            accent = Theme.trigger
         case nil:
             break
         }
@@ -407,6 +419,7 @@ private struct PadCell: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? "未分配")")
         .accessibilityAddTraits(.isButton)
+        .help("操作 \(presentation.control.shortName)")
         .accessibilityAction {
             onPress()
             onRelease()

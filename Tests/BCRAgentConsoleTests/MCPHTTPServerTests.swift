@@ -202,7 +202,7 @@ final class MCPHTTPServerTests: XCTestCase {
         let data = try JSONEncoder().encode(JSONValue.object(original))
         try data.write(to: stores.configuration.fileURL)
         let model = ConsoleViewModel(stores: stores, startsMIDI: false)
-        XCTAssertEqual(model.configuration.version, 2)
+        XCTAssertEqual(model.configuration.version, SurfaceConfiguration.currentVersion)
         XCTAssertFalse(model.configuration.parameter("arm.enabled")!.agentWritable)
         XCTAssertTrue(model.persistenceNotice?.text.contains("迁移") == true)
         XCTAssertEqual(try Data(contentsOf: stores.configuration.fileURL), data)

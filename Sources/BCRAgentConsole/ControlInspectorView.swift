@@ -11,8 +11,8 @@ struct ControlInspectorView: View {
                 if let control = model.selectedControl {
                     header(control)
                     bindingSection(control)
-                    FunctionSection(model: model, control: control)
-                    if case let .parameter(id)? = model.configuration.assignment(for: control)?.target,
+                    FunctionSection(model: model, control: control).id(control)
+                    if let id = model.configuration.assignment(for: control)?.target.parameterID,
                        let definition = model.configuration.parameter(id) {
                         ParameterEditor(model: model, definition: definition)
                             .id(definition.id)
@@ -22,6 +22,7 @@ struct ControlInspectorView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, minHeight: 200)
                 }
+                BulkAssignmentSection(model: model)
             }
             .padding(14)
         }
@@ -107,7 +108,7 @@ struct ControlInspectorView: View {
 // MARK: - Function
 
 private enum TargetKind: String, CaseIterable, Identifiable {
-    case none, parameter, agent, reset
+    case none, parameter, agent, reset, step, preset, cycle
 
     var id: String { rawValue }
 
@@ -117,6 +118,9 @@ private enum TargetKind: String, CaseIterable, Identifiable {
         case .parameter: "参数"
         case .agent: "Agent 主操作"
         case .reset: "复位参数组"
+        case .step: "参数步进"
+        case .preset: "设为指定值"
+        case .cycle: "循环预设值"
         }
     }
 
@@ -126,6 +130,9 @@ private enum TargetKind: String, CaseIterable, Identifiable {
         case .parameter?: self = .parameter
         case .agentPrimaryAction?: self = .agent
         case .resetGroup?: self = .reset
+        case .stepParameter?: self = .step
+        case .setParameter?: self = .preset
+        case .cycleParameter?: self = .cycle
         }
     }
 }
@@ -182,7 +189,7 @@ private struct FunctionSection: View {
                     get: { assignment?.inverted ?? false },
                     set: { inverted in modify { $0.inverted = inverted } }
                 ))
-                let shared = model.configuration.controls(targeting: .parameter(id)).filter { $0 != control }
+                let shared = model.configuration.controls(targetingParameter: id).filter { $0 != control }
                 if !shared.isEmpty {
                     Text("同一参数也绑定在：\(shared.map(\.shortName).joined(separator: "、"))，会互相同步。")
                         .font(.caption)
@@ -199,6 +206,11 @@ private struct FunctionSection: View {
                 Text("空闲时启动、运行时中断、等待批准时批准；LED 亮度表示 Agent 状态。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+            case .stepParameter?, .setParameter?, .cycleParameter?:
+                if let target = assignment?.target {
+                    TriggerParameterEditor(model: model, control: control, target: target)
+                }
 
             case let .resetGroup(group)?:
                 Picker("参数组", selection: Binding(
@@ -234,6 +246,18 @@ private struct FunctionSection: View {
                         update(target: .parameter(first.id))
                     } else {
                         model.createParameter(assigningTo: control)
+                    }
+                case .step, .preset, .cycle:
+                    let id = assignment?.target.parameterID ?? model.configuration.parameters.first?.id ?? model.createParameter()
+                    guard let id, let definition = model.configuration.parameter(id) else { return }
+                    switch kind {
+                    case .step: update(target: .stepParameter(id: id, step: definition.step ?? 1, wraps: false))
+                    case .preset: update(target: .setParameter(id: id, value: definition.defaultValue))
+                    case .cycle:
+                        var seen = Set<Double>()
+                        let values = [definition.minimum, definition.clamp(definition.defaultValue), definition.maximum].filter { seen.insert($0).inserted }
+                        update(target: .cycleParameter(id: id, values: values))
+                    default: break
                     }
                 case .agent:
                     update(target: .agentPrimaryAction(AgentSlotID(1)))
@@ -332,6 +356,15 @@ private struct ParameterEditor: View {
                 TextField("最大值", value: $draftState.value.maximum, format: .number)
                 TextField("默认值", value: $draftState.value.defaultValue, format: .number)
                 Toggle("允许 Agent 写入", isOn: $draftState.value.agentWritable)
+                Toggle("启用步长吸附", isOn: Binding(
+                    get: { draftState.value.step != nil },
+                    set: { draftState.value.step = $0 ? (draftState.value.step ?? 1) : nil }
+                ))
+                if draftState.value.step != nil {
+                    TextField("步长", value: Binding(
+                        get: { draftState.value.step ?? 1 }, set: { draftState.value.step = $0 }
+                    ), format: .number)
+                }
             }
             .formStyle(.columns)
             .controlSize(.small)

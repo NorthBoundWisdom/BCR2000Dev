@@ -183,7 +183,7 @@ private struct ParameterRow: View {
 
     private var chips: some View {
         HStack(spacing: 4) {
-            let controls = model.configuration.controls(targeting: .parameter(definition.id))
+            let controls = model.configuration.controls(targetingParameter: definition.id)
             if controls.isEmpty {
                 Text("未绑定").font(.caption2).foregroundStyle(.tertiary)
             }
