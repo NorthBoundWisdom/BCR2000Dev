@@ -17,8 +17,11 @@
 - Keep classes `final`, dependencies explicit, and failures visible. Do not add silent fallbacks.
 - Any new state transition or MIDI message shape needs a focused unit test.
 - Keep secrets, absolute user paths, generated app bundles, MIDI captures, and local mappings out of git.
-- Work on `main` unless the user explicitly requests a branch. After each verified change, commit with a
-  Conventional Commit message and push to `origin/main`; never force-push `main`.
+- Develop and verify only in the `main` working tree: no branches, no `git worktree`, no extra clones
+  (unless the user explicitly asks). After each verified change, commit with a Conventional Commit
+  message and push to `origin/main`; never force-push `main`.
+- The working tree may be shared with other developers/agents: check `git status` first and never
+  overwrite, stash, reset, or commit someone else's uncommitted changes without confirming.
 - Version tags and releases are created or pushed only when explicitly requested.
 - Follow `CONTRIBUTING.md` (conventions, pre-commit checks) and `ROADMAP.md` (phase plan).
 

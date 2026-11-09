@@ -2,7 +2,7 @@
 
 > 更新：2026-11-09。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
 > 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的外部开发任务见
-> [DEV_PROMPT.md](DEV_PROMPT.md)（WP1–WP6）。
+> [DEV_PROMPT.md](DEV_PROMPT.md)（WP1–WP7）。
 
 ## 当前基线
 
@@ -19,13 +19,18 @@
 |---|---|---|
 | R1 实机闭环验证 | P0 | 新模型在真实 BCR2000 上可学习、可回写、行为写入文档 |
 | R2 同步可靠性 | P0 | 高频操作、断线重连、长时间运行下软件与硬件不分叉 |
+| R8 MCP 控制接口 | P1（R2 之后立即进行） | App 开放本机 MCP 端口，外部 Agent 可直接读取和修改参数 |
 | R3 精度与编码器模式 | P1 | 机械臂关节可精调：相对模式、14-bit、加速度 |
 | R4 功能系统 | P1 | 每个控件可配置更丰富的功能：步进、页面/层、宏、配置导入导出 |
 | R5 外部系统适配 | P1 | 参数双向连接机械臂或仿真（OSC / WebSocket / ROS 2），带安全门 |
 | R6 Agent / Codex | P2 | 把 Mock Agent 替换为 `codex app-server` adapter（沿用 TODO 中 P0-S4、M6） |
 | R7 发布 | P2 | 公证发布、macOS 14 真机安装验收 |
 
-R1、R2 是后续所有工作的前提；R3 与 R5 可以并行，R4 依赖 R2 的效果管线稳定。
+R1、R2 是后续所有工作的前提。R8 只依赖 R2 的会话层与反馈调度，可以在无真机时完成，
+并作为之后每轮验收的自动化入口。R3 与 R5 可以并行；R4 依赖 R2 的效果管线稳定。
+R5 的安全门同时约束硬件、滑块和 MCP 三种来源的写入。
+
+外部开发的执行顺序：WP2（R2）→ WP3（R8）→ WP4–WP5（R4）→ WP6（R5）→ WP7（R3）。
 
 ---
 
@@ -57,6 +62,33 @@ R1、R2 是后续所有工作的前提；R3 与 R5 可以并行，R4 依赖 R2 �
 
 验收：soak 测试无分叉；连续拖动 10 秒 CPU 占用稳定；所有丢弃的反馈在 UI 可见。
 
+## R8 MCP 控制接口（P1）
+
+目标：后续 Agent 不通过界面，直接用 MCP 工具操控软件，实现参数读写；效果与人在面板上操作一致。
+
+1. **嵌入式服务**：App 内置 MCP 服务（Streamable HTTP，`POST /mcp`），只绑定 `127.0.0.1`。
+   默认关闭，在 UI 中开启；端口固定可配置，被占用时明确报错。
+2. **统一写入路径**：MCP 写入与滑块写入一样经过 `SurfaceSession`，同步回写 Mock / 实体 LED。
+   监视器中标注来源 `AGENT`；R5 的安全门对 MCP 写入同样生效。
+3. **安全**：
+   - Bearer token 存放在 Keychain；校验 `Origin`；
+   - 权限分级（只读 / 参数写入 / 配置写入）；
+   - 参数级 `agentWritable` 开关（`arm.enabled` 等安全相关参数默认不可写）；
+   - 写入限速；每次调用有记录，可一键停止服务。
+4. **首批工具**：`get_status`、`list_parameters`、`get_parameter`、`set_parameter`、
+   `set_parameters`（原子批量）、`nudge_parameter`、`reset_group`、`list_controls`；
+   配置写入权限下另有 `assign_control`、`create_parameter`、`update_parameter`。
+   协议与 schema 记录在 `docs/MCP.md`。
+5. **验收工具**：`tools/mcp_smoke.py` 对运行中的 App 做端到端冒烟，之后每轮验收都要执行。
+6. **后续**（不在首版）：
+   - 参数变化订阅（resources + SSE 通知），让 Agent 实时感知硬件操作；
+   - 触发 Agent 槽位、切换设备源等更多工具；
+   - 给只支持 stdio 的客户端提供桥接。
+
+验收：Claude Code 用一条 `claude mcp add` 命令接入后，`set_parameter arm.j1 = 90` 让参数滑块和
+P1-1 灯环同步移动；面板上的操作能被 `get_parameter` 读到；`arm.enabled` 写入被拒绝；错误 token
+返回 401；关闭服务后连接被拒绝。
+
 ## R3 精度与编码器模式（P1）
 
 1. `ControlAssignment` 增加编码器模式：`absolute`（当前）、`relative`（BCR Relative 1/2）。
@@ -83,7 +115,7 @@ R1、R2 是后续所有工作的前提；R3 与 R5 可以并行，R4 依赖 R2 �
 1. 定义 `ParameterSink` / `ParameterSource` 适配器边界：参数变化推送给外部系统，外部系统
    的实际状态（如关节实际角度）回到引擎并驱动 LED 环——这才是真正的“硬件 ↔ 机械臂”双向。
 2. 首批适配器：OSC（UDP）、WebSocket JSON；之后评估 ROS 2 桥。
-3. 安全约束（机械臂场景必须满足）：
+3. 安全约束（机械臂场景必须满足；对硬件、滑块、MCP 三种写入来源一视同仁）：
    - “使能”为关时不向执行端输出任何运动指令；
    - 软限位、单步最大变化量、速度上限在软件侧执行，不依赖执行端；
    - 适配器断线或心跳超时立即停止输出并在 UI 明确告警；
@@ -107,3 +139,4 @@ Stop All 与重连一致性。Agent 继续作为一种控件功能（`agentPrima
 - BCR2000 的组切换按钮是否能通过 SysEx 获知当前组？（影响实体模式的面板自动跟随）
 - 是否用 BCL / SysEx 直接给 BCR 写入预设，以替代逐个学习？需评估对用户现有预设的风险。
 - 机械臂目标平台（真实型号 / ROS 版本）确定后再细化 R5 的消息格式。
+- R8：首版是否需要 SSE 推送？如果确有需要，是否引入官方 Swift MCP SDK（属于新增第三方依赖，需开发者批准）。

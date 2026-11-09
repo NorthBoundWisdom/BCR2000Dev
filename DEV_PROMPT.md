@@ -1,7 +1,8 @@
 # 外部开发任务说明（无真机阶段）
 
 > 给外部开发者 / 开发 Agent 的完整任务说明。每个工作包完成后由 Claude 做代码审查。
-> 编写：2026-11-09。对应 [ROADMAP.md](ROADMAP.md) 中不依赖实体 BCR2000 的部分。
+> 编写：2026-11-09；2026-11-09 更新：加入 WP3 MCP 控制接口，原 WP3–WP6 顺延为 WP4–WP7，
+> 明确只在 `main` 工作区开发与验收。对应 [ROADMAP.md](ROADMAP.md) 中不依赖实体 BCR2000 的部分。
 
 ---
 
@@ -42,9 +43,14 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 
 - **环境**：非交互 shell 先 `source $HOME/.config/dev-environment/environment.sh`。
   不要安装或升级工具链，不要新增 SwiftPM 第三方依赖（需要时先停下来说明理由）。
-- **分支与提交**：只在 `main` 上开发。每个工作包可以拆成多个提交，每个提交都必须通过检查。
-  使用 Conventional Commits，完成后 `git pull --rebase origin main` 再 `git push origin main`。
-  禁止强制推送，禁止创建或推送版本 tag。
+- **分支与提交**：始终在 `main` 工作区开发和验证。**不创建分支、不使用 `git worktree`、
+  不另外 clone 仓库**来开发、验证或回测。
+  - 按“改 → 在 `main` 工作区跑检查 → 提交”的顺序推进，一个提交对应一次通过检查的工作区状态；
+    不要事后把混在一起的改动拆成多个提交，也不要回测历史提交。
+  - 使用 Conventional Commits；完成后 `git pull --rebase origin main`，再 `git push origin main`。
+  - 禁止强制推送，禁止创建或推送版本 tag。
+- **共享工作区**：开始前先看 `git status`。如果有不属于你的未提交改动，不要覆盖、`stash`、
+  `reset` 或擅自提交，先停下来说明。
 - **提交前检查**：运行 `CONTRIBUTING.md` 第 2 节列出的全部命令；涉及 UI 时还要运行
   `build` 和 `smoke`，并在 Mock 模式下实际操作一遍。不得引入编译警告。
 - **真机相关的假设**：凡是关于实体 BCR2000 行为的假设（相对模式编码、NRPN 行为、
@@ -64,7 +70,7 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 ## 2. 工作包（按顺序执行）
 
 **每完成一个工作包：推送 → 按第 3 节写交接说明 → 停下来等待审查。**
-审查通过后再开始下一个。
+审查通过后再开始下一个。推送后工作区必须是干净的，审查方直接在同一个 `main` 工作区验收。
 
 ### WP1：可测试的会话层（R2 第 1 项）
 
@@ -124,7 +130,64 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 
 **验收**：拖动滑块不会刷屏（MIDI 监视器可见合并效果）；随机测试通过；界面行为不变。
 
-### WP3：持久化加固与配置导入导出（R4 第 2 项 + 规范第 5 节）
+### WP3：MCP 控制接口（R8 第 1–5 项）
+
+**目标**：App 内置 MCP 服务，让外部 Agent（Claude Code、Codex 等）通过本机端口读取并修改参数。
+Agent 写入与滑块写入**完全等价**：都经过 `SurfaceSession` 效果管线，界面、Mock / 实体 LED 同步更新。
+
+**要求**：
+
+1. **分层**：
+   - Core：MCP / JSON-RPC 2.0 消息模型、协议版本协商、工具定义（含 JSON Schema）、参数校验、
+     权限判断与工具执行（`AgentControlService` 一类的 `@MainActor` 类型，调用 `SurfaceSession`）。纯逻辑，可单元测试。
+   - App：基于 `Network.framework` 的 HTTP 监听、请求解析、鉴权、UI 设置与状态展示。
+   - 默认自行实现所需的最小协议子集，**不引入第三方依赖**。如果你认为官方 Swift MCP SDK 明显更合适，
+     先停下来说明理由，由开发者决定。
+2. **传输**：MCP Streamable HTTP，单一端点 `POST /mcp`，返回 `application/json`。
+   - 支持 `initialize`、`notifications/initialized`、`ping`、`tools/list`、`tools/call`，以及会话头 `Mcp-Session-Id`。
+   - 首版不要求 SSE 推送；不支持的方法返回规范的 JSON-RPC 错误。
+   - 实现时以当时最新的稳定规范版本为准，在 `docs/MCP.md` 中写明协议版本。
+3. **安全**（缺一不可）：
+   - 只绑定 `127.0.0.1`；默认关闭，用户在 UI 中开启后持久化。
+   - 端口固定、可配置。被占用时明确报错，**不得**自动改用随机端口。
+   - Bearer token 首次启用时随机生成，保存在 Keychain，不进仓库和日志。缺少或错误的 token 返回 401。
+   - 校验 `Origin` 头，拒绝非本机来源，防止 DNS rebinding。
+   - 权限分级：`只读`、`参数写入`（默认开启）、`配置写入`（默认关闭，用于改分配和参数定义）。
+   - 参数级开关 `agentWritable`：提升 `SurfaceConfiguration.currentVersion` 并迁移旧数据；
+     示例配置中 `arm.enabled` 设为不可写。
+   - 写入限速（可配置）；超限时返回明确错误，不静默丢弃。
+4. **首批工具**（输入输出 schema 写入 `docs/MCP.md`）：
+   - `get_status`：设备源、连接、丢弃计数、MCP 权限。
+   - `list_parameters`：id、名称、分组、单位、范围、类型、当前值、是否可写、绑定控件。
+   - `get_parameter`。
+   - `set_parameter`：返回实际写入值；超出范围时返回 `clamped: true`，不得静默截断。
+   - `set_parameters`：批量写入，先全部校验，任一失败则全部不写。
+   - `nudge_parameter`：按增量修改。
+   - `reset_group`。
+   - `list_controls`：物理控件、分配、绑定状态、当前值。
+   - `assign_control`、`create_parameter`、`update_parameter`：仅在开启“配置写入”时可用。
+   - 工具执行失败返回 `isError: true` 和可读的原因（未知参数、无权限、限速、校验失败）。
+5. **可见性**：
+   - 顶栏显示 MCP 状态：关闭 / 监听中 / 活跃会话数。
+   - 设置面板：端口、权限、复制 token、复制连接命令（例如
+     `claude mcp add --transport http bcr-console http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"`）、
+     最近 100 次调用记录。
+   - MIDI 监视器中，Agent 发起的写入标注来源 `AGENT`。
+   - 一键停止服务（立即断开所有会话）。
+6. **测试**：
+   - Core 测试：协商、`tools/list` schema、每个工具的成功与失败路径、权限拒绝、批量原子性、
+     clamp 标记、限速（时钟注入），以及“Agent 写入 → Mock LED 更新”的闭环。
+   - Console 测试：本机回环的 HTTP 集成测试（端口 0），覆盖鉴权、Origin、会话头、端口占用报错。
+   - 新增 `tools/mcp_smoke.py`（仅用 Python 标准库），对运行中的 App 执行
+     initialize → tools/list → set_parameter → get_parameter，作为验收脚本。
+
+**验收**（在 Mock 模式下）：
+- 用 Claude Code 通过上面的连接命令接入，列出工具后调用 `set_parameter arm.j1 = 90`：参数滑块和 P1-1 灯环同步移动。
+- 在面板上转动 P1-1 后，`get_parameter` 读到新值。
+- 写入 `arm.enabled` 被拒绝；错误 token 返回 401；关闭服务后连接被拒绝。
+- `tools/mcp_smoke.py` 通过。
+
+### WP4：持久化加固与配置导入导出（R4 第 2 项 + 规范第 5 节）
 
 **问题**：
 
@@ -146,7 +209,7 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 4. 修复草稿过期问题：外部修改时，未编辑的草稿自动刷新；已编辑的草稿要提示冲突。
 5. 为每条校验规则、非法解码和导入失败路径写测试。
 
-### WP4：功能系统扩展（R4 第 1、3 项，不含页面 / 层）
+### WP5：功能系统扩展（R4 第 1、3 项，不含页面 / 层）
 
 **要求**：
 
@@ -161,9 +224,9 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 4. 检查器 UI 支持编辑上述新功能的参数。
 5. 提升 `SurfaceConfiguration.currentVersion`，并处理旧版本迁移。
 
-### WP5：安全门与外部输出适配器（R5，含仿真端）
+### WP6：安全门与外部输出适配器（R5，含仿真端）
 
-**要求**：
+**要求**（安全门对硬件、滑块、MCP 三种来源的写入一视同仁）：
 
 1. 在 Core 中实现 `MotionSafetyGate`（纯值类型，时钟可注入）：
    - “使能”参数为关时不输出；
@@ -185,7 +248,7 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 **验收**：Mock 面板转动 J1 时，仿真端的实际角度受速度上限约束，并能回到 UI；
 关闭“使能”或停止仿真端后，500 ms 内 UI 告警并停止输出。
 
-### WP6：编码器模式与 14-bit（R3，仅 Mock，待实机验证）
+### WP7：编码器模式与 14-bit（R3，仅 Mock，待实机验证）
 
 **要求**：
 
@@ -206,11 +269,12 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 
 ```markdown
 ## WPn 交接
-- 提交：<hash 列表>
+- 提交：<hash 列表>（推送后的 `main` HEAD：<hash>，工作区干净）
 - 改动概述：<3–6 条，说明做了什么、为什么>
 - 设计取舍：<备选方案及选择理由>
 - 测试：<新增测试名单；全部检查命令与结果，失败的如实写出>
 - 手动验证：<在 Mock 模式下操作了什么、看到了什么；未做的写“未做”>
+- MCP 冒烟：<WP3 完成后每个工作包都要执行 `tools/mcp_smoke.py` 并附上结果；WP3 之前写“不适用”>
 - 待实机验证：<依赖真机行为的假设>
 - 发现但未处理：<范围外的问题>
 - 需要审查重点关注：<你最没把握的地方>
@@ -229,7 +293,18 @@ BCR2000 当作双向控制面板。实体控件可以驱动软件参数（例如
 5. **失败可见**：没有吞掉的错误，没有静默回退。
 6. **持久化兼容**：版本号已提升，旧数据有迁移或可见提示，不会丢失用户文件。
 7. **Swift 6 并发**：没有 `@unchecked Sendable` 滥用，没有为了消除警告而加 `nonisolated(unsafe)`。
-8. **范围与提交**：只做当前工作包；提交原子、信息规范、每个提交都能通过检查；已推送到 `main`。
+8. **范围与提交**：只做当前工作包；提交原子、信息规范；没有分支、worktree 或额外 clone；
+   已推送到 `main`，推送后工作区干净。
 9. **交接如实**：说明中的“已验证”必须有对应的命令输出或操作记录。
+10. **Agent 接口安全**（WP3 起）：MCP 写入只经过会话管线；权限、token、Origin、限速、
+    `agentWritable` 均生效，拒绝的请求有明确的错误和调用记录。
+
+### 每轮验收流程
+
+1. 开发方推送后，审查方在同一个 `main` 工作区执行 `git pull --rebase origin main`，确认工作区干净、
+   HEAD 与交接说明一致。
+2. 在 `main` HEAD 上复跑 `CONTRIBUTING.md` 第 2 节的全部检查；涉及 UI 的，构建并打开 App 实测。
+3. WP3 完成后，每轮都在运行中的 App 上执行 `tools/mcp_smoke.py`；审查方可以直接通过 MCP 驱动 App 验证。
+4. 不为审查创建分支、worktree 或另外 clone；需要修正时，在 `main` 上追加 `fix` 提交并推送。
 
 审查结论分三级：**通过** / **小改后通过**（直接在 `main` 上追加 fix 提交）/ **需返工**。
