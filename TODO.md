@@ -2,28 +2,29 @@
 
 > 阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-状态（截至 2026-11-09）：WP1、WP3–WP7 已在 Mock 下完成；WP3–WP7 审查发现的问题正在修复，
-修复前不推送。实体 BCR2000 已连接，CoreMIDI 可见 `BCR2000 Port 1/2`（输入）与
+状态（截至 2026-11-09）：WP1、WP3–WP7 已在 Mock 下完成；WP3–WP7 七项审查问题已完成本机修复与验证，
+按用户要求暂不推送。实体 BCR2000 已连接，CoreMIDI 可见 `BCR2000 Port 1/2`（输入）与
 `BCR2000 Port 1/2/3`（输出），R1 实机验证解除阻塞。
 
 执行顺序：A 审查修正 → 推送 → B 实机验证（HW0–HW6）→ C 按实测结果修正 → D 设计改进与 WP2 → E 远期。
 
-## A. WP3–WP7 审查修正（进行中，修完后一起推送）
+## A. WP3–WP7 审查修正（本机已完成，暂不推送）
 
 审查基线 `aa6e180..ef57989`：186 条 Swift 测试、19 条 BuildWorkflowTests、6 条仿真测试、
 隔离原生 MCP 两版协议验收通过；以下问题必须修复后再推送。
 
-- [ ] A1【高】MCP 配置写入不得削弱参数保护：拒绝通过 MCP 修改 `agentWritable`，拒绝修改不可写参数
+- [x] A1【高】MCP 配置写入不得削弱参数保护：拒绝通过 MCP 修改 `agentWritable`，拒绝修改不可写参数
   和输出使能参数的定义（范围、类型、默认值）。回归测试覆盖：翻转 `agentWritable` 后写入、
   `minimum:-1, maximum:0` 把当前值变为“开”、默认值改为 1。
-- [ ] A2【高】启动或恢复输出时不得因使能已开而直接运动：开始输出后必须先观察到使能“关 → 开”
+- [x] A2【高】启动或恢复输出时不得因使能已开而直接运动：开始输出后必须先观察到使能“关 → 开”
   才放行；评估启动时是否不自动恢复输出。测试覆盖 `restore()` 与使能默认值为开。
-- [ ] A3【中】MCP `reset_group` 遇到不可写参数时整组失败（示例“机械臂”组必现）：
+- [x] A3【中】MCP `reset_group` 遇到不可写参数时整组失败（示例“机械臂”组必现）：
   跳过不可写参数并在结果中列出，其余仍原子写入。
-- [ ] A4【中低】`ArmPreviewView` 用 `Int(...)` 转换角度，超大值会让 App 崩溃：改为有界格式化，补测试。
-- [ ] A5【低】`Tests/BCRAgentCoreTests/PersistenceValidationTests.swift` 末尾空行导致
+- [x] A4【中低】`ArmPreviewView` 用 `Int(...)` 转换角度，超大值会让 App 崩溃：改为有界格式化，补测试。
+- [x] A5【低】`Tests/BCRAgentCoreTests/PersistenceValidationTests.swift` 末尾空行导致
   `git diff --check` 失败；交接中的检查需改为针对提交范围（`git diff --check <base>..HEAD`）。
-- [ ] A6 修复后复跑全部检查与 `tools/mcp_integration.py`，然后与 WP3–WP7 一起推送 `origin/main`。
+- [x] A6 全部检查与隔离原生 MCP/安全/精度/OSC 验证通过，代码提交 `32a6fa1`；见 [修正交接](docs/REVIEW_FIXES.md)。
+- [ ] A7 推送 `origin/main`：遵守用户“不要推送”的要求，等待另行明确指示。
 
 ## B. 实机验证（R1，现在可做）
 
@@ -60,9 +61,9 @@ App 不发送 SysEx、不改写设备 Preset，开始前用 BC Manager 等工具
 
 ## D. 设计改进与剩余工作包
 
-- [ ] D1 OSC 每帧发送全部目标值（幂等），避免 UDP 丢包后某关节停在旧目标；
+- [x] D1 OSC 每帧发送全部目标值（幂等），避免 UDP 丢包后某关节停在旧目标；
   停止帧重复发送；在 `docs/OSC.md` 写明接收端必须有超时自动停机。
-- [ ] D2 相对编码器与 NRPN 微调在参数 `step` 大于单次增量时不动：按控件累积余量，
+- [x] D2 相对编码器与 NRPN 微调在参数 `step` 大于单次增量时不动：按控件累积余量，
   或相对输入至少按方向走一步；补慢速转动测试。
 - [ ] D3 WP2：反馈调度与 UI 刷新性能（以 HW6 实测为基线）
   - [ ] 同控件反馈合并、限速与错误抑制策略
@@ -190,13 +191,3 @@ WP1 验证时没有实体 BCR2000，使用本机构建的 ad-hoc App。已观察
   - [x] OSC 安全输出与仿真端；WebSocket / ROS 留待后续
   - [x] 编码器 absolute / relative1 / relative2（Mock）；实体回放标定待 R1
   - [x] 会话配置导入导出（不含实体映射与私密信息）
-
-## WP3–WP7 审查修正
-
-- [x] MCP 不可修改只读/使能定义及已有 agentWritable；自定义输出使能同样受保护。
-- [x] 禁止自动恢复输出，启动/故障/重连需观察使能先关后开。
-- [x] OSC 全量输出快照及关闭帧重发；仿真器独立控制帧超时停机。
-- [x] 相对/NRPN 软件细调累积余量，清理外部修改和边界积压。
-- [x] reset_group 跳过保护项并返回清单。
-- [x] 大角度预览避免 Int 缩窄及三角函数溢出。
-- [x] 修正测试文件 EOF 空行，并检查净改动与新增提交本身。
