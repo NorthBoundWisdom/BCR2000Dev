@@ -26,7 +26,10 @@
 - [x] A6 全部检查与隔离原生 MCP/安全/精度/OSC 验证通过，代码提交 `32a6fa1`；见 [修正交接](docs/REVIEW_FIXES.md)。
 - [x] A7 用户已明确授权，完成推送前检查后将全部提交推送到 `origin/main`；后续实机修正也按规范提交推送。
 
-## B. 实机验证（R1，现在可做）
+## B. 实机验证（R1，已开始）
+
+Port 1 只读连接与本次 App 冷启动均成功；用户当前 Preset 为 8。其余硬件结论仍待逐项实测，
+见 [实机记录](docs/HARDWARE_VALIDATION.md)。
 
 规则：只在 Mock 关闭、实体模式下进行；不连接真实机械臂（OSC 只连 `tools/arm_sim.py`）；
 App 不发送 SysEx、不改写设备 Preset，开始前用 BC Manager 等工具备份当前 Preset。
