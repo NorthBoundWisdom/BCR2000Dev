@@ -55,6 +55,7 @@ struct BCRAgentConsoleApp: App {
                 .frame(minWidth: 1_200, minHeight: 760)
         }
         .defaultSize(width: 1_260, height: 920)
-        .windowStyle(.hiddenTitleBar)
+        // Keep AppKit in charge of title-bar dragging and double-click zoom.
+        .windowStyle(.titleBar)
     }
 }
