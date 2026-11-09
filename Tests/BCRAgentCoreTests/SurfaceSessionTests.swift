@@ -374,4 +374,19 @@ final class SurfaceSessionTests: XCTestCase {
         f.device.receive([message(a, 13)])
         XCTAssertEqual(f.session.events.first?.id, 306)
     }
+    func testChangingConnectedOutputRouteResendsSnapshotOnce() async {
+        let fixture = SessionFixture()
+        fixture.session.selectSource(.hardware)
+        fixture.device.connect(true)
+        fixture.device.sent.removeAll()
+        var snapshot = fixture.device.connection
+        snapshot.connectedDestination = "BCR2000 Port 2"
+        snapshot.connectedDestinationID = 22
+        fixture.device.onConnection?(snapshot)
+        XCTAssertFalse(fixture.device.sent.isEmpty)
+        fixture.device.sent.removeAll()
+        fixture.device.onConnection?(snapshot)
+        XCTAssertTrue(fixture.device.sent.isEmpty)
+    }
+
 }

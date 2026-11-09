@@ -19,18 +19,33 @@ enum CoreMIDIServiceError: Error, LocalizedError {
     }
 }
 
+@MainActor
+protocol MIDIService: SurfaceDevice {
+    func start() throws
+    func selectEndpoints(_ selection: MIDIEndpointSelection)
+}
+
 /// Main-actor device boundary. The transport only decodes and hands off value batches;
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
-final class CoreMIDIService: SurfaceDevice {
+final class CoreMIDIService: MIDIService {
     private(set) var connection = MIDIConnectionSnapshot()
     var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     private var transport: CoreMIDITransport?
+    private var selection: MIDIEndpointSelection
+
+    init(selection: MIDIEndpointSelection = .init()) { self.selection = selection }
+
+    func selectEndpoints(_ selection: MIDIEndpointSelection) {
+        self.selection = selection
+        transport?.selectEndpoints(selection)
+    }
 
     func start() throws {
         guard transport == nil else { return }
         let transport = CoreMIDITransport(
+            selection: selection,
             onMessages: { [weak self] messages in
                 Task { @MainActor [weak self] in self?.onMessages?(messages) }
             },
@@ -74,11 +89,14 @@ private final class CoreMIDITransport: @unchecked Sendable {
     private var connectedSources: [MIDIEndpointRef] = []
     private var destination: MIDIEndpointRef = 0
     private var isStarted = false
+    private var selection: MIDIEndpointSelection
 
     init(
+        selection: MIDIEndpointSelection,
         onMessages: @escaping MessageHandler,
         onConnection: @escaping ConnectionHandler
     ) {
+        self.selection = selection
         messageHandler = onMessages
         connectionHandler = onConnection
     }
@@ -213,6 +231,13 @@ private final class CoreMIDITransport: @unchecked Sendable {
         }
     }
 
+    func selectEndpoints(_ selection: MIDIEndpointSelection) {
+        managementQueue.async { [weak self] in
+            self?.selection = selection
+            self?.reconnect()
+        }
+    }
+
     private func reconnect() {
         guard isStarted else {
             return
@@ -233,41 +258,38 @@ private final class CoreMIDITransport: @unchecked Sendable {
             endpointAt: MIDIGetDestination
         )
 
-        let bcrSources = sources.filter { Self.isBCR2000($0.name) }
-        let bcrDestinations = destinations.filter { Self.isBCR2000($0.name) }
-        let selectedSource = Self.preferredPortOne(in: bcrSources)
-        let selectedDestination = Self.preferredPortOne(in: bcrDestinations)
-
         var lastError: String?
-        if let selectedSource {
-            let status = MIDIPortConnectSource(inputPort, selectedSource.endpoint, nil)
-            if status == noErr {
-                connectedSources = [selectedSource.endpoint]
-            } else {
-                lastError = CoreMIDIServiceError.operation(
-                    name: "连接 \(selectedSource.name)",
-                    status: status
-                ).localizedDescription
+        func resolve(_ endpoints: [NamedEndpoint], selectedID: Int32?) -> NamedEndpoint? {
+            do {
+                let value = try MIDIEndpointPolicy.resolve(endpoints.map { .init(id: $0.id, name: $0.name) }, selectedID: selectedID)
+                return endpoints.first { $0.id == value.id }
+            } catch {
+                lastError = [lastError, error.localizedDescription].compactMap { $0 }.joined(separator: "；")
+                return nil
             }
         }
-
-        if let selectedDestination {
-            destination = selectedDestination.endpoint
+        let selectedSource = resolve(sources, selectedID: selection.sourceID)
+        let selectedDestination = resolve(destinations, selectedID: selection.destinationID)
+        if let selectedSource {
+            let status = MIDIPortConnectSource(inputPort, selectedSource.endpoint, nil)
+            if status == noErr { connectedSources = [selectedSource.endpoint] }
+            else { lastError = CoreMIDIServiceError.operation(name: "连接 \(selectedSource.name)", status: status).localizedDescription }
         }
-
-        connectionHandler(
-            MIDIConnectionSnapshot(
-                sourceNames: bcrSources.map(\.name),
-                destinationNames: bcrDestinations.map(\.name),
-                connectedSource: connectedSources.isEmpty ? nil : selectedSource?.name,
-                connectedDestination: destination == 0 ? nil : selectedDestination?.name,
-                lastError: lastError
-            )
-        )
+        if let selectedDestination { destination = selectedDestination.endpoint }
+        var snapshot = MIDIConnectionSnapshot(
+            sourceNames: sources.map(\.name), destinationNames: destinations.map(\.name),
+            connectedSource: connectedSources.isEmpty ? nil : selectedSource?.name,
+            connectedDestination: destination == 0 ? nil : selectedDestination?.name, lastError: lastError)
+        snapshot.sourceEndpoints = sources.map { .init(id: $0.id, name: $0.name) }
+        snapshot.destinationEndpoints = destinations.map { .init(id: $0.id, name: $0.name) }
+        snapshot.connectedSourceID = connectedSources.isEmpty ? nil : selectedSource?.id
+        snapshot.connectedDestinationID = destination == 0 ? nil : selectedDestination?.id
+        connectionHandler(snapshot)
     }
 
     private struct NamedEndpoint {
         let endpoint: MIDIEndpointRef
+        let id: Int32
         let name: String
     }
 
@@ -277,11 +299,16 @@ private final class CoreMIDITransport: @unchecked Sendable {
     ) -> [NamedEndpoint] {
         (0..<count()).compactMap { index in
             let endpoint = endpointAt(index)
-            guard endpoint != 0 else {
+            var id: Int32 = 0
+            var offline: Int32 = 0
+            guard endpoint != 0,
+                  MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &id) == noErr, id != 0,
+                  MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline) == noErr, offline == 0 else {
                 return nil
             }
             return NamedEndpoint(
                 endpoint: endpoint,
+                id: id,
                 name: endpointName(endpoint) ?? "未命名 MIDI 端点"
             )
         }
@@ -297,16 +324,6 @@ private final class CoreMIDITransport: @unchecked Sendable {
             return nil
         }
         return property?.takeRetainedValue() as String?
-    }
-
-    private static func isBCR2000(_ name: String) -> Bool {
-        name.localizedCaseInsensitiveContains("BCR2000")
-    }
-
-    private static func preferredPortOne(in endpoints: [NamedEndpoint]) -> NamedEndpoint? {
-        endpoints.first {
-            $0.name.localizedCaseInsensitiveContains("Port 1")
-        } ?? endpoints.first
     }
 
     private static func decode(

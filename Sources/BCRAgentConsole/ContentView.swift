@@ -168,26 +168,33 @@ private struct HeaderBar: View {
 
 private struct DeviceStatus: View {
     @ObservedObject var model: ConsoleViewModel
+    @State private var showsPorts = false
 
     var body: some View {
         let (title, detail, color, icon) = status
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(color)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.callout.bold()).foregroundStyle(color)
-                Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+        Button { showsPorts = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.callout.bold()).foregroundStyle(color)
+                    Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            .frame(maxWidth: 360, alignment: .trailing)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
-        .frame(maxWidth: 360, alignment: .trailing)
+        .buttonStyle(.plain)
+        .accessibilityLabel("MIDI 端口设置：\(title)")
+        .help("选择实体 MIDI 输入与输出端口")
+        .sheet(isPresented: $showsPorts) { MIDIEndpointSettingsView(model: model) }
     }
 
     private var status: (String, String, Color, String) {
         let hardware = model.connection.isConnected
-            ? "\(model.connection.connectedSource ?? "BCR2000") 在线"
+            ? "\(model.connection.connectedSource ?? "—") → \(model.connection.connectedDestination ?? "—")"
             : (model.connection.lastError ?? "未找到 BCR2000 Port 1（建议 USB 模式 U-1）")
         switch model.source {
         case .mock:

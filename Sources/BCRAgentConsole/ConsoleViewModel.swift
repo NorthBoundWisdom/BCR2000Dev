@@ -32,6 +32,10 @@ struct ConsoleNotice: Equatable {
 
 @MainActor
 final class ConsoleViewModel: ObservableObject {
+    private let midi: any MIDIService
+    private let endpointStore: JSONFileStore<MIDIEndpointSelection>
+    let canConfigureMIDI: Bool
+    @Published private(set) var endpointSelection = MIDIEndpointSelection()
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
@@ -54,7 +58,8 @@ final class ConsoleViewModel: ObservableObject {
     var mockTasks: [AgentSlotID: Task<Void, Never>] = [:]
 
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
-         mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false) {
+         mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
+         midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil) {
         slots = AgentStateMachine().slots
 
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration)
@@ -70,7 +75,18 @@ final class ConsoleViewModel: ObservableObject {
                                               text: messages.joined(separator: " "))
         }
 
-        let midi = CoreMIDIService()
+        let endpointStore = JSONFileStore<MIDIEndpointSelection>(fileURL:
+            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "midi-endpoints.json"))
+        self.endpointStore = endpointStore
+        canConfigureMIDI = startsMIDI
+        var endpointError: String?
+        var savedSelection = MIDIEndpointSelection()
+        do {
+            if let stored = try endpointStore.load() { try stored.validate(); savedSelection = stored }
+        } catch { endpointError = "MIDI 端口设置读取失败：\(error.localizedDescription)" }
+        endpointSelection = savedSelection
+        let midi = midiService ?? CoreMIDIService(selection: savedSelection)
+        self.midi = midi
         session = SurfaceSession(
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
             saveHardwareMap: { try hardwareFile.save($0) },
@@ -80,7 +96,8 @@ final class ConsoleViewModel: ObservableObject {
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
             credentials: mcpCredentials ?? KeychainMCPCredentialStore(), integrationTest: integrationTest)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
-            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")))
+            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
+            adapter: outputTransport ?? OSCParameterAdapter())
         session.onChange = { [weak self] in self?.objectWillChange.send() }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
@@ -90,7 +107,9 @@ final class ConsoleViewModel: ObservableObject {
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
         Task { @MainActor [weak output] in output?.restore() }
+        if let endpointError { notice = ConsoleNotice(level: .error, text: endpointError); return }
         guard startsMIDI else { return }
+        midi.selectEndpoints(savedSelection)
         do { try midi.start() }
         catch { notice = ConsoleNotice(level: .error, text: "CoreMIDI 启动失败：\(error.localizedDescription)") }
     }
@@ -122,6 +141,23 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     // MARK: Device source
+
+    func applyEndpointSelection(_ selection: MIDIEndpointSelection) {
+        guard canConfigureMIDI else {
+            notice = ConsoleNotice(level: .warning, text: "隔离测试未启用实体 MIDI")
+            return
+        }
+        do {
+            try selection.validate()
+            try endpointStore.save(selection)
+            if output.settings.enabled { output.stop(failure: "MIDI 端口已改变，请重新确认使能") }
+            endpointSelection = selection
+            if isLearning { session.stopLearning() }
+            midi.selectEndpoints(selection)
+            try midi.start()
+            notice = ConsoleNotice(level: .info, text: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
+        } catch { report(error) }
+    }
 
     func selectSource(_ newSource: DeviceSource) {
         session.selectSource(newSource)

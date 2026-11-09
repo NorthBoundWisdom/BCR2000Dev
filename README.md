@@ -172,3 +172,9 @@ git diff --check
 选择编码器，在检查器设置“相对 1 / 相对 2”和相对步长（例如 0.5）。
 灯环保持绝对位置。打开“Mock 14-bit NRPN”可在本次会话验证高分辨率，默认 CC1–108 预设不变。
 实体学习需要明确选择消息格式；编码与回显仍待 R1 真机验证，见 [控制映射说明](docs/CONTROL_MAP.md)。
+
+### 实机 MIDI 诊断
+
+点击顶栏设备状态可分别选择 MIDI 输入/输出（包括通用 USB-MIDI 接口）；默认 BCR2000 Port 1，手动端口缺失时不自动换路由。
+无第三方依赖的 Windows/macOS Python 五段灯环测试见 [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md)。
+该工具自动学习实际 CC，不需要猜测 Preset。

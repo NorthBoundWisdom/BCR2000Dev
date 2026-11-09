@@ -9,6 +9,10 @@ public enum DeviceSource: String, CaseIterable, Identifiable, Sendable {
 
 /// Value-only connection information; CoreMIDI endpoint lifetimes stay in the app.
 public struct MIDIConnectionSnapshot: Equatable, Sendable {
+    public var sourceEndpoints: [MIDIEndpointDescriptor] = []
+    public var destinationEndpoints: [MIDIEndpointDescriptor] = []
+    public var connectedSourceID: Int32?
+    public var connectedDestinationID: Int32?
     public var sourceNames: [String] = []
     public var destinationNames: [String] = []
     public var connectedSource: String?

@@ -338,9 +338,13 @@ public final class SurfaceSession {
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
         let wasConnected = connection.isConnected
-        if snapshot.isConnected != wasConnected { nrpnAssembler.reset() }
+        let routeChanged = connection.connectedSourceID != snapshot.connectedSourceID
+            || connection.connectedDestinationID != snapshot.connectedDestinationID
+            || connection.connectedSource != snapshot.connectedSource
+            || connection.connectedDestination != snapshot.connectedDestination
+        if snapshot.isConnected != wasConnected || routeChanged { nrpnAssembler.reset() }
         connection = snapshot
-        if snapshot.isConnected, !wasConnected {
+        if snapshot.isConnected, !wasConnected || routeChanged {
             onEvent?(.connected(snapshot))
             if source == .hardware {
                 droppedFeedbackCount = 0
