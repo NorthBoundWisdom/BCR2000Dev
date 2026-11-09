@@ -118,6 +118,7 @@ git diff --check
 - [Swift/Qt/Rust 选型 ADR](docs/adr/001-native-swift-mvp.md)
 - [后续开发计划](ROADMAP.md)
 - [开发规范](CONTRIBUTING.md)
+- [外部开发任务说明（无真机阶段）](DEV_PROMPT.md)
 - [后续开发 TODO](TODO.md)
 
 下一里程碑是把 Mock adapter 扩展为官方 `codex app-server` adapter，并补齐安全审批、重连恢复和发布化，详见 [TODO](TODO.md)。

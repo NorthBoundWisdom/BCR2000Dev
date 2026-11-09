@@ -1,7 +1,8 @@
 # BCR Console 后续开发计划
 
 > 更新：2026-11-09。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
-> 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+> 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的外部开发任务见
+> [DEV_PROMPT.md](DEV_PROMPT.md)（WP1–WP6）。
 
 ## 当前基线
 
