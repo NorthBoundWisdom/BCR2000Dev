@@ -53,9 +53,9 @@ struct BCRAgentConsoleApp: App {
         WindowGroup {
             ContentView(model: model)
                 .frame(minWidth: 1_200, minHeight: 760)
+                .background(WindowTitlebar().frame(width: 0, height: 0))
         }
         .defaultSize(width: 1_260, height: 920)
-        // Keep AppKit in charge of title-bar dragging and double-click zoom.
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
     }
 }

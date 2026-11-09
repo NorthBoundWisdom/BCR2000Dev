@@ -32,6 +32,10 @@ let package = Package(
             name: "BCRAgentCoreTests",
             dependencies: ["BCRAgentCore"]
         ),
+        .testTarget(
+            name: "BCRAgentConsoleTests",
+            dependencies: ["BCRAgentConsole"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
