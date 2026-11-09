@@ -55,7 +55,7 @@ public protocol ParameterSource: AnyObject {
 
 public enum MotionGateStatus: String, Codable, Equatable, Sendable {
     case disconnected, disabled, waitingHeartbeat, heartbeatExpired, waitingActual, actualOutOfLimits
-    case invalidTarget, invalidActual, clockError, ready
+    case invalidTarget, invalidActual, clockError, waitingRearm, ready
 }
 
 public enum MotionOutputPrecision: Sendable { case double, float32 }
@@ -90,6 +90,8 @@ public struct MotionSafetyGate: Sendable {
     public private(set) var outputs: [ParameterID: Double] = [:]
     public private(set) var baseline: [ParameterID: Double] = [:]
     private let precision: MotionOutputPrecision
+    private var observedDisabled = false
+    private var armed = false
     private var connected = false
     private var connectedAt: Date?
     private var heartbeat: Date?
@@ -112,6 +114,8 @@ public struct MotionSafetyGate: Sendable {
 
     public mutating func setConnected(_ value: Bool, at now: Date) {
         if value != connected {
+            observedDisabled = false
+            armed = false
             heartbeat = nil
             actual.removeAll()
             lastStep = now
@@ -142,7 +146,7 @@ public struct MotionSafetyGate: Sendable {
         lastStep = now
         func stopped(_ state: MotionGateStatus, _ reason: String) -> MotionSafetyDecision {
             MotionSafetyDecision(status: state, reason: reason,
-                command: previous == .ready ? ParameterOutputFrame(enabled: false, values: [:]) : nil, limited: false)
+                command: previous == .ready || (connected && heartbeat != nil) ? ParameterOutputFrame(enabled: false, values: [:]) : nil, limited: false)
         }
         if elapsed < 0 { fault = "时钟倒退，需重新连接安全门"; faultStatus = .clockError }
         let closed: MotionSafetyDecision?
@@ -156,8 +160,10 @@ public struct MotionSafetyGate: Sendable {
         } else if connectedAt.map({ now.timeIntervalSince($0) >= heartbeatTimeout }) == true {
             closed = stopped(.heartbeatExpired, "未收到对端心跳，已停止输出")
         } else { closed = stopped(.waitingHeartbeat, "等待对端心跳") }
-        if let closed { status = closed.status; return closed }
+        if let closed { armed = false; observedDisabled = false; status = closed.status; return closed }
         if !enabled {
+            armed = false
+            observedDisabled = true
             let result = stopped(.disabled, "使能关闭，禁止运动输出")
             status = result.status
             return result
@@ -167,22 +173,33 @@ public struct MotionSafetyGate: Sendable {
             guard let sample = actual[limit.id], now.timeIntervalSince(sample.receivedAt) >= 0,
                   now.timeIntervalSince(sample.receivedAt) < heartbeatTimeout else {
                 let result = stopped(.waitingActual, "等待新鲜实际状态：\(limit.id)")
+                armed = false; observedDisabled = false
                 status = result.status; return result
             }
             guard sample.value >= limit.minimum, sample.value <= limit.maximum else {
                 let result = stopped(.actualOutOfLimits, "实际状态超出软限位：\(limit.id)")
+                armed = false; observedDisabled = false
                 status = result.status; return result
             }
             guard let target = targets[limit.id], target.isFinite else {
                 let result = stopped(.invalidTarget, "目标缺失或不是有限数值：\(limit.id)")
+                armed = false; observedDisabled = false
                 status = result.status; return result
             }
+        }
+        if !armed {
+            guard observedDisabled else {
+                let result = stopped(.waitingRearm, "请先关闭再开启使能，禁止自动恢复运动")
+                status = result.status
+                return result
+            }
+            armed = true
+            observedDisabled = false
         }
         if previous != .ready {
             outputs = Dictionary(uniqueKeysWithValues: limits.map { ($0.id, actual[$0.id]!.value) })
             baseline = outputs
         }
-        var changed: [ParameterID: Double] = [:]
         var limited = false
         for limit in limits {
             let previousOutput = outputs[limit.id]!
@@ -194,10 +211,9 @@ public struct MotionSafetyGate: Sendable {
             let next = quantized(candidate, lower: lower, upper: upper, previous: previousOutput)
             outputs[limit.id] = next
             limited = limited || next != target
-            if next != previousOutput { changed[limit.id] = next }
         }
         status = .ready
-        let command = previous != .ready || !changed.isEmpty ? ParameterOutputFrame(enabled: true, values: changed) : nil
+        let command = ParameterOutputFrame(enabled: true, values: outputs)
         return MotionSafetyDecision(status: .ready, reason: limited ? "限位 / 限速中" : "输出已就绪",
                                     command: command, limited: limited)
     }

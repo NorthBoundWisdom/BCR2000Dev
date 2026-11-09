@@ -67,6 +67,7 @@ final class OutputController: ObservableObject {
         settings = .defaults(for: configuration)
         do { if let stored = try store.load() { settings = stored } }
         catch { self.error = "输出设置读取失败：\(error.localizedDescription)" }
+        session.setOutputEnableParameter(settings.enableParameter)
         adapter.onConnection = { [weak self] connected, failure in
             guard let self, !self.isStopping else { return }
             if let failure { self.stop(failure: failure); return }
@@ -89,7 +90,13 @@ final class OutputController: ObservableObject {
     deinit { task?.cancel() }
 
     func restore() {
-        if settings.enabled { start() }
+        // Restoring saved settings never reconnects an actuator or resumes motion.
+        if settings.enabled {
+            settings.enabled = false
+            reason = "上次输出未恢复；请手动启动并先关闭再开启使能"
+            do { try store.save(settings) }
+            catch { self.error = "输出设置保存失败：\(error.localizedDescription)" }
+        }
     }
 
     func start() {
@@ -102,6 +109,7 @@ final class OutputController: ObservableObject {
             settings = candidate
             self.gate = gate
             configuration = session.engine.configuration
+            session.setOutputEnableParameter(settings.enableParameter)
             outputs = [:]; actual = [:]; error = nil; lastPing = nil
             try adapter.start(host: settings.host, port: UInt16(settings.port))
             task?.cancel()
@@ -144,6 +152,7 @@ final class OutputController: ObservableObject {
             // Actual projection requires a live source; starting below installs it after fresh samples.
             try store.save(value)
             settings = value
+            session.setOutputEnableParameter(value.enableParameter)
             error = nil
             if restart { start() }
             else { session.setLEDFeedbackSource(.target) }

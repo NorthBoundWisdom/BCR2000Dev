@@ -12,6 +12,7 @@ final class MotionSafetyTests: XCTestCase {
         gate.setConnected(true, at: time)
         gate.receiveHeartbeat(at: time)
         gate.receiveActual([.init(id: "x", value: actual, receivedAt: time)])
+        _ = gate.evaluate(targets: [:], enabled: false, at: time)
     }
 
     func testDisabledAndDisconnectedNeverProduceMotionFrames() throws {
@@ -20,7 +21,7 @@ final class MotionSafetyTests: XCTestCase {
         prepare(&g, at: t0)
         let decision = g.evaluate(targets: ["x": 50], enabled: false, at: t0)
         XCTAssertEqual(decision.status, .disabled)
-        XCTAssertNil(decision.command)
+        XCTAssertEqual(decision.command, .init(enabled: false, values: [:]))
         XCTAssertTrue(g.outputs.isEmpty)
     }
 
@@ -28,7 +29,7 @@ final class MotionSafetyTests: XCTestCase {
         var g = try gate(speed: 10, change: 0.5)
         prepare(&g, at: t0)
         let initial = g.evaluate(targets: ["x": 90], enabled: true, at: t0.addingTimeInterval(0.1))
-        XCTAssertEqual(initial.command, .init(enabled: true, values: [:]))
+        XCTAssertEqual(initial.command, .init(enabled: true, values: ["x": 0]))
         XCTAssertEqual(g.outputs["x"], 0)
         let next = g.evaluate(targets: ["x": 90], enabled: true, at: t0.addingTimeInterval(0.2))
         XCTAssertEqual(next.command?.values["x"], 0.5)
@@ -47,11 +48,11 @@ final class MotionSafetyTests: XCTestCase {
         _ = g.evaluate(targets: ["x": 999], enabled: true, at: t0.addingTimeInterval(0.1))
         XCTAssertEqual(g.outputs["x"], 100)
         let same = g.evaluate(targets: ["x": 999], enabled: true, at: t0.addingTimeInterval(0.1))
-        XCTAssertNil(same.command)
+        XCTAssertEqual(same.command?.values, ["x": 100])
         XCTAssertTrue(same.limited)
     }
 
-    func testDisableTimeoutAndDisconnectEmitStopThenNoMoreCommands() throws {
+    func testDisableTimeoutAndDisconnectNeverRepeatMovement() throws {
         for reason in 0..<3 {
             var g = try gate()
             prepare(&g, at: t0)
@@ -64,7 +65,8 @@ final class MotionSafetyTests: XCTestCase {
             let result = g.evaluate(targets: ["x": 50], enabled: enabled, at: time)
             XCTAssertEqual(result.command, .init(enabled: false, values: [:]))
             XCTAssertNotEqual(result.status, .ready)
-            XCTAssertNil(g.evaluate(targets: ["x": 80], enabled: enabled, at: time).command)
+            let repeated = g.evaluate(targets: ["x": 80], enabled: enabled, at: time).command
+            XCTAssertTrue(repeated == nil || repeated == .init(enabled: false, values: [:]))
         }
     }
 
@@ -107,7 +109,7 @@ final class MotionSafetyTests: XCTestCase {
         let enable = g.evaluate(targets: ["x": 90], enabled: true, at: time)
         XCTAssertEqual(g.outputs["x"], 20)
         XCTAssertEqual(g.baseline["x"], 20)
-        XCTAssertEqual(enable.command?.values, [:])
+        XCTAssertEqual(enable.command?.values, ["x": 20])
         g.setConnected(false, at: time)
         _ = g.evaluate(targets: ["x": 90], enabled: true, at: time)
         prepare(&g, at: time, actual: -20)
@@ -140,4 +142,52 @@ final class MotionSafetyTests: XCTestCase {
         XCTAssertThrowsError(try MotionSafetyGate(limits: []))
         XCTAssertThrowsError(try MotionSafetyGate(limits: [.init(id: "x", minimum: 0, maximum: 1, maximumChange: 1, maximumVelocity: 1)], heartbeatTimeout: 1))
     }
+    func testAlreadyEnabledStartupAndReconnectRequireObservedOffThenOn() throws {
+        var g = try gate()
+        g.setConnected(true, at: t0)
+        g.receiveHeartbeat(at: t0)
+        g.receiveActual([.init(id: "x", value: 0, receivedAt: t0)])
+        for _ in 0..<3 {
+            let held = g.evaluate(targets: ["x": 90], enabled: true, at: t0)
+            XCTAssertEqual(held.status, .waitingRearm)
+            XCTAssertEqual(held.command, .init(enabled: false, values: [:]))
+            XCTAssertTrue(g.outputs.isEmpty)
+        }
+        _ = g.evaluate(targets: ["x": 90], enabled: false, at: t0)
+        XCTAssertEqual(g.evaluate(targets: ["x": 90], enabled: true, at: t0).status, .ready)
+        let expired = t0.addingTimeInterval(0.3)
+        XCTAssertEqual(g.evaluate(targets: ["x": 90], enabled: true, at: expired).status, .heartbeatExpired)
+        g.receiveHeartbeat(at: expired)
+        g.receiveActual([.init(id: "x", value: 1, receivedAt: expired)])
+        XCTAssertEqual(g.evaluate(targets: ["x": 90], enabled: true, at: expired).status, .waitingRearm)
+        _ = g.evaluate(targets: ["x": 90], enabled: false, at: expired)
+        XCTAssertEqual(g.evaluate(targets: ["x": 90], enabled: true, at: expired).status, .ready)
+        g.setConnected(false, at: expired)
+        g.setConnected(true, at: expired)
+        g.receiveHeartbeat(at: expired)
+        g.receiveActual([.init(id: "x", value: 2, receivedAt: expired)])
+        XCTAssertEqual(g.evaluate(targets: ["x": 90], enabled: true, at: expired).status, .waitingRearm)
+    }
+
+    func testEveryReadyFrameContainsAllLimitedOutputsIncludingUnchangedJoints() throws {
+        var g = try MotionSafetyGate(limits: [
+            .init(id: "x", minimum: -100, maximum: 100, maximumChange: 1, maximumVelocity: 10),
+            .init(id: "y", minimum: -100, maximum: 100, maximumChange: 1, maximumVelocity: 10)
+        ])
+        g.setConnected(true, at: t0)
+        g.receiveHeartbeat(at: t0)
+        g.receiveActual([.init(id: "x", value: 0, receivedAt: t0), .init(id: "y", value: 5, receivedAt: t0)])
+        _ = g.evaluate(targets: [:], enabled: false, at: t0)
+        for i in 0..<3 {
+            let decision = g.evaluate(targets: ["x": 1, "y": 5], enabled: true, at: t0.addingTimeInterval(Double(i) * 0.1))
+            XCTAssertEqual(Set(decision.command!.values.keys), Set(["x", "y"]))
+            XCTAssertEqual(decision.command!.values["y"], 5)
+        }
+        let retry = g.evaluate(targets: ["x": 1, "y": 5], enabled: true, at: t0.addingTimeInterval(0.2))
+        XCTAssertEqual(retry.command?.values, ["x": 1, "y": 5])
+        for _ in 0..<3 {
+            XCTAssertEqual(g.evaluate(targets: [:], enabled: false, at: t0.addingTimeInterval(0.2)).command, .init(enabled: false, values: [:]))
+        }
+    }
+
 }

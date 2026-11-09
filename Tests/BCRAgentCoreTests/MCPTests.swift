@@ -87,7 +87,7 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(service.session.engine.parameterValues, before)
         XCTAssertTrue(service.session.events.isEmpty)
         XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.enabled"), "value": .number(1)])).isError)
-        XCTAssertTrue(service.call("reset_group", arguments: .object(["group": .string(SurfaceConfiguration.robotArmGroup)])).isError)
+        XCTAssertFalse(service.call("reset_group", arguments: .object(["group": .string(SurfaceConfiguration.robotArmGroup)])).isError)
         XCTAssertEqual(service.session.engine.parameterValues, before)
         service.permissions.parameterWrite = false
         XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .number(90)])).isError)
@@ -293,4 +293,59 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(demo.parameter("arm.j1")!.agentWritable)
         XCTAssertEqual(try JSONValue.encoded(demo).decoded(SurfaceConfiguration.self), demo)
     }
+    func testConfigurationPermissionCannotEscalateProtectedDefinitionsOrEnableValues() async throws {
+        let service = makeService()
+        service.permissions.configurationWrite = true
+        let session = service.session
+        let original = session.engine.configuration.parameter("arm.enabled")!
+        var attacks: [ParameterDefinition] = []
+        var changed = original; changed.agentWritable = true; attacks.append(changed)
+        changed = original; changed.minimum = -1; changed.maximum = 0; attacks.append(changed)
+        changed = original; changed.defaultValue = 1; attacks.append(changed)
+        for attack in attacks {
+            XCTAssertTrue(service.call("update_parameter", arguments: .object(["definition": try .encoded(attack)])).isError)
+            XCTAssertEqual(session.engine.configuration.parameter("arm.enabled"), original)
+            XCTAssertEqual(session.engine.value(of: "arm.enabled"), 0)
+        }
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.enabled"), "value": .number(1)])).isError)
+        var writable = session.engine.configuration.parameter("arm.j1")!
+        writable.agentWritable = false
+        XCTAssertTrue(service.call("update_parameter", arguments: .object(["definition": try .encoded(writable)])).isError)
+        try session.addParameter(.init(id: "readonly", name: "R", minimum: 0, maximum: 1, agentWritable: false))
+        var readonly = session.engine.configuration.parameter("readonly")!
+        readonly.name = "Changed"
+        XCTAssertTrue(service.call("update_parameter", arguments: .object(["definition": try .encoded(readonly)])).isError)
+        try session.addParameter(.init(id: "custom.enable", name: "Enable", minimum: 0, maximum: 1, kind: .toggle))
+        session.setOutputEnableParameter("custom.enable")
+        let custom = session.engine.configuration.parameter("custom.enable")!
+        XCTAssertTrue(service.call("update_parameter", arguments: .object(["definition": try .encoded(custom)])).isError)
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("custom.enable"), "value": .number(1)])).isError)
+        // Even a locally-created writable arm.enabled remains reserved to the operator.
+        var local = original; local.agentWritable = true
+        try session.updateParameter(local)
+        XCTAssertTrue(service.call("set_parameter", arguments: .object(["id": .string("arm.enabled"), "value": .number(1)])).isError)
+    }
+
+    func testResetGroupResetsWritableParametersAndReportsProtectedSkips() async throws {
+        let service = makeService()
+        service.session.setParameter("arm.j1", to: 90)
+        service.session.setParameter("arm.enabled", to: 1)
+        let result = service.call("reset_group", arguments: .object(["group": .string(SurfaceConfiguration.robotArmGroup)]))
+        XCTAssertFalse(result.isError)
+        let data = try XCTUnwrap(result.value.objectValue)
+        let skipped = try XCTUnwrap(data["skipped"]?.arrayValue)
+        XCTAssertEqual(skipped.count, 1)
+        XCTAssertEqual(skipped.first?.objectValue?["id"], .string("arm.enabled"))
+        XCTAssertEqual(data["results"]?.arrayValue?.count, 8)
+        XCTAssertEqual(service.session.engine.value(of: "arm.j1"), 0)
+        XCTAssertEqual(service.session.engine.value(of: "arm.enabled"), 1)
+        try service.session.addParameter(.init(id: "only.readonly", name: "R", group: "Protected", minimum: 0, maximum: 1, agentWritable: false))
+        let protected = service.call("reset_group", arguments: .object(["group": .string("Protected")]))
+        XCTAssertFalse(protected.isError)
+        XCTAssertEqual(protected.value.objectValue?["results"]?.arrayValue?.count, 0)
+        XCTAssertEqual(protected.value.objectValue?["skipped"]?.arrayValue?.count, 1)
+        service.permissions.parameterWrite = false
+        XCTAssertTrue(service.call("reset_group", arguments: .object(["group": .string(SurfaceConfiguration.robotArmGroup)])).isError)
+    }
+
 }

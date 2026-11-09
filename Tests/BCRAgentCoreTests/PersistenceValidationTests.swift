@@ -144,4 +144,3 @@ private final class ValidationFakeDevice: SurfaceDevice {
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     func send(_ message: MIDIVoiceMessage) throws {}
 }
-

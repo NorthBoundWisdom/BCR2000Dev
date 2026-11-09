@@ -84,7 +84,13 @@ public final class AgentControlService {
             let group = try string(args, "group")
             let parameters = session.engine.configuration.parameters.filter { $0.group == group }
             guard !parameters.isEmpty else { throw MCPToolFailure("未知参数组") }
-            return .array(try write(parameters.map { ($0.id, $0.defaultValue) }))
+            let writable = parameters.filter { $0.agentWritable && !session.isMCPProtectedParameter($0.id) }
+            let skipped = parameters.filter { !$0.agentWritable || session.isMCPProtectedParameter($0.id) }
+            return .object([
+                "results": .array(try write(writable.map { ($0.id, $0.defaultValue) })),
+                "skipped": .array(skipped.map { .object(["id": .string($0.id.rawValue),
+                    "reason": .string("参数受保护，不允许 Agent 写入")]) }),
+            ])
         case "list_controls":
             return .array(try BCRLayout.allControls.map { control in
                 .object([
@@ -114,6 +120,15 @@ public final class AgentControlService {
             try requireConfigurationWrite()
             let definition = try args["definition"]!.decoded(ParameterDefinition.self)
             try definition.validate()
+            guard !session.isMCPProtectedParameter(definition.id) else {
+                throw MCPToolFailure("MCP 不允许修改使能参数定义：\(definition.id)")
+            }
+            if name == "update_parameter", let previous = session.engine.configuration.parameter(definition.id) {
+                guard previous.agentWritable else { throw MCPToolFailure("MCP 不允许修改不可写参数定义：\(definition.id)") }
+                guard previous.agentWritable == definition.agentWritable else {
+                    throw MCPToolFailure("MCP 不允许修改 agentWritable")
+                }
+            }
             guard definition.defaultValue.isFinite,
                   (definition.minimum...definition.maximum).contains(definition.defaultValue) else {
                 throw MCPToolFailure("默认值必须在参数范围内")
@@ -139,7 +154,7 @@ public final class AgentControlService {
             guard value.isFinite else { throw MCPToolFailure("参数值必须是有限数值") }
             guard seen.insert(id).inserted else { throw MCPToolFailure("批量写入包含重复参数：\(id)") }
             guard let definition = session.engine.configuration.parameter(id) else { throw MCPToolFailure("未知参数：\(id)") }
-            guard definition.agentWritable else { throw MCPToolFailure("参数不允许 Agent 写入：\(id)") }
+            guard definition.agentWritable, !session.isMCPProtectedParameter(id) else { throw MCPToolFailure("参数不允许 Agent 写入：\(id)") }
         }
         try consumeWrites(entries.count)
         // All validation completes before the first synchronous effect. No await can interleave a change.
@@ -162,7 +177,7 @@ public final class AgentControlService {
         info["value"] = .double(value)
         info["actualValue"] = session.engine.actualFeedbackValues[id].map(JSONValue.double) ?? .null
         info["outputValue"] = session.motionSafety?.outputs[id].map(JSONValue.double) ?? .null
-        info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable)
+        info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable && !session.isMCPProtectedParameter(id))
         info["controls"] = .array(try session.engine.configuration.controls(targetingParameter: id).map(JSONValue.encoded))
         return .object(info)
     }

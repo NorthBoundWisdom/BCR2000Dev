@@ -118,4 +118,40 @@ final class OutputControllerTests: XCTestCase {
         settings.limits.append(settings.limits[0])
         XCTAssertThrowsError(try settings.validate(configuration: config))
     }
+    func testSavedEnabledOutputDoesNotAutoRestoreAndStartupHighRequiresNewEdge() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = OutputTestClock(), transport = OutputFakeTransport()
+        var configuration = SurfaceConfiguration.robotArmDemo()
+        var enable = configuration.parameter("arm.enabled")!
+        enable.defaultValue = 1
+        try configuration.updateParameter(enable)
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration, now: { clock.now },
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        XCTAssertEqual(session.engine.value(of: "arm.enabled"), 1)
+        let store = JSONFileStore<OutputSettings>(fileURL: directory.appending(path: "output.json"))
+        var saved = OutputSettings.defaults(for: session.engine.configuration)
+        saved.enabled = true
+        try store.save(saved)
+        let controller = OutputController(session: session, store: store, adapter: transport, automaticallyTicks: false, now: { clock.now })
+        controller.restore()
+        XCTAssertFalse(controller.settings.enabled)
+        XCTAssertFalse(transport.isConnected)
+        XCTAssertTrue(transport.frames.isEmpty)
+        XCTAssertEqual(try store.load()?.enabled, false)
+        controller.start()
+        defer { controller.stop() }
+        transport.onHeartbeat?(clock.now)
+        transport.onSamples?(session.engine.configuration.parameters.filter { $0.kind == .continuous }.map {
+            .init(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
+        })
+        for _ in 0..<3 { controller.tick() }
+        XCTAssertEqual(controller.status, .waitingRearm)
+        XCTAssertFalse(transport.frames.contains { $0.enabled })
+        session.setParameter("arm.enabled", to: 0); controller.tick()
+        session.setParameter("arm.enabled", to: 1); controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+        XCTAssertEqual(transport.frames.last?.values.count, saved.limits.count)
+    }
+
 }

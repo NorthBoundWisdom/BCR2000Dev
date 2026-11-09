@@ -51,6 +51,8 @@ public struct SurfaceEngine: Sendable {
     public var triggerDebounce: TimeInterval = 0.25
 
     private var recentFeedback: [MIDIControlID: (value: UInt16, sentAt: Date)] = [:]
+    private struct IncrementRemainder: Sendable { let parameter: ParameterID; let anchor: Double; let value: Double }
+    private var incrementRemainders: [BCRControlID: IncrementRemainder] = [:]
     private var lastTrigger: [BCRControlID: Date] = [:]
 
     public init(hardwareMap: HardwareMap, configuration: SurfaceConfiguration) {
@@ -103,6 +105,7 @@ public struct SurfaceEngine: Sendable {
             }
             if message.maximumDataValue == 16383 {
                 let raw = assignment.inverted ? 16383 - message.dataValue : message.dataValue
+                clearIncrementRemainders(for: id)
                 parameterValues[id] = definition.clamp(definition.minimum + Double(raw) / 16383 * (definition.maximum - definition.minimum))
                 let bound = configuration.controls(targetingParameter: id)
                 let targets = feedbackDataValue(for: control) == message.dataValue ? bound.filter { $0 != control } : bound
@@ -125,9 +128,9 @@ public struct SurfaceEngine: Sendable {
         }
         if hardwareMap.midi(for: control)?.kind == .nrpn,
            let assignment = configuration.assignment(for: control), case let .parameter(id) = assignment.target,
-           let definition = configuration.parameter(id), let current = value(of: id) {
+           let definition = configuration.parameter(id) {
             let direction = assignment.inverted ? -1.0 : 1.0
-            return setParameter(id, to: current + direction * Double(delta) * (definition.maximum - definition.minimum) / 16383, at: now)
+            return incrementParameter(control, id: id, movement: direction * Double(delta) * (definition.maximum - definition.minimum) / 16383, at: now)
         }
         let current = Int(feedbackValue(for: control) ?? state(of: control).value)
         let next = UInt8(min(max(current + delta, 0), 127))
@@ -156,6 +159,7 @@ public struct SurfaceEngine: Sendable {
         guard let definition = configuration.parameter(id) else {
             return []
         }
+        clearIncrementRemainders(for: id)
         parameterValues[id] = definition.clamp(value)
         return feedback(to: configuration.controls(targetingParameter: id), at: now)
     }
@@ -202,11 +206,13 @@ public struct SurfaceEngine: Sendable {
 
     public mutating func assign(_ assignment: ControlAssignment, at now: Date = .now) throws -> [SurfaceEffect] {
         try configuration.assign(assignment)
+        incrementRemainders[assignment.control] = nil
         return feedback(to: [assignment.control], at: now)
     }
 
     public mutating func clearAssignment(for control: BCRControlID) {
         configuration.clearAssignment(for: control)
+        incrementRemainders[control] = nil
     }
 
     public mutating func addParameter(_ definition: ParameterDefinition) throws {
@@ -221,6 +227,7 @@ public struct SurfaceEngine: Sendable {
 
     public mutating func removeParameter(_ id: ParameterID) {
         configuration.removeParameter(id)
+        clearIncrementRemainders(for: id)
         parameterValues[id] = nil
         actualFeedbackValues[id] = nil
     }
@@ -237,6 +244,7 @@ public struct SurfaceEngine: Sendable {
 
     public mutating func replaceHardwareMap(_ map: HardwareMap) {
         hardwareMap = map
+        incrementRemainders.removeAll()
         learnTarget = nil
         recentFeedback.removeAll()
     }
@@ -251,10 +259,12 @@ public struct SurfaceEngine: Sendable {
 
     public mutating func unbind(_ control: BCRControlID) {
         hardwareMap.unbind(control)
+        incrementRemainders[control] = nil
     }
 
     public mutating func resetHardwareMap() {
         hardwareMap.reset()
+        incrementRemainders.removeAll()
         learnTarget = nil
     }
 
@@ -279,6 +289,7 @@ public struct SurfaceEngine: Sendable {
             return [.learnRejected(target, error)]
         }
 
+        incrementRemainders[target] = nil
         record(target, value: value, direction: .input)
         learnTarget = BCRLayout.controls(in: target.section)
             .first { $0 > target && hardwareMap.midi(for: $0) == nil }
@@ -304,6 +315,7 @@ public struct SurfaceEngine: Sendable {
                 return []
             }
             let bound = configuration.controls(targetingParameter: id)
+            clearIncrementRemainders(for: id)
             if control.isContinuous {
                 let input = assignment.inverted ? 127 - value : value
                 parameterValues[id] = definition.value(fromMIDI: input)
@@ -362,12 +374,28 @@ public struct SurfaceEngine: Sendable {
 
     private mutating func applyRelative(_ control: BCRControlID, delta: Int, at now: Date) -> [SurfaceEffect] {
         guard let assignment = configuration.assignment(for: control),
-              case let .parameter(id) = assignment.target,
-              let definition = configuration.parameter(id), let current = value(of: id) else { return [] }
+              case let .parameter(id) = assignment.target else { return [] }
         let movement = Double(delta) * assignment.encoderStep * (assignment.inverted ? -1 : 1)
-        let next = current + movement
-        // Encoded magnitude carries acceleration. No guessed time curve or seven-bit quantization.
-        return setParameter(id, to: next.isFinite ? next : (movement > 0 ? definition.maximum : definition.minimum), at: now)
+        return incrementParameter(control, id: id, movement: movement, at: now)
+    }
+
+    private mutating func incrementParameter(_ control: BCRControlID, id: ParameterID, movement: Double, at now: Date) -> [SurfaceEffect] {
+        guard let definition = configuration.parameter(id), let current = value(of: id) else { return [] }
+        let pending = incrementRemainders[control]
+        let base = pending?.parameter == id && pending?.anchor == current ? pending!.value : current
+        let requested = base + movement
+        // Retain fractions before snapping; clip at endpoints so no hidden wind-up accumulates.
+        let bounded = requested.isFinite ? min(max(requested, definition.minimum), definition.maximum)
+            : (movement > 0 ? definition.maximum : definition.minimum)
+        let snapped = definition.clamp(bounded)
+        if snapped != current { clearIncrementRemainders(for: id) }
+        incrementRemainders[control] = .init(parameter: id, anchor: snapped, value: bounded)
+        parameterValues[id] = snapped
+        return feedback(to: configuration.controls(targetingParameter: id), at: now)
+    }
+
+    private mutating func clearIncrementRemainders(for id: ParameterID) {
+        incrementRemainders = incrementRemainders.filter { $0.value.parameter != id }
     }
 
     private func steppedValue(_ current: Double, definition: ParameterDefinition, step: Double, wraps: Bool) -> Double {

@@ -42,6 +42,12 @@ public final class SurfaceSession {
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
     public private(set) var droppedFeedbackCount = 0
+    /// App-owned safety configuration; MCP cannot change which parameter is the enable gate.
+    public private(set) var outputEnableParameter: ParameterID = "arm.enabled"
+    public func setOutputEnableParameter(_ id: ParameterID) { outputEnableParameter = id }
+    public func isMCPProtectedParameter(_ id: ParameterID) -> Bool {
+        id == "arm.enabled" || id == outputEnableParameter
+    }
     public private(set) var motionSafety: MotionSafetySnapshot?
     public private(set) var lastConfigurationPersistenceError: String?
 

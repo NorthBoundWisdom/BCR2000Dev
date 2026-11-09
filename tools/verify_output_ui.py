@@ -129,10 +129,18 @@ key code 48''')
     if safety()["status"] == "disconnected":
         press_help("启动或停止经过安全门的 OSC 输出", sheet=True)
     gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
-    wait_for(lambda: safety()["status"] == "ready", "fresh receiver did not reconnect")
+    wait_for(lambda: safety()["status"] == "waitingRearm", "fresh receiver did not require an operator rearm")
+    time.sleep(0.15)
+    if abs(safety()["actual"]["arm.j1"]) > 1e-4:
+        raise RuntimeError("receiver restarted with enable already high and began moving")
+    press_help("操作 B2-1", area=1)
+    wait_for(lambda: safety()["status"] == "disabled", "rearm did not observe enable off")
+    time.sleep(0.3)
+    press_help("操作 B2-1", area=1)
+    wait_for(lambda: safety()["status"] == "ready", "operator off/on did not rearm receiver")
     if safety()["baseline"]["arm.j1"] > safety()["actual"]["arm.j1"] + 1e-4:
         raise RuntimeError("reconnect replayed the old output instead of seeding actual state")
-    print("Native receiver restart used fresh actual state without replaying stale output.")
+    print("Native receiver restart stayed stopped until operator off/on, then seeded fresh actual state.")
 finally:
     if simulator.poll() is None:
         simulator.terminate()

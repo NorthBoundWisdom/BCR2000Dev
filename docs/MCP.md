@@ -55,7 +55,7 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | set_parameter | id: string, value: number | id、value（实际值）、clamped |
 | set_parameters | values: [{id, value}]，1–256 条且 id 不重复 | 写入结果数组；先全部校验，任一失败则不改任何参数 |
 | nudge_parameter | id: string, delta: number | 与 set_parameter 相同 |
-| reset_group | group: string | 该组所有参数的写入结果；任何参数不可写则整组拒绝 |
+| reset_group | group: string | 对组内可写参数复位；返回 {results: 写入结果数组, skipped: [{id, reason}]}，受保护参数保持原值 |
 | list_controls | 空对象 | 108 个 control、label、assignment、binding、value |
 | assign_control | assignment: 完整功能分配对象 | 保存后的分配，需要配置写入 |
 | create_parameter | definition: 参数定义对象 | 创建后的参数信息，需要配置写入 |
@@ -103,3 +103,11 @@ App 显示迁移提示，并保持原文件直到用户后续修改配置。
 stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {id, values}。
 例如 target={"stepParameter":{"id":"arm.j1","step":0.5,"wraps":false}}。
 这些功能同样受配置写入权限和整体校验限制；普通参数写入返回的 clamped 也标明吸附造成的调整。
+
+### 审查修正：写入权限边界
+
+配置写入权限不授予修改权限策略的能力。update_parameter 不允许改变已有参数的 agentWritable，
+也不允许修改当前不可写参数的任何定义。arm.enabled 和输出设置选定的使能参数始终禁止 MCP
+创建/修改定义或写值，即使操作员曾在本地把其 agentWritable 设为 true。
+get_parameter 的 writable 反映此约束。reset_group 跳过这些参数并明确返回 skipped；
+其余可写参数仍在全部验证、限速通过后统一复位。参数写权限关闭时复位仍被拒绝。

@@ -42,7 +42,7 @@
 - 参数 step 是全来源吸附，encoderStep 是相对输入灵敏度；设置较粗的参数 step 会覆盖细调结果。
 - 外部仿真不等同于真实机械臂，真实执行端的独立停机保护仍未验收。
 - 发现但未处理：现有 ArmPreviewView 对极大自定义角度使用 Int 转换，可能超出显示范围。
-  本轮只使用正常关节范围；此处留作独立预览健壮性修复，不扩大当前工作包。
+  该问题已在后续审查修正中解决，见 [REVIEW_FIXES.md](REVIEW_FIXES.md)。
 
 完整编码规则、手册来源与迁移见 [CONTROL_MAP.md](CONTROL_MAP.md)，
 通用 MCP 接口见 [MCP.md](MCP.md)，OSC 仿真见 [OSC.md](OSC.md)。

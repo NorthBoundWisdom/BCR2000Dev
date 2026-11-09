@@ -86,6 +86,32 @@ class ArmSimulationTests(unittest.TestCase):
         self.assertEqual(values[1][0], "/bcr/state/frame")
         self.assertEqual(len(values), 10)
 
+    def test_command_watchdog_stops_even_while_heartbeats_continue(self):
+        arm = sim.ArmSimulation()
+        self.connect(arm)
+        arm.receive(self.frame(1, True, {"arm.j1": 90}), self.peer, 0)
+        arm.advance(0.05, 0.05)
+        arm.receive(sim.message("/bcr/heartbeat", [2]), self.peer, 0.34)
+        held = arm.actual["arm.j1"]
+        arm.advance(0.05, 0.35)
+        self.assertFalse(arm.enabled)
+        self.assertEqual(arm.actual["arm.j1"], held)
+        # A lost stop frame is safe at the receiver's independent command deadline.
+        arm.receive(self.frame(1, True, {"arm.j1": 90}), self.peer, 0.36)
+        self.assertFalse(arm.enabled)
+
+    def test_full_snapshot_after_lost_packet_repairs_all_targets(self):
+        arm = sim.ArmSimulation()
+        self.connect(arm)
+        # Frame 1 is intentionally dropped; frame 2 still contains unchanged targets.
+        snapshot = dict(arm.actual)
+        snapshot["arm.j1"] = 1
+        snapshot["arm.j2"] = 31
+        arm.receive(self.frame(2, True, snapshot), self.peer, 0.1)
+        self.assertEqual(arm.targets, snapshot)
+        arm.receive(self.frame(3, True, snapshot), self.peer, 0.2)
+        self.assertEqual(arm.targets, snapshot)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -169,7 +169,7 @@ public enum MCPToolCatalog {
         "set_parameter": "写入参数并同步所有绑定 LED；报告实际值与 clamp。",
         "set_parameters": "原子批量写入；任一参数校验失败则全部不写。",
         "nudge_parameter": "按增量修改一个参数。",
-        "reset_group": "复位整组；每个参数都必须允许 Agent 写入。",
+        "reset_group": "复位组内可写参数，返回 results 和受保护参数的 skipped 列表。",
         "list_controls": "列出物理控件、功能分配、MIDI 绑定与当前值。",
         "assign_control": "修改控件分配，需要配置写入权限。",
         "create_parameter": "创建参数，需要配置写入权限。",

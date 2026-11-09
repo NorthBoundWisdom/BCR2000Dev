@@ -107,6 +107,7 @@ class ArmSimulation:
         self.peer = None
         self.last_heartbeat = None
         self.last_command = None
+        self.last_command_at = None
         self.state_sequence = 0
         self.epoch = secrets.token_hex(16)
         self.dropped = 0
@@ -157,6 +158,7 @@ class ArmSimulation:
         if not enabled and updates:
             raise ValueError("stop frame must not contain motion values")
         self.last_command = sequence
+        self.last_command_at = now
         self.enabled = enabled
         if enabled:
             self.targets.update(updates)
@@ -172,6 +174,10 @@ class ArmSimulation:
             self.targets = dict(self.actual)
             self.peer = None
             self.last_command = None
+        # A live heartbeat cannot keep an old movement command alive.
+        if self.last_command_at is None or now - self.last_command_at >= self.timeout:
+            self.enabled = False
+            self.targets = dict(self.actual)
         if self.enabled:
             allowance = self.speed * min(elapsed, 0.05)
             for identifier, target in self.targets.items():

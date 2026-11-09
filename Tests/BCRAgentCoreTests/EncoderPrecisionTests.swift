@@ -270,4 +270,44 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(s.engine.configuration.assignment(for: encoder), assignment)
     }
 
+    func testSlowRelativeTicksAccumulateAcrossSnappingAndExternalWritesClearRemainders() async throws {
+        for mode in [EncoderMode.relative1, .relative2] {
+            let s = session(mode: mode, step: 0.25)
+            var definition = s.engine.configuration.parameter("angle")!
+            definition.step = 1
+            try s.updateParameter(definition)
+            for _ in 0..<4 { s.turn(encoder, by: 1) }
+            XCTAssertEqual(s.engine.value(of: "angle"), 1)
+            for _ in 0..<4 { s.turn(encoder, by: -1) }
+            XCTAssertEqual(s.engine.value(of: "angle"), 0)
+            s.turn(encoder, by: 1) // pending 0.25
+            s.setParameter("angle", to: 10)
+            s.turn(encoder, by: 1)
+            XCTAssertEqual(s.engine.value(of: "angle"), 10)
+            s.turn(encoder, by: 1)
+            XCTAssertEqual(s.engine.value(of: "angle"), 10) // 10.5 ties down; old remainder must not leak.
+            s.setParameter("angle", to: 180)
+            for _ in 0..<20 { s.turn(encoder, by: 1) }
+            for _ in 0..<4 { s.turn(encoder, by: -1) }
+            XCTAssertEqual(s.engine.value(of: "angle"), 179) // no wind-up at endpoint.
+        }
+    }
+
+    func testNRPNSoftwareFineAdjustAccumulatesAndAssignmentChangeClearsRemainder() throws {
+        let map = HardwareMap(entries: [.init(control: encoder, midi: .init(kind: .nrpn, channel: 0, number: 1000))])
+        var config = configuration()
+        var definition = config.parameter("angle")!
+        definition.step = 1
+        try config.updateParameter(definition)
+        var engine = SurfaceEngine(hardwareMap: map, configuration: config)
+        for _ in 0..<46 { _ = engine.adjust(encoder, by: 1, at: time) }
+        XCTAssertEqual(engine.value(of: "angle"), 1)
+        for _ in 0..<46 { _ = engine.adjust(encoder, by: -1, at: time) }
+        XCTAssertEqual(engine.value(of: "angle"), 0)
+        for _ in 0..<20 { _ = engine.adjust(encoder, by: 1, at: time) }
+        _ = try engine.assign(.init(control: encoder, target: .parameter("angle")), at: time)
+        _ = engine.adjust(encoder, by: 1, at: time)
+        XCTAssertEqual(engine.value(of: "angle"), 0)
+    }
+
 }

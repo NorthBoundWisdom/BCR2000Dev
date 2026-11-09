@@ -73,7 +73,7 @@ struct ArmPreviewView: View {
         HStack {
             Text(title).foregroundStyle(.secondary)
             Spacer()
-            Text("\(Int(value.rounded()))\(unit)").monospacedDigit()
+            Text("\(ArmPreviewNumbers.text(value.rounded()))\(unit)").monospacedDigit()
         }
         .font(.caption)
     }
@@ -103,9 +103,9 @@ private struct SideView: View {
 
             // Angles from vertical; J2 tilts the upper arm, J3 and J4 are relative.
             let shoulderPoint = CGPoint(x: ground.x, y: ground.y - 30)
-            let a1 = pose.shoulder * .pi / 180
-            let a2 = a1 + pose.elbow * .pi / 180
-            let a3 = a2 + pose.wristPitch * .pi / 180
+            let a1 = ArmPreviewNumbers.radians(pose.shoulder)
+            let a2 = a1 + ArmPreviewNumbers.radians(pose.elbow)
+            let a3 = a2 + ArmPreviewNumbers.radians(pose.wristPitch)
             func advance(_ p: CGPoint, _ angle: Double, _ length: Double) -> CGPoint {
                 CGPoint(x: p.x + sin(angle) * length * scale, y: p.y - cos(angle) * length * scale)
             }
@@ -127,7 +127,7 @@ private struct SideView: View {
             }
 
             // Gripper jaws open perpendicular to the last link.
-            let opening = 4 + pose.gripper / 100 * 12
+            let opening = 4 + min(max(pose.gripper, 0), 100) / 100 * 12
             let normal = CGVector(dx: cos(a3), dy: sin(a3))
             for side in [-1.0, 1.0] {
                 let start = CGPoint(x: toolPoint.x + normal.dx * opening * side, y: toolPoint.y + normal.dy * opening * side)
@@ -138,7 +138,7 @@ private struct SideView: View {
             }
 
             context.draw(
-                Text("侧视 · J2 \(Int(pose.shoulder))°  J3 \(Int(pose.elbow))°  J4 \(Int(pose.wristPitch))°")
+                Text("侧视 · J2 \(ArmPreviewNumbers.text(pose.shoulder))°  J3 \(ArmPreviewNumbers.text(pose.elbow))°  J4 \(ArmPreviewNumbers.text(pose.wristPitch))°")
                     .font(.caption2.monospaced())
                     .foregroundColor(.secondary),
                 at: CGPoint(x: 12, y: 14),
@@ -158,16 +158,31 @@ private struct TopView: View {
             let ring = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
             context.stroke(Path(ellipseIn: ring), with: .color(.white.opacity(0.15)), lineWidth: 1)
 
-            let angle = pose.base * .pi / 180
+            let angle = ArmPreviewNumbers.radians(pose.base)
             var arm = Path()
             arm.move(to: center)
             arm.addLine(to: CGPoint(x: center.x + sin(angle) * radius, y: center.y - cos(angle) * radius))
             context.stroke(arm, with: .color(pose.enabled ? Theme.parameter : .gray), style: StrokeStyle(lineWidth: 6, lineCap: .round))
             context.fill(Path(ellipseIn: CGRect(x: center.x - 6, y: center.y - 6, width: 12, height: 12)), with: .color(.white.opacity(0.6)))
             context.draw(
-                Text("俯视 · J1 \(Int(pose.base))°").font(.caption2.monospaced()).foregroundColor(.secondary),
+                Text("俯视 · J1 \(ArmPreviewNumbers.text(pose.base))°").font(.caption2.monospaced()).foregroundColor(.secondary),
                 at: CGPoint(x: size.width / 2, y: 12)
             )
         }
+    }
+}
+
+/// Presentation uses floating-point formatting; no narrowing conversion to a machine integer.
+enum ArmPreviewNumbers {
+    static func text(_ value: Double) -> String {
+        guard value.isFinite else { return "无效值" }
+        if abs(value) >= 1e9 {
+            return value.formatted(.number.notation(.scientific).precision(.significantDigits(4)))
+        }
+        return value.formatted(.number.grouping(.never).precision(.fractionLength(0)))
+    }
+
+    static func radians(_ degrees: Double) -> Double {
+        degrees.truncatingRemainder(dividingBy: 360) / 180 * .pi
     }
 }
