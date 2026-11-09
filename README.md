@@ -39,6 +39,7 @@ CC/Note 按键，在 SwiftUI 与确定性 Mock Agent 之间共享同一状态机
 `SurfaceDevice` 由 Mock 适配器和 App 层的 CoreMIDI 适配器实现。设备断线期间的反馈只计数，
 连接恢复时回写当前软件快照；Mock 模式下实体输入只记录。会话整合测试使用假设备，无需真机。
 UI 保留选中项、跟随触碰与提示文案，Mock Agent 时间线通过会话层触发并回写 LED。
+Agent 按键的当前 LED 反馈先于触发回调执行，确保同步更新后的状态在按住期间立即显示。
 
 分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md)。
 

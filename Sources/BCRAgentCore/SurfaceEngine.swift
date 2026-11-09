@@ -274,7 +274,9 @@ public struct SurfaceEngine: Sendable {
             if isPositive, acceptTrigger(control, at: now) {
                 effects.append(.triggerAgent(slot))
             }
-            return effects + feedback(to: [control], at: now)
+            // Trigger callbacks may synchronously publish new Agent feedback. Send the
+            // current LED snapshot first so it cannot overwrite that newer state.
+            return feedback(to: [control], at: now) + effects
 
         case let .resetGroup(group):
             guard isPositive, acceptTrigger(control, at: now) else {

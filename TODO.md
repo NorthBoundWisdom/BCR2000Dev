@@ -6,12 +6,30 @@
 
 ## 无真机工作包（DEV_PROMPT.md）
 
-- [x] WP1：可测试的会话层、设备适配器与整合测试（已实现，待审查）
+- [x] WP1：可测试的会话层、设备适配器与整合测试（审查小改后通过，修正已追加，待确认）
 - [ ] WP2：反馈调度与 UI 刷新性能
+  - [ ] `MonitorEvent` 标明反馈是否送达（成功发送 / 未连接丢弃 / 发送失败）
+  - [ ] 学习中替换配置时发出可见事件，并覆盖相应会话/UI 路径
 - [ ] WP3：持久化加固与配置导入导出
 - [ ] WP4：功能系统扩展
 - [ ] WP5：安全门与外部输出适配器
 - [ ] WP6：编码器模式与 14-bit（仅 Mock）
+
+## CoreMIDI OSStatus -304 复现记录（待调查）
+
+- [ ] 调查 `创建 MIDI Client 失败（OSStatus -304）`，记录重启、间隔和复现频率。
+
+WP1 验证时没有实体 BCR2000，使用本机构建的 ad-hoc App。已观察到的操作路径：
+
+1. 运行 `python3 configs/macos_workflow.py build` 和 `python3 configs/macos_workflow.py smoke`，
+   再用 `open build/app/BCRAgentConsole.app` 打开普通 App；smoke 本身不启动 CoreMIDI。
+2. 在 Mock 下操作旋钮、滑块与 Agent，切换实体模式检查未连接/学习提示后回到 Mock。
+3. 重新构建并通过 smoke 后，用 AppleScript 请求退出旧 App，紧接着 `open` 曾返回启动错误
+   `-600`；再次执行 `open` 后，App 界面连接详情显示 CoreMIDI 创建 Client 失败 `OSStatus -304`。
+4. 此时 Mock 旋钮、滑块和设备源切换仍正常。没有实体 MIDI 输入，未验证真实连接。
+
+这是一次观察到的复现路径，尚未证明每次均能复现，也未确定与快速重开或 `-600` 的因果关系。
+后续应分别记录冷启动、等待完全退出后重开及快速重开的结果；不得把 smoke 通过视为 MIDI 启动通过。
 
 ## 后续开发 Plan（Todolist）
 
@@ -74,7 +92,7 @@
   - [x] 脱敏审计日志（禁止写入 token、密码、环境变量、完整 prompt）
 
 - [ ] M6：稳定性与回归（P1）
-  - [ ] Agent 同步触发后的旧 LED 效果顺序：可能短暂覆盖刚更新的状态（WP1 原生操作发现，见 docs/WP1_HANDOFF.md）
+  - [x] Agent 同步触发后的旧 LED 效果顺序：反馈先于触发，回归测试覆盖按住期间的新 LED 和运行中→中断（WP1 审查修正）
   - [ ] 反馈调度器限速、同控件去重、错误抑制策略可配置化
   - [ ] 断线重连恢复策略：仅恢复软件快照，旧输入清空，不重放旧队列
   - [ ] 完成 protocol/状态机集成测试与 30 分钟 soak 验证

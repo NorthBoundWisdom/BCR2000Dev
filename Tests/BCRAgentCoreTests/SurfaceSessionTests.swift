@@ -251,6 +251,34 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.events.filter { $0.control == button }.count, 1)
     }
 
+    func testSynchronousAgentFeedbackSurvivesHeldPressIncludingRunningToInterrupted() async {
+        let button = BCRControlID.button(row: 1, 1)
+        let slot = AgentSlotID(1)
+        for (previous, next) in [(AgentRunState.idle, AgentRunState.queued), (.running, .interrupted)] {
+            let f = SessionFixture()
+            let session = f.session
+            session.setAgentFeedback(slot, value: previous.feedbackValue)
+            // Let an intentional press at the previous LED value pass the echo window.
+            f.state.time.addTimeInterval(1)
+            var triggered: [AgentSlotID] = []
+            session.onTriggerAgent = { [weak session] receivedSlot in
+                triggered.append(receivedSlot)
+                session?.setAgentFeedback(receivedSlot, value: next.feedbackValue)
+            }
+
+            session.press(button)
+
+            XCTAssertEqual(triggered, [slot])
+            XCTAssertEqual(session.engine.state(of: button).lastInput, 127)
+            XCTAssertEqual(session.engine.agentFeedback[slot], next.feedbackValue)
+            XCTAssertEqual(session.mock.value(of: button), next.feedbackValue,
+                           "Held press must retain synchronous \(previous) → \(next) feedback before release")
+            session.release(button)
+            XCTAssertEqual(session.mock.value(of: button), next.feedbackValue)
+            XCTAssertEqual(triggered, [slot], "Release must not trigger another Agent action")
+        }
+    }
+
     func testSendFailureReportsErrorAndCountsEveryDroppedMessage() async {
         let f = SessionFixture(configuration: mirroredConfiguration())
         f.device.connect(true)

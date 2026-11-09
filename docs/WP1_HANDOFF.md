@@ -1,6 +1,6 @@
 # WP1 交接：可测试的会话层
 
-状态：已实现并验证，等待审查后再开始 WP2。提交 hash 见本次交接回复。
+状态：WP1 审查结论为小改后通过；已追加下述审查修正，等待确认后再开始 WP2。提交 hash 见交接回复。
 
 ## 改动概述
 
@@ -89,12 +89,25 @@ Mock 不回显、momentary 按键、组切换与非当前组 LED 记忆，以及
 
 ## 发现但未处理
 
-- 原有 `triggerAgent` 效果后附带旧 LED 反馈。Agent 回调同步更新状态时，监视器可以看到
-  启动瞬间 OUT 40 后 OUT 0，再由松开或后续状态更新恢复；批准时同样可短暂回写旧值。
-  抽离前的效果顺序亦如此，本次按 WP1 范围保留，已加入 TODO，建议 WP2 调度前先审查。
+- 初次交接发现的 Agent 旧 LED 反馈覆盖问题已在审查修正中处理，见下节。
 - UI 仍通过整个 ViewModel 发布；触碰跟随和嵌套 Agent 回调可能导致多次通知。这是 WP2 的目标。
 
 ## 需要审查重点关注
 
 主线程回调中的 Agent 重入和旧反馈顺序；连接快照到达时整体回写的边界；语义事件转 UI 提示时，
 确保保存/发送错误始终保留可见。CoreMIDI 的真实连接与消息时序仍需 R1 验证。
+
+
+## WP1 审查修正
+
+- `SurfaceEngine.apply` 的 Agent 分支改为先反馈、后触发，避免同步回调的新 LED 值被旧快照覆盖。
+- 新增 `testSynchronousAgentFeedbackSurvivesHeldPressIncludingRunningToInterrupted`：在
+  `onTriggerAgent` 内同步调用 `setAgentFeedback`，不松开按键即断言 Mock LED 是新值；
+  覆盖空闲→排队（40）和运行中→中断（20），松开后保持且不会重复触发。使用注入时钟，无 sleep。
+- 先运行该测试确认原实现失败两次（实际 0/127，期望 40/20），再修复；全量 Swift 测试现为
+  82 条通过。19 条 BuildWorkflowTests、命令校验、diff 检查、compileall、workflow help、
+  App build 与原生 smoke 均通过，无新增编译警告。
+- TODO 记录 `OSStatus -304` 已观察到的启动/退出/重开条件，明确尚非稳定复现及原因未知；
+  R1 增加 CoreMIDI 连接快照与输入批次回调到达顺序的实机验证。
+- `MonitorEvent` 反馈送达状态及学习中替换配置的可见事件已写入 WP2 要求/TODO，本次不实现。
+- 本次没有更改视图；没有重复原生界面手动操作，按住期间的 LED 行为由上述会话闭环测试验证。
