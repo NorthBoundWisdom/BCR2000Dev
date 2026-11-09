@@ -3,12 +3,12 @@
 > 阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 状态（截至 2026-11-09）：WP1、WP3–WP7 已在 Mock 下完成；WP3–WP7 七项审查问题已完成本机修复与验证，
-按用户要求暂不推送。实体 BCR2000 已连接，CoreMIDI 可见 `BCR2000 Port 1/2`（输入）与
+用户已授权整理后推送全部提交。实体 BCR2000 已连接，CoreMIDI 可见 `BCR2000 Port 1/2`（输入）与
 `BCR2000 Port 1/2/3`（输出），R1 实机验证解除阻塞。
 
 执行顺序：A 审查修正 → 推送 → B 实机验证（HW0–HW6）→ C 按实测结果修正 → D 设计改进与 WP2 → E 远期。
 
-## A. WP3–WP7 审查修正（本机已完成，暂不推送）
+## A. WP3–WP7 审查修正（已完成，进入实机阶段）
 
 审查基线 `aa6e180..ef57989`：186 条 Swift 测试、19 条 BuildWorkflowTests、6 条仿真测试、
 隔离原生 MCP 两版协议验收通过；以下问题必须修复后再推送。
@@ -24,7 +24,7 @@
 - [x] A5【低】`Tests/BCRAgentCoreTests/PersistenceValidationTests.swift` 末尾空行导致
   `git diff --check` 失败；交接中的检查需改为针对提交范围（`git diff --check <base>..HEAD`）。
 - [x] A6 全部检查与隔离原生 MCP/安全/精度/OSC 验证通过，代码提交 `32a6fa1`；见 [修正交接](docs/REVIEW_FIXES.md)。
-- [ ] A7 推送 `origin/main`：遵守用户“不要推送”的要求，等待另行明确指示。
+- [x] A7 用户已明确授权，完成推送前检查后将全部提交推送到 `origin/main`；后续实机修正也按规范提交推送。
 
 ## B. 实机验证（R1，现在可做）
 
