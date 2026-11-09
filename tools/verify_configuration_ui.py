@@ -90,8 +90,12 @@ error "semantic button help not found"''')
 
 
 def go_to_path(path):
-    gui('set frontmost to true\nkeystroke "g" using {command down, shift down}')
-    wait_for(lambda: gui("return count of sheets of sheet 1 of window 1") != "0", "Go to Folder did not appear")
+    def open_folder_sheet():
+        if gui("return count of sheets of sheet 1 of window 1") != "0":
+            return True
+        gui('set frontmost to true\nkeystroke "g" using {command down, shift down}')
+        return False
+    wait_for(open_folder_sheet, "Go to Folder did not appear")
     gui(f'set value of text field 1 of sheet 1 of sheet 1 of window 1 to {quote(path)}')
     # Path completion is asynchronous. Confirm only while the Go to Folder sheet exists.
     deadline = time.monotonic() + 4
@@ -112,7 +116,7 @@ def select_path(path, confirm):
 gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
 binding_before = [entry["binding"] for entry in client.call("list_controls")]
 original = client.call("get_parameter", {"id": "arm.j1"})
-definition = {key: value for key, value in original.items() if key not in {"value", "writable", "controls"}}
+definition = client.parameter_definition("arm.j1")
 definition["name"] = "External J1"
 client.call("update_parameter", {"definition": definition})
 wait_for(lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "External J1",

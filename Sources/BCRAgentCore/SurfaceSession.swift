@@ -40,6 +40,7 @@ public final class SurfaceSession {
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
     public private(set) var droppedFeedbackCount = 0
+    public private(set) var motionSafety: MotionSafetySnapshot?
     public private(set) var lastConfigurationPersistenceError: String?
 
     public var onChange: (@MainActor () -> Void)?
@@ -181,6 +182,21 @@ public final class SurfaceSession {
         if persist { persistConfiguration() }
         else { lastConfigurationPersistenceError = nil }
         onChange?()
+    }
+
+    public func setActualFeedback(_ values: [ParameterID: Double]) throws {
+        let effects = try engine.setActualFeedback(values, at: now())
+        withWriteOrigin(.external) { perform(effects) }
+        if !effects.isEmpty { onChange?() }
+    }
+
+    public func setLEDFeedbackSource(_ source: LEDFeedbackSource) {
+        perform(engine.setLEDFeedbackSource(source, at: now()))
+        onChange?()
+    }
+
+    public func setMotionSafety(_ snapshot: MotionSafetySnapshot) {
+        motionSafety = snapshot // The output controller publishes its own UI; MCP reads this value directly.
     }
 
     public func retryConfigurationPersistence() {

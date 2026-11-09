@@ -35,6 +35,7 @@ final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
+    let output: OutputController
     var source: DeviceSource { session.source }
     var engine: SurfaceEngine { session.engine }
     var mock: MockBCR2000 { session.mock }
@@ -78,6 +79,8 @@ final class ConsoleViewModel: ObservableObject {
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
             credentials: mcpCredentials ?? KeychainMCPCredentialStore(), integrationTest: integrationTest)
+        output = OutputController(session: session, store: JSONFileStore(fileURL:
+            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")))
         session.onChange = { [weak self] in self?.objectWillChange.send() }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
@@ -86,6 +89,7 @@ final class ConsoleViewModel: ObservableObject {
         }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
+        Task { @MainActor [weak output] in output?.restore() }
         guard startsMIDI else { return }
         do { try midi.start() }
         catch { notice = ConsoleNotice(level: .error, text: "CoreMIDI 启动失败：\(error.localizedDescription)") }

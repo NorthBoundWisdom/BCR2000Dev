@@ -47,6 +47,8 @@ public final class AgentControlService {
                 "connected": .bool(session.source == .mock || session.connection.isConnected),
                 "droppedFeedbackCount": .number(session.droppedFeedbackCount),
                 "permissions": try .encoded(permissions),
+                "ledSource": .string(session.engine.ledFeedbackSource.rawValue),
+                "motionSafety": motionSafetyInfo(),
                 "hardwareConnection": .object([
                     "connected": .bool(session.connection.isConnected),
                     "source": session.connection.connectedSource.map(JSONValue.string) ?? .null,
@@ -158,9 +160,21 @@ public final class AgentControlService {
             throw MCPToolFailure("未知参数：\(id)")
         }
         info["value"] = .double(value)
+        info["actualValue"] = session.engine.actualFeedbackValues[id].map(JSONValue.double) ?? .null
+        info["outputValue"] = session.motionSafety?.outputs[id].map(JSONValue.double) ?? .null
         info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable)
         info["controls"] = .array(try session.engine.configuration.controls(targetingParameter: id).map(JSONValue.encoded))
         return .object(info)
+    }
+
+    private func motionSafetyInfo() -> JSONValue {
+        guard let safety = session.motionSafety else { return .null }
+        func values(_ input: [ParameterID: Double]) -> JSONValue {
+            .object(Dictionary(uniqueKeysWithValues: input.map { ($0.key.rawValue, .double($0.value)) }))
+        }
+        return .object(["status": .string(safety.status.rawValue), "reason": .string(safety.reason),
+                        "limited": .bool(safety.limited), "outputs": values(safety.outputs), "actual": values(safety.actual),
+                        "baseline": values(safety.baseline)])
     }
 
     private func requireSavedConfiguration() throws {

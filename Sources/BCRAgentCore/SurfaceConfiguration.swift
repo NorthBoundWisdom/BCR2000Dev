@@ -164,8 +164,9 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     }
 
     /// 7-bit value for LED ring / button feedback.
-    public func midiValue(for value: Double) -> UInt8 {
-        UInt8((normalized(value) * 127).rounded())
+    public func midiValue(for value: Double, snap: Bool = true) -> UInt8 {
+        let normalized = snap ? normalized(value) : (min(max(value, minimum), maximum) - minimum) / (maximum - minimum)
+        return UInt8((normalized * 127).rounded())
     }
 
     /// Parameter value represented by a 7-bit control value.
@@ -177,13 +178,26 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         return clamp(minimum + (maximum - minimum) * Double(midi) / 127)
     }
 
-    public func formatted(_ value: Double) -> String {
-        let value = clamp(value)
+    public func formatted(_ value: Double, snap: Bool = true, minimumFractionDigits: Int = 0) -> String {
+        guard value.isFinite else { return "无效值" }
+        let value = snap ? clamp(value) : value
         if kind == .toggle {
             return value >= midpoint ? "开" : "关"
         }
         let span = maximum - minimum
-        let digits = span <= 2 ? 2 : (span <= 20 ? 1 : 0)
+        let spanDigits = span <= 2 ? 2 : (span <= 20 ? 1 : 0)
+        var stepDigits = 0
+        if let step {
+            for digits in 0...6 {
+                let scaled = step * pow(10, Double(digits))
+                if scaled.isFinite, abs(scaled - scaled.rounded()) <= scaled.ulp * 4 {
+                    stepDigits = digits
+                    break
+                }
+                stepDigits = 6
+            }
+        }
+        let digits = max(spanDigits, stepDigits, minimumFractionDigits)
         let number = value.formatted(.number.precision(.fractionLength(digits)))
         return unit.isEmpty ? number : "\(number) \(unit)"
     }

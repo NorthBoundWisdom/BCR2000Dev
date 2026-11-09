@@ -11,6 +11,10 @@ public struct SurfaceControlState: Equatable, Sendable {
     public init() {}
 }
 
+public enum LEDFeedbackSource: String, Codable, Equatable, Sendable {
+    case target, actual
+}
+
 public enum MIDIObservationDirection: String, Equatable, Sendable {
     case input
     case output
@@ -38,6 +42,8 @@ public struct SurfaceEngine: Sendable {
     public private(set) var controls: [BCRControlID: SurfaceControlState] = [:]
     /// While set, the next device input is learned as this control's MIDI identity.
     public private(set) var learnTarget: BCRControlID?
+    public private(set) var actualFeedbackValues: [ParameterID: Double] = [:]
+    public private(set) var ledFeedbackSource: LEDFeedbackSource = .target
     public private(set) var agentFeedback: [AgentSlotID: UInt8] = [:]
 
     public var echoWindow: TimeInterval = 0.18
@@ -144,6 +150,27 @@ public struct SurfaceEngine: Sendable {
         feedback(to: configuration.assignments.map(\.control), at: now)
     }
 
+    public mutating func setActualFeedback(_ values: [ParameterID: Double], at now: Date = .now) throws -> [SurfaceEffect] {
+        for (id, value) in values {
+            guard configuration.parameter(id) != nil, value.isFinite else { throw MotionSafetyError("实际状态参数未知或数值无效") }
+        }
+        var changed: [BCRControlID] = []
+        for (id, value) in values where actualFeedbackValues[id] != value {
+            actualFeedbackValues[id] = value
+            if ledFeedbackSource == .actual {
+                changed += configuration.controls(targetingParameter: id).filter {
+                    $0.isContinuous && feedbackValue(for: $0) != state(of: $0).value
+                }
+            }
+        }
+        return feedback(to: changed, at: now)
+    }
+
+    public mutating func setLEDFeedbackSource(_ source: LEDFeedbackSource, at now: Date = .now) -> [SurfaceEffect] {
+        ledFeedbackSource = source
+        return fullFeedback(at: now)
+    }
+
     // MARK: Configuration
 
     public mutating func assign(_ assignment: ControlAssignment, at now: Date = .now) throws -> [SurfaceEffect] {
@@ -168,6 +195,7 @@ public struct SurfaceEngine: Sendable {
     public mutating func removeParameter(_ id: ParameterID) {
         configuration.removeParameter(id)
         parameterValues[id] = nil
+        actualFeedbackValues[id] = nil
     }
 
     /// Configuration replacement resets parameters, while Agent state belongs to the session.
@@ -253,8 +281,7 @@ public struct SurfaceEngine: Sendable {
                 let input = assignment.inverted ? 127 - value : value
                 parameterValues[id] = definition.value(fromMIDI: input)
                 // The moved encoder already shows its position; only mirror it elsewhere.
-                let projected = definition.midiValue(for: parameterValues[id]!)
-                let expected = assignment.inverted ? 127 - projected : projected
+                let expected = feedbackValue(for: control)
                 // A snapped value can differ from the device's local ring. Correct the
                 // origin only in that case; unchanged absolute inputs still mirror others.
                 let targets = fromDevice && expected == value ? bound.filter { $0 != control } : bound
@@ -332,10 +359,10 @@ public struct SurfaceEngine: Sendable {
         }
         switch assignment.target {
         case let .parameter(id):
-            guard let definition = configuration.parameter(id), let value = value(of: id) else {
-                return nil
-            }
-            let midi = definition.midiValue(for: value)
+            guard let definition = configuration.parameter(id) else { return nil }
+            let useActual = control.isContinuous && definition.kind == .continuous && ledFeedbackSource == .actual
+            guard let value = useActual ? actualFeedbackValues[id] : value(of: id) else { return nil }
+            let midi = definition.midiValue(for: value, snap: !useActual)
             return assignment.inverted ? 127 - midi : midi
         case let .stepParameter(id, step, wraps):
             guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }

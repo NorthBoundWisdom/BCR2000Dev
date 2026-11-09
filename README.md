@@ -160,3 +160,9 @@ git diff --check
 - [后续开发 TODO](TODO.md)
 
 下一里程碑是把 Mock adapter 扩展为官方 `codex app-server` adapter，并补齐安全审批、重连恢复和发布化，详见 [TODO](TODO.md)。
+
+### OSC 仿真输出
+
+运行 `python3 tools/arm_sim.py --port 9000`，在顶栏“输出”设置中连接本机 9000 端口，
+检查限位后启动，再用 Mock B2-1 开启使能。输出页显示目标、限速输出和实际值。
+协议、安全门与 LED 来源选择见 [OSC 说明](docs/OSC.md)。

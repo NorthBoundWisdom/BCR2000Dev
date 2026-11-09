@@ -64,6 +64,15 @@ class Client:
             raise RuntimeError(f"{name}: unexpected tool success/error")
         return result["structuredContent"]["data"]
 
+    def parameter_definition(self, identifier):
+        status, response = self.rpc("tools/list")
+        if status != 200:
+            raise RuntimeError("tool schema discovery failed")
+        tool = next(item for item in response["result"]["tools"] if item["name"] == "update_parameter")
+        properties = tool["inputSchema"]["properties"]["definition"]["properties"]
+        info = self.call("get_parameter", {"id": identifier})
+        return {key: value for key, value in info.items() if key in properties}
+
     def close(self):
         if not self.session:
             return

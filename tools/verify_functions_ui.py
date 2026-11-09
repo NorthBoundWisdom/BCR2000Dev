@@ -69,7 +69,7 @@ def assign(index, kind, fields):
 
 gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
 info = client.call("get_parameter", {"id": "arm.j1"})
-definition = {key: value for key, value in info.items() if key not in {"value", "writable", "controls"}}
+definition = client.parameter_definition("arm.j1")
 definition["step"] = 0.5
 client.call("update_parameter", {"definition": definition})
 snapped = client.call("set_parameter", {"id": "arm.j1", "value": 90.26})

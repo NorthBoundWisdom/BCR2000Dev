@@ -2,7 +2,7 @@ import BCRAgentCore
 import SwiftUI
 
 enum WorkspaceTab: String, CaseIterable, Identifiable {
-    case parameters, arm, agents, monitor
+    case parameters, arm, agents, monitor, output
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum WorkspaceTab: String, CaseIterable, Identifiable {
         case .arm: "机械臂预览"
         case .agents: "Agent"
         case .monitor: "MIDI 监视"
+        case .output: "输出"
         }
     }
 
@@ -21,6 +22,7 @@ enum WorkspaceTab: String, CaseIterable, Identifiable {
         case .arm: "point.3.connected.trianglepath.dotted"
         case .agents: "square.grid.2x2"
         case .monitor: "waveform.path"
+        case .output: "arrow.up.forward.circle"
         }
     }
 }
@@ -43,6 +45,7 @@ struct WorkspaceTabsView: View {
             case .arm: ArmPreviewView(model: model)
             case .agents: AgentGridView(model: model)
             case .monitor: MIDIMonitorView(model: model)
+            case .output: OutputReadoutView(model: model, controller: model.output)
             }
         }
         .panelStyle()
@@ -285,7 +288,7 @@ private struct MIDIMonitorView: View {
                             Text(event.direction == .input ? "IN " : "OUT")
                                 .foregroundStyle(event.direction == .input ? Theme.parameter : Theme.selection)
                                 .bold()
-                            Text(event.origin == .agent ? "AGENT" : (event.source == .mock ? "MOCK" : "HW  "))
+                            Text(event.origin == .agent ? "AGENT" : (event.origin == .external ? "STATE" : (event.source == .mock ? "MOCK" : "HW  ")))
                                 .foregroundStyle(.secondary)
                             Text(event.message.diagnosticDescription)
                                 .lineLimit(1)
