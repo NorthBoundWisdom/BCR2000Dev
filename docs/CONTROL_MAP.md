@@ -1,5 +1,49 @@
 # BCR2000 控制器映射与反馈
 
+## 分层模型（2026-11 重构）
+
+```text
+物理控件 BCRControlID   ── 固定硬件几何：P(组1–4)×8、推钮按下、B1–B2、E1–E3、U1–U4，共 108 个
+   │  HardwareMap        ── 学习得到的 MIDI 身份（kind + channel + number），按设备区分
+   ▼
+功能分配 ControlAssignment ── 参数 / Agent 主操作 / 复位参数组；按键行为（切换/按住）、反向
+   │
+   ▼
+参数状态 ParameterDefinition + SurfaceEngine ── 软件侧唯一事实来源
+```
+
+- 设备输入 → 参数更新 → 写回绑定同一参数的**其他**控件（被转动的编码器本身已显示该位置）。
+- 软件修改（滑块、检查器、复位）→ 写回**所有**绑定控件。按键 LED 始终由软件决定。
+- 180 ms 内与上次反馈同值的输入视为回环并忽略；触发类按键 250 ms 去抖。
+
+### 设备源
+
+| 设备源 | 硬件映射 | 虚拟面板操作含义 |
+|---|---|---|
+| Mock 设备 | Mock 自带预设：通道 1 的 CC 1–108，按面板顺序编号（仅描述 Mock，不代表实体出厂预设） | 模拟实体操作，产生 MIDI 输入，经同一引擎处理 |
+| 实体 BCR2000 | 用户学习，保存在 `hardware-map.json` | 软件修改并回写硬件 |
+
+Mock 模式下实体输入只记录在 MIDI 监视器中，不执行。
+
+### 学习（仅实体模式）
+
+在检查器中选中控件后点“从这里开始学习”，然后操作实体控件：编码器转动、按键按下
+（松开不会学习）。学完自动跳到本区下一个未学习控件，可连续扫过整排。已学习控件的后续
+消息在学习期间只更新显示，不会被绑定到下一个控件；编码器只接受 CC。
+
+### 本地文件
+
+```text
+~/Library/Application Support/BCRAgentConsole/hardware-map.json          # 实体映射（v3）
+~/Library/Application Support/BCRAgentConsole/surface-configuration.json # 参数与功能分配
+```
+
+旧版 `controller-profile.json`（8 槽位映射）不再读取，需在实体模式下重新学习。
+
+---
+
+以下为重构前的 8 槽位快速学习说明，保留作历史参考。
+
 ## 为什么采用快速学习
 
 BCR2000 的 CC/Note、通道、按键模式和 LED 行为由当前 Preset 决定。厂商手册确认它支持

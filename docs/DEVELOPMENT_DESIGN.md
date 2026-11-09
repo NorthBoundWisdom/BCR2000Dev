@@ -174,16 +174,23 @@ BCR2000Dev/
 ├── Sources/
 │   ├── BCRAgentCore/
 │   │   ├── AgentModels.swift
-│   │   ├── ControllerProfile.swift
-│   │   ├── MIDIModels.swift
-│   │   └── MIDISurfaceState.swift
+│   │   ├── BCRLayout.swift            # 108 个物理控件（固定硬件几何）
+│   │   ├── HardwareMap.swift          # 物理控件 ↔ MIDI 身份（学习得到）
+│   │   ├── SurfaceConfiguration.swift # 参数定义 + 控件功能分配
+│   │   ├── SurfaceEngine.swift        # 双向同步状态机（纯值类型）
+│   │   ├── MockBCR2000.swift          # U-1 行为模型的 Mock 设备
+│   │   └── MIDIModels.swift
 │   └── BCRAgentConsole/
 │       ├── BCRAgentConsoleApp.swift
-│       ├── ConsoleViewModel.swift
-│       ├── ContentView.swift
-│       ├── ControllerProfileStore.swift
-│       ├── CoreMIDIService.swift
-│       └── HardwareMirrorView.swift
+│       ├── ConsoleViewModel.swift     # 设备源、效果管线、持久化
+│       ├── ConsoleViewModel+Agents.swift
+│       ├── ContentView.swift          # 窗口外壳
+│       ├── SurfacePanelView.swift     # BCR2000 虚拟面板
+│       ├── ControlInspectorView.swift # 绑定 / 功能 / 参数编辑
+│       ├── WorkspaceTabsView.swift    # 参数、Agent、MIDI 监视
+│       ├── ArmPreviewView.swift
+│       ├── JSONFileStore.swift
+│       └── CoreMIDIService.swift
 ├── Tests/BCRAgentCoreTests/
 ├── configs/
 │   ├── freecm.commands.jsonc

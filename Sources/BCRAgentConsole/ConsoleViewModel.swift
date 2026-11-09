@@ -2,46 +2,116 @@ import BCRAgentCore
 import Combine
 import Foundation
 
+enum DeviceSource: String, CaseIterable, Identifiable, Sendable {
+    /// Built-in behavioural model of the device; the virtual panel acts as its physical surface.
+    case mock
+    /// The USB BCR2000 on Port 1; the virtual panel is a software-side mirror.
+    case hardware
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .mock: "Mock 设备"
+        case .hardware: "实体 BCR2000"
+        }
+    }
+}
+
+struct MonitorEvent: Identifiable, Equatable {
+    let id: Int
+    let time: Date
+    let direction: MIDIObservationDirection
+    let source: DeviceSource
+    let message: MIDIVoiceMessage
+    let control: BCRControlID?
+    /// Hardware input that arrived while the mock was the active device.
+    let ignored: Bool
+}
+
+struct ConsoleNotice: Equatable {
+    enum Level: Equatable {
+        case info
+        case warning
+        case error
+    }
+
+    enum Action: Equatable {
+        case switchToHardware
+    }
+
+    let level: Level
+    let text: String
+    var action: Action?
+}
+
 @MainActor
 final class ConsoleViewModel: ObservableObject {
+    @Published private(set) var source: DeviceSource = .mock
+    @Published private(set) var engine: SurfaceEngine
+    @Published private(set) var mock = MockBCR2000()
     @Published private(set) var slots: [AgentSlot]
-    @Published var selectedSlotID = AgentSlotID(1)
     @Published private(set) var connection = MIDIConnectionSnapshot()
-    @Published private(set) var profile: ControllerProfile
-    @Published private(set) var diagnostics: [String] = []
-    @Published private(set) var surfaceControls: [MIDIControlSnapshot] = []
-    @Published private(set) var notice: String?
-    @Published var isQuickLearnEnabled: Bool
+    @Published private(set) var events: [MonitorEvent] = []
+    @Published private(set) var notice: ConsoleNotice?
+    /// Feedback messages that could not be sent because the hardware output was unavailable.
+    @Published private(set) var droppedFeedbackCount = 0
+    @Published private(set) var visibleGroup = 1
+    @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
+    /// Select whichever control was last touched on the device.
+    @Published var followsTouch = true
 
-    private var stateMachine: AgentStateMachine
-    private let profileStore: ControllerProfileStore
+    var agentMachine = AgentStateMachine()
+    var mockTasks: [AgentSlotID: Task<Void, Never>] = [:]
+
+    private var hardwareMap: HardwareMap
+    private let stores: ConsoleStores
     private var midi: CoreMIDIService?
-    private var mockTasks: [AgentSlotID: Task<Void, Never>] = [:]
-    private var lastPhysicalActivation: [MIDIControlID: Date] = [:]
-    private var recentFeedback: [MIDIControlID: (value: UInt8, sentAt: Date)] = [:]
-    private var surfaceState = MIDISurfaceState()
+    private var nextEventID = 0
 
-    init(profileStore: ControllerProfileStore = ControllerProfileStore(), startsMIDI: Bool = true) {
-        self.profileStore = profileStore
-        stateMachine = AgentStateMachine()
-        slots = stateMachine.slots
+    init(stores: ConsoleStores = .standard, startsMIDI: Bool = true) {
+        self.stores = stores
+        slots = AgentStateMachine().slots
 
-        let loadedProfile: ControllerProfile
+        var notices: [String] = []
+        var loadedMap = HardwareMap()
         do {
-            loadedProfile = try profileStore.load()
+            if let map = try stores.hardwareMap.load() {
+                if map.version == HardwareMap.currentVersion {
+                    loadedMap = map
+                } else {
+                    notices.append("硬件映射版本 \(map.version) 已过期，请在实体模式下重新学习。")
+                }
+            }
         } catch {
-            loadedProfile = ControllerProfile()
-            notice = "控制器映射读取失败：\(error.localizedDescription)"
+            notices.append("硬件映射读取失败：\(error.localizedDescription)")
         }
-        profile = loadedProfile
-        isQuickLearnEnabled = false
+
+        var configuration = SurfaceConfiguration.robotArmDemo()
+        do {
+            if let stored = try stores.configuration.load() {
+                if stored.version == SurfaceConfiguration.currentVersion {
+                    configuration = stored
+                } else {
+                    notices.append("功能配置版本 \(stored.version) 不受支持，已载入机械臂示例。")
+                }
+            }
+        } catch {
+            notices.append("功能配置读取失败，已载入机械臂示例：\(error.localizedDescription)")
+        }
+
+        hardwareMap = loadedMap
+        engine = SurfaceEngine(hardwareMap: .mockPreset(), configuration: configuration)
+        if !notices.isEmpty {
+            notice = ConsoleNotice(level: .error, text: notices.joined(separator: " "))
+        }
+        perform(engine.fullFeedback())
 
         guard startsMIDI else { return }
-
         midi = CoreMIDIService(
             onMessages: { [weak self] messages in
                 Task { @MainActor [weak self] in
-                    self?.handleMIDI(messages)
+                    self?.handleHardwareMessages(messages)
                 }
             },
             onConnection: { [weak self] snapshot in
@@ -50,384 +120,366 @@ final class ConsoleViewModel: ObservableObject {
                 }
             }
         )
-
         do {
             try midi?.start()
         } catch {
             connection.lastError = error.localizedDescription
-            notice = "CoreMIDI 启动失败：\(error.localizedDescription)"
+            notice = ConsoleNotice(level: .error, text: "CoreMIDI 启动失败：\(error.localizedDescription)")
         }
     }
 
-    var selectedSlot: AgentSlot {
-        slots.first { $0.id == selectedSlotID } ?? slots[0]
+    // MARK: Read model
+
+    var configuration: SurfaceConfiguration {
+        engine.configuration
     }
 
-    var nextLearnSlot: AgentSlotID? {
-        profile.nextUnboundSlot
+    var isLearning: Bool {
+        engine.learnTarget != nil
     }
 
-    func start(_ slotID: AgentSlotID) {
-        guard let slot = stateMachine.slot(slotID), !slot.state.isActive else {
-            return
+    var learnedCount: Int {
+        engine.hardwareMap.boundCount
+    }
+
+    /// The value the virtual panel shows for a control.
+    func displayValue(of control: BCRControlID) -> UInt8 {
+        switch source {
+        case .mock: mock.value(of: control)
+        case .hardware: engine.state(of: control).value
         }
+    }
 
-        mockTasks[slotID]?.cancel()
-        do {
-            try transition(
-                slotID,
-                to: .queued,
-                progress: 0,
-                statusText: "Mock 任务已进入队列"
-            )
-        } catch {
-            report(error)
-            return
+    func slot(_ id: AgentSlotID) -> AgentSlot? {
+        slots.first { $0.id == id }
+    }
+
+    // MARK: Device source
+
+    func selectSource(_ newSource: DeviceSource) {
+        guard newSource != source else { return }
+        source = newSource
+        engine.replaceHardwareMap(hardwareMap(for: newSource))
+        droppedFeedbackCount = 0
+        perform(engine.fullFeedback())
+        switch newSource {
+        case .mock:
+            notice = ConsoleNotice(level: .info, text: "已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。")
+        case .hardware:
+            notice = connection.isConnected
+                ? ConsoleNotice(level: .info, text: "已切换到实体 BCR2000，软件状态已整体回写。")
+                : ConsoleNotice(level: .warning, text: "已切换到实体模式，但尚未找到 BCR2000 Port 1。")
         }
+    }
 
-        mockTasks[slotID] = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(450))
-                guard let self else { return }
-                try self.transition(
-                    slotID,
-                    to: .running,
-                    progress: 0.08,
-                    statusText: "分析工作区"
-                )
+    func selectGroup(_ group: Int) {
+        visibleGroup = min(max(group, 1), 4)
+        mock.activeGroup = visibleGroup
+    }
 
-                let stages: [(Double, String)] = [
-                    (0.20, "读取项目上下文"),
-                    (0.34, "规划变更"),
-                    (0.48, "生成补丁"),
-                    (0.58, "准备执行受控操作"),
-                ]
-                for stage in stages {
-                    try await Task.sleep(for: .milliseconds(550))
-                    try Task.checkCancellation()
-                    try self.updateProgress(
-                        slotID,
-                        progress: stage.0,
-                        statusText: stage.1
-                    )
-                }
+    // MARK: Panel interaction (mock: physical touch; hardware: software edit)
 
-                try self.transition(
-                    slotID,
-                    to: .waitingApproval,
-                    progress: 0.60,
-                    statusText: "等待批准：运行 Mock 验证"
-                )
-                self.mockTasks[slotID] = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                self?.report(error)
+    func turn(_ control: BCRControlID, by delta: Int) {
+        touch(control)
+        switch source {
+        case .mock:
+            if let message = mock.turn(control, by: delta) {
+                receiveFromDevice(message)
             }
+        case .hardware:
+            perform(engine.adjust(control, by: delta))
         }
     }
 
-    func interrupt(_ slotID: AgentSlotID) {
-        guard let slot = stateMachine.slot(slotID), slot.state.isActive else {
-            return
-        }
-        mockTasks[slotID]?.cancel()
-        mockTasks[slotID] = nil
-        do {
-            try transition(
-                slotID,
-                to: .interrupted,
-                statusText: "已由控制台中断"
-            )
-        } catch {
-            report(error)
-        }
-    }
-
-    func approve(_ slotID: AgentSlotID) {
-        guard stateMachine.slot(slotID)?.state == .waitingApproval else {
-            return
-        }
-
-        do {
-            try transition(
-                slotID,
-                to: .running,
-                progress: 0.64,
-                statusText: "批准通过，继续验证"
-            )
-        } catch {
-            report(error)
-            return
-        }
-
-        mockTasks[slotID] = Task { @MainActor [weak self] in
-            do {
-                guard let self else { return }
-                let stages: [(Double, String)] = [
-                    (0.72, "运行单元测试"),
-                    (0.84, "检查构建结果"),
-                    (0.94, "整理变更摘要"),
-                ]
-                for stage in stages {
-                    try await Task.sleep(for: .milliseconds(600))
-                    try Task.checkCancellation()
-                    try self.updateProgress(
-                        slotID,
-                        progress: stage.0,
-                        statusText: stage.1
-                    )
-                }
-                try await Task.sleep(for: .milliseconds(450))
-                try self.transition(
-                    slotID,
-                    to: .completed,
-                    progress: 1,
-                    statusText: "Mock 任务已完成"
-                )
-                self.mockTasks[slotID] = nil
-            } catch is CancellationError {
-                return
-            } catch {
-                self?.report(error)
+    func press(_ control: BCRControlID) {
+        touch(control)
+        switch source {
+        case .mock:
+            if let message = mock.press(control) {
+                receiveFromDevice(message)
             }
+        case .hardware:
+            perform(engine.press(control, isDown: true))
         }
     }
 
-    func decline(_ slotID: AgentSlotID) {
-        guard stateMachine.slot(slotID)?.state == .waitingApproval else {
+    func release(_ control: BCRControlID) {
+        switch source {
+        case .mock:
+            if let message = mock.release(control) {
+                receiveFromDevice(message)
+            }
+        case .hardware:
+            perform(engine.press(control, isDown: false))
+        }
+    }
+
+    /// Selects a touched control unless learning owns the selection.
+    func touch(_ control: BCRControlID) {
+        guard !isLearning else { return }
+        selectedControl = control
+    }
+
+    // MARK: Parameters
+
+    func setParameter(_ id: ParameterID, to value: Double) {
+        perform(engine.setParameter(id, to: value))
+    }
+
+    func resetGroup(_ group: String) {
+        perform(engine.resetGroup(group))
+    }
+
+    @discardableResult
+    func createParameter(assigningTo control: BCRControlID? = nil) -> ParameterID? {
+        let id = configuration.makeParameterID()
+        let number = id.rawValue.split(separator: ".").last.map(String.init) ?? ""
+        let definition = control.map { !$0.isContinuous } ?? false
+            ? ParameterDefinition(id: id, name: "开关 \(number)", group: "自定义", minimum: 0, maximum: 1, kind: .toggle)
+            : ParameterDefinition(id: id, name: "参数 \(number)", group: "自定义", minimum: 0, maximum: 127)
+        do {
+            try engine.addParameter(definition)
+            if let control {
+                perform(try engine.assign(ControlAssignment(control: control, target: .parameter(id))))
+            }
+            persistConfiguration()
+            return id
+        } catch {
+            report(error)
+            return nil
+        }
+    }
+
+    func updateParameter(_ definition: ParameterDefinition) {
+        do {
+            perform(try engine.updateParameter(definition))
+            persistConfiguration()
+            notice = ConsoleNotice(level: .info, text: "参数“\(definition.name)”已更新。")
+        } catch {
+            report(error)
+        }
+    }
+
+    func removeParameter(_ id: ParameterID) {
+        engine.removeParameter(id)
+        persistConfiguration()
+    }
+
+    func restoreDemoConfiguration() {
+        engine.replaceConfiguration(.robotArmDemo())
+        for slot in slots {
+            _ = engine.setAgentFeedback(slot.id, value: slot.state.feedbackValue)
+        }
+        perform(engine.fullFeedback())
+        persistConfiguration()
+        notice = ConsoleNotice(level: .info, text: "已恢复机械臂示例配置。")
+    }
+
+    // MARK: Assignments
+
+    func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) {
+        guard let assignment else {
+            engine.clearAssignment(for: control)
+            persistConfiguration()
             return
         }
-        interrupt(slotID)
+        do {
+            perform(try engine.assign(assignment))
+            persistConfiguration()
+        } catch {
+            report(error)
+        }
     }
 
-    func performPrimaryAction(_ slotID: AgentSlotID) {
-        guard let slot = stateMachine.slot(slotID) else {
+    // MARK: Hardware map / learning
+
+    func beginLearning(at control: BCRControlID) {
+        guard source == .hardware else {
+            notice = ConsoleNotice(level: .warning, text: "Mock 设备的预设已知，学习只用于实体 BCR2000。")
             return
         }
-        switch slot.state {
-        case .waitingApproval:
-            approve(slotID)
-        case .queued, .running:
-            interrupt(slotID)
-        case .idle, .completed, .interrupted, .error:
-            start(slotID)
-        }
+        engine.beginLearning(control)
+        selectedControl = control
+        notice = ConsoleNotice(
+            level: .info,
+            text: "学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。"
+        )
     }
 
-    func resetMapping() {
-        profile.reset()
-        isQuickLearnEnabled = true
-        persistProfile()
-        notice = "快速学习已重置；请依次按下 8 个 momentary 按键。"
+    func stopLearning() {
+        engine.stopLearning()
+        notice = ConsoleNotice(level: .info, text: "学习已停止，已学习 \(learnedCount) / \(BCRLayout.allControls.count) 个控件。")
     }
 
-    func enableQuickLearn() {
-        isQuickLearnEnabled = true
-        notice = "快速学习已开启。下一个控件将绑定到槽位 \(nextLearnSlot?.rawValue ?? 1)。"
+    func unbind(_ control: BCRControlID) {
+        guard source == .hardware else { return }
+        engine.unbind(control)
+        persistHardwareMap()
     }
 
-    func pauseQuickLearn() {
-        guard isQuickLearnEnabled else {
-            return
-        }
-        isQuickLearnEnabled = false
-        notice = "快速学习已暂停；硬件镜像仍会继续记录所有 MIDI 状态。"
+    func resetHardwareMap() {
+        guard source == .hardware else { return }
+        engine.resetHardwareMap()
+        persistHardwareMap()
+        notice = ConsoleNotice(level: .info, text: "实体映射已清空，请重新学习。")
+    }
+
+    // MARK: Misc
+
+    func clearMonitor() {
+        events.removeAll()
     }
 
     func clearNotice() {
         notice = nil
     }
 
-    func clearSurfaceMonitor() {
-        surfaceState.reset()
-        surfaceControls = []
-        diagnostics = []
+    func performNoticeAction(_ action: ConsoleNotice.Action) {
+        switch action {
+        case .switchToHardware:
+            selectSource(.hardware)
+        }
     }
 
-    func adjustSurfaceControl(_ control: MIDIControlID, by delta: Int) {
-        guard control.kind == .controlChange, delta != 0 else {
-            return
-        }
-        guard let snapshot = surfaceControls.first(where: { $0.id == control }) else {
-            return
-        }
+    // MARK: Effect pipeline
 
-        let boundedDelta = min(max(delta, -127), 127)
-        let adjustedValue = UInt8(
-            min(max(Int(snapshot.displayedValue) + boundedDelta, 0), 127)
-        )
-        guard adjustedValue != snapshot.displayedValue else {
-            return
+    func perform(_ effects: [SurfaceEffect]) {
+        for effect in effects {
+            switch effect {
+            case let .send(message):
+                transmit(message)
+            case let .triggerAgent(slot):
+                performPrimaryAction(slot)
+            case let .learned(control, midi):
+                persistHardwareMap()
+                if let next = engine.learnTarget {
+                    selectedControl = next
+                    notice = ConsoleNotice(level: .info, text: "\(control.shortName) = \(midi)。下一个：请操作 \(next.shortName)。")
+                } else {
+                    selectedControl = control
+                    notice = ConsoleNotice(level: .info, text: "\(control.shortName) = \(midi)。本区已全部学习，学习结束。")
+                }
+            case let .learnRejected(_, error):
+                notice = ConsoleNotice(level: .warning, text: error.localizedDescription)
+            case .unmappedInput:
+                break // Shown in the MIDI monitor as an unmapped event.
+            }
         }
-        guard connection.connectedDestination != nil, let midi else {
-            let message = "BCR2000 输出端口未连接，无法回写 CC \(control.number)。"
-            connection.lastError = message
-            notice = message
-            appendDiagnostic("反馈失败：\(message)")
-            return
-        }
+    }
 
-        let message = MIDI1UMPCodec.feedback(control: control, value: adjustedValue)
-        do {
-            try midi.send(message)
-            recentFeedback[control] = (adjustedValue, .now)
-            surfaceState.observe(message, direction: .output)
-            surfaceControls = surfaceState.controls
-            appendDiagnostic("UI \(message.diagnosticDescription)")
-        } catch {
-            connection.lastError = error.localizedDescription
-            notice = "旋钮反馈失败：\(error.localizedDescription)"
-            appendDiagnostic("反馈失败：\(error.localizedDescription)")
+    private func receiveFromDevice(_ message: MIDIVoiceMessage) {
+        let control = engine.hardwareMap.control(for: message.controlID)
+        log(.input, message, control: control, ignored: false)
+        if followsTouch, !isLearning, let control {
+            selectedControl = control
+            if control.section == .pushEncoder || control.section == .pushEncoderButton {
+                selectGroup(control.row)
+            }
+        }
+        perform(engine.handleInput(message))
+    }
+
+    private func transmit(_ message: MIDIVoiceMessage) {
+        let control = engine.hardwareMap.control(for: message.controlID)
+        log(.output, message, control: control, ignored: false)
+        switch source {
+        case .mock:
+            mock.receive(message)
+        case .hardware:
+            guard let midi, connection.connectedDestination != nil else {
+                droppedFeedbackCount += 1
+                return
+            }
+            do {
+                try midi.send(message)
+            } catch {
+                droppedFeedbackCount += 1
+                connection.lastError = error.localizedDescription
+                notice = ConsoleNotice(level: .error, text: "反馈发送失败：\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleHardwareMessages(_ messages: [MIDIVoiceMessage]) {
+        for message in messages {
+            guard source == .hardware else {
+                log(.input, message, control: hardwareMap.control(for: message.controlID), ignored: true)
+                continue
+            }
+            receiveFromDevice(message)
         }
     }
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
         let wasConnected = connection.isConnected
         connection = snapshot
-        if snapshot.isConnected {
-            if !wasConnected {
-                notice = "已连接 \(snapshot.connectedSource ?? "BCR2000")，反馈发送到 \(snapshot.connectedDestination ?? "Port 1")。"
-            }
-            sendAllFeedback()
-        } else if snapshot.lastError == nil {
-            notice = "未找到完整的 BCR2000 输入/输出端点。"
+        guard snapshot.isConnected, !wasConnected else { return }
+        switch source {
+        case .hardware:
+            droppedFeedbackCount = 0
+            perform(engine.fullFeedback())
+            notice = ConsoleNotice(level: .info, text: "已连接 \(snapshot.connectedSource ?? "BCR2000")，软件状态已整体回写。")
+        case .mock:
+            notice = ConsoleNotice(
+                level: .info,
+                text: "检测到 \(snapshot.connectedSource ?? "BCR2000")。当前仍在 Mock 模式，实体输入只记录不执行。",
+                action: .switchToHardware
+            )
         }
     }
 
-    private func handleMIDI(_ messages: [MIDIVoiceMessage]) {
-        for message in messages {
-            appendDiagnostic(message.diagnosticDescription)
-            surfaceState.observe(message, direction: .input)
-
-            if isRecentFeedbackEcho(message) {
-                continue
-            }
-
-            if isQuickLearnEnabled, !profile.isComplete, message.isPositiveActivation {
-                if let learned = profile.learn(message.controlID) {
-                    persistProfile()
-                    selectedSlotID = learned.slotID
-                    notice = "已将 \(learned.control.description) 绑定到槽位 \(learned.slotID.rawValue)。"
-                    sendFeedback(for: learned.slotID)
-                    if profile.isComplete {
-                        isQuickLearnEnabled = false
-                        notice = "8 个槽位映射完成，BCR2000 与 Mock 状态已联动。"
-                        sendAllFeedback()
-                    }
-                }
-                continue
-            }
-
-            guard
-                message.isPositiveActivation,
-                let binding = profile.binding(for: message.controlID),
-                shouldAcceptPhysicalActivation(message.controlID)
-            else {
-                continue
-            }
-
-            selectedSlotID = binding.slotID
-            performPrimaryAction(binding.slotID)
+    private func hardwareMap(for source: DeviceSource) -> HardwareMap {
+        switch source {
+        case .mock: mock.preset
+        case .hardware: hardwareMap
         }
-        surfaceControls = surfaceState.controls
     }
 
-    private func shouldAcceptPhysicalActivation(_ control: MIDIControlID) -> Bool {
-        let now = Date()
-        defer { lastPhysicalActivation[control] = now }
-        guard let previous = lastPhysicalActivation[control] else {
-            return true
-        }
-        return now.timeIntervalSince(previous) >= 0.25
-    }
-
-    private func isRecentFeedbackEcho(_ message: MIDIVoiceMessage) -> Bool {
-        guard let feedback = recentFeedback[message.controlID] else {
-            return false
-        }
-        return feedback.value == message.value
-            && Date().timeIntervalSince(feedback.sentAt) < 0.18
-    }
-
-    private func transition(
-        _ slotID: AgentSlotID,
-        to state: AgentRunState,
-        progress: Double? = nil,
-        statusText: String
-    ) throws {
-        try stateMachine.transition(
-            slotID,
-            to: state,
-            progress: progress,
-            statusText: statusText
+    private func log(_ direction: MIDIObservationDirection, _ message: MIDIVoiceMessage, control: BCRControlID?, ignored: Bool) {
+        nextEventID += 1
+        events.append(
+            MonitorEvent(
+                id: nextEventID,
+                time: .now,
+                direction: direction,
+                source: ignored ? .hardware : source,
+                message: message,
+                control: control,
+                ignored: ignored
+            )
         )
-        publish(slotID)
-    }
-
-    private func updateProgress(
-        _ slotID: AgentSlotID,
-        progress: Double,
-        statusText: String
-    ) throws {
-        try stateMachine.updateProgress(
-            slotID,
-            progress: progress,
-            statusText: statusText
-        )
-        publish(slotID)
-    }
-
-    private func publish(_ slotID: AgentSlotID) {
-        slots = stateMachine.slots
-        sendFeedback(for: slotID)
-    }
-
-    private func sendAllFeedback() {
-        for slot in slots {
-            sendFeedback(for: slot.id)
+        if events.count > 300 {
+            events.removeFirst(events.count - 300)
         }
     }
 
-    private func sendFeedback(for slotID: AgentSlotID) {
-        guard
-            connection.connectedDestination != nil,
-            let binding = profile.binding(for: slotID),
-            let slot = stateMachine.slot(slotID)
-        else {
-            return
-        }
-
-        let value = slot.state.feedbackValue
-        let message = MIDI1UMPCodec.feedback(control: binding.control, value: value)
+    private func persistHardwareMap() {
+        guard source == .hardware else { return }
+        hardwareMap = engine.hardwareMap
         do {
-            try midi?.send(message)
-            recentFeedback[binding.control] = (value, .now)
-            surfaceState.observe(message, direction: .output)
-            surfaceControls = surfaceState.controls
+            try stores.hardwareMap.save(hardwareMap)
         } catch {
-            connection.lastError = error.localizedDescription
-            appendDiagnostic("反馈失败：\(error.localizedDescription)")
+            notice = ConsoleNotice(level: .error, text: "硬件映射保存失败：\(error.localizedDescription)")
         }
     }
 
-    private func persistProfile() {
+    private func persistConfiguration() {
         do {
-            try profileStore.save(profile)
+            try stores.configuration.save(engine.configuration)
         } catch {
-            notice = "控制器映射保存失败：\(error.localizedDescription)"
+            notice = ConsoleNotice(level: .error, text: "功能配置保存失败：\(error.localizedDescription)")
         }
     }
 
-    private func appendDiagnostic(_ line: String) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-        diagnostics.insert("\(formatter.string(from: .now))  \(line)", at: 0)
-        diagnostics = Array(diagnostics.prefix(12))
+    /// Publishes agent slots and writes a changed state to the slot's LEDs.
+    func applyAgentSlots(_ newSlots: [AgentSlot], changed slotID: AgentSlotID) {
+        let previous = slot(slotID)?.state
+        slots = newSlots
+        guard let state = slot(slotID)?.state, state != previous else { return }
+        perform(engine.setAgentFeedback(slotID, value: state.feedbackValue))
     }
 
-    private func report(_ error: Error) {
-        notice = error.localizedDescription
-        appendDiagnostic("状态机错误：\(error.localizedDescription)")
+    func report(_ error: Error) {
+        notice = ConsoleNotice(level: .error, text: error.localizedDescription)
     }
 }

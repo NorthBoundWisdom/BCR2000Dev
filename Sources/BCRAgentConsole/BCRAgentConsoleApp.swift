@@ -46,19 +46,15 @@ struct BCRAgentConsoleApp: App {
 
     init() {
         let smoke = CommandLine.arguments.contains("--startup-smoke")
-        let store = smoke
-            ? ControllerProfileStore(fileURL: FileManager.default.temporaryDirectory
-                .appending(path: "bcr-smoke-\(UUID().uuidString)/controller-profile.json"))
-            : ControllerProfileStore()
-        _model = StateObject(wrappedValue: ConsoleViewModel(profileStore: store, startsMIDI: !smoke))
+        _model = StateObject(wrappedValue: ConsoleViewModel(stores: smoke ? .temporary() : .standard, startsMIDI: !smoke))
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
-                .frame(minWidth: 1_020, minHeight: 720)
+                .frame(minWidth: 1_200, minHeight: 760)
         }
-        .defaultSize(width: 1_180, height: 800)
+        .defaultSize(width: 1_260, height: 920)
         .windowStyle(.hiddenTitleBar)
     }
 }
