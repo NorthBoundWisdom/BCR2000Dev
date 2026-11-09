@@ -23,6 +23,20 @@ CC/Note 按键，在 SwiftUI 与确定性 Mock Agent 之间共享同一状态机
 - 可选 FreeCM 插件 Config、Build、Run、Test、Package 接线；
 - 领域、映射、状态机、双向 surface state、MIDI codec 与打包流程测试。
 
+## 控制台结构（2026-11 重构）
+
+- **BCR2000 虚拟面板**：按真实面板布局显示 108 个控件（推钮编码器 4 组、2 行按键、
+  3 行编码器、4 个用户按键），LED 灯环即软件回写值。
+- **设备源切换**：`Mock 设备` 下面板就是模拟硬件；`实体 BCR2000` 下面板是镜像，
+  操作即软件修改并回写硬件。
+- **检查器**：查看/学习控件的 MIDI 身份，给控件分配参数、Agent 主操作或复位参数组，
+  直接编辑参数名称、单位、范围和默认值。
+- **工作区**：参数滑块（与硬件双向同步）、机械臂示意预览、Agent 槽位、MIDI 监视。
+- 默认载入“机械臂示例”：P1-1…P1-8 = J1–J6、夹爪、速度；B1 行 = Agent 1–8；
+  B2-1 = 使能；B2-8 = 复位机械臂。
+
+分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md)。
+
 ## 快速开始
 
 ```bash
@@ -102,6 +116,8 @@ git diff --check
 - [打包、签名与 CI 发布](docs/PACKAGING.md)
 - [图标源文件与生成说明](assets/README.md)
 - [Swift/Qt/Rust 选型 ADR](docs/adr/001-native-swift-mvp.md)
+- [后续开发计划](ROADMAP.md)
+- [开发规范](CONTRIBUTING.md)
 - [后续开发 TODO](TODO.md)
 
 下一里程碑是把 Mock adapter 扩展为官方 `codex app-server` adapter，并补齐安全审批、重连恢复和发布化，详见 [TODO](TODO.md)。

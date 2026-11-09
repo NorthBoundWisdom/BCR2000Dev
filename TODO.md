@@ -1,5 +1,7 @@
 # BCR2000 Agent Console 开发 TODO
 
+> 阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
 状态（截至 2026-07-27）：Swift MVP（Mock）与硬件镜像、双向反馈、基础映射已实现。当前待办聚焦于 Codex 接入与安全生产化。
 
 ## 后续开发 Plan（Todolist）
@@ -70,7 +72,12 @@
   - [ ] 运行远端发布 CI、真实 Developer ID 公证及 macOS 14 真机安装验收（流程见 docs/PACKAGING.md）
 
 - [ ] M7：映射与可配置性（P1）
-  - [ ] 完成全部 32 控件的实际采集与 CONTROL_MAP 细化
-  - [ ] 映射冲突检测与手工覆盖 UI（端点、槽位、旋钮行为）
+  - [x] 108 个物理控件模型、逐控件学习（自动跳到下一个）与冲突拒绝
+  - [x] Mock BCR2000 设备与软件参数双向同步引擎
+  - [x] 检查器：为每个控件分配参数 / Agent / 复位组，编辑参数范围与单位
+  - [ ] 用实体 BCR2000 验证全部控件学习与 LED 回写
+  - [ ] 手工端点选择（多设备 / 非 Port 1）
+  - [ ] 14-bit（NRPN）高分辨率参数，供机械臂关节精调
+  - [ ] 参数输出适配器（OSC / WebSocket / ROS）把参数推给外部系统
   - [ ] 支持切换编码器输入模式（absolute / relative）及回放标定
   - [ ] 会话配置导入导出（不包含用户私密信息）

@@ -17,7 +17,10 @@
 - Keep classes `final`, dependencies explicit, and failures visible. Do not add silent fallbacks.
 - Any new state transition or MIDI message shape needs a focused unit test.
 - Keep secrets, absolute user paths, generated app bundles, MIDI captures, and local mappings out of git.
-- Work on `main` unless the user explicitly requests a branch. Do not commit or publish unless asked.
+- Work on `main` unless the user explicitly requests a branch. After each verified change, commit with a
+  Conventional Commit message and push to `origin/main`; never force-push `main`.
+- Version tags and releases are created or pushed only when explicitly requested.
+- Follow `CONTRIBUTING.md` (conventions, pre-commit checks) and `ROADMAP.md` (phase plan).
 
 ## Development Commands
 
@@ -51,4 +54,5 @@ git diff --check
   Developer ID packaging must require successful notarization, stapling and Gatekeeper checks.
 - Keep credentials in Keychain/local environment. CI defaults to ad-hoc signing, tests final
   universal packages on ARM and Intel runners, and publishes only explicitly pushed version tags.
-- See `docs/PACKAGING.md` for local and CI release commands. Do not commit or publish unless asked.
+- See `docs/PACKAGING.md` for local and CI release commands. Do not push version tags or publish
+  releases unless asked.
