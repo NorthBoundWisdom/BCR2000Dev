@@ -49,6 +49,45 @@ Mock 模式下实体输入只记录在 MIDI 监视器中，不执行。
 （松开不会学习）。学完自动跳到本区下一个未学习控件，可连续扫过整排。已学习控件的后续
 消息在学习期间只更新显示，不会被绑定到下一个控件；编码器接受 CC 或显式选择的 14-bit NRPN。
 
+### 全台旋钮批量学习
+
+除逐个 Quick Learn 外，可显式从**实体当前临时预设的完整 BCL 回读**学习全部旋钮，
+仍保存到同一个 `hardware-map.json`，不是应用 Mock 预设或推测出厂 CC。
+`BCRPresetEncoderLearning` 在 Core 校验连续行号、设备一致性、完整首尾、56 个唯一旋钮定义，
+并要求每个身份在同次设备快照中出现；仅接受 0…127 的普通绝对 CC。
+重复身份、缺失快照、自定义发送、其他编码或与已有映射冲突时，整批拒绝，保留原配置。
+现有参数和功能保持原样；未分配旋钮新增独立 0…127 参数，默认值取回读快照。
+此操作不学习旋钮按下或其他按钮，也不发送设备预设写入。
+
+BCL 的编码器 1–32 对应顶部组 1–4，33–56 对应下方三排，编号依据
+[B-Control MIDI Implementation §16](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)。
+读当前临时预设使用只读 Request Data（0x40，数据 0x7F），等待 `$end`，不能将固定短等待的半份回读当作完整数据。
+
+开发工具（捕获与暂存目录必须保持本地、忽略，不进入 git）：
+
+```bash
+python3 tools/read_bcr_preset.py build/encoder-learning
+swiftc -swift-version 6 -strict-concurrency=complete \
+  -o build/prepare_encoder_profile Sources/BCRAgentCore/*.swift tools/prepare_encoder_profile.swift
+build/prepare_encoder_profile build/encoder-learning <本机配置目录>
+```
+
+第二步只生成经过 Core 校验的 `learned-hardware-map.json`、`learned-surface-configuration.json`，
+不会覆盖用户文件。安装前退出 App、备份原文件（记录原配置是否缺省），再将两个暂存文件一起安装到本机配置目录；
+重开 App 并选择实体模式。不要在运行中的 App 下修改持久化文件。
+
+通过运行中的 App 验证（先关闭外部执行端输出；token 仅由环境提供）：
+
+```bash
+python3 tools/verify_encoder_surface.py --report build/encoder-roundtrip.json
+```
+
+该工具要求 56 个独立绝对 CC 参数，五轮不同位置值均经 MCP → SurfaceSession → 引擎效果管线写出，
+每轮请求设备快照逐一核对，最后还原并回读初始值；不直接旁路发送旋钮值。
+2026-11-11 当前设备已完成 56/56 映射与 280/280 回读，App 反馈丢弃为 0。
+此结果验证软件写入与设备值记忆；每个实体旋钮的人工转动、非当前组视觉灯环、按键、Relative/NRPN、
+热插拔与长期稳定性仍按 R1 分别验收。
+
 ### 步长与触发参数功能（WP5）
 
 参数 step 可缺省；启用后必须为正的有限数值，且能表示该范围。按零点整数倍网格取最近值，
