@@ -25,7 +25,7 @@ struct MIDIEndpointSettingsView: View {
                     get: { draft.sourceID ?? 0 }, set: { draft.sourceID = $0 == 0 ? nil : $0 }
                 )) {
                     Text("自动 · Port 1").tag(Int32(0))
-                    ForEach(model.connection.sourceEndpoints) { Text($0.name).tag($0.id) }
+                    ForEach(model.connection.sourceEndpoints) { Text($0.availabilityKnown ? $0.name : "\($0.name)（状态未知）").tag($0.id) }
                     if let id = draft.sourceID, !model.connection.sourceEndpoints.contains(where: { $0.id == id }) {
                         Text("所选输入已断开").tag(id)
                     }
@@ -34,7 +34,7 @@ struct MIDIEndpointSettingsView: View {
                     get: { draft.destinationID ?? 0 }, set: { draft.destinationID = $0 == 0 ? nil : $0 }
                 )) {
                     Text("自动 · Port 1").tag(Int32(0))
-                    ForEach(model.connection.destinationEndpoints) { Text($0.name).tag($0.id) }
+                    ForEach(model.connection.destinationEndpoints) { Text($0.availabilityKnown ? $0.name : "\($0.name)（状态未知）").tag($0.id) }
                     if let id = draft.destinationID, !model.connection.destinationEndpoints.contains(where: { $0.id == id }) {
                         Text("所选输出已断开").tag(id)
                     }

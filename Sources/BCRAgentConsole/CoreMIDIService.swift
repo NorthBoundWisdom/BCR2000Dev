@@ -25,6 +25,12 @@ protocol MIDIService: SurfaceDevice {
     func selectEndpoints(_ selection: MIDIEndpointSelection)
 }
 
+enum CoreMIDIEndpointAvailability {
+    static func isUsable(status: OSStatus, offline: Int32) -> Bool {
+        status == noErr ? offline == 0 : status == kMIDIUnknownProperty
+    }
+}
+
 /// Main-actor device boundary. The transport only decodes and hands off value batches;
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
@@ -261,7 +267,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
         var lastError: String?
         func resolve(_ endpoints: [NamedEndpoint], selectedID: Int32?) -> NamedEndpoint? {
             do {
-                let value = try MIDIEndpointPolicy.resolve(endpoints.map { .init(id: $0.id, name: $0.name) }, selectedID: selectedID)
+                let value = try MIDIEndpointPolicy.resolve(endpoints.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }, selectedID: selectedID)
                 return endpoints.first { $0.id == value.id }
             } catch {
                 lastError = [lastError, error.localizedDescription].compactMap { $0 }.joined(separator: "；")
@@ -280,14 +286,15 @@ private final class CoreMIDITransport: @unchecked Sendable {
             sourceNames: sources.map(\.name), destinationNames: destinations.map(\.name),
             connectedSource: connectedSources.isEmpty ? nil : selectedSource?.name,
             connectedDestination: destination == 0 ? nil : selectedDestination?.name, lastError: lastError)
-        snapshot.sourceEndpoints = sources.map { .init(id: $0.id, name: $0.name) }
-        snapshot.destinationEndpoints = destinations.map { .init(id: $0.id, name: $0.name) }
+        snapshot.sourceEndpoints = sources.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
+        snapshot.destinationEndpoints = destinations.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
         snapshot.connectedSourceID = connectedSources.isEmpty ? nil : selectedSource?.id
         snapshot.connectedDestinationID = destination == 0 ? nil : selectedDestination?.id
         connectionHandler(snapshot)
     }
 
     private struct NamedEndpoint {
+        let availabilityKnown: Bool
         let endpoint: MIDIEndpointRef
         let id: Int32
         let name: String
@@ -301,12 +308,14 @@ private final class CoreMIDITransport: @unchecked Sendable {
             let endpoint = endpointAt(index)
             var id: Int32 = 0
             var offline: Int32 = 0
+            let availabilityStatus = MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline)
             guard endpoint != 0,
                   MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &id) == noErr, id != 0,
-                  MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline) == noErr, offline == 0 else {
+                  CoreMIDIEndpointAvailability.isUsable(status: availabilityStatus, offline: offline) else {
                 return nil
             }
             return NamedEndpoint(
+                availabilityKnown: availabilityStatus == noErr,
                 endpoint: endpoint,
                 id: id,
                 name: endpointName(endpoint) ?? "未命名 MIDI 端点"

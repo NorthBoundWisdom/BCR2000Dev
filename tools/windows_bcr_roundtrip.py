@@ -8,12 +8,11 @@ CC writes require --test-cc and a matching, unambiguous baseline snapshot.
 import argparse
 import ctypes as C
 import json
-from pathlib import Path
 import queue
 import sys
 import time
 
-from midi_feedback_probe import CC, PTR, U32, UPTR, WinMM, bind, read_cc, resolve, _KEEPALIVE
+from midi_feedback_probe import PTR, U32, UPTR, WinMM, bind, read_cc, _KEEPALIVE
 
 
 class MIDIHDR(C.Structure):
@@ -22,52 +21,8 @@ class MIDIHDR(C.Structure):
                 ("offset", U32), ("reserved_array", UPTR * 8)]
 
 
-def request_bytes(command):
-    if command not in (0x01, 0x43):
-        raise ValueError("Only read-only identity/snapshot requests are allowed")
-    return bytes([0xF0, 0, 0x20, 0x32, 0x7F, 0x15, command, 0xF7])
-
-
-class SysExFrames:
-    def __init__(self):
-        self.partial = None
-        self.frames = []
-
-    def feed(self, data):
-        for byte in data:
-            if byte >= 0xF8:
-                continue
-            if byte == 0xF0:
-                if self.partial is not None:
-                    raise ValueError("Interrupted SysEx frame")
-                self.partial = bytearray([byte])
-            elif self.partial is not None:
-                if byte >= 0x80 and byte != 0xF7:
-                    raise ValueError("Invalid SysEx byte")
-                self.partial.append(byte)
-                if len(self.partial) > 8192:
-                    raise ValueError("Unexpectedly large identity reply")
-                if byte == 0xF7:
-                    self.frames.append(bytes(self.partial))
-                    self.partial = None
-
-
-def identity_info(frame):
-    if len(frame) < 9 or frame[:4] != bytes([0xF0, 0, 0x20, 0x32]) or frame[5:7] != bytes([0x15, 2]) or frame[-1] != 0xF7:
-        return None
-    return {"deviceID": frame[4], "model": "BCR2000", "identity": frame[7:-1].decode("ascii", errors="strict")}
-
-
-def snapshot_values(messages, channel, controller):
-    values = {m.value for m in messages if m.channel == channel and m.controller == controller}
-    if len(values) > 1:
-        raise ValueError("Conflicting values for the target identity in one snapshot")
-    if not values:
-        return None
-    # A lone echo is insufficient evidence of a snapshot response.
-    if len({(m.channel, m.controller) for m in messages}) < 2:
-        return None
-    return next(iter(values))
+from bcr_protocol import request_bytes, SysExFrames, identity_info, snapshot_values
+from bcr_roundtrip import run_roundtrip
 
 
 class WinBCR(WinMM):
@@ -190,64 +145,7 @@ class WinBCR(WinMM):
 
 
 def run(args):
-    backend = WinBCR()
-    report = {"identity": None, "snapshotCCCount": 0, "writes": [], "visualLED": "not observed remotely"}
-    original = None
-    try:
-        inputs, outputs = backend.ports(True), backend.ports(False)
-        print(json.dumps({"inputs": [p.__dict__ for p in inputs], "outputs": [p.__dict__ for p in outputs]}), flush=True)
-        source, destination = resolve(inputs, args.input, "input"), resolve(outputs, args.output, "output")
-        if "bcr2000" not in source.name.lower() or "bcr2000" not in destination.name.lower():
-            raise ValueError("Only explicitly named BCR2000 endpoints are supported")
-        report.update(input=source.name, output=destination.name)
-        backend.open(source, destination)
-        _, replies = backend.query(1, args.wait)
-        identities = [info for frame in replies if (info := identity_info(frame)) is not None]
-        report["identity"] = identities[0] if identities else None
-        baseline, _ = backend.query(0x43, args.wait)
-        report["snapshotCCCount"] = len(baseline)
-        print(json.dumps({"identity": report["identity"], "snapshotCCCount": len(baseline)}), flush=True)
-        if args.test_cc is None:
-            return report
-        if args.test_cc in {0, 6, 32, 38, 96, 97, 98, 99, 100, 101} or not 1 <= args.test_cc < 120:
-            raise ValueError("Choose a known ordinary absolute CC encoder")
-        if report["identity"] is None:
-            raise RuntimeError("No device identity response; no CC write attempted")
-        value = snapshot_values(baseline, args.channel, args.test_cc)
-        if value is None:
-            raise RuntimeError("Target absent or snapshot unverified; no CC write attempted")
-        original = CC(args.channel, args.test_cc, value)
-        report["baselineValue"] = value
-        for target in (0, 32, 64, 96, 127):
-            backend.send(CC(args.channel, args.test_cc, target))
-            pre_snapshot = backend.collect(0.25)
-            messages, _ = backend.query(0x43, args.wait)
-            observed = snapshot_values(messages, args.channel, args.test_cc)
-            result = {"requested": target, "observed": observed, "matches": observed == target,
-                      "echoCandidatesWithin250ms": sum(m.channel == args.channel and m.controller == args.test_cc for m in pre_snapshot)}
-            report["writes"].append(result)
-            print(json.dumps(result), flush=True)
-        report["inputDropped"] = backend.events.dropped
-        if backend.events.dropped:
-            raise RuntimeError("Input overflow; roundtrip result is incomplete")
-        report["valueRoundtripPassed"] = all(item["matches"] for item in report["writes"])
-        return report
-    finally:
-        if original is not None:
-            final = CC(original.channel, original.controller, 127) if args.hold_max else original
-            try:
-                backend.send(final)
-                report["finalRequested"] = final.value
-                time.sleep(0.1)
-                snapshot, _ = backend.query(0x43, args.wait)
-                report["finalObserved"] = snapshot_values(snapshot, final.channel, final.controller)
-            except Exception as error:
-                report["finalError"] = str(error)
-        try:
-            backend.close()
-        finally:
-            if args.report:
-                Path(args.report).write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return run_roundtrip(args, WinBCR)
 
 
 def main():

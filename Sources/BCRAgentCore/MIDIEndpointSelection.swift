@@ -3,7 +3,10 @@ import Foundation
 public struct MIDIEndpointDescriptor: Equatable, Identifiable, Sendable {
     public let id: Int32
     public let name: String
-    public init(id: Int32, name: String) { self.id = id; self.name = name }
+    public let availabilityKnown: Bool
+    public init(id: Int32, name: String, availabilityKnown: Bool = true) {
+        self.id = id; self.name = name; self.availabilityKnown = availabilityKnown
+    }
 }
 
 public struct MIDIEndpointSelection: Codable, Equatable, Sendable {

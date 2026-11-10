@@ -186,30 +186,38 @@ class WinMM:
             raise RuntimeError("; ".join(errors))
 
 
-def mac_cc_packets(packet_list, offset, aligned):
+def mac_packet_bytes(packet_list, offset, aligned):
     result = []
     count = U32.from_address(packet_list).value
     packet = packet_list + offset
     for _ in range(count):
         length = U16.from_address(packet + 8).value
-        data = C.string_at(packet + 10, length)
-        index = 0
-        while index < len(data):
-            status = data[index]
-            if status & 0xF0 == 0xB0 and index + 2 < len(data):
-                result.append(status | data[index+1] << 8 | data[index+2] << 16)
-                index += 3
-            elif 0x80 <= status < 0xF0:
-                index += 2 if status & 0xF0 in (0xC0, 0xD0) else 3
-            elif status == 0xF0:
-                end = data.find(b"\xF7", index + 1)
-                index = len(data) if end < 0 else end + 1
-            else:
-                index += 1
+        result.append(C.string_at(packet + 10, length))
         packet += 10 + length
         if aligned:
             packet = (packet + 3) & ~3
     return result
+
+
+def cc_bytes(data):
+    result, index = [], 0
+    while index < len(data):
+        status = data[index]
+        if status & 0xF0 == 0xB0 and index + 2 < len(data):
+            result.append(status | data[index+1] << 8 | data[index+2] << 16)
+            index += 3
+        elif 0x80 <= status < 0xF0:
+            index += 2 if status & 0xF0 in (0xC0, 0xD0) else 3
+        elif status == 0xF0:
+            end = data.find(b"\xF7", index + 1)
+            index = len(data) if end < 0 else end + 1
+        else:
+            index += 1
+    return result
+
+
+def mac_cc_packets(packet_list, offset, aligned):
+    return [message for chunk in mac_packet_bytes(packet_list, offset, aligned) for message in cc_bytes(chunk)]
 
 
 class MacMIDI:
@@ -219,6 +227,10 @@ class MacMIDI:
             raise ValueError("packet_repeats must be 1..16")
         if output_api not in ("legacy", "ump1", "ump2"):
             raise ValueError("Unknown CoreMIDI output API")
+        self.raw_input = None
+        self.availability_notes = []
+        self._input_refs = {}
+        self._output_refs = {}
         self.packet_repeats = packet_repeats
         self.output_api = output_api
         self.api = C.CDLL("/System/Library/Frameworks/CoreMIDI.framework/CoreMIDI")
@@ -277,15 +289,20 @@ class MacMIDI:
         for index in range(count):
             ref, value = endpoint(index), PTR()
             offline = C.c_int32()
-            self.check(self.api.MIDIObjectGetIntegerProperty(ref, offline_key, C.byref(offline)), "Read endpoint availability")
-            if offline.value:
+            availability_status = self.api.MIDIObjectGetIntegerProperty(ref, offline_key, C.byref(offline))
+            if availability_status not in (0, -10835):  # Optional kMIDIUnknownProperty.
+                self.check(availability_status, "Read endpoint availability")
+            if availability_status == 0 and offline.value:
                 continue
+            if availability_status == -10835:
+                self.availability_notes.append({"direction": "input" if input else "output", "index": index, "availability": "unknown"})
             self.check(self.api.MIDIObjectGetStringProperty(ref, name_key, C.byref(value)), "Read endpoint name")
             try:
                 text = C.create_string_buffer(1024)
                 if not self.cf.CFStringGetCString(value, text, len(text), 0x08000100):
                     raise RuntimeError("Endpoint name cannot be decoded")
                 result.append(Port(index, text.value.decode()))
+                (self._input_refs if input else self._output_refs)[index] = ref
             finally:
                 self.cf.CFRelease(value)
         return result
@@ -297,38 +314,47 @@ class MacMIDI:
             callback_type = C.CFUNCTYPE(None, PTR, PTR, PTR)
             def received(packet_list, refcon, source):
                 try:
-                    for packed in mac_cc_packets(packet_list, self._packet_offset, self._aligned):
-                        self.events.put(packed)
+                    for chunk in mac_packet_bytes(packet_list, self._packet_offset, self._aligned):
+                        if self.raw_input is not None:
+                            self.raw_input(chunk)
+                        for packed in cc_bytes(chunk):
+                            self.events.put(packed)
                 except Exception as error:
                     self.events.put(RuntimeError("CoreMIDI input callback: " + str(error)))
             self.callback = callback_type(received)
             self.check(self.api.MIDIInputPortCreate(self.client, name, C.cast(self.callback, PTR), None, C.byref(self.input)), "Open input")
-            self.source = self.api.MIDIGetSource(input_port.id)
+            self.source = self._input_refs.get(input_port.id) or self.api.MIDIGetSource(input_port.id)
             self.check(self.api.MIDIPortConnectSource(self.input, self.source, None), "Connect input")
             if output_port:
                 self.check(self.api.MIDIOutputPortCreate(self.client, name, C.byref(self.output)), "Open output")
-                self.destination = self.api.MIDIGetDestination(output_port.id)
+                self.destination = self._output_refs.get(output_port.id) or self.api.MIDIGetDestination(output_port.id)
         finally:
             self.cf.CFRelease(name)
+
+    def _send_words(self, words, protocol):
+        data = (U32 * len(words))(*words)
+        packet = self.api.MIDIEventListInit(self._storage, protocol)
+        if not self.api.MIDIEventListAdd(self._storage, len(self._storage), packet, 0, len(words), data):
+            raise RuntimeError("Cannot create UMP event list")
+        self.check(self.api.MIDISendEventList(self.output, self.destination, self._storage), "Send UMP")
+
+    def _send_bytes(self, raw):
+        if not raw or len(raw) > len(self._storage) - 64:
+            raise ValueError("Native MIDI packet exceeds bounded storage")
+        data = (C.c_ubyte * len(raw)).from_buffer_copy(raw)
+        packet = self.api.MIDIPacketListInit(self._storage)
+        if not self.api.MIDIPacketListAdd(self._storage, len(self._storage), packet, 0, len(raw), data):
+            raise RuntimeError("Cannot create MIDI packet")
+        self.check(self.api.MIDISend(self.output, self.destination, self._storage), "Send MIDI")
 
     def send(self, message):
         if self.output_api != "legacy":
             protocol = 1 if self.output_api == "ump1" else 2
-            words = ump_cc(message, protocol) * self.packet_repeats
-            data = (U32 * len(words))(*words)
-            packet = self.api.MIDIEventListInit(self._storage, protocol)
-            if not self.api.MIDIEventListAdd(self._storage, len(self._storage), packet, 0, len(words), data):
-                raise RuntimeError("Cannot create UMP event list")
-            self.check(self.api.MIDISendEventList(self.output, self.destination, self._storage), "Send UMP CC")
-            return
-        packed = message.packed()
-        raw = bytes([packed & 255, packed >> 8 & 255, packed >> 16 & 255]) * self.packet_repeats
-        data = (C.c_ubyte * len(raw)).from_buffer_copy(raw)
-        packet = self.api.MIDIPacketListInit(self._storage)
-        added = self.api.MIDIPacketListAdd(self._storage, len(self._storage), packet, 0, len(raw), data)
-        if not added:
-            raise RuntimeError("Cannot create MIDI packet")
-        self.check(self.api.MIDISend(self.output, self.destination, self._storage), "Send CC")
+            self._send_words(ump_cc(message, protocol) * self.packet_repeats, protocol)
+        else:
+            packed = message.packed()
+            raw = bytes([packed & 255, packed >> 8 & 255, packed >> 16 & 255])
+            self._send_bytes(raw * self.packet_repeats)
 
     def close(self):
         errors = []
@@ -469,6 +495,8 @@ def main():
             print(title)
             for port in ports:
                 print(f"  [{port.id}] {port.name}")
+        if getattr(backend, "availability_notes", None):
+            print("Availability metadata:", backend.availability_notes)
         if args.mode == "list":
             return
         input_port = resolve(inputs, args.input, "input")

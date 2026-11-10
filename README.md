@@ -178,3 +178,8 @@ git diff --check
 点击顶栏设备状态可分别选择 MIDI 输入/输出（包括通用 USB-MIDI 接口）；默认 BCR2000 Port 1，手动端口缺失时不自动换路由。
 无第三方依赖的 Windows/macOS Python 五段灯环测试见 [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md)。
 该工具自动学习实际 CC，不需要猜测 Preset。
+
+### 远程 Mac 实机测试包
+
+远程接线、只读预检、自动读回矩阵和 GUI 会话入口见 [Mac 远程测试计划](docs/MAC_REMOTE_TEST_PLAN.md)。
+使用 `tools/package_macos_diagnostics.py` 生成带校验清单的 Apple Silicon/Intel 通用诊断包，默认不写实体 CC。
