@@ -5,6 +5,7 @@ Use when SSH and the logged-in desktop have different CoreMIDI visibility.
 Does not restart MIDIServer, alter login settings, install a persistent agent,
 change another user\'s session or elevate privileges.
 """
+
 import argparse
 import json
 import os
@@ -30,15 +31,29 @@ def run(arguments, timeout=300):
         stdout, stderr = root / "stdout.txt", root / "stderr.txt"
         for path in (stdout, stderr):
             path.touch(mode=0o600)
-        command = [sys.executable, str(Path(__file__).with_name("macos_test_session.py")), *arguments,
-                   "--completion-file", str(complete)]
+        command = [
+            sys.executable,
+            str(Path(__file__).with_name("macos_test_session.py")),
+            *arguments,
+            "--completion-file",
+            str(complete),
+        ]
         plist = root / "job.plist"
         with plist.open("wb") as stream:
-            plistlib.dump({"Label": label, "ProgramArguments": command, "RunAtLoad": True,
-                          "ProcessType": "Background", "LimitLoadToSessionType": "Aqua",
-                          "WorkingDirectory": str(Path.cwd()),
-                          "EnvironmentVariables": {"BCR_DIAGNOSTIC_GUI": "1"},
-                          "StandardOutPath": str(stdout), "StandardErrorPath": str(stderr)}, stream)
+            plistlib.dump(
+                {
+                    "Label": label,
+                    "ProgramArguments": command,
+                    "RunAtLoad": True,
+                    "ProcessType": "Background",
+                    "LimitLoadToSessionType": "Aqua",
+                    "WorkingDirectory": str(Path.cwd()),
+                    "EnvironmentVariables": {"BCR_DIAGNOSTIC_GUI": "1"},
+                    "StandardOutPath": str(stdout),
+                    "StandardErrorPath": str(stderr),
+                },
+                stream,
+            )
         os.chmod(plist, 0o600)
         started = False
         summary = None
@@ -67,7 +82,9 @@ def run(arguments, timeout=300):
                 removed = subprocess.run(["launchctl", "bootout", domain + "/" + label], capture_output=True, text=True)
                 cleanup = removed.returncode == 0
                 if not cleanup:
-                    raise RuntimeError("Could not remove temporary GUI job " + domain + "/" + label + ": " + removed.stderr.strip())
+                    raise RuntimeError(
+                        "Could not remove temporary GUI job " + domain + "/" + label + ": " + removed.stderr.strip()
+                    )
         summary["temporaryGUIJobRemoved"] = cleanup
         return summary
 

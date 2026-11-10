@@ -48,6 +48,7 @@ public final class SurfaceSession {
     public func isMCPProtectedParameter(_ id: ParameterID) -> Bool {
         id == "arm.enabled" || id == outputEnableParameter
     }
+
     public private(set) var motionSafety: MotionSafetySnapshot?
     public private(set) var lastConfigurationPersistenceError: String?
 
@@ -167,7 +168,10 @@ public final class SurfaceSession {
     public func addParameter(_ definition: ParameterDefinition, assigningTo control: BCRControlID? = nil) throws {
         try engine.addParameter(definition)
         if let control {
-            perform(try engine.assign(ControlAssignment(control: control, target: .parameter(definition.id)), at: now()))
+            perform(try engine.assign(
+                ControlAssignment(control: control, target: .parameter(definition.id)),
+                at: now()
+            ))
         }
         persistConfiguration()
         onChange?()
@@ -322,7 +326,13 @@ public final class SurfaceSession {
     }
 
     private func transmit(_ message: MIDIVoiceMessage) {
-        log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID), ignored: false)
+        log(
+            .output,
+            message,
+            source: source,
+            control: engine.hardwareMap.control(for: message.controlID),
+            ignored: false
+        )
         let device: any SurfaceDevice = source == .mock ? mockDevice : hardwareDevice
         guard device.connection.connectedDestination != nil else {
             droppedFeedbackCount += 1
@@ -360,7 +370,8 @@ public final class SurfaceSession {
     ) {
         nextEventID += 1
         events.append(MonitorEvent(id: nextEventID, time: now(), direction: direction,
-                                   source: source, message: message, control: control, ignored: ignored, origin: writeOrigin))
+                                   source: source, message: message, control: control, ignored: ignored,
+                                   origin: writeOrigin))
         if events.count > 300 { events.removeFirst(events.count - 300) }
     }
 

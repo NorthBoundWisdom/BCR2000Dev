@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native WP5 acceptance hook; run with mcp_integration.py --configuration-write."""
+
 import json
 import os
 import subprocess
@@ -14,13 +15,13 @@ client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -34,6 +35,7 @@ def debug_failure(kind, value, trace):
     except RuntimeError:
         pass
     sys.__excepthook__(kind, value, trace)
+
 
 sys.excepthook = debug_failure
 
@@ -61,13 +63,20 @@ error "button help not found"''')
 
 
 def assign(index, kind, fields):
-    client.call("assign_control", {"assignment": {
-        "control": {"section": "userButton", "row": 1, "index": index},
-        "target": {kind: fields}, "buttonBehavior": "toggle", "inverted": False,
-    }})
+    client.call(
+        "assign_control",
+        {
+            "assignment": {
+                "control": {"section": "userButton", "row": 1, "index": index},
+                "target": {kind: fields},
+                "buttonBehavior": "toggle",
+                "inverted": False,
+            }
+        },
+    )
 
 
-gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
+gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 info = client.call("get_parameter", {"id": "arm.j1"})
 definition = client.parameter_definition("arm.j1")
 definition["step"] = 0.5
@@ -109,8 +118,11 @@ error "bulk confirmation missing"''')
 def first_row_assigned():
     controls = client.call("list_controls")
     row = [entry for entry in controls if entry["control"]["section"] == "encoder" and entry["control"]["row"] == 1]
-    return len(row) == 8 and row[0]["assignment"]["target"] == {"parameter": {"_0": "arm.j1"}} \
+    return (
+        len(row) == 8
+        and row[0]["assignment"]["target"] == {"parameter": {"_0": "arm.j1"}}
         and row[7]["assignment"]["target"] == {"parameter": {"_0": "arm.speed"}}
+    )
 
 
 wait_for(first_row_assigned, "confirmed bulk assignment not applied")

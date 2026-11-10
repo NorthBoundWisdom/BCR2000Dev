@@ -38,9 +38,19 @@ final class OutputControllerTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let clock = OutputTestClock(), transport = OutputFakeTransport()
-        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), now: { clock.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
-        let controller = OutputController(session: session, store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
-                                          adapter: transport, automaticallyTicks: false, now: { clock.now })
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(),
+            now: { clock.now },
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let controller = OutputController(
+            session: session,
+            store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+            adapter: transport,
+            automaticallyTicks: false,
+            now: { clock.now }
+        )
         controller.start()
         defer { controller.stop() }
         func fresh() {
@@ -60,7 +70,10 @@ final class OutputControllerTests: XCTestCase {
         clock.now.addTimeInterval(0.1); fresh(); controller.tick()
         XCTAssertLessThanOrEqual(controller.outputs["arm.j1"]!, 1)
         let service = AgentControlService(session: session, now: { clock.now })
-        XCTAssertFalse(service.call("set_parameter", arguments: .object(["id": .string("arm.j1"), "value": .number(180)])).isError)
+        XCTAssertFalse(service.call(
+            "set_parameter",
+            arguments: .object(["id": .string("arm.j1"), "value": .number(180)])
+        ).isError)
         clock.now.addTimeInterval(0.1); fresh(); controller.tick()
         XCTAssertLessThanOrEqual(controller.outputs["arm.j1"]!, 2)
         session.turn(.pushEncoder(group: 1, 1), by: -10)
@@ -77,9 +90,19 @@ final class OutputControllerTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let clock = OutputTestClock(), transport = OutputFakeTransport()
-        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), now: { clock.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
-        let controller = OutputController(session: session, store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
-                                          adapter: transport, automaticallyTicks: false, now: { clock.now })
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(),
+            now: { clock.now },
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let controller = OutputController(
+            session: session,
+            store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+            adapter: transport,
+            automaticallyTicks: false,
+            now: { clock.now }
+        )
         controller.start()
         defer { controller.stop() }
         transport.onHeartbeat?(clock.now)
@@ -118,6 +141,7 @@ final class OutputControllerTests: XCTestCase {
         settings.limits.append(settings.limits[0])
         XCTAssertThrowsError(try settings.validate(configuration: config))
     }
+
     func testSavedEnabledOutputDoesNotAutoRestoreAndStartupHighRequiresNewEdge() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -126,14 +150,25 @@ final class OutputControllerTests: XCTestCase {
         var enable = configuration.parameter("arm.enabled")!
         enable.defaultValue = 1
         try configuration.updateParameter(enable)
-        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration, now: { clock.now },
-                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(),
+            configuration: configuration,
+            now: { clock.now },
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
         XCTAssertEqual(session.engine.value(of: "arm.enabled"), 1)
         let store = JSONFileStore<OutputSettings>(fileURL: directory.appending(path: "output.json"))
         var saved = OutputSettings.defaults(for: session.engine.configuration)
         saved.enabled = true
         try store.save(saved)
-        let controller = OutputController(session: session, store: store, adapter: transport, automaticallyTicks: false, now: { clock.now })
+        let controller = OutputController(
+            session: session,
+            store: store,
+            adapter: transport,
+            automaticallyTicks: false,
+            now: { clock.now }
+        )
         controller.restore()
         XCTAssertFalse(controller.settings.enabled)
         XCTAssertFalse(transport.isConnected)
@@ -145,7 +180,7 @@ final class OutputControllerTests: XCTestCase {
         transport.onSamples?(session.engine.configuration.parameters.filter { $0.kind == .continuous }.map {
             .init(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
         })
-        for _ in 0..<3 { controller.tick() }
+        for _ in 0 ..< 3 { controller.tick() }
         XCTAssertEqual(controller.status, .waitingRearm)
         XCTAssertFalse(transport.frames.contains { $0.enabled })
         session.setParameter("arm.enabled", to: 0); controller.tick()
@@ -153,5 +188,4 @@ final class OutputControllerTests: XCTestCase {
         XCTAssertEqual(controller.status, .ready)
         XCTAssertEqual(transport.frames.last?.values.count, saved.limits.count)
     }
-
 }

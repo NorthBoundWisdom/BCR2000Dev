@@ -5,7 +5,9 @@ import sys
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("midi_feedback_probe", Path(__file__).parents[2] / "tools/midi_feedback_probe.py")
+spec = importlib.util.spec_from_file_location(
+    "midi_feedback_probe", Path(__file__).parents[2] / "tools/midi_feedback_probe.py"
+)
 probe = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = probe
 spec.loader.exec_module(probe)
@@ -83,14 +85,16 @@ class FeedbackProbeTests(unittest.TestCase):
                 probe.sweep(backend, probe.CC(1, 8, 7), wait=lambda _: None)
             self.assertEqual(backend.sent[-1].value, 7)
         backend = FakeBackend()
+
         def cancel(_):
             raise KeyboardInterrupt()
+
         with patch("builtins.print"), self.assertRaises(KeyboardInterrupt):
             probe.sweep(backend, probe.CC(1, 8, 9), wait=cancel)
         self.assertEqual(backend.sent[-1].value, 9)
 
     def test_multiple_cc_or_nrpn_learning_never_sends(self):
-        for messages in [ [probe.CC(1, 8, 1), probe.CC(1, 9, 1)], [probe.CC(1, 99, 1)] ]:
+        for messages in [[probe.CC(1, 8, 1), probe.CC(1, 9, 1)], [probe.CC(1, 99, 1)]]:
             backend = FakeBackend()
             for message in messages:
                 backend.events.put(message.packed())
@@ -101,7 +105,8 @@ class FeedbackProbeTests(unittest.TestCase):
     def test_queue_overflow_is_reported_and_callback_errors_surface(self):
         backend = FakeBackend()
         backend.events.queue = probe.queue.Queue(maxsize=1)
-        backend.events.put(1); backend.events.put(2)
+        backend.events.put(1)
+        backend.events.put(2)
         self.assertEqual(backend.events.dropped, 1)
         backend = FakeBackend()
         backend.events.put(RuntimeError("bad callback"))
@@ -115,15 +120,17 @@ class FeedbackProbeTests(unittest.TestCase):
             probe.U32.from_address(base).value = 2
             first = base + 4
             one = bytes([0xC0, 4, 0xB0, 8, 7, 0xF8])
-            probe.U16.from_address(first+8).value = len(one)
-            ctypes.memmove(first+10, one, len(one))
-            second = first+10+len(one)
+            probe.U16.from_address(first + 8).value = len(one)
+            ctypes.memmove(first + 10, one, len(one))
+            second = first + 10 + len(one)
             if aligned:
-                second = (second+3) & ~3
+                second = (second + 3) & ~3
             two = bytes([0xF0, 1, 2, 0xF7, 0xB2, 9, 127])
-            probe.U16.from_address(second+8).value = len(two)
-            ctypes.memmove(second+10, two, len(two))
-            self.assertEqual(probe.mac_cc_packets(base, 4, aligned), [probe.CC(1, 8, 7).packed(), probe.CC(3, 9, 127).packed()])
+            probe.U16.from_address(second + 8).value = len(two)
+            ctypes.memmove(second + 10, two, len(two))
+            self.assertEqual(
+                probe.mac_cc_packets(base, 4, aligned), [probe.CC(1, 8, 7).packed(), probe.CC(3, 9, 127).packed()]
+            )
 
 
 if __name__ == "__main__":

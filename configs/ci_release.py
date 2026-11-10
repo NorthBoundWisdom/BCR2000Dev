@@ -36,9 +36,18 @@ def validate_assets(directory: Path, version: str, commit: str) -> None:
     for name in sorted(expected_assets):
         asset = directory / name
         proof = json.loads(asset.with_suffix(asset.suffix + ".build.json").read_text())
-        expected = {"schema_version": 1, "asset": name, "version": version, "build": "1",
-                    "commit": commit, "dirty": False, "architecture": "universal",
-                    "signature": "ad-hoc", "notarized": False, "sha256": _sha(asset)}
+        expected = {
+            "schema_version": 1,
+            "asset": name,
+            "version": version,
+            "build": "1",
+            "commit": commit,
+            "dirty": False,
+            "architecture": "universal",
+            "signature": "ad-hoc",
+            "notarized": False,
+            "sha256": _sha(asset),
+        }
         if any(proof.get(key) != value for key, value in expected.items()):
             raise ValueError(f"Release artifact provenance/hash mismatch: {name}")
         checksums.append(f"{proof['sha256']}  {name}")

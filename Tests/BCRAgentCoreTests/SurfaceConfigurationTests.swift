@@ -8,7 +8,7 @@ final class SurfaceConfigurationTests: XCTestCase {
         XCTAssertEqual(joint.value(fromMIDI: 0), -90)
         XCTAssertEqual(joint.value(fromMIDI: 127), 90)
         XCTAssertEqual(joint.midiValue(for: 0), 64)
-        for midi in UInt8(0)...127 {
+        for midi in UInt8(0) ... 127 {
             XCTAssertEqual(joint.midiValue(for: joint.value(fromMIDI: midi)), midi)
         }
         XCTAssertEqual(joint.clamp(400), 90)

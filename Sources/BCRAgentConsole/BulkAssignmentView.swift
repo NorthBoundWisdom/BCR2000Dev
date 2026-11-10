@@ -40,7 +40,8 @@ struct BulkAssignmentSection: View {
     }
 
     private func selectValidGroup() {
-        if !model.configuration.parameterGroups.contains(group) { group = model.configuration.parameterGroups.first ?? "" }
+        if !model.configuration.parameterGroups
+            .contains(group) { group = model.configuration.parameterGroups.first ?? "" }
     }
 }
 
@@ -63,7 +64,10 @@ private struct BulkAssignmentPreview: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(plan.changes, id: \.proposed.control) { change in
                         HStack(alignment: .top) {
-                            Text(change.proposed.control.shortName).font(.body.monospaced().bold()).frame(width: 58, alignment: .leading)
+                            Text(change.proposed.control.shortName).font(.body.monospaced().bold()).frame(
+                                width: 58,
+                                alignment: .leading
+                            )
                             Text(summary(change.previous)).frame(maxWidth: .infinity, alignment: .leading)
                             Image(systemName: "arrow.right")
                             Text(summary(change.proposed)).frame(maxWidth: .infinity, alignment: .leading)
@@ -107,7 +111,8 @@ private struct BulkAssignmentPreview: View {
         case let .cycleParameter(id, values): title = "\(configuration.parameter(id)?.name ?? id.rawValue) 循环 \(values.count) 项"
         }
         let inverted = assignment.inverted ? " · 反向" : ""
-        let behavior = !assignment.control.isContinuous && assignment.target.parameterID != nil && !assignment.target.isTrigger
+        let behavior = !assignment.control.isContinuous && assignment.target.parameterID != nil && !assignment.target
+            .isTrigger
             ? " · \(assignment.buttonBehavior.displayName)" : ""
         return title + inverted + behavior
     }

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run native Mock acceptance in an explicit isolated Debug app, without user files/Keychain."""
+
 import argparse
 import json
 import os
@@ -29,16 +30,26 @@ def main():
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="case-", dir=root))
     settings = {
-        "version": 1, "enabled": True, "port": args.port,
-        "permissions": {"parameterWrite": True, "configurationWrite": args.configuration_write, "writesPerSecond": 1000},
+        "version": 1,
+        "enabled": True,
+        "port": args.port,
+        "permissions": {
+            "parameterWrite": True,
+            "configurationWrite": args.configuration_write,
+            "writesPerSecond": 1000,
+        },
     }
     (directory / "mcp-settings.json").write_text(json.dumps(settings))
     token = secrets.token_hex(32)
     environment = os.environ.copy()
-    environment.update({
-        "BCR_INTEGRATION_DIRECTORY": str(directory), "BCR_INTEGRATION_TOKEN": token,
-        "BCR_MCP_TOKEN": token, "BCR_MCP_URL": f"http://127.0.0.1:{args.port}/mcp",
-    })
+    environment.update(
+        {
+            "BCR_INTEGRATION_DIRECTORY": str(directory),
+            "BCR_INTEGRATION_TOKEN": token,
+            "BCR_MCP_TOKEN": token,
+            "BCR_MCP_URL": f"http://127.0.0.1:{args.port}/mcp",
+        }
+    )
     # Give this artifact a unique app/process identity so native automation cannot
     # accidentally resolve the production app with the same bundle identifier/name.
     bundle = directory / "Integration.app"
@@ -56,10 +67,13 @@ def main():
     info["CFBundleIdentifier"] = "dev.bcragentconsole.integration." + executable_name.lower()
     with info_path.open("wb") as destination:
         plistlib.dump(info, destination)
-    subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)],
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)], check=True, capture_output=True
+    )
     with (directory / "app.log").open("w") as log:
-        app = subprocess.Popen([str(executable), "--integration-test"], env=environment, stdout=log, stderr=subprocess.STDOUT)
+        app = subprocess.Popen(
+            [str(executable), "--integration-test"], env=environment, stdout=log, stderr=subprocess.STDOUT
+        )
         environment["BCR_INTEGRATION_APP_PID"] = str(app.pid)
         try:
             client = Client(environment["BCR_MCP_URL"], token)
@@ -76,8 +90,11 @@ def main():
             else:
                 raise RuntimeError("isolated listener did not start on the configured port")
             for flags in ([], ["--legacy"]):
-                subprocess.run([sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
-                               env=environment, check=True)
+                subprocess.run(
+                    [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
+                    env=environment,
+                    check=True,
+                )
             if args.script:
                 subprocess.run([sys.executable, str(args.script.resolve())], env=environment, check=True)
             print("Isolated native MCP acceptance passed; artifacts:", directory.relative_to(Path.cwd()))

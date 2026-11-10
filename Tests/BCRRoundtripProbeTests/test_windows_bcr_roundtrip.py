@@ -24,13 +24,15 @@ class BCRRoundtripTests(unittest.TestCase):
     def test_fragmented_identity_with_realtime_bytes(self):
         frames = probe.SysExFrames()
         frames.feed(bytes.fromhex("F0 00 20 32 F8 00"))
-        frames.feed(bytes.fromhex("15 02") + b"BCR2000 1.10" + b"\xF7")
+        frames.feed(bytes.fromhex("15 02") + b"BCR2000 1.10" + b"\xf7")
         self.assertIsNone(frames.partial)
-        self.assertEqual(probe.identity_info(frames.frames[0]), {"deviceID": 0, "model": "BCR2000", "identity": "BCR2000 1.10"})
+        self.assertEqual(
+            probe.identity_info(frames.frames[0]), {"deviceID": 0, "model": "BCR2000", "identity": "BCR2000 1.10"}
+        )
         self.assertIsNone(probe.identity_info(bytes.fromhex("F0 00 20 32 00 15 43 F7")))
 
     def test_malformed_or_unbounded_sysex_fails_visibly(self):
-        for data in (b"\xF0\x01\xF0", b"\xF0\x90", b"\xF0" + bytes(8192)):
+        for data in (b"\xf0\x01\xf0", b"\xf0\x90", b"\xf0" + bytes(8192)):
             with self.assertRaises(ValueError):
                 probe.SysExFrames().feed(data)
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native WP4 acceptance hook for tools/mcp_integration.py; never uses production files."""
+
 import copy
 import json
 import os
@@ -20,13 +21,13 @@ def quote(value):
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -37,11 +38,16 @@ def debug_failure(kind, value, trace):
     try:
         (directory / "ui-tree.txt").write_text(gui("return entire contents of window 1"))
         (directory / "windows.txt").write_text(gui("return properties of every window"))
-        (directory / "button-properties.txt").write_text(gui('return properties of every button of scroll area 2 of group 1 of window 1'))
-        (directory / "tree-shape.txt").write_text(gui('set entries to entire contents of window 1\nreturn {count of entries, class of item 1 of entries}'))
+        (directory / "button-properties.txt").write_text(
+            gui("return properties of every button of scroll area 2 of group 1 of window 1")
+        )
+        (directory / "tree-shape.txt").write_text(
+            gui("set entries to entire contents of window 1\nreturn {count of entries, class of item 1 of entries}")
+        )
     except RuntimeError:
         pass
     sys.__excepthook__(kind, value, trace)
+
 
 sys.excepthook = debug_failure
 
@@ -95,8 +101,9 @@ def go_to_path(path):
             return True
         gui('set frontmost to true\nkeystroke "g" using {command down, shift down}')
         return False
+
     wait_for(open_folder_sheet, "Go to Folder did not appear")
-    gui(f'set value of text field 1 of sheet 1 of sheet 1 of window 1 to {quote(path)}')
+    gui(f"set value of text field 1 of sheet 1 of sheet 1 of window 1 to {quote(path)}")
     # Path completion is asynchronous. Confirm only while the Go to Folder sheet exists.
     deadline = time.monotonic() + 4
     while time.monotonic() < deadline:
@@ -110,36 +117,42 @@ def go_to_path(path):
 def select_path(path, confirm):
     wait_for(lambda: gui("return count of sheets of window 1") != "0", "file panel did not appear")
     go_to_path(path)
-    gui(f'click button {quote(confirm)} of splitter group 1 of sheet 1 of window 1')
+    gui(f"click button {quote(confirm)} of splitter group 1 of sheet 1 of window 1")
 
 
-gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
+gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 binding_before = [entry["binding"] for entry in client.call("list_controls")]
 original = client.call("get_parameter", {"id": "arm.j1"})
 definition = client.parameter_definition("arm.j1")
 definition["name"] = "External J1"
 client.call("update_parameter", {"definition": definition})
-wait_for(lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "External J1",
-         "pristine parameter draft did not refresh")
-gui('''set frontmost to true
+wait_for(
+    lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "External J1",
+    "pristine parameter draft did not refresh",
+)
+gui("""set frontmost to true
 set focused of text field "名称" of scroll area 2 of group 1 of window 1 to true
 set value of text field "名称" of scroll area 2 of group 1 of window 1 to "LocalDraft"
-key code 48''')
+key code 48""")
 time.sleep(0.1)
 definition["name"] = "Concurrent J1"
 client.call("update_parameter", {"definition": definition})
-wait_for(lambda: "草稿冲突" in gui('return value of every static text of scroll area 2 of group 1 of window 1'),
-         "dirty draft did not show conflict")
+wait_for(
+    lambda: "草稿冲突" in gui("return value of every static text of scroll area 2 of group 1 of window 1"),
+    "dirty draft did not show conflict",
+)
 click_identifier("parameter.adoptExternal")
-wait_for(lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "Concurrent J1",
-         "external conflict resolution failed")
+wait_for(
+    lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "Concurrent J1",
+    "external conflict resolution failed",
+)
 print("Native parameter draft refresh/conflict/resolution passed.")
 
 click_identifier("configuration.export")
 wait_for(lambda: gui("return count of sheets of window 1") != "0", "save panel did not appear")
 go_to_path(directory)
-gui('''set value of text field 1 of splitter group 1 of sheet 1 of window 1 to "exported-config.json"
-click button "导出" of splitter group 1 of sheet 1 of window 1''')
+gui("""set value of text field 1 of splitter group 1 of sheet 1 of window 1 to "exported-config.json"
+click button "导出" of splitter group 1 of sheet 1 of window 1""")
 exported = directory / "exported-config.json"
 wait_for(lambda: exported.exists(), "export file not created")
 raw = json.loads(exported.read_text())
@@ -152,8 +165,10 @@ bad.write_text('{"version":999}')
 before = client.call("get_parameter", {"id": "arm.j1"})
 click_identifier("configuration.import")
 select_path(bad, "导入")
-wait_for(lambda: "失败" in gui("return value of every static text of group 1 of window 1"),
-         "invalid import did not show an error")
+wait_for(
+    lambda: "失败" in gui("return value of every static text of group 1 of window 1"),
+    "invalid import did not show an error",
+)
 if client.call("get_parameter", {"id": "arm.j1"}) != before:
     raise RuntimeError("invalid import replaced the parameter")
 
@@ -167,11 +182,14 @@ path = directory / "valid.json"
 path.write_text(json.dumps(candidate))
 click_identifier("configuration.import")
 select_path(path, "导入")
-wait_for(lambda: "替换当前全部参数与分配？" in gui("return entire contents of window 1"),
-         "import confirmation did not appear")
+wait_for(
+    lambda: "替换当前全部参数与分配？" in gui("return entire contents of window 1"),
+    "import confirmation did not appear",
+)
 gui('perform action "AXPress" of button 2 of sheet 1 of window 1')
-wait_for(lambda: client.call("get_parameter", {"id": "arm.j1"})["name"] == "Imported J1",
-         "valid import was not applied")
+wait_for(
+    lambda: client.call("get_parameter", {"id": "arm.j1"})["name"] == "Imported J1", "valid import was not applied"
+)
 if client.call("get_parameter", {"id": "arm.j1"})["value"] != 45:
     raise RuntimeError("import did not restore parameter default")
 if [entry["binding"] for entry in client.call("list_controls")] != binding_before:

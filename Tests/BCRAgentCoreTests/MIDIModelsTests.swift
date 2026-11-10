@@ -33,7 +33,7 @@ final class MIDIModelsTests: XCTestCase {
     func testNoteOnAndOffRoundTrip() throws {
         let messages: [MIDIVoiceMessage] = [
             .noteOn(channel: 2, number: 60, velocity: 100),
-            .noteOff(channel: 2, number: 60, velocity: 12),
+            .noteOff(channel: 2, number: 60, velocity: 12)
         ]
 
         for message in messages {

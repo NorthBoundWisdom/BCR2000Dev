@@ -83,10 +83,12 @@ public struct SurfaceEngine: Sendable {
         let midi = message.controlID
         let value = Self.controlValue(of: message)
 
-        let mode = hardwareMap.control(for: midi).flatMap { configuration.assignment(for: $0) }?.encoderMode ?? .absolute
+        let mode = hardwareMap.control(for: midi).flatMap { configuration.assignment(for: $0) }?
+            .encoderMode ?? .absolute
         let relative = mode != .absolute
         if !relative, let feedback = recentFeedback[midi], feedback.value == message.dataValue,
-           now.timeIntervalSince(feedback.sentAt) < echoWindow {
+           now.timeIntervalSince(feedback.sentAt) < echoWindow
+        {
             return []
         }
 
@@ -99,16 +101,23 @@ public struct SurfaceEngine: Sendable {
         }
         record(control, value: value, direction: .input, rawValue: message.dataValue)
         if control.isContinuous, let assignment = configuration.assignment(for: control),
-           case let .parameter(id) = assignment.target, let definition = configuration.parameter(id) {
+           case let .parameter(id) = assignment.target, let definition = configuration.parameter(id)
+        {
             if assignment.encoderMode != .absolute {
-                return applyRelative(control, delta: assignment.encoderMode.delta(value: message.dataValue, maximum: message.maximumDataValue), at: now)
+                return applyRelative(
+                    control,
+                    delta: assignment.encoderMode.delta(value: message.dataValue, maximum: message.maximumDataValue),
+                    at: now
+                )
             }
             if message.maximumDataValue == 16383 {
                 let raw = assignment.inverted ? 16383 - message.dataValue : message.dataValue
                 clearIncrementRemainders(for: id)
-                parameterValues[id] = definition.clamp(definition.minimum + Double(raw) / 16383 * (definition.maximum - definition.minimum))
+                parameterValues[id] = definition
+                    .clamp(definition.minimum + Double(raw) / 16383 * (definition.maximum - definition.minimum))
                 let bound = configuration.controls(targetingParameter: id)
-                let targets = feedbackDataValue(for: control) == message.dataValue ? bound.filter { $0 != control } : bound
+                let targets = feedbackDataValue(for: control) == message.dataValue ? bound
+                    .filter { $0 != control } : bound
                 return feedback(to: targets, at: now)
             }
         }
@@ -123,14 +132,21 @@ public struct SurfaceEngine: Sendable {
             return []
         }
         if configuration.assignment(for: control)?.encoderMode != nil,
-           configuration.assignment(for: control)?.encoderMode != .absolute {
+           configuration.assignment(for: control)?.encoderMode != .absolute
+        {
             return applyRelative(control, delta: delta, at: now)
         }
         if hardwareMap.midi(for: control)?.kind == .nrpn,
            let assignment = configuration.assignment(for: control), case let .parameter(id) = assignment.target,
-           let definition = configuration.parameter(id) {
+           let definition = configuration.parameter(id)
+        {
             let direction = assignment.inverted ? -1.0 : 1.0
-            return incrementParameter(control, id: id, movement: direction * Double(delta) * (definition.maximum - definition.minimum) / 16383, at: now)
+            return incrementParameter(
+                control,
+                id: id,
+                movement: direction * Double(delta) * (definition.maximum - definition.minimum) / 16383,
+                at: now
+            )
         }
         let current = Int(feedbackValue(for: control) ?? state(of: control).value)
         let next = UInt8(min(max(current + delta, 0), 127))
@@ -181,7 +197,9 @@ public struct SurfaceEngine: Sendable {
         feedback(to: configuration.assignments.map(\.control), at: now)
     }
 
-    public mutating func setActualFeedback(_ values: [ParameterID: Double], at now: Date = .now) throws -> [SurfaceEffect] {
+    public mutating func setActualFeedback(_ values: [ParameterID: Double],
+                                           at now: Date = .now) throws -> [SurfaceEffect]
+    {
         for (id, value) in values {
             guard configuration.parameter(id) != nil, value.isFinite else { throw MotionSafetyError("实际状态参数未知或数值无效") }
         }
@@ -220,7 +238,9 @@ public struct SurfaceEngine: Sendable {
         parameterValues[definition.id] = definition.clamp(definition.defaultValue)
     }
 
-    public mutating func updateParameter(_ definition: ParameterDefinition, at now: Date = .now) throws -> [SurfaceEffect] {
+    public mutating func updateParameter(_ definition: ParameterDefinition,
+                                         at now: Date = .now) throws -> [SurfaceEffect]
+    {
         try configuration.updateParameter(definition)
         return setParameter(definition.id, to: parameterValues[definition.id] ?? definition.defaultValue, at: now)
     }
@@ -268,7 +288,9 @@ public struct SurfaceEngine: Sendable {
         learnTarget = nil
     }
 
-    private mutating func learn(_ message: MIDIVoiceMessage, into target: BCRControlID, at now: Date) -> [SurfaceEffect] {
+    private mutating func learn(_ message: MIDIVoiceMessage, into target: BCRControlID,
+                                at now: Date) -> [SurfaceEffect]
+    {
         let midi = message.controlID
         let value = Self.controlValue(of: message)
 
@@ -342,7 +364,11 @@ public struct SurfaceEngine: Sendable {
         case let .stepParameter(id, step, wraps):
             guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
             guard let definition = configuration.parameter(id), let current = self.value(of: id) else { return [] }
-            return setParameter(id, to: steppedValue(current, definition: definition, step: step, wraps: wraps), at: now)
+            return setParameter(
+                id,
+                to: steppedValue(current, definition: definition, step: step, wraps: wraps),
+                at: now
+            )
 
         case let .setParameter(id, value):
             guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
@@ -350,7 +376,8 @@ public struct SurfaceEngine: Sendable {
 
         case let .cycleParameter(id, values):
             guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
-            guard let definition = configuration.parameter(id), let current = self.value(of: id), !values.isEmpty else { return [] }
+            guard let definition = configuration.parameter(id), let current = self.value(of: id),
+                  !values.isEmpty else { return [] }
             let previous = values.firstIndex { approximatelyEqual(definition.clamp($0), current) }
             let next = previous.map { ($0 + 1) % values.count } ?? 0
             return setParameter(id, to: values[next], at: now)
@@ -379,7 +406,9 @@ public struct SurfaceEngine: Sendable {
         return incrementParameter(control, id: id, movement: movement, at: now)
     }
 
-    private mutating func incrementParameter(_ control: BCRControlID, id: ParameterID, movement: Double, at now: Date) -> [SurfaceEffect] {
+    private mutating func incrementParameter(_ control: BCRControlID, id: ParameterID, movement: Double,
+                                             at now: Date) -> [SurfaceEffect]
+    {
         guard let definition = configuration.parameter(id), let current = value(of: id) else { return [] }
         let pending = incrementRemainders[control]
         let base = pending?.parameter == id && pending?.anchor == current ? pending!.value : current
@@ -431,7 +460,11 @@ public struct SurfaceEngine: Sendable {
             return assignment.inverted ? 127 - midi : midi
         case let .stepParameter(id, step, wraps):
             guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
-            return approximatelyEqual(steppedValue(current, definition: definition, step: step, wraps: wraps), current) ? 0 : 127
+            return approximatelyEqual(
+                steppedValue(current, definition: definition, step: step, wraps: wraps),
+                current
+            ) ?
+                0 : 127
         case let .setParameter(id, preset):
             guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
             return approximatelyEqual(definition.clamp(preset), current) ? 127 : 0
@@ -450,11 +483,13 @@ public struct SurfaceEngine: Sendable {
             return feedbackValue(for: control).map(UInt16.init)
         }
         if let assignment = configuration.assignment(for: control), case let .parameter(id) = assignment.target,
-           let definition = configuration.parameter(id) {
+           let definition = configuration.parameter(id)
+        {
             let useActual = control.isContinuous && definition.kind == .continuous && ledFeedbackSource == .actual
             guard let value = useActual ? actualFeedbackValues[id] : value(of: id) else { return nil }
             let bounded = min(max(useActual ? value : definition.clamp(value), definition.minimum), definition.maximum)
-            let raw = UInt16(((bounded - definition.minimum) / (definition.maximum - definition.minimum) * 16383).rounded())
+            let raw = UInt16(((bounded - definition.minimum) / (definition.maximum - definition.minimum) * 16383)
+                .rounded())
             return assignment.inverted ? 16383 - raw : raw
         }
         return feedbackValue(for: control).map { UInt16((Double($0) * 16383 / 127).rounded()) }
@@ -466,17 +501,27 @@ public struct SurfaceEngine: Sendable {
                 return nil
             }
             let raw = feedbackDataValue(for: control) ?? UInt16(value)
-            let presentation = hardwareMap.midi(for: control)?.kind == .nrpn ? UInt8((Double(raw) * 127 / 16383).rounded()) : value
+            let presentation = hardwareMap.midi(for: control)?
+                .kind == .nrpn ? UInt8((Double(raw) * 127 / 16383).rounded()) : value
             record(control, value: presentation, direction: .output, rawValue: raw)
             guard let midi = hardwareMap.midi(for: control) else {
                 return nil
             }
             recentFeedback[midi] = (raw, now)
-            return .send(midi.kind == .nrpn ? MIDI1UMPCodec.feedback14(control: midi, value: raw) : MIDI1UMPCodec.feedback(control: midi, value: value))
+            return .send(midi.kind == .nrpn ? MIDI1UMPCodec.feedback14(control: midi, value: raw) : MIDI1UMPCodec
+                .feedback(
+                    control: midi,
+                    value: value
+                ))
         }
     }
 
-    private mutating func record(_ control: BCRControlID, value: UInt8, direction: MIDIObservationDirection, rawValue: UInt16? = nil) {
+    private mutating func record(
+        _ control: BCRControlID,
+        value: UInt8,
+        direction: MIDIObservationDirection,
+        rawValue: UInt16? = nil
+    ) {
         var state = controls[control] ?? SurfaceControlState()
         state.value = value
         state.rawValue = rawValue ?? UInt16(value)

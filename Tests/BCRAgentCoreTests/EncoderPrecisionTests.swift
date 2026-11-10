@@ -17,25 +17,41 @@ final class EncoderPrecisionTests: XCTestCase {
     private let mirror = BCRControlID.encoder(row: 1, 1)
     private let time = Date(timeIntervalSinceReferenceDate: 900)
 
-    private func configuration(mode: EncoderMode = .absolute, step: Double = 0.5, inverted: Bool = false) -> SurfaceConfiguration {
+    private func configuration(mode: EncoderMode = .absolute, step: Double = 0.5,
+                               inverted: Bool = false) -> SurfaceConfiguration
+    {
         SurfaceConfiguration(name: "Precision", parameters: [
             .init(id: "angle", name: "Angle", minimum: -180, maximum: 180, defaultValue: 0)
         ], assignments: [
-            .init(control: encoder, target: .parameter("angle"), inverted: inverted, encoderMode: mode, encoderStep: step),
+            .init(
+                control: encoder,
+                target: .parameter("angle"),
+                inverted: inverted,
+                encoderMode: mode,
+                encoderStep: step
+            ),
             .init(control: mirror, target: .parameter("angle"))
         ])
     }
 
     private func session(mode: EncoderMode = .absolute, step: Double = 0.5, inverted: Bool = false) -> SurfaceSession {
-        SurfaceSession(hardwareDevice: PrecisionDevice(), configuration: configuration(mode: mode, step: step, inverted: inverted),
-                       now: { self.time }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        SurfaceSession(
+            hardwareDevice: PrecisionDevice(),
+            configuration: configuration(mode: mode, step: step, inverted: inverted),
+            now: { self.time },
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
     }
 
     func testRelativeEncodingNeutralSignsMagnitudeAnd14Bit() {
         for maximum: UInt16 in [127, 16383] {
             for mode in [EncoderMode.relative1, .relative2] {
                 for delta in [-63, -4, -1, 0, 1, 4, 63] {
-                    XCTAssertEqual(mode.delta(value: mode.encoded(delta: delta, maximum: maximum), maximum: maximum), delta)
+                    XCTAssertEqual(
+                        mode.delta(value: mode.encoded(delta: delta, maximum: maximum), maximum: maximum),
+                        delta
+                    )
                 }
             }
         }
@@ -73,7 +89,10 @@ final class EncoderPrecisionTests: XCTestCase {
         s.synchronize()
         s.turn(encoder, by: 1)
         XCTAssertEqual(s.engine.value(of: "angle"), -0.5)
-        try s.setAssignment(.init(control: encoder, target: .parameter("angle"), encoderMode: .relative1, encoderStep: 0.25), for: encoder)
+        try s.setAssignment(
+            .init(control: encoder, target: .parameter("angle"), encoderMode: .relative1, encoderStep: 0.25),
+            for: encoder
+        )
         s.turn(encoder, by: 1)
         XCTAssertEqual(s.engine.value(of: "angle"), -0.25)
         try s.setAssignment(.init(control: encoder, target: .parameter("angle")), for: encoder)
@@ -90,7 +109,8 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(results, [message])
         XCTAssertThrowsError(try MIDI1UMPCodec.encode(message))
         for invalid in [MIDIVoiceMessage.nrpn(channel: 16, number: 0, value: 0),
-                        .nrpn(channel: 0, number: 16384, value: 0), .nrpn(channel: 0, number: 0, value: 16384)] {
+                        .nrpn(channel: 0, number: 16384, value: 0), .nrpn(channel: 0, number: 0, value: 16384)]
+        {
             XCTAssertThrowsError(try MIDI1UMPCodec.encodeWords(invalid))
         }
     }
@@ -118,11 +138,15 @@ final class EncoderPrecisionTests: XCTestCase {
         ]
         for reset: MIDIVoiceMessage? in [nil, .controlChange(channel: 0, number: 100, value: 0),
                                          .controlChange(channel: 0, number: 101, value: 0),
-                                         .controlChange(channel: 0, number: 121, value: 0)] {
+                                         .controlChange(channel: 0, number: 121, value: 0)]
+        {
             var a = NRPNAssembler()
             for p in parts { XCTAssertNil(a.consume(p, at: time)) }
             if let reset { XCTAssertNil(a.consume(reset, at: time)) }
-            XCTAssertNil(a.consume(.controlChange(channel: 0, number: 38, value: 4), at: reset == nil ? time.addingTimeInterval(0.5) : time))
+            XCTAssertNil(a.consume(
+                .controlChange(channel: 0, number: 38, value: 4),
+                at: reset == nil ? time.addingTimeInterval(0.5) : time
+            ))
         }
         var a = NRPNAssembler()
         for p in parts { _ = a.consume(p, at: time) }
@@ -144,7 +168,10 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(s.mock.rawValues[encoder], 12287)
         s.turn(encoder, by: -1)
         XCTAssertEqual(s.engine.value(of: "angle")!, -180 + 12286.0 / 16383 * 360, accuracy: 1e-10)
-        XCTAssertEqual(s.mock.value(of: mirror), s.engine.configuration.parameter("angle")!.midiValue(for: s.engine.value(of: "angle")!))
+        XCTAssertEqual(
+            s.mock.value(of: mirror),
+            s.engine.configuration.parameter("angle")!.midiValue(for: s.engine.value(of: "angle")!)
+        )
     }
 
     func testNRPNRelativeModesAndActualFeedbackKeepTargetIndependent() async throws {
@@ -167,9 +194,13 @@ final class EncoderPrecisionTests: XCTestCase {
 
     func testNRPNEchoSuppressionUsesAll14Bits() throws {
         let midi = MIDIControlID(kind: .nrpn, channel: 0, number: 700)
-        var e = SurfaceEngine(hardwareMap: .init(entries: [.init(control: encoder, midi: midi)]), configuration: configuration())
+        var e = SurfaceEngine(
+            hardwareMap: .init(entries: [.init(control: encoder, midi: midi)]),
+            configuration: configuration()
+        )
         _ = e.setParameter("angle", to: 0, at: time)
-        XCTAssertTrue(e.handleInput(.nrpn(channel: 0, number: 700, value: 8192), at: time.addingTimeInterval(0.01)).isEmpty)
+        XCTAssertTrue(e.handleInput(.nrpn(channel: 0, number: 700, value: 8192), at: time.addingTimeInterval(0.01))
+            .isEmpty)
         _ = e.handleInput(.nrpn(channel: 0, number: 700, value: 8193), at: time.addingTimeInterval(0.02))
         XCTAssertEqual(e.value(of: "angle")!, -180 + 8193.0 / 16383 * 360, accuracy: 1e-10)
     }
@@ -190,13 +221,28 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(migrated.assignment(for: encoder)?.encoderMode, .absolute)
         for bad in [0.0, -1, .infinity, .nan] {
             var c = configuration()
-            XCTAssertThrowsError(try c.assign(.init(control: encoder, target: .parameter("angle"), encoderMode: .relative1, encoderStep: bad)))
+            XCTAssertThrowsError(try c.assign(.init(
+                control: encoder,
+                target: .parameter("angle"),
+                encoderMode: .relative1,
+                encoderStep: bad
+            )))
         }
         var c = configuration()
-        XCTAssertThrowsError(try c.assign(.init(control: .userButton(1), target: .parameter("angle"), encoderMode: .relative1)))
-        let map = HardwareMap(version: 3, entries: [.init(control: encoder, midi: .init(kind: .controlChange, channel: 0, number: 1))])
+        XCTAssertThrowsError(try c.assign(.init(
+            control: .userButton(1),
+            target: .parameter("angle"),
+            encoderMode: .relative1
+        )))
+        let map = HardwareMap(
+            version: 3,
+            entries: [.init(control: encoder, midi: .init(kind: .controlChange, channel: 0, number: 1))]
+        )
         XCTAssertEqual(try map.migrated().version, 4)
-        XCTAssertThrowsError(try JSONDecoder().decode(MIDIControlID.self, from: Data(#"{"kind":"nrpn","channel":0,"number":16384}"#.utf8)))
+        XCTAssertThrowsError(try JSONDecoder().decode(
+            MIDIControlID.self,
+            from: Data(#"{"kind":"nrpn","channel":0,"number":16384}"#.utf8)
+        ))
         let identity = MIDIControlID(kind: .nrpn, channel: 15, number: 16383)
         XCTAssertEqual(try JSONDecoder().decode(MIDIControlID.self, from: JSONEncoder().encode(identity)), identity)
     }
@@ -210,7 +256,10 @@ final class EncoderPrecisionTests: XCTestCase {
         try map.bind(mirror, to: .init(kind: .controlChange, channel: 1, number: 6))
         XCTAssertEqual(HardwareMap.mockPreset().entries.count, 108)
         for (offset, control) in BCRLayout.allControls.enumerated() {
-            XCTAssertEqual(HardwareMap.mockPreset().midi(for: control), .init(kind: .controlChange, channel: 0, number: offset + 1))
+            XCTAssertEqual(
+                HardwareMap.mockPreset().midi(for: control),
+                .init(kind: .controlChange, channel: 0, number: offset + 1)
+            )
         }
     }
 
@@ -221,7 +270,11 @@ final class EncoderPrecisionTests: XCTestCase {
                                saveHardwareMap: { maps.append($0) }, saveConfiguration: { _ in })
         s.selectSource(.hardware)
         XCTAssertTrue(s.beginLearning(at: encoder, format: .nrpn14))
-        let wire = MIDI1UMPCodec.decode(words: try MIDI1UMPCodec.encodeWords(.nrpn(channel: 2, number: 900, value: 8192)))
+        let wire = MIDI1UMPCodec.decode(words: try MIDI1UMPCodec.encodeWords(.nrpn(
+            channel: 2,
+            number: 900,
+            value: 8192
+        )))
         for p in wire.dropLast() { device.onMessages?([p]) }
         XCTAssertNil(s.engine.hardwareMap.midi(for: encoder))
         device.onMessages?([wire.last!])
@@ -231,13 +284,14 @@ final class EncoderPrecisionTests: XCTestCase {
         device.onMessages?([.controlChange(channel: 1, number: 99, value: 3)])
         XCTAssertEqual(s.engine.hardwareMap.midi(for: mirror), .init(kind: .controlChange, channel: 1, number: 99))
     }
+
     func testAll14BitPositionsRoundTripWithoutSevenBitLoss() throws {
         let midi = MIDIControlID(kind: .nrpn, channel: 0, number: 1234)
         var engine = SurfaceEngine(hardwareMap: .init(entries: [.init(control: encoder, midi: midi)]),
                                    configuration: configuration())
         engine.echoWindow = 0
         var mock = MockBCR2000(preset: engine.hardwareMap)
-        for raw in UInt16(0)...UInt16(16383) {
+        for raw in UInt16(0) ... UInt16(16383) {
             let message = MIDIVoiceMessage.nrpn(channel: 0, number: 1234, value: raw)
             mock.receive(message)
             let effects = engine.handleInput(message, at: time)
@@ -255,11 +309,20 @@ final class EncoderPrecisionTests: XCTestCase {
         try s.setMockNRPN(true, for: encoder)
         let service = AgentControlService(session: s)
         service.permissions.configurationWrite = true
-        let assignment = ControlAssignment(control: encoder, target: .parameter("angle"), encoderMode: .relative2, encoderStep: 0.125)
-        XCTAssertFalse(service.call("assign_control", arguments: .object(["assignment": try .encoded(assignment)])).isError)
+        let assignment = ControlAssignment(
+            control: encoder,
+            target: .parameter("angle"),
+            encoderMode: .relative2,
+            encoderStep: 0.125
+        )
+        XCTAssertFalse(service.call("assign_control", arguments: .object(["assignment": try .encoded(assignment)]))
+            .isError)
         s.turn(encoder, by: 1)
         XCTAssertEqual(s.engine.value(of: "angle"), 0.125)
-        XCTAssertFalse(service.call("set_parameter", arguments: .object(["id": .string("angle"), "value": .double(45.125)])).isError)
+        XCTAssertFalse(service.call(
+            "set_parameter",
+            arguments: .object(["id": .string("angle"), "value": .double(45.125)])
+        ).isError)
         XCTAssertEqual(s.mock.rawValues[encoder], UInt16(((45.125 + 180) / 360 * 16383).rounded()))
         var bad = try JSONValue.encoded(assignment).objectValue!
         bad["encoderMode"] = .string("invented")
@@ -276,9 +339,9 @@ final class EncoderPrecisionTests: XCTestCase {
             var definition = s.engine.configuration.parameter("angle")!
             definition.step = 1
             try s.updateParameter(definition)
-            for _ in 0..<4 { s.turn(encoder, by: 1) }
+            for _ in 0 ..< 4 { s.turn(encoder, by: 1) }
             XCTAssertEqual(s.engine.value(of: "angle"), 1)
-            for _ in 0..<4 { s.turn(encoder, by: -1) }
+            for _ in 0 ..< 4 { s.turn(encoder, by: -1) }
             XCTAssertEqual(s.engine.value(of: "angle"), 0)
             s.turn(encoder, by: 1) // pending 0.25
             s.setParameter("angle", to: 10)
@@ -287,8 +350,8 @@ final class EncoderPrecisionTests: XCTestCase {
             s.turn(encoder, by: 1)
             XCTAssertEqual(s.engine.value(of: "angle"), 10) // 10.5 ties down; old remainder must not leak.
             s.setParameter("angle", to: 180)
-            for _ in 0..<20 { s.turn(encoder, by: 1) }
-            for _ in 0..<4 { s.turn(encoder, by: -1) }
+            for _ in 0 ..< 20 { s.turn(encoder, by: 1) }
+            for _ in 0 ..< 4 { s.turn(encoder, by: -1) }
             XCTAssertEqual(s.engine.value(of: "angle"), 179) // no wind-up at endpoint.
         }
     }
@@ -300,14 +363,13 @@ final class EncoderPrecisionTests: XCTestCase {
         definition.step = 1
         try config.updateParameter(definition)
         var engine = SurfaceEngine(hardwareMap: map, configuration: config)
-        for _ in 0..<46 { _ = engine.adjust(encoder, by: 1, at: time) }
+        for _ in 0 ..< 46 { _ = engine.adjust(encoder, by: 1, at: time) }
         XCTAssertEqual(engine.value(of: "angle"), 1)
-        for _ in 0..<46 { _ = engine.adjust(encoder, by: -1, at: time) }
+        for _ in 0 ..< 46 { _ = engine.adjust(encoder, by: -1, at: time) }
         XCTAssertEqual(engine.value(of: "angle"), 0)
-        for _ in 0..<20 { _ = engine.adjust(encoder, by: 1, at: time) }
+        for _ in 0 ..< 20 { _ = engine.adjust(encoder, by: 1, at: time) }
         _ = try engine.assign(.init(control: encoder, target: .parameter("angle")), at: time)
         _ = engine.adjust(encoder, by: 1, at: time)
         XCTAssertEqual(engine.value(of: "angle"), 0)
     }
-
 }

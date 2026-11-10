@@ -73,6 +73,7 @@ for className in [kIOUSBDeviceClassName, "IOUSBHostDevice"] {
         targets.append(target)
     }
 }
+
 let report: [String: Any] = ["schemaVersion": 1, "readOnly": true, "targets": targets, "errors": failures]
 let encoded = try JSONSerialization.data(withJSONObject: report, options: [.sortedKeys])
 FileHandle.standardOutput.write(encoded)

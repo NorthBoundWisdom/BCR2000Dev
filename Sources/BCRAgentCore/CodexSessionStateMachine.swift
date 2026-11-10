@@ -57,7 +57,7 @@ public struct CodexSlotRuntimeState: Codable, Equatable, Sendable {
 public actor CodexSessionStateMachine {
     private var slots: [AgentSlotID: CodexSlotRuntimeState]
 
-    public init(slotIDs: [AgentSlotID] = (1...8).map { AgentSlotID($0) }) {
+    public init(slotIDs: [AgentSlotID] = (1 ... 8).map { AgentSlotID($0) }) {
         slots = Dictionary(
             uniqueKeysWithValues: slotIDs.map { slotID in
                 (slotID, CodexSlotRuntimeState())
@@ -77,7 +77,9 @@ public actor CodexSessionStateMachine {
         guard var state = slots[slotID] else {
             throw CodexSessionStateMachineError.slotMissing(slotID)
         }
-        guard state.phase == .idle || state.phase == .completed || state.phase == .interrupted || state.phase == .failed else {
+        guard state.phase == .idle || state.phase == .completed || state.phase == .interrupted || state
+            .phase == .failed
+        else {
             throw CodexSessionStateMachineError.invalidTransition(
                 slot: slotID,
                 from: state.phase,

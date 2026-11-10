@@ -45,7 +45,8 @@ final class WindowTitlebarView: NSView {
         // Traffic-light buttons retain their own click and accessibility behaviour.
         for kind in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             if let button = window.standardWindowButton(kind),
-               button.convert(button.bounds, to: nil).insetBy(dx: -4, dy: -4).contains(event.locationInWindow) {
+               button.convert(button.bounds, to: nil).insetBy(dx: -4, dy: -4).contains(event.locationInWindow)
+            {
                 return false
             }
         }

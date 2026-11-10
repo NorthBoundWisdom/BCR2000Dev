@@ -17,15 +17,15 @@ public enum BCRSection: String, Codable, Sendable, CaseIterable, Comparable {
 
     public var rowRange: ClosedRange<Int> {
         switch self {
-        case .pushEncoder, .pushEncoderButton: 1...4
-        case .button: 1...2
-        case .encoder: 1...3
-        case .userButton: 1...1
+        case .pushEncoder, .pushEncoderButton: 1 ... 4
+        case .button: 1 ... 2
+        case .encoder: 1 ... 3
+        case .userButton: 1 ... 1
         }
     }
 
     public var indexRange: ClosedRange<Int> {
-        self == .userButton ? 1...4 : 1...8
+        self == .userButton ? 1 ... 4 : 1 ... 8
     }
 
     /// Encoders send a continuous 7-bit value; every other section is a button.
@@ -157,7 +157,8 @@ public enum BCRLayout {
     public static func control(after control: BCRControlID) -> BCRControlID? {
         let sectionControls = controls(in: control.section)
         guard let position = sectionControls.firstIndex(of: control),
-              position + 1 < sectionControls.count else {
+              position + 1 < sectionControls.count
+        else {
             return nil
         }
         return sectionControls[position + 1]

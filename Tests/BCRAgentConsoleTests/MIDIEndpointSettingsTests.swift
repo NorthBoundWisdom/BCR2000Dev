@@ -36,6 +36,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         .init(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
               configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
     }
+
     func testChoicePersistsStopsOutputAndPreservesParameterValues() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -51,9 +52,11 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertEqual(midi.choices.last, choice)
         XCTAssertFalse(model.output.settings.enabled)
         XCTAssertEqual(model.engine.value(of: "arm.j1"), 45)
-        let saved = try JSONFileStore<MIDIEndpointSelection>(fileURL: directory.appending(path: "midi-endpoints.json")).load()
+        let saved = try JSONFileStore<MIDIEndpointSelection>(fileURL: directory.appending(path: "midi-endpoints.json"))
+            .load()
         XCTAssertEqual(saved, choice)
     }
+
     func testCorruptSettingsPreventStartUntilExplicitlyRepaired() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -69,6 +72,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         model.applyEndpointSelection(.init())
         XCTAssertEqual(midi.starts, 1)
     }
+
     func testIsolatedModeCannotConfigureOrStartRealMIDI() async {
         let midi = EndpointFakeMIDI()
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

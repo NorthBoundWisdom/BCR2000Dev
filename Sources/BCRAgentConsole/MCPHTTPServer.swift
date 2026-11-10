@@ -23,7 +23,8 @@ enum MCPHTTPParser {
             return nil
         }
         guard separator.lowerBound <= 16_384,
-              let text = String(data: data[..<separator.lowerBound], encoding: .utf8) else {
+              let text = String(data: data[..<separator.lowerBound], encoding: .utf8)
+        else {
             throw MCPHTTPParseError(reason: "HTTP 头无效")
         }
         let lines = text.components(separatedBy: "\r\n")
@@ -36,8 +37,10 @@ enum MCPHTTPParser {
             }
             let key = String(line[..<colon]).lowercased()
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-            guard !key.isEmpty, key.utf8.allSatisfy({ (97...122).contains($0) || (48...57).contains($0) || $0 == 45 }),
-                  !value.contains("\r"), !value.contains("\n"), headers[key] == nil else {
+            guard !key.isEmpty,
+                  key.utf8.allSatisfy({ (97 ... 122).contains($0) || (48 ... 57).contains($0) || $0 == 45 }),
+                  !value.contains("\r"), !value.contains("\n"), headers[key] == nil
+            else {
                 throw MCPHTTPParseError(reason: "HTTP 头重复或无效")
             }
             headers[key] = value
@@ -45,8 +48,9 @@ enum MCPHTTPParser {
         guard headers["transfer-encoding"] == nil else { throw MCPHTTPParseError(reason: "不支持 Transfer-Encoding") }
         let length: Int
         if let raw = headers["content-length"] {
-            guard !raw.isEmpty, raw.utf8.allSatisfy({ (48...57).contains($0) }),
-                  let parsed = Int(raw), parsed <= 1_048_576 else { throw MCPHTTPParseError(reason: "Content-Length 无效") }
+            guard !raw.isEmpty, raw.utf8.allSatisfy({ (48 ... 57).contains($0) }),
+                  let parsed = Int(raw),
+                  parsed <= 1_048_576 else { throw MCPHTTPParseError(reason: "Content-Length 无效") }
             length = parsed
         } else if request[0] == "POST" {
             throw MCPHTTPParseError(reason: "POST 必须包含 Content-Length")
@@ -173,24 +177,25 @@ final class MCPHTTPServer {
     }
 
     private func receive(_ id: UUID, accumulated: Data) {
-        connections[id]?.receive(minimumIncompleteLength: 1, maximumLength: 8_192) { [weak self] data, _, complete, error in
-            Task { @MainActor [weak self] in
-                guard let self, self.connections[id] != nil else { return }
-                if error != nil { self.close(id); return }
-                var buffer = accumulated
-                if let data { buffer.append(data) }
-                do {
-                    if let request = try MCPHTTPParser.parse(buffer) {
-                        self.timeouts.removeValue(forKey: id)?.cancel()
-                        self.respond(id, to: request)
-                    } else if complete { self.close(id) }
-                    else { self.receive(id, accumulated: buffer) }
-                } catch {
-                    self.router.service.record("http", succeeded: false, detail: error.localizedDescription)
-                    self.send(id, reply: MCPReply(status: 400))
+        connections[id]?
+            .receive(minimumIncompleteLength: 1, maximumLength: 8_192) { [weak self] data, _, complete, error in
+                Task { @MainActor [weak self] in
+                    guard let self, self.connections[id] != nil else { return }
+                    if error != nil { self.close(id); return }
+                    var buffer = accumulated
+                    if let data { buffer.append(data) }
+                    do {
+                        if let request = try MCPHTTPParser.parse(buffer) {
+                            self.timeouts.removeValue(forKey: id)?.cancel()
+                            self.respond(id, to: request)
+                        } else if complete { self.close(id) }
+                        else { self.receive(id, accumulated: buffer) }
+                    } catch {
+                        self.router.service.record("http", succeeded: false, detail: error.localizedDescription)
+                        self.send(id, reply: MCPReply(status: 400))
+                    }
                 }
             }
-        }
     }
 
     private func respond(_ id: UUID, to request: MCPHTTPRequest) {
@@ -204,13 +209,15 @@ final class MCPHTTPServer {
             guard let origin = URLComponents(string: raw), origin.scheme == "http",
                   ["127.0.0.1", "localhost"].contains(origin.host?.lowercased() ?? ""),
                   origin.port == Int(port), origin.user == nil, origin.password == nil,
-                  origin.query == nil, origin.fragment == nil, origin.path.isEmpty else {
+                  origin.query == nil, origin.fragment == nil, origin.path.isEmpty
+            else {
                 reject(id, status: 403, detail: "Origin 不允许")
                 return
             }
         }
         guard let authorization = request.headers["authorization"], authorization.prefix(7).lowercased() == "bearer ",
-              constantTimeEqual(String(authorization.dropFirst(7)), token) else {
+              constantTimeEqual(String(authorization.dropFirst(7)), token)
+        else {
             reject(id, status: 401, detail: "Bearer 鉴权失败")
             return
         }
@@ -222,7 +229,9 @@ final class MCPHTTPServer {
             return
         }
         guard request.method == "POST" else { send(id, reply: MCPReply(status: 405)); return }
-        guard request.headers["content-type"]?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else {
+        guard request.headers["content-type"]?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces)
+            .lowercased() == "application/json"
+        else {
             send(id, reply: MCPReply(status: 415)); return
         }
         let accept = request.headers["accept"]?.lowercased() ?? ""

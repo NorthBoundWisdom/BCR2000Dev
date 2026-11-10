@@ -34,7 +34,37 @@
 
 ## 2. 提交前检查
 
+### 自动格式化
+
+安装 SwiftFormat 和 Ruff（本轮验证版本为 SwiftFormat 0.64.4、Ruff 0.15.17），
+并运行项目配置来启用版本控制内的提交钩子：
+
 ```bash
+brew install swiftformat ruff
+python3 configs/setup_local_project.py
+```
+
+配置会将本仓库的 `core.hooksPath` 设置为 `configs/githooks`。已有自定义钩子的开发者
+应先合并自己的钩子；这是仓库本地配置，不影响其他仓库。
+
+```bash
+python3 configs/format_repo.py --all          # 全仓格式化（仅 Git 跟踪文件）
+python3 configs/format_repo.py --all --check  # 只检查，不写文件
+python3 configs/format_repo.py --staged       # 与提交钩子相同
+```
+
+Swift 使用 `configs/.swiftformat`（Swift 6、4 空格、120 列），Python 使用 `ruff.toml`。
+其他 UTF-8 文本统一 LF、行尾空白与文件末尾换行，保留 Markdown 的双空格换行。
+跳过 `configs/_vendor/`、二进制、符号链接及 Git 属性中标记为 `-text` 的文件。
+
+提交时只检查暂存内容；需要修正时自动格式化完全暂存的文件，然后中止提交，提示重新
+`git add` 并提交。部分暂存的文件若需要格式化，会在写入前停止，保留暂存区和工作区内容。
+缺少格式化工具或工具执行失败会阻止提交并显示原因。
+
+### 必需检查
+
+```bash
+python3 configs/format_repo.py --all --check
 swift test --build-path build/swiftpm            # 必须全部通过
 python3 -m unittest discover -s Tests/BuildWorkflowTests
 python3 configs/validate_repo_commands.py .

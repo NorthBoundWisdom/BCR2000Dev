@@ -4,6 +4,7 @@
 Default is read-only queries. --test-cc must name a previously learned ordinary
 absolute encoder, and requires a matching device identity and baseline snapshot.
 """
+
 import argparse
 import json
 import queue
@@ -17,8 +18,10 @@ from midi_feedback_probe import MacMIDI, read_cc
 
 def request_words(command):
     payload = request_bytes(command)[1:-1]
-    return [0x30000000 | len(payload) << 16 | payload[0] << 8 | payload[1],
-            payload[2] << 24 | payload[3] << 16 | payload[4] << 8 | payload[5]]
+    return [
+        0x30000000 | len(payload) << 16 | payload[0] << 8 | payload[1],
+        payload[2] << 24 | payload[3] << 16 | payload[4] << 8 | payload[5],
+    ]
 
 
 class MacBCR(MacMIDI):
@@ -26,11 +29,13 @@ class MacBCR(MacMIDI):
         super().__init__(output_api=output_api)
         self.raw_events = queue.Queue(maxsize=8192)
         self.frames = SysExFrames()
+
         def queued(data):
             try:
                 self.raw_events.put_nowait(data)
             except queue.Full:
                 self.events.dropped += 1
+
         self.raw_input = queued
 
     def pump(self):

@@ -37,7 +37,7 @@ final class AgentStateMachineTests: XCTestCase {
     }
 
     func testActiveStatesCanBeInterrupted() throws {
-        for slotNumber in 1...3 {
+        for slotNumber in 1 ... 3 {
             let slot = AgentSlotID(slotNumber)
             var machine = AgentStateMachine()
             try machine.transition(slot, to: .queued, statusText: "queued")

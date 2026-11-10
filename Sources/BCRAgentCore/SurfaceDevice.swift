@@ -49,7 +49,10 @@ public protocol SurfaceDevice: AnyObject {
 @MainActor
 public final class MockSurfaceDevice: SurfaceDevice {
     public private(set) var model: MockBCR2000
-    public let connection = MIDIConnectionSnapshot(connectedSource: "Mock BCR2000", connectedDestination: "Mock BCR2000")
+    public let connection = MIDIConnectionSnapshot(
+        connectedSource: "Mock BCR2000",
+        connectedDestination: "Mock BCR2000"
+    )
     public var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     public var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
 
@@ -63,7 +66,10 @@ public final class MockSurfaceDevice: SurfaceDevice {
     }
 
     public func configureModes(_ configuration: SurfaceConfiguration) {
-        model.encoderModes = Dictionary(uniqueKeysWithValues: configuration.assignments.map { ($0.control, $0.encoderMode) })
+        model.encoderModes = Dictionary(uniqueKeysWithValues: configuration.assignments.map { (
+            $0.control,
+            $0.encoderMode
+        ) })
     }
 
     public func setNRPN(_ enabled: Bool, for control: BCRControlID) throws {

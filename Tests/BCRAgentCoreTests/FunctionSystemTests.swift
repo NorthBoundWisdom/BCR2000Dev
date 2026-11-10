@@ -22,12 +22,14 @@ final class FunctionSystemTests: XCTestCase {
     private let button = BCRControlID.userButton(1)
 
     private func session(target: ControlTarget, definition: ParameterDefinition,
-                         clock: FunctionClock = FunctionClock()) -> SurfaceSession {
+                         clock: FunctionClock = FunctionClock()) -> SurfaceSession
+    {
         SurfaceSession(hardwareDevice: FunctionDevice(), configuration: SurfaceConfiguration(
             name: "Functions", parameters: [definition], assignments: [
                 .init(control: encoder, target: .parameter(definition.id)),
-                .init(control: button, target: target),
-            ]), now: { clock.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+                .init(control: button, target: target)
+            ]
+        ), now: { clock.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
     }
 
     func testStepButtonStopsAtLimitAndLEDReportsAvailabilityWhileHeld() async {
@@ -54,7 +56,10 @@ final class FunctionSystemTests: XCTestCase {
         XCTAssertEqual(s.engine.value(of: "x"), 0)
         s.release(button)
         clock.now.addTimeInterval(1)
-        XCTAssertNoThrow(try s.setAssignment(.init(control: button, target: .stepParameter(id: "x", step: -2, wraps: true)), for: button))
+        XCTAssertNoThrow(try s.setAssignment(
+            .init(control: button, target: .stepParameter(id: "x", step: -2, wraps: true)),
+            for: button
+        ))
         s.press(button)
         XCTAssertEqual(s.engine.value(of: "x"), 10)
         XCTAssertEqual(s.mock.value(of: button), 127)
@@ -94,8 +99,9 @@ final class FunctionSystemTests: XCTestCase {
         let definition = ParameterDefinition(id: "x", name: "X", minimum: 0, maximum: 100, step: 10)
         let s = SurfaceSession(hardwareDevice: FunctionDevice(), configuration: SurfaceConfiguration(
             name: "Snap", parameters: [definition], assignments: [
-                .init(control: encoder, target: .parameter("x")), .init(control: mirror, target: .parameter("x")),
-            ]), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+                .init(control: encoder, target: .parameter("x")), .init(control: mirror, target: .parameter("x"))
+            ]
+        ), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
         s.synchronize()
         s.turn(encoder, by: 12)
         XCTAssertEqual(s.engine.value(of: "x"), 10)
@@ -114,14 +120,20 @@ final class FunctionSystemTests: XCTestCase {
         XCTAssertEqual(irregular.clamp(-0.3), -0.3)
         XCTAssertEqual(irregular.clamp(1.09), 1.1)
         var seed: UInt64 = 0xBC2000
-        for _ in 0..<100 {
+        for _ in 0 ..< 100 {
             seed = seed &* 6_364_136_223_846_793_005 &+ 1
             let minimum = -Double(seed % 1000) / 13
             let span = Double((seed >> 12) % 1000 + 1) / 7
             let step = span / Double((seed >> 24) % 200 + 1)
-            let definition = ParameterDefinition(id: "x", name: "X", minimum: minimum, maximum: minimum + span, step: step)
+            let definition = ParameterDefinition(
+                id: "x",
+                name: "X",
+                minimum: minimum,
+                maximum: minimum + span,
+                step: step
+            )
             try definition.validate()
-            for midi in UInt8(0)...127 {
+            for midi in UInt8(0) ... 127 {
                 let canonical = definition.midiValue(for: definition.value(fromMIDI: midi))
                 XCTAssertEqual(definition.midiValue(for: definition.value(fromMIDI: canonical)), canonical)
             }
@@ -132,7 +144,7 @@ final class FunctionSystemTests: XCTestCase {
         let definition = ParameterDefinition(id: "x", name: "X", minimum: 0, maximum: 10, step: 1)
         for target in [
             ControlTarget.stepParameter(id: "x", step: 1, wraps: false),
-            .setParameter(id: "x", value: 3), .cycleParameter(id: "x", values: [0, 10]),
+            .setParameter(id: "x", value: 3), .cycleParameter(id: "x", values: [0, 10])
         ] {
             var configuration = SurfaceConfiguration(name: "Test", parameters: [definition])
             XCTAssertThrowsError(try configuration.assign(.init(control: encoder, target: target)))
@@ -142,10 +154,10 @@ final class FunctionSystemTests: XCTestCase {
             .stepParameter(id: "x", step: .infinity, wraps: true),
             .setParameter(id: "x", value: 11), .setParameter(id: "x", value: .nan),
             .cycleParameter(id: "x", values: []), .cycleParameter(id: "x", values: [1, 1]),
-            .cycleParameter(id: "x", values: [0.1, 0.2]), .cycleParameter(id: "x", values: [1, .nan]),
+            .cycleParameter(id: "x", values: [0.1, 0.2]), .cycleParameter(id: "x", values: [1, .nan])
         ] {
             XCTAssertThrowsError(try SurfaceConfiguration(name: "Test", parameters: [definition], assignments: [
-                .init(control: button, target: target),
+                .init(control: button, target: target)
             ]).validate())
         }
         for step in [0.0, -1, .nan, .infinity, Double.leastNonzeroMagnitude] {
@@ -157,7 +169,12 @@ final class FunctionSystemTests: XCTestCase {
         let s = SurfaceSession(hardwareDevice: FunctionDevice(), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
         s.setParameter("arm.j1", to: 37)
         s.setAgentFeedback(AgentSlotID(1), value: 96)
-        let plan = try BulkAssignmentPlan(configuration: s.engine.configuration, section: .encoder, row: 1, group: SurfaceConfiguration.robotArmGroup)
+        let plan = try BulkAssignmentPlan(
+            configuration: s.engine.configuration,
+            section: .encoder,
+            row: 1,
+            group: SurfaceConfiguration.robotArmGroup
+        )
         XCTAssertEqual(plan.changes.count, 8)
         XCTAssertEqual(plan.skippedParameters, 1)
         let map = s.engine.hardwareMap
@@ -167,15 +184,33 @@ final class FunctionSystemTests: XCTestCase {
         XCTAssertEqual(s.engine.hardwareMap, map)
         XCTAssertEqual(s.mock.value(of: .button(row: 1, 1)), 96)
         XCTAssertEqual(s.mock.value(of: encoder), s.mock.value(of: mirror))
-        let stale = try BulkAssignmentPlan(configuration: s.engine.configuration, section: .encoder, row: 2, group: SurfaceConfiguration.robotArmGroup)
+        let stale = try BulkAssignmentPlan(
+            configuration: s.engine.configuration,
+            section: .encoder,
+            row: 2,
+            group: SurfaceConfiguration.robotArmGroup
+        )
         var changed = s.engine.configuration.parameter("arm.j1")!
         changed.name = "Changed"
         try s.updateParameter(changed)
         let current = s.engine.configuration
-        XCTAssertThrowsError(try s.applyBulkAssignment(stale)) { XCTAssertEqual($0 as? ControlAssignmentPlanError, .stalePreview) }
+        XCTAssertThrowsError(try s.applyBulkAssignment(stale)) { XCTAssertEqual(
+            $0 as? ControlAssignmentPlanError,
+            .stalePreview
+        ) }
         XCTAssertEqual(s.engine.configuration, current)
-        XCTAssertThrowsError(try BulkAssignmentPlan(configuration: current, section: .encoder, row: 9, group: "missing"))
-        XCTAssertThrowsError(try BulkAssignmentPlan(configuration: current, section: .encoder, row: 1, group: "missing"))
+        XCTAssertThrowsError(try BulkAssignmentPlan(
+            configuration: current,
+            section: .encoder,
+            row: 9,
+            group: "missing"
+        ))
+        XCTAssertThrowsError(try BulkAssignmentPlan(
+            configuration: current,
+            section: .encoder,
+            row: 1,
+            group: "missing"
+        ))
     }
 
     func testOldConfigurationMigrationAndNewTargetsRoundTrip() async throws {
@@ -185,10 +220,17 @@ final class FunctionSystemTests: XCTestCase {
         XCTAssertEqual(decoded.version, SurfaceConfiguration.currentVersion)
         XCTAssertNil(decoded.parameter("arm.j1")?.step)
         let definition = ParameterDefinition(id: "x", name: "X", minimum: 0, maximum: 10, step: 0.5)
-        let targets: [ControlTarget] = [.stepParameter(id: "x", step: 0.5, wraps: true), .setParameter(id: "x", value: 3),
-                                       .cycleParameter(id: "x", values: [0, 3, 10])]
+        let targets: [ControlTarget] = [
+            .stepParameter(id: "x", step: 0.5, wraps: true),
+            .setParameter(id: "x", value: 3),
+            .cycleParameter(id: "x", values: [0, 3, 10])
+        ]
         for target in targets {
-            let configuration = SurfaceConfiguration(name: "Test", parameters: [definition], assignments: [.init(control: button, target: target)])
+            let configuration = SurfaceConfiguration(
+                name: "Test",
+                parameters: [definition],
+                assignments: [.init(control: button, target: target)]
+            )
             XCTAssertEqual(try JSONValue.encoded(configuration).decoded(SurfaceConfiguration.self), configuration)
         }
     }

@@ -73,9 +73,12 @@ public struct MCPToolResult: Equatable, Sendable {
     public var rpcValue: JSONValue {
         get throws {
             .object([
-                "content": .array([.object(["type": .string("text"), "text": .string(try JSONValue.object(["data": value]).jsonText)])]),
+                "content": .array([.object([
+                    "type": .string("text"),
+                    "text": .string(try JSONValue.object(["data": value]).jsonText)
+                ])]),
                 "structuredContent": .object(["data": value]),
-                "isError": .bool(isError),
+                "isError": .bool(isError)
             ])
         }
     }
@@ -92,14 +95,22 @@ public enum MCPToolCatalog {
         "agentWritable": boolean,
         "step": .object(["oneOf": .array([
             .object(["type": .string("number"), "exclusiveMinimum": .number(0)]),
-            .object(["type": .string("null")]),
-        ])]),
+            .object(["type": .string("null")])
+        ])])
     ], required: ["id", "name"])
     private static let control: JSONValue = .object(["oneOf": .array(BCRSection.allCases.map { section in
         schema([
             "section": .object(["const": .string(section.rawValue)]),
-            "row": .object(["type": .string("integer"), "minimum": .number(section.rowRange.lowerBound), "maximum": .number(section.rowRange.upperBound)]),
-            "index": .object(["type": .string("integer"), "minimum": .number(section.indexRange.lowerBound), "maximum": .number(section.indexRange.upperBound)]),
+            "row": .object([
+                "type": .string("integer"),
+                "minimum": .number(section.rowRange.lowerBound),
+                "maximum": .number(section.rowRange.upperBound)
+            ]),
+            "index": .object([
+                "type": .string("integer"),
+                "minimum": .number(section.indexRange.lowerBound),
+                "maximum": .number(section.indexRange.upperBound)
+            ])
         ], required: ["section", "row", "index"])
     })])
     private static let assignment: JSONValue = schema([
@@ -107,19 +118,34 @@ public enum MCPToolCatalog {
         "target": .object(["oneOf": .array([
             schema(["parameter": schema(["_0": string], required: ["_0"])], required: ["parameter"]),
             schema(["agentPrimaryAction": schema(["_0": schema(["rawValue": .object([
-                "type": .string("integer"), "minimum": .number(1), "maximum": .number(8),
+                "type": .string("integer"), "minimum": .number(1), "maximum": .number(8)
             ])], required: ["rawValue"])], required: ["_0"])], required: ["agentPrimaryAction"]),
             schema(["resetGroup": schema(["_0": string], required: ["_0"])], required: ["resetGroup"]),
-            schema(["stepParameter": schema(["id": string, "step": number, "wraps": boolean], required: ["id", "step", "wraps"])], required: ["stepParameter"]),
-            schema(["setParameter": schema(["id": string, "value": number], required: ["id", "value"])], required: ["setParameter"]),
+            schema(
+                ["stepParameter": schema(
+                    ["id": string, "step": number, "wraps": boolean],
+                    required: ["id", "step", "wraps"]
+                )],
+                required: ["stepParameter"]
+            ),
+            schema(
+                ["setParameter": schema(["id": string, "value": number], required: ["id", "value"])],
+                required: ["setParameter"]
+            ),
             schema(["cycleParameter": schema(["id": string, "values": .object([
-                "type": .string("array"), "items": number, "minItems": .number(1), "maxItems": .number(256),
-            ])], required: ["id", "values"])], required: ["cycleParameter"]),
+                "type": .string("array"), "items": number, "minItems": .number(1), "maxItems": .number(256)
+            ])], required: ["id", "values"])], required: ["cycleParameter"])
         ])]),
-        "buttonBehavior": .object(["type": .string("string"), "enum": .array([.string("toggle"), .string("momentary")])]),
+        "buttonBehavior": .object([
+            "type": .string("string"),
+            "enum": .array([.string("toggle"), .string("momentary")])
+        ]),
         "inverted": boolean,
-        "encoderMode": .object(["type": .string("string"), "enum": .array(EncoderMode.allCases.map { .string($0.rawValue) })]),
-        "encoderStep": .object(["type": .string("number"), "exclusiveMinimum": .number(0)]),
+        "encoderMode": .object([
+            "type": .string("string"),
+            "enum": .array(EncoderMode.allCases.map { .string($0.rawValue) })
+        ]),
+        "encoderStep": .object(["type": .string("number"), "exclusiveMinimum": .number(0)])
     ], required: ["control", "target", "buttonBehavior", "inverted"])
 
     private static func schema(_ properties: [String: JSONValue], required: [String] = []) -> JSONValue {
@@ -129,7 +155,7 @@ public enum MCPToolCatalog {
 
     public static let names = [
         "get_status", "list_parameters", "get_parameter", "set_parameter", "set_parameters",
-        "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter",
+        "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter"
     ]
 
     public static func inputSchema(for name: String) -> JSONValue {
@@ -139,11 +165,15 @@ public enum MCPToolCatalog {
         case "set_parameter": schema(["id": string, "value": number], required: ["id", "value"])
         case "set_parameters":
             schema(["values": .object(["type": .string("array"), "minItems": .number(1), "maxItems": .number(256),
-                                      "items": schema(["id": string, "value": number], required: ["id", "value"])])], required: ["values"])
+                                       "items": schema(["id": string, "value": number], required: ["id", "value"])])],
+            required: ["values"])
         case "nudge_parameter": schema(["id": string, "delta": number], required: ["id", "delta"])
         case "reset_group": schema(["group": string], required: ["group"])
         case "assign_control": schema(["assignment": assignment], required: ["assignment"])
-        case "create_parameter", "update_parameter": schema(["definition": parameterDefinition], required: ["definition"])
+        case "create_parameter", "update_parameter": schema(
+                ["definition": parameterDefinition],
+                required: ["definition"]
+            )
         default: schema([:])
         }
     }
@@ -157,7 +187,7 @@ public enum MCPToolCatalog {
                 "outputSchema": .object(["type": .string("object"), "properties": .object(["data": .object([:])]),
                                          "required": .array([.string("data")])]),
                 "annotations": .object(["readOnlyHint": .bool(name.hasPrefix("get_") || name.hasPrefix("list_")),
-                                         "openWorldHint": .bool(false)]),
+                                        "openWorldHint": .bool(false)])
             ])
         }
     }
@@ -173,6 +203,6 @@ public enum MCPToolCatalog {
         "list_controls": "列出物理控件、功能分配、MIDI 绑定与当前值。",
         "assign_control": "修改控件分配，需要配置写入权限。",
         "create_parameter": "创建参数，需要配置写入权限。",
-        "update_parameter": "更新参数定义，需要配置写入权限。",
+        "update_parameter": "更新参数定义，需要配置写入权限。"
     ]
 }

@@ -31,14 +31,20 @@ final class KeychainMCPCredentialStore: MCPCredentialStore {
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecSuccess {
             guard let data = result as? Data, let value = String(data: data, encoding: .utf8),
-                  value.utf8.count == 64, value.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+                  value.utf8.count == 64,
+                  value.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) })
+            else {
                 throw MCPHTTPParseError(reason: "Keychain 中的 MCP 凭据无效")
             }
             return value
         }
         guard status == errSecItemNotFound else { throw MCPHTTPParseError(reason: "读取 Keychain 失败（\(status)）") }
         var random = [UInt8](repeating: 0, count: 32)
-        let randomStatus = random.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, $0.count, $0.baseAddress!) }
+        let randomStatus = random.withUnsafeMutableBytes { SecRandomCopyBytes(
+            kSecRandomDefault,
+            $0.count,
+            $0.baseAddress!
+        ) }
         guard randomStatus == errSecSuccess else { throw MCPHTTPParseError(reason: "生成 MCP 凭据失败（\(randomStatus)）") }
         let value = random.map { String(format: "%02x", Int($0)) }.joined()
         var item = identity
@@ -58,11 +64,12 @@ struct MCPSettings: Codable, Equatable, Sendable {
 
     func validate() throws {
         guard version == 1 else { throw MCPHTTPParseError(reason: "MCP 设置版本不受支持") }
-        guard (1_024...65_535).contains(port) else { throw MCPHTTPParseError(reason: "MCP 端口必须为 1024–65535") }
+        guard (1_024 ... 65_535).contains(port) else { throw MCPHTTPParseError(reason: "MCP 端口必须为 1024–65535") }
         guard !permissions.configurationWrite || permissions.parameterWrite else {
             throw MCPHTTPParseError(reason: "只读模式不能开启配置写入")
         }
-        guard (1...10_000).contains(permissions.writesPerSecond) else { throw MCPHTTPParseError(reason: "写入限额必须为每秒 1–10000") }
+        guard (1 ... 10_000).contains(permissions.writesPerSecond)
+        else { throw MCPHTTPParseError(reason: "写入限额必须为每秒 1–10000") }
     }
 }
 
@@ -79,7 +86,8 @@ final class MCPController: ObservableObject {
     let integrationTest: Bool
 
     init(session: SurfaceSession, store: JSONFileStore<MCPSettings>,
-         credentials: any MCPCredentialStore = KeychainMCPCredentialStore(), integrationTest: Bool = false) {
+         credentials: any MCPCredentialStore = KeychainMCPCredentialStore(), integrationTest: Bool = false)
+    {
         self.store = store
         self.credentials = credentials
         self.integrationTest = integrationTest
@@ -172,8 +180,8 @@ final class MCPController: ObservableObject {
                 "jsonrpc": .string("2.0"), "id": .number(1), "method": .string("server/discover"),
                 "params": .object(["_meta": .object([
                     "io.modelcontextprotocol/protocolVersion": .string(MCPVersions.current),
-                    "io.modelcontextprotocol/clientCapabilities": .object([:]),
-                ])]),
+                    "io.modelcontextprotocol/clientCapabilities": .object([:])
+                ])])
             ])
             let command = "curl -X POST '\(endpoint)' -H 'Authorization: Bearer \(token)' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'MCP-Protocol-Version: \(MCPVersions.current)' -H 'Mcp-Method: server/discover' --data '\(try body.jsonText)'"
             NSPasteboard.general.clearContents()

@@ -27,8 +27,11 @@ public struct MIDIControlID: Hashable, Codable, Sendable, CustomStringConvertibl
         let kind = try container.decode(MIDIControlKind.self, forKey: .kind)
         let channel = try container.decode(Int.self, forKey: .channel)
         let number = try container.decode(Int.self, forKey: .number)
-        guard (0...15).contains(channel), (0...(kind == .nrpn ? 16383 : 127)).contains(number) else {
-            throw DecodingError.dataCorrupted(.init(codingPath: container.codingPath, debugDescription: "Invalid MIDI control channel/number"))
+        guard (0 ... 15).contains(channel), (0 ... (kind == .nrpn ? 16383 : 127)).contains(number) else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: container.codingPath,
+                debugDescription: "Invalid MIDI control channel/number"
+            ))
         }
         self.init(kind: kind, channel: UInt8(channel), number: UInt16(number))
     }
@@ -72,6 +75,7 @@ public enum MIDIVoiceMessage: Equatable, Sendable {
         if case let .nrpn(_, _, value) = self { return value }
         return UInt16(value)
     }
+
     public var maximumDataValue: UInt16 { if case .nrpn = self { return 16383 }; return 127 }
 
     public func validate() throws {
@@ -241,7 +245,11 @@ public enum MIDI1UMPCodec {
     public static func feedback(control: MIDIControlID, value: UInt8) -> MIDIVoiceMessage {
         switch control.kind {
         case .nrpn:
-            .nrpn(channel: control.channel, number: control.number, value: UInt16((Double(min(value, 127)) * 16383 / 127).rounded()))
+            .nrpn(
+                channel: control.channel,
+                number: control.number,
+                value: UInt16((Double(min(value, 127)) * 16383 / 127).rounded())
+            )
         case .controlChange:
             .controlChange(
                 channel: control.channel,
@@ -272,6 +280,7 @@ public struct NRPNAssembler: Sendable {
         var dataMSB: UInt8?
         var date: Date
     }
+
     private var channels: [UInt8: Selection] = [:]
     public init() {}
     public mutating func reset() { channels.removeAll() }

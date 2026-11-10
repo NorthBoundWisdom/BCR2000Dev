@@ -267,7 +267,10 @@ private final class CoreMIDITransport: @unchecked Sendable {
         var lastError: String?
         func resolve(_ endpoints: [NamedEndpoint], selectedID: Int32?) -> NamedEndpoint? {
             do {
-                let value = try MIDIEndpointPolicy.resolve(endpoints.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }, selectedID: selectedID)
+                let value = try MIDIEndpointPolicy.resolve(
+                    endpoints.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) },
+                    selectedID: selectedID
+                )
                 return endpoints.first { $0.id == value.id }
             } catch {
                 lastError = [lastError, error.localizedDescription].compactMap { $0 }.joined(separator: "；")
@@ -279,15 +282,24 @@ private final class CoreMIDITransport: @unchecked Sendable {
         if let selectedSource {
             let status = MIDIPortConnectSource(inputPort, selectedSource.endpoint, nil)
             if status == noErr { connectedSources = [selectedSource.endpoint] }
-            else { lastError = CoreMIDIServiceError.operation(name: "连接 \(selectedSource.name)", status: status).localizedDescription }
+            else {
+                lastError = CoreMIDIServiceError.operation(name: "连接 \(selectedSource.name)", status: status)
+                    .localizedDescription
+            }
         }
         if let selectedDestination { destination = selectedDestination.endpoint }
         var snapshot = MIDIConnectionSnapshot(
             sourceNames: sources.map(\.name), destinationNames: destinations.map(\.name),
             connectedSource: connectedSources.isEmpty ? nil : selectedSource?.name,
-            connectedDestination: destination == 0 ? nil : selectedDestination?.name, lastError: lastError)
-        snapshot.sourceEndpoints = sources.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
-        snapshot.destinationEndpoints = destinations.map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
+            connectedDestination: destination == 0 ? nil : selectedDestination?.name, lastError: lastError
+        )
+        snapshot.sourceEndpoints = sources
+            .map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
+        snapshot.destinationEndpoints = destinations.map { .init(
+            id: $0.id,
+            name: $0.name,
+            availabilityKnown: $0.availabilityKnown
+        ) }
         snapshot.connectedSourceID = connectedSources.isEmpty ? nil : selectedSource?.id
         snapshot.connectedDestinationID = destination == 0 ? nil : selectedDestination?.id
         connectionHandler(snapshot)
@@ -304,14 +316,15 @@ private final class CoreMIDITransport: @unchecked Sendable {
         count: () -> Int,
         endpointAt: (Int) -> MIDIEndpointRef
     ) -> [NamedEndpoint] {
-        (0..<count()).compactMap { index in
+        (0 ..< count()).compactMap { index in
             let endpoint = endpointAt(index)
             var id: Int32 = 0
             var offline: Int32 = 0
             let availabilityStatus = MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline)
             guard endpoint != 0,
                   MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &id) == noErr, id != 0,
-                  CoreMIDIEndpointAvailability.isUsable(status: availabilityStatus, offline: offline) else {
+                  CoreMIDIEndpointAvailability.isUsable(status: availabilityStatus, offline: offline)
+            else {
                 return nil
             }
             return NamedEndpoint(
@@ -350,7 +363,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             .advanced(by: packetOffset)
             .assumingMemoryBound(to: MIDIEventPacket.self)
 
-        for _ in 0..<eventList.pointee.numPackets {
+        for _ in 0 ..< eventList.pointee.numPackets {
             let words = UnsafeRawPointer(packet)
                 .advanced(by: wordsOffset)
                 .assumingMemoryBound(to: UInt32.self)

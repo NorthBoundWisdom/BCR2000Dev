@@ -57,7 +57,7 @@ final class CodexSessionCoordinatorTests: XCTestCase {
                             "id": .string("model-hidden"),
                             "displayName": .string("Model Hidden"),
                             "isDefault": .bool(false),
-                            "hidden": .bool(true),
+                            "hidden": .bool(true)
                         ])
                     ]),
                     "nextCursor": .string("cursor-2")
@@ -80,7 +80,7 @@ final class CodexSessionCoordinatorTests: XCTestCase {
                             "supportedReasoningEfforts": .array([.string("medium")]),
                             "metadata": .object(["provider": .string("openai-beta")])
                         ])
-                    ]),
+                    ])
                 ])
             ).encodeJSON()
         )

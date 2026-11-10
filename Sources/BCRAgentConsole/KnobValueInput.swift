@@ -51,7 +51,10 @@ final class KnobValueInputView: NSView {
         if event.phase == .began || (event.phase == [] && event.momentumPhase == []) {
             onTouch()
         }
-        emitSteps(from: event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.25 : 1), accumulator: &scrollRemainder)
+        emitSteps(
+            from: event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 0.25 : 1),
+            accumulator: &scrollRemainder
+        )
     }
 
     override func mouseDown(with event: NSEvent) {

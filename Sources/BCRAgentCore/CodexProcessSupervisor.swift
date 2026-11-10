@@ -303,7 +303,7 @@ public actor CodexProcessSupervisor {
         if isStdout {
             while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
                 let line = String(stdoutBuffer[..<newlineIndex])
-                stdoutBuffer.removeSubrange(stdoutBuffer.startIndex...newlineIndex)
+                stdoutBuffer.removeSubrange(stdoutBuffer.startIndex ... newlineIndex)
                 emitStdout(line.trimmingCharacters(in: .newlines))
             }
             if stdoutBuffer.count > maxLineLength {
@@ -316,7 +316,7 @@ public actor CodexProcessSupervisor {
 
         while let newlineIndex = stderrBuffer.firstIndex(of: "\n") {
             let line = String(stderrBuffer[..<newlineIndex])
-            stderrBuffer.removeSubrange(stderrBuffer.startIndex...newlineIndex)
+            stderrBuffer.removeSubrange(stderrBuffer.startIndex ... newlineIndex)
             emitStderr(line.trimmingCharacters(in: .newlines))
         }
         if stderrBuffer.count > maxLineLength {

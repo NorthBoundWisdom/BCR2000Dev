@@ -23,6 +23,7 @@ public final class MCPRouter {
         var initialized: Bool
         var seen: Date
     }
+
     private var sessions: [String: LegacySession] = [:]
     private let now: @MainActor () -> Date
     private let serverInfo: JSONValue = .object(["name": .string("bcr-console"), "version": .string("1.0.0")])
@@ -49,7 +50,8 @@ public final class MCPRouter {
         catch { return rpcError(-32700, "Parse error", id: .null, status: 400) }
         guard let object = message.objectValue,
               object["jsonrpc"] == .string("2.0"),
-              let method = object["method"]?.stringValue, !method.isEmpty else {
+              let method = object["method"]?.stringValue, !method.isEmpty
+        else {
             return rpcError(-32600, "Invalid Request", id: .null, status: 400)
         }
         let requestID = object["id"]
@@ -71,17 +73,19 @@ public final class MCPRouter {
         if modern {
             guard let declaredVersion, declaredVersion == headerVersion,
                   headers["mcp-method"] == method,
-                  meta?["io.modelcontextprotocol/clientCapabilities"]?.objectValue != nil else {
+                  meta?["io.modelcontextprotocol/clientCapabilities"]?.objectValue != nil
+            else {
                 return rpcError(-32020, "Required MCP metadata or mirrored headers do not match", id: id, status: 400)
             }
             guard declaredVersion == MCPVersions.current else {
                 return rpcError(-32022, "Unsupported protocol version", id: id, status: 400,
-                             data: .object(["supported": .array(MCPVersions.supported.map(JSONValue.string)),
-                                            "requested": .string(declaredVersion)]))
+                                data: .object(["supported": .array(MCPVersions.supported.map(JSONValue.string)),
+                                               "requested": .string(declaredVersion)]))
             }
             if method == "tools/call" {
                 guard let name = params["name"]?.stringValue,
-                      decodeHeader(headers["mcp-name"]) == name else {
+                      decodeHeader(headers["mcp-name"]) == name
+                else {
                     return rpcError(-32020, "Mcp-Name does not match params.name", id: id, status: 400)
                 }
             }
@@ -90,7 +94,8 @@ public final class MCPRouter {
                   params["protocolVersion"]?.stringValue != nil,
                   let info = params["clientInfo"]?.objectValue,
                   info["name"]?.stringValue != nil, info["version"]?.stringValue != nil,
-                  params["capabilities"]?.objectValue != nil else {
+                  params["capabilities"]?.objectValue != nil
+            else {
                 return rpcError(-32602, "Invalid initialize parameters", id: id)
             }
             expireSessions()
@@ -101,12 +106,17 @@ public final class MCPRouter {
             return MCPReply(body: response(id: id, result: .object([
                 "protocolVersion": .string(MCPVersions.legacy),
                 "serverInfo": serverInfo,
-                "capabilities": .object(["tools": .object(["listChanged": .bool(false)])]),
+                "capabilities": .object(["tools": .object(["listChanged": .bool(false)])])
             ])), sessionID: sessionID)
         } else {
             expireSessions()
             guard let sessionID = headers["mcp-session-id"], var session = sessions[sessionID] else {
-                return rpcError(-32000, "Unknown or missing MCP session", id: id, status: headers["mcp-session-id"] == nil ? 400 : 404)
+                return rpcError(
+                    -32000,
+                    "Unknown or missing MCP session",
+                    id: id,
+                    status: headers["mcp-session-id"] == nil ? 400 : 404
+                )
             }
             guard headerVersion == MCPVersions.legacy else {
                 return rpcError(-32602, "MCP-Protocol-Version must match the initialized session", id: id, status: 400)
@@ -130,7 +140,7 @@ public final class MCPRouter {
             result = .object([
                 "supportedVersions": .array(MCPVersions.supported.map(JSONValue.string)),
                 "capabilities": .object(["tools": .object([:])]),
-                "instructions": .string("Local BCR parameters; writes obey permissions, agentWritable and rate limits."),
+                "instructions": .string("Local BCR parameters; writes obey permissions, agentWritable and rate limits.")
             ])
         case "ping": result = .object([:])
         case "tools/list": result = .object(["tools": .array(MCPToolCatalog.tools)])
@@ -149,7 +159,10 @@ public final class MCPRouter {
     private func response(id: JSONValue, result: JSONValue, modern: Bool = false) -> JSONValue {
         guard var result = result.objectValue else {
             return .object(["jsonrpc": .string("2.0"), "id": id,
-                            "error": .object(["code": .number(-32603), "message": .string("Result must be an object")])])
+                            "error": .object([
+                                "code": .number(-32603),
+                                "message": .string("Result must be an object")
+                            ])])
         }
         if modern {
             result["resultType"] = .string("complete")
@@ -158,7 +171,9 @@ public final class MCPRouter {
         return .object(["jsonrpc": .string("2.0"), "id": id, "result": .object(result)])
     }
 
-    private func rpcError(_ code: Int, _ message: String, id: JSONValue, status: Int = 200, data: JSONValue? = nil) -> MCPReply {
+    private func rpcError(_ code: Int, _ message: String, id: JSONValue, status: Int = 200,
+                          data: JSONValue? = nil) -> MCPReply
+    {
         var error: [String: JSONValue] = ["code": .number(code), "message": .string(message)]
         if let data { error["data"] = data }
         return MCPReply(status: status, body: .object(["jsonrpc": .string("2.0"), "id": id, "error": .object(error)]))
@@ -167,9 +182,12 @@ public final class MCPRouter {
     private func decodeHeader(_ value: String?) -> String? {
         guard let value else { return nil }
         if value.hasPrefix("=?base64?"), value.hasSuffix("?=") {
-            return Data(base64Encoded: String(value.dropFirst(9).dropLast(2))).flatMap { String(data: $0, encoding: .utf8) }
+            return Data(base64Encoded: String(value.dropFirst(9).dropLast(2))).flatMap { String(
+                data: $0,
+                encoding: .utf8
+            ) }
         }
-        return value.unicodeScalars.allSatisfy { (0x21...0x7e).contains($0.value) } ? value : nil
+        return value.unicodeScalars.allSatisfy { (0x21 ... 0x7e).contains($0.value) } ? value : nil
     }
 
     private func expireSessions() {

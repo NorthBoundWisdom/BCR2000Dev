@@ -15,7 +15,10 @@ final class FunctionEditorTests: XCTestCase {
         XCTAssertEqual(model.configuration, before)
         XCTAssertEqual(model.notice?.level, .error)
         model.setCycleValues("-90，0，90", parameter: "arm.j1", for: control)
-        XCTAssertEqual(model.configuration.assignment(for: control)?.target, .cycleParameter(id: "arm.j1", values: [-90, 0, 90]))
+        XCTAssertEqual(
+            model.configuration.assignment(for: control)?.target,
+            .cycleParameter(id: "arm.j1", values: [-90, 0, 90])
+        )
         let valid = model.configuration
         model.setCycleValues("0, 0", parameter: "arm.j1", for: control)
         XCTAssertEqual(model.configuration, valid)
@@ -25,7 +28,11 @@ final class FunctionEditorTests: XCTestCase {
         let stores = ConsoleStores.temporary()
         defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
         let model = ConsoleViewModel(stores: stores, startsMIDI: false)
-        let plan = try XCTUnwrap(model.bulkAssignmentPlan(section: .encoder, row: 1, group: SurfaceConfiguration.robotArmGroup))
+        let plan = try XCTUnwrap(model.bulkAssignmentPlan(
+            section: .encoder,
+            row: 1,
+            group: SurfaceConfiguration.robotArmGroup
+        ))
         model.setParameter("arm.j1", to: 40)
         XCTAssertTrue(model.applyBulkAssignment(plan))
         XCTAssertEqual(model.engine.value(of: "arm.j1"), 40)

@@ -54,8 +54,14 @@ class BuildConfigurationTests(unittest.TestCase):
         marker.parent.mkdir()
         marker.write_text("old configuration")
         os.utime(marker, (1, 1))
-        with patch.object(setup_local_project, "REPO_ROOT", self.root), patch.object(setup_local_project.subprocess, "run"):
+        with (
+            patch.object(setup_local_project, "REPO_ROOT", self.root),
+            patch.object(setup_local_project.subprocess, "run") as command,
+        ):
             self.assertEqual(setup_local_project.main(), 0)
+            command.assert_any_call(
+                ["git", "config", "--local", "core.hooksPath", "configs/githooks"], cwd=self.root, check=True
+            )
         self.assertEqual(local.read_text(), original)
         self.assertGreater(marker.stat().st_mtime, 1)
         self.assertEqual(json.loads(marker.read_text())["app_build"]["MARKETING_VERSION"], "2.3.4")
@@ -63,7 +69,9 @@ class BuildConfigurationTests(unittest.TestCase):
     def test_invalid_versions_cannot_escape_artifact_directory(self):
         for value in ("../../outside", "1.0.0/other", "1.0.0\n", "1.0.0;command", "v1.0.0", 1):
             with self.subTest(value=value):
-                (self.root / "configs/app_build.json").write_text(json.dumps({"MARKETING_VERSION": value, "ARCHIVE_ID": "1"}))
+                (self.root / "configs/app_build.json").write_text(
+                    json.dumps({"MARKETING_VERSION": value, "ARCHIVE_ID": "1"})
+                )
                 with self.assertRaises(ValueError):
                     load_app_build_settings(self.root)
 
@@ -75,7 +83,9 @@ class BuildConfigurationTests(unittest.TestCase):
                     load_app_build_settings(self.root)
 
     def test_local_paths_expand_without_shell_execution(self):
-        (self.root / "build.local.json").write_text(json.dumps({"environment": {"SDK": "${REPO_ROOT}/sdk"}, "path": ["$SDK/bin"]}))
+        (self.root / "build.local.json").write_text(
+            json.dumps({"environment": {"SDK": "${REPO_ROOT}/sdk"}, "path": ["$SDK/bin"]})
+        )
         environment = load_build_environment(self.root, environ={"PATH": "/usr/bin"})
         self.assertEqual(environment["PATH"], f"{self.root}/sdk/bin:/usr/bin")
 
@@ -96,7 +106,18 @@ class ReleaseIntegrityTests(unittest.TestCase):
         for extension in ("zip", "dmg"):
             asset = self.root / f"BCRAgentConsole_v1.2.3_1_macOS_universal_ad-hoc.{extension}"
             asset.write_bytes(b"release payload")
-            proof = {"schema_version": 1, "asset": asset.name, "version": "1.2.3", "build": "1", "commit": "commit-a", "dirty": False, "architecture": "universal", "signature": "ad-hoc", "notarized": False, "sha256": macos_workflow._sha(asset)}
+            proof = {
+                "schema_version": 1,
+                "asset": asset.name,
+                "version": "1.2.3",
+                "build": "1",
+                "commit": "commit-a",
+                "dirty": False,
+                "architecture": "universal",
+                "signature": "ad-hoc",
+                "notarized": False,
+                "sha256": macos_workflow._sha(asset),
+            }
             asset.with_suffix(asset.suffix + ".build.json").write_text(json.dumps(proof))
             self.assets.append(asset)
 
@@ -153,7 +174,9 @@ class ReleaseIntegrityTests(unittest.TestCase):
                 macos_workflow._notarize(Path("app.zip"), "test-profile")
 
     def test_ambiguous_signing_identity_is_rejected(self):
-        identities = '  1) AAA "Developer ID Application: One (TEAMONE)"\n  2) BBB "Developer ID Application: Two (TEAMTWO)"'
+        identities = (
+            '  1) AAA "Developer ID Application: One (TEAMONE)"\n  2) BBB "Developer ID Application: Two (TEAMTWO)"'
+        )
         with patch.dict(os.environ, {}, clear=True), patch.object(macos_workflow, "_run", return_value=identities):
             with self.assertRaisesRegex(ValueError, "exactly one"):
                 macos_workflow._sign(Path("app.app"), "developer-id", None)

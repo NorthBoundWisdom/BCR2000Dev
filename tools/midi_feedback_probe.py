@@ -4,6 +4,7 @@
 No SysEx, preset writes, drivers or third-party Python packages. Device input learns
 one absolute seven-bit CC encoder; output is opt-in with --mode test.
 """
+
 import argparse
 import ctypes as C
 from dataclasses import dataclass
@@ -51,8 +52,7 @@ def ump_cc(message, protocol):
     if protocol == 1:
         return [0x20B00000 | channel << 16 | message.controller << 8 | message.value]
     if protocol == 2:
-        return [0x40B00000 | channel << 16 | message.controller << 8,
-                message.value * 0xFFFFFFFF // 127]
+        return [0x40B00000 | channel << 16 | message.controller << 8, message.value * 0xFFFFFFFF // 127]
     raise ValueError("UMP protocol must be 1 or 2")
 
 
@@ -100,14 +100,21 @@ def validate_output(port, allow_other=False, explicit_input=None, explicit_outpu
 
 
 class InputCaps(C.Structure):
-    _fields_ = [("manufacturer", U16), ("product", U16), ("version", U32),
-                ("name", U16 * 32), ("support", U32)]
+    _fields_ = [("manufacturer", U16), ("product", U16), ("version", U32), ("name", U16 * 32), ("support", U32)]
 
 
 class OutputCaps(C.Structure):
-    _fields_ = [("manufacturer", U16), ("product", U16), ("version", U32),
-                ("name", U16 * 32), ("technology", U16), ("voices", U16),
-                ("notes", U16), ("channel_mask", U16), ("support", U32)]
+    _fields_ = [
+        ("manufacturer", U16),
+        ("product", U16),
+        ("version", U32),
+        ("name", U16 * 32),
+        ("technology", U16),
+        ("voices", U16),
+        ("notes", U16),
+        ("channel_mask", U16),
+        ("support", U32),
+    ]
 
 
 class WinMM:
@@ -137,18 +144,26 @@ class WinMM:
         result = []
         for index in range(getattr(self.api, prefix + "GetNumDevs")()):
             caps = caps_type()
-            self.check(getattr(self.api, prefix + "GetDevCapsW")(index, C.byref(caps), C.sizeof(caps)), "Get port", input)
+            self.check(
+                getattr(self.api, prefix + "GetDevCapsW")(index, C.byref(caps), C.sizeof(caps)), "Get port", input
+            )
             result.append(Port(index, bytes(caps.name).decode("utf-16-le").split("\0")[0]))
         return result
 
     def open(self, input_port, output_port=None):
         callback_type = C.WINFUNCTYPE(None, PTR, U32, UPTR, UPTR, UPTR)
+
         def received(handle, message, instance, data, timestamp):
             # No WinMM calls, printing or waits in the driver callback.
             self.handle_native_event(message, int(data))
+
         self.callback = callback_type(received)  # Retained until midiInClose succeeds.
         handle = PTR()
-        self.check(self.api.midiInOpen(C.byref(handle), input_port.id, C.cast(self.callback, PTR).value, 0, 0x30000), "Open input", True)
+        self.check(
+            self.api.midiInOpen(C.byref(handle), input_port.id, C.cast(self.callback, PTR).value, 0, 0x30000),
+            "Open input",
+            True,
+        )
         self.input = handle
         self.check(self.api.midiInStart(handle), "Start input", True)
         if output_port:
@@ -204,12 +219,12 @@ def cc_bytes(data):
     while index < len(data):
         status = data[index]
         if status & 0xF0 == 0xB0 and index + 2 < len(data):
-            result.append(status | data[index+1] << 8 | data[index+2] << 16)
+            result.append(status | data[index + 1] << 8 | data[index + 2] << 16)
             index += 3
         elif 0x80 <= status < 0xF0:
             index += 2 if status & 0xF0 in (0xC0, 0xD0) else 3
         elif status == 0xF0:
-            end = data.find(b"\xF7", index + 1)
+            end = data.find(b"\xf7", index + 1)
             index = len(data) if end < 0 else end + 1
         else:
             index += 1
@@ -222,6 +237,7 @@ def mac_cc_packets(packet_list, offset, aligned):
 
 class MacMIDI:
     """Plain C callback boundary, independent of the Swift app/actors/UI."""
+
     def __init__(self, packet_repeats=1, output_api="legacy"):
         if not 1 <= packet_repeats <= 16:
             raise ValueError("packet_repeats must be 1..16")
@@ -295,7 +311,9 @@ class MacMIDI:
             if availability_status == 0 and offline.value:
                 continue
             if availability_status == -10835:
-                self.availability_notes.append({"direction": "input" if input else "output", "index": index, "availability": "unknown"})
+                self.availability_notes.append(
+                    {"direction": "input" if input else "output", "index": index, "availability": "unknown"}
+                )
             self.check(self.api.MIDIObjectGetStringProperty(ref, name_key, C.byref(value)), "Read endpoint name")
             try:
                 text = C.create_string_buffer(1024)
@@ -312,6 +330,7 @@ class MacMIDI:
         try:
             self.check(self.api.MIDIClientCreate(name, None, None, C.byref(self.client)), "Create client")
             callback_type = C.CFUNCTYPE(None, PTR, PTR, PTR)
+
             def received(packet_list, refcon, source):
                 try:
                     for chunk in mac_packet_bytes(packet_list, self._packet_offset, self._aligned):
@@ -321,8 +340,12 @@ class MacMIDI:
                             self.events.put(packed)
                 except Exception as error:
                     self.events.put(RuntimeError("CoreMIDI input callback: " + str(error)))
+
             self.callback = callback_type(received)
-            self.check(self.api.MIDIInputPortCreate(self.client, name, C.cast(self.callback, PTR), None, C.byref(self.input)), "Open input")
+            self.check(
+                self.api.MIDIInputPortCreate(self.client, name, C.cast(self.callback, PTR), None, C.byref(self.input)),
+                "Open input",
+            )
             self.source = self._input_refs.get(input_port.id) or self.api.MIDIGetSource(input_port.id)
             self.check(self.api.MIDIPortConnectSource(self.input, self.source, None), "Connect input")
             if output_port:
@@ -391,7 +414,9 @@ def learn(backend, seconds):
         if message:
             print(f"RX CC: channel={message.channel} controller={message.controller} value={message.value}", flush=True)
             if message.controller in {0, 6, 32, 38, 96, 97, 98, 99, 100, 101} or message.controller >= 120:
-                raise ValueError("Use an ordinary absolute 7-bit CC encoder; bank/RPN/NRPN/channel-mode CC is excluded.")
+                raise ValueError(
+                    "Use an ordinary absolute 7-bit CC encoder; bank/RPN/NRPN/channel-mode CC is excluded."
+                )
             if learned and (message.channel, message.controller) != (learned.channel, learned.controller):
                 raise ValueError("More than one CC/channel received; turn only one absolute 7-bit CC encoder.")
             learned, last_at = message, time.monotonic()
@@ -421,12 +446,14 @@ def mac_virtual_self_test(packet_repeats=1, output_api="legacy"):
     name = owner.string("Console Python Virtual Diagnostic")
     received = queue.Queue()
     callback_type = C.CFUNCTYPE(None, PTR, PTR, PTR)
+
     def callback(packet_list, refcon, connection):
         try:
             for packed in mac_cc_packets(packet_list, owner._packet_offset, owner._aligned):
                 received.put_nowait(packed)
         except Exception as error:
             received.put_nowait(error)
+
     retained_callback = callback_type(callback)
     try:
         owner.check(owner.api.MIDIClientCreate(name, None, None, C.byref(owner.client)), "Create virtual client")
@@ -434,9 +461,18 @@ def mac_virtual_self_test(packet_repeats=1, output_api="legacy"):
         create_source = bind(owner.api, "MIDISourceCreate", C.c_int32, [U32, PTR, C.POINTER(U32)])
         create_destination = bind(owner.api, "MIDIDestinationCreate", C.c_int32, [U32, PTR, PTR, PTR, C.POINTER(U32)])
         owner.check(create_source(owner.client, name, C.byref(source)), "Create virtual source")
-        owner.check(create_destination(owner.client, name, C.cast(retained_callback, PTR), None, C.byref(destination)), "Create virtual destination")
-        input_index = next(i for i in range(owner.api.MIDIGetNumberOfSources()) if owner.api.MIDIGetSource(i) == source.value)
-        output_index = next(i for i in range(owner.api.MIDIGetNumberOfDestinations()) if owner.api.MIDIGetDestination(i) == destination.value)
+        owner.check(
+            create_destination(owner.client, name, C.cast(retained_callback, PTR), None, C.byref(destination)),
+            "Create virtual destination",
+        )
+        input_index = next(
+            i for i in range(owner.api.MIDIGetNumberOfSources()) if owner.api.MIDIGetSource(i) == source.value
+        )
+        output_index = next(
+            i
+            for i in range(owner.api.MIDIGetNumberOfDestinations())
+            if owner.api.MIDIGetDestination(i) == destination.value
+        )
         backend.open(Port(input_index, "virtual source"), Port(output_index, "virtual destination"))
         for value in [0, 32, 64, 96, 127]:
             expected = CC(1, 8, value)
@@ -465,9 +501,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["list", "monitor", "test"], default="list")
     parser.add_argument("--self-test", action="store_true", help="macOS virtual input/output check; no physical sends")
-    parser.add_argument("--mac-api", choices=["legacy", "ump1", "ump2"], default="legacy", help="macOS output API for controlled comparisons")
-    parser.add_argument("--packet-repeats", type=int, default=1, help="macOS diagnostic: repeat identical CC 1..16 times in one packet")
-    parser.add_argument("--allow-other-device", action="store_true", help="allow an explicitly selected DIN/network MIDI interface connected to the BCR")
+    parser.add_argument(
+        "--mac-api",
+        choices=["legacy", "ump1", "ump2"],
+        default="legacy",
+        help="macOS output API for controlled comparisons",
+    )
+    parser.add_argument(
+        "--packet-repeats", type=int, default=1, help="macOS diagnostic: repeat identical CC 1..16 times in one packet"
+    )
+    parser.add_argument(
+        "--allow-other-device",
+        action="store_true",
+        help="allow an explicitly selected DIN/network MIDI interface connected to the BCR",
+    )
     parser.add_argument("--input", type=int)
     parser.add_argument("--output", type=int)
     parser.add_argument("--seconds", type=int, default=120)
@@ -514,7 +561,10 @@ def main():
             while time.monotonic() < deadline:
                 message = read_cc(backend)
                 if message:
-                    print(f"RX CC: channel={message.channel} controller={message.controller} value={message.value}", flush=True)
+                    print(
+                        f"RX CC: channel={message.channel} controller={message.controller} value={message.value}",
+                        flush=True,
+                    )
             return
         print("READY: turn ONE absolute 7-bit CC encoder, then stop and watch the SAME ring.", flush=True)
         print("No SysEx/preset writes. Five values will be sent after input stops for one second.", flush=True)
@@ -522,7 +572,9 @@ def main():
         print(f"Learned channel={learned.channel}, CC={learned.controller}, last value={learned.value}.", flush=True)
         time.sleep(2)
         sweep(backend, learned)
-        print("PASS requires seeing the same ring follow five positions. Native send success is not hardware acknowledgement.")
+        print(
+            "PASS requires seeing the same ring follow five positions. Native send success is not hardware acknowledgement."
+        )
     finally:
         backend.close()
         if backend.events.dropped:

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native review-fix acceptance hook; run with mcp_integration.py --configuration-write."""
+
 import json
 import os
 import subprocess
@@ -14,13 +15,13 @@ client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -34,6 +35,7 @@ def debug_failure(kind, value, trace):
     except RuntimeError:
         pass
     sys.__excepthook__(kind, value, trace)
+
 
 sys.excepthook = debug_failure
 
@@ -60,8 +62,6 @@ end repeat
 error "button help not found"''')
 
 
-
-
 def rejected(tool, arguments):
     try:
         client.call(tool, arguments)
@@ -69,7 +69,8 @@ def rejected(tool, arguments):
         return
     raise RuntimeError("protected request unexpectedly succeeded: " + tool)
 
-gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
+
+gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 original = client.parameter_definition("arm.enabled")
 for changes in ({"agentWritable": True}, {"minimum": -1, "maximum": 0}, {"defaultValue": 1}):
     attack = dict(original, **changes)
@@ -91,7 +92,7 @@ for identifier in ["arm.j1", "arm.j2", "arm.j3", "arm.j4", "arm.j5", "arm.j6", "
     definition.update(minimum=-1e300, maximum=1e300, defaultValue=0)
     client.call("update_parameter", {"definition": definition})
     client.call("set_parameter", {"id": identifier, "value": 1e300})
-gui('set value of scroll bar 1 of scroll area 1 of group 1 of window 1 to 1.0')
+gui("set value of scroll bar 1 of scroll area 1 of group 1 of window 1 to 1.0")
 gui('perform action "AXPress" of radio button 2 of radio group 1 of scroll area 1 of group 1 of window 1')
 time.sleep(0.3)
 tree = gui("return entire contents of window 1")

@@ -13,7 +13,7 @@ final class OSCCodecTests: XCTestCase {
     func testIntegerStringAndNestedBundleRoundTrip() throws {
         let packet = OSCPacket.bundle(timetag: 1, elements: [
             .message(OSCMessage("/heartbeat", [.int(-1)])),
-            .bundle(timetag: 1, elements: [.message(OSCMessage("/value", [.float(-3.5), .string("text")]))]),
+            .bundle(timetag: 1, elements: [.message(OSCMessage("/value", [.float(-3.5), .string("text")]))])
         ])
         XCTAssertEqual(try OSCCodec.decode(OSCCodec.encode(packet)), packet)
         XCTAssertEqual(try OSCCodec.immediateMessages(packet).count, 2)
@@ -40,7 +40,7 @@ final class OSCCodecTests: XCTestCase {
         badType[5] = 113
         XCTAssertThrowsError(try OSCCodec.decode(badType))
         var nan = good
-        nan.replaceSubrange(8..<12, with: [0x7f, 0xc0, 0, 0])
+        nan.replaceSubrange(8 ..< 12, with: [0x7f, 0xc0, 0, 0])
         XCTAssertThrowsError(try OSCCodec.decode(nan))
         XCTAssertThrowsError(try OSCCodec.encode(.message(OSCMessage("/x", [.float(.infinity)]))))
         XCTAssertThrowsError(try OSCCodec.encode(.message(OSCMessage("invalid", []))))
@@ -50,10 +50,10 @@ final class OSCCodecTests: XCTestCase {
 
     func testBundleLengthAndNestingAreBounded() throws {
         var packet = OSCPacket.message(OSCMessage("/x", [.int(1)]))
-        for _ in 0..<10 { packet = .bundle(timetag: 1, elements: [packet]) }
+        for _ in 0 ..< 10 { packet = .bundle(timetag: 1, elements: [packet]) }
         XCTAssertThrowsError(try OSCCodec.encode(packet))
         var encoded = try OSCCodec.encode(.bundle(timetag: 1, elements: [.message(OSCMessage("/x", [.int(1)]))]))
-        encoded.replaceSubrange(16..<20, with: [0x7f, 0xff, 0xff, 0xff])
+        encoded.replaceSubrange(16 ..< 20, with: [0x7f, 0xff, 0xff, 0xff])
         XCTAssertThrowsError(try OSCCodec.decode(encoded))
     }
 
@@ -63,8 +63,11 @@ final class OSCCodecTests: XCTestCase {
         var engine = SurfaceEngine(hardwareMap: .mockPreset(), configuration: SurfaceConfiguration(
             name: "Projection", parameters: [
                 .init(id: "x", name: "X", minimum: 0, maximum: 100, step: 10),
-                .init(id: "enabled", name: "Enable", minimum: 0, maximum: 1, kind: .toggle),
-            ], assignments: [.init(control: control, target: .parameter("x")), .init(control: toggle, target: .parameter("enabled"))]
+                .init(id: "enabled", name: "Enable", minimum: 0, maximum: 1, kind: .toggle)
+            ], assignments: [
+                .init(control: control, target: .parameter("x")),
+                .init(control: toggle, target: .parameter("enabled"))
+            ]
         ))
         _ = engine.setParameter("x", to: 80)
         _ = engine.setParameter("enabled", to: 1)
@@ -86,11 +89,11 @@ final class OSCCodecTests: XCTestCase {
         XCTAssertThrowsError(try engine.setActualFeedback(["missing": 0]))
         XCTAssertThrowsError(try engine.setActualFeedback(["x": .nan]))
     }
+
     func testActualReadoutDoesNotSnapOrHideOutOfRangeValues() {
         let definition = ParameterDefinition(id: "x", name: "X", unit: "°", minimum: -180, maximum: 180, step: 0.5)
         XCTAssertTrue(definition.formatted(90.5).contains("90.5"))
         XCTAssertTrue(definition.formatted(181.25, snap: false, minimumFractionDigits: 2).contains("181.25"))
         XCTAssertTrue(definition.formatted(.nan, snap: false).contains("无效"))
     }
-
 }

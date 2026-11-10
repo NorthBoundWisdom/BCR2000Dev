@@ -35,22 +35,31 @@ final class MCPHTTPServerTests: XCTestCase {
     private let credential = "isolated-test-credential"
 
     private func makeServer() -> MCPHTTPServer {
-        let session = SurfaceSession(hardwareDevice: HTTPFakeDevice(), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let session = SurfaceSession(
+            hardwareDevice: HTTPFakeDevice(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
         return MCPHTTPServer(router: MCPRouter(service: AgentControlService(session: session)))
     }
 
     private func request(port: UInt16, method: String = "ping", params: [String: JSONValue] = [:],
                          token: String? = nil, headers overrides: [String: String] = [:],
                          legacySession: String? = nil, notification: Bool = false,
-                         httpMethod: String = "POST") async throws -> (Data, HTTPURLResponse) {
+                         httpMethod: String = "POST") async throws -> (Data, HTTPURLResponse)
+    {
         var parameters = params
         if legacySession == nil, method != "initialize" {
             parameters["_meta"] = .object([
                 "io.modelcontextprotocol/protocolVersion": .string(MCPVersions.current),
-                "io.modelcontextprotocol/clientCapabilities": .object([:]),
+                "io.modelcontextprotocol/clientCapabilities": .object([:])
             ])
         }
-        var body: [String: JSONValue] = ["jsonrpc": .string("2.0"), "method": .string(method), "params": .object(parameters)]
+        var body: [String: JSONValue] = [
+            "jsonrpc": .string("2.0"),
+            "method": .string(method),
+            "params": .object(parameters)
+        ]
         if !notification { body["id"] = .number(1) }
         var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/mcp")!)
         request.httpMethod = httpMethod
@@ -59,7 +68,10 @@ final class MCPHTTPServerTests: XCTestCase {
         request.setValue("Bearer \(token ?? credential)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
-        request.setValue(legacySession == nil ? MCPVersions.current : MCPVersions.legacy, forHTTPHeaderField: "MCP-Protocol-Version")
+        request.setValue(
+            legacySession == nil ? MCPVersions.current : MCPVersions.legacy,
+            forHTTPHeaderField: "MCP-Protocol-Version"
+        )
         if let legacySession { request.setValue(legacySession, forHTTPHeaderField: "Mcp-Session-Id") }
         else {
             request.setValue(method, forHTTPHeaderField: "Mcp-Method")
@@ -83,14 +95,14 @@ final class MCPHTTPServerTests: XCTestCase {
         XCTAssertNil(response.value(forHTTPHeaderField: "Mcp-Session-Id"))
         XCTAssertNotNil(try JSONDecoder().decode(JSONValue.self, from: discovery).objectValue?["result"])
         let (_, writeResponse) = try await request(port: port, method: "tools/call", params: [
-            "name": .string("set_parameter"), "arguments": .object(["id": .string("arm.j1"), "value": .number(90)]),
+            "name": .string("set_parameter"), "arguments": .object(["id": .string("arm.j1"), "value": .number(90)])
         ])
         XCTAssertEqual(writeResponse.statusCode, 200)
         XCTAssertEqual(server.router.service.session.engine.value(of: "arm.j1"), 90)
         XCTAssertEqual(server.router.service.session.mock.value(of: .pushEncoder(group: 1, 1)), 95)
         XCTAssertEqual(server.router.service.session.events.last?.origin, .agent)
         let (_, readResponse) = try await request(port: port, method: "tools/call", params: [
-            "name": .string("get_parameter"), "arguments": .object(["id": .string("arm.j1")]),
+            "name": .string("get_parameter"), "arguments": .object(["id": .string("arm.j1")])
         ])
         XCTAssertEqual(readResponse.statusCode, 200)
         XCTAssertEqual(server.router.sessionCount, 0)
@@ -128,11 +140,16 @@ final class MCPHTTPServerTests: XCTestCase {
         defer { server.stop() }
         let (_, initResponse) = try await request(port: port, method: "initialize", params: [
             "protocolVersion": .string(MCPVersions.legacy), "capabilities": .object([:]),
-            "clientInfo": .object(["name": .string("neutral-client"), "version": .string("1")]),
+            "clientInfo": .object(["name": .string("neutral-client"), "version": .string("1")])
         ], headers: ["MCP-Protocol-Version": MCPVersions.legacy])
         XCTAssertEqual(initResponse.statusCode, 200)
         let session = try XCTUnwrap(initResponse.value(forHTTPHeaderField: "Mcp-Session-Id"))
-        let (_, notification) = try await request(port: port, method: "notifications/initialized", legacySession: session, notification: true)
+        let (_, notification) = try await request(
+            port: port,
+            method: "notifications/initialized",
+            legacySession: session,
+            notification: true
+        )
         XCTAssertEqual(notification.statusCode, 202)
         let (_, tools) = try await request(port: port, method: "tools/list", legacySession: session)
         XCTAssertEqual(tools.statusCode, 200)
@@ -167,7 +184,8 @@ final class MCPHTTPServerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let credentials = SuspendedMCPCredentials()
         let controller = MCPController(session: makeServer().router.service.session,
-            store: JSONFileStore(fileURL: directory.appending(path: "settings.json")), credentials: credentials)
+                                       store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                       credentials: credentials)
         let start = Task { @MainActor in await controller.setEnabled(true) }
         var events = credentials.started.stream.makeAsyncIterator()
         _ = await events.next()
@@ -217,7 +235,7 @@ final class MCPHTTPServerTests: XCTestCase {
             "POST /mcp HTTP/1.1\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n",
             "POST /mcp HTTP/1.1\r\nContent-Length: -1\r\n\r\n",
             "POST /mcp HTTP/1.1\r\nContent-Length: 0\r\n\r\nextra",
-            "POST /mcp HTTP/1.1\r\n\r\n",
+            "POST /mcp HTTP/1.1\r\n\r\n"
         ] { XCTAssertThrowsError(try MCPHTTPParser.parse(Data(raw.utf8))) }
         XCTAssertThrowsError(try MCPHTTPParser.parse(Data(repeating: 65, count: 16_385)))
     }
@@ -228,7 +246,8 @@ final class MCPHTTPServerTests: XCTestCase {
         let credentials = HTTPFakeCredentials()
         let service = makeServer().router.service
         let controller = MCPController(session: service.session,
-            store: JSONFileStore(fileURL: directory.appending(path: "settings.json")), credentials: credentials)
+                                       store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                       credentials: credentials)
         XCTAssertFalse(controller.settings.enabled)
         XCTAssertEqual(credentials.calls, 0)
         var draft = controller.settings

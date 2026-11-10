@@ -124,7 +124,10 @@ public actor CodexRPCClient {
                 do {
                     try await self?.transport.sendLine(line)
                 } catch {
-                    await self?.failPendingRequest(requestID, error: CodexRPCError.transport(error.localizedDescription))
+                    await self?.failPendingRequest(
+                        requestID,
+                        error: CodexRPCError.transport(error.localizedDescription)
+                    )
                 }
             }
         }

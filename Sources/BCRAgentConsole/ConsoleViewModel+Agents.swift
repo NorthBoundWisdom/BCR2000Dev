@@ -87,7 +87,12 @@ extension ConsoleViewModel {
         interrupt(slotID)
     }
 
-    private func transition(_ slotID: AgentSlotID, to state: AgentRunState, progress: Double? = nil, statusText: String) throws {
+    private func transition(
+        _ slotID: AgentSlotID,
+        to state: AgentRunState,
+        progress: Double? = nil,
+        statusText: String
+    ) throws {
         try agentMachine.transition(slotID, to: state, progress: progress, statusText: statusText)
         publishAgent(slotID)
     }

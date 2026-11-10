@@ -1,4 +1,5 @@
 """Private, atomic diagnostics and bounded subprocess execution."""
+
 import json
 import os
 from pathlib import Path
@@ -29,7 +30,11 @@ def command_stage(name, arguments, directory, timeout=30):
         result["status"] = "ok" if completed.returncode == 0 else "error"
         stdout, stderr = completed.stdout, completed.stderr
     except subprocess.TimeoutExpired as error:
-        result.update(status="timeout", exitCode=None, error="Worker exceeded its deadline; hardware state is not assumed restored")
+        result.update(
+            status="timeout",
+            exitCode=None,
+            error="Worker exceeded its deadline; hardware state is not assumed restored",
+        )
         stdout = error.stdout or b""
         stderr = error.stderr or b""
         stdout = stdout.decode(errors="replace") if isinstance(stdout, bytes) else stdout

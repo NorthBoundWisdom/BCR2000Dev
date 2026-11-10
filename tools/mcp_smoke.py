@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Client-neutral MCP Streamable HTTP acceptance probe; token only comes from environment."""
+
 import argparse
 import json
 import math
@@ -76,11 +77,15 @@ class Client:
     def close(self):
         if not self.session:
             return
-        request = urllib.request.Request(self.url, headers={
-            "Authorization": "Bearer " + self.token,
-            "MCP-Protocol-Version": LEGACY,
-            "Mcp-Session-Id": self.session,
-        }, method="DELETE")
+        request = urllib.request.Request(
+            self.url,
+            headers={
+                "Authorization": "Bearer " + self.token,
+                "MCP-Protocol-Version": LEGACY,
+                "Mcp-Session-Id": self.session,
+            },
+            method="DELETE",
+        )
         with urllib.request.urlopen(request, timeout=5) as response:
             if response.status != 200:
                 raise RuntimeError("session cleanup failed")
@@ -102,10 +107,14 @@ def main():
         parser.error("--value must be finite")
     client = Client(args.url, token, args.legacy)
     if args.legacy:
-        status, reply = client.rpc("initialize", {
-            "protocolVersion": LEGACY, "capabilities": {},
-            "clientInfo": {"name": "bcr-generic-smoke", "version": "1.0"},
-        })
+        status, reply = client.rpc(
+            "initialize",
+            {
+                "protocolVersion": LEGACY,
+                "capabilities": {},
+                "clientInfo": {"name": "bcr-generic-smoke", "version": "1.0"},
+            },
+        )
         if status != 200 or reply.get("result", {}).get("protocolVersion") != LEGACY or not client.session:
             raise RuntimeError("legacy initialization failed")
         status, _ = client.rpc("notifications/initialized", notification=True)
@@ -126,16 +135,25 @@ def main():
         if not math.isclose(written["value"], current):
             raise RuntimeError("parameter readback differs from actual written value")
         client.call("set_parameter", {"id": "arm.enabled", "value": 1}, expect_error=True)
-        client.call("set_parameters", {"values": [
-            {"id": args.parameter, "value": 0}, {"id": "__missing__", "value": 1},
-        ]}, expect_error=True)
+        client.call(
+            "set_parameters",
+            {
+                "values": [
+                    {"id": args.parameter, "value": 0},
+                    {"id": "__missing__", "value": 1},
+                ]
+            },
+            expect_error=True,
+        )
         if client.call("get_parameter", {"id": args.parameter})["value"] != current:
             raise RuntimeError("failed batch changed a parameter")
         if client.rpc("ping", token="incorrect-smoke-token")[0] != 401:
             raise RuntimeError("incorrect token was not rejected")
         if client.rpc("ping", extra_headers={"Origin": "https://untrusted.example"})[0] != 403:
             raise RuntimeError("untrusted Origin was not rejected")
-        print(f"MCP {LEGACY if args.legacy else CURRENT}: discovery, tools, write/read, protected parameter, atomic batch, auth and Origin passed.")
+        print(
+            f"MCP {LEGACY if args.legacy else CURRENT}: discovery, tools, write/read, protected parameter, atomic batch, auth and Origin passed."
+        )
     finally:
         try:
             client.call("set_parameter", {"id": args.parameter, "value": original})

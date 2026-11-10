@@ -1,5 +1,6 @@
 """B-Control read-only request framing and shared snapshot validation."""
 
+
 def request_bytes(command):
     if command not in (0x01, 0x43):
         raise ValueError("Only read-only identity/snapshot requests are allowed")
@@ -31,7 +32,12 @@ class SysExFrames:
 
 
 def identity_info(frame):
-    if len(frame) < 9 or frame[:4] != bytes([0xF0, 0, 0x20, 0x32]) or frame[5:7] != bytes([0x15, 2]) or frame[-1] != 0xF7:
+    if (
+        len(frame) < 9
+        or frame[:4] != bytes([0xF0, 0, 0x20, 0x32])
+        or frame[5:7] != bytes([0x15, 2])
+        or frame[-1] != 0xF7
+    ):
         return None
     return {"deviceID": frame[4], "model": "BCR2000", "identity": frame[7:-1].decode("ascii", errors="strict")}
 

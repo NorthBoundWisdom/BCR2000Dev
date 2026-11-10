@@ -523,7 +523,10 @@ public enum CodexLogSanitizer {
     public static func sanitize(_ text: String) -> String {
         var output = text
 
-        output = redact(pattern: "(?i)(token|access[_-]?token|api[_-]?key|secret|password|passwd|authorization|auth|bearer)\\s*[:=]\\s*[^\\s\\n]+", in: output)
+        output = redact(
+            pattern: "(?i)(token|access[_-]?token|api[_-]?key|secret|password|passwd|authorization|auth|bearer)\\s*[:=]\\s*[^\\s\\n]+",
+            in: output
+        )
         output = redact(pattern: "\\b[A-Z_][A-Z0-9_]*=([^\\s]+)", in: output)
         output = redact(pattern: "--(token|password|key)\\s+[^\"\\s]+", in: output)
         output = redact(pattern: "(?i)(prompt|env|environment)\\s*[:=]\\s*['\"]?[^\"'\n]+['\"]?", in: output)

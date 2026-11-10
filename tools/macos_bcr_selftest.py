@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native virtual BCR responder. Never targets a physical MIDI endpoint."""
+
 import argparse
 import contextlib
 import ctypes as C
@@ -24,12 +25,14 @@ def self_test(output_api):
     stopped = threading.Event()
     state = {"value": 11}
     callback_type = C.CFUNCTYPE(None, PTR, PTR, PTR)
+
     def callback(packet_list, refcon, connection):
         try:
             for data in mac_packet_bytes(packet_list, owner._packet_offset, owner._aligned):
                 packets.put_nowait(data)
         except Exception as error:
             failures.put(error)
+
     retained_callback = callback_type(callback)
     thread = None
     try:
@@ -38,15 +41,26 @@ def self_test(output_api):
         create_destination = bind(owner.api, "MIDIDestinationCreate", C.c_int32, [U32, PTR, PTR, PTR, C.POINTER(U32)])
         inject = bind(owner.api, "MIDIReceived", C.c_int32, [U32, PTR])
         owner.check(create_source(owner.client, name, C.byref(source)), "Create virtual source")
-        owner.check(create_destination(owner.client, name, C.cast(retained_callback, PTR), None, C.byref(destination)), "Create virtual destination")
-        input_index = next(i for i in range(owner.api.MIDIGetNumberOfSources()) if owner.api.MIDIGetSource(i) == source.value)
-        output_index = next(i for i in range(owner.api.MIDIGetNumberOfDestinations()) if owner.api.MIDIGetDestination(i) == destination.value)
+        owner.check(
+            create_destination(owner.client, name, C.cast(retained_callback, PTR), None, C.byref(destination)),
+            "Create virtual destination",
+        )
+        input_index = next(
+            i for i in range(owner.api.MIDIGetNumberOfSources()) if owner.api.MIDIGetSource(i) == source.value
+        )
+        output_index = next(
+            i
+            for i in range(owner.api.MIDIGetNumberOfDestinations())
+            if owner.api.MIDIGetDestination(i) == destination.value
+        )
+
         def send_input(raw):
             data = (C.c_ubyte * len(raw)).from_buffer_copy(raw)
             packet = owner.api.MIDIPacketListInit(owner._storage)
             if not owner.api.MIDIPacketListAdd(owner._storage, len(owner._storage), packet, 0, len(raw), data):
                 raise RuntimeError("Virtual response packet construction failed")
             owner.check(inject(source, owner._storage), "Inject virtual reply")
+
         def responder():
             frames = SysExFrames()
             try:
@@ -64,26 +78,42 @@ def self_test(output_api):
                     for frame in frames.frames[before:]:
                         if frame == bytes.fromhex("F0 00 20 32 7F 15 01 F7"):
                             # Fragment the response across packets to test callback state.
-                            reply = bytes.fromhex("F0 00 20 32 00 15 02") + b"BCR2000 1.10\xF7"
-                            send_input(reply[:10]); send_input(reply[10:])
+                            reply = bytes.fromhex("F0 00 20 32 00 15 02") + b"BCR2000 1.10\xf7"
+                            send_input(reply[:10])
+                            send_input(reply[10:])
                         elif frame == bytes.fromhex("F0 00 20 32 7F 15 43 F7"):
                             send_input(bytes([0xB0, 74, state["value"], 0xB0, 75, 20]))
                         else:
                             raise RuntimeError("Unexpected SysEx in read-only self-test")
             except Exception as error:
                 failures.put(error)
+
         thread = threading.Thread(target=responder, daemon=True)
         thread.start()
-        args = SimpleNamespace(input=input_index, output=output_index, test_cc=74, channel=1,
-                               wait=0.2, hold_max=False, expected_identity="BCR2000 1.10", report=None)
+        args = SimpleNamespace(
+            input=input_index,
+            output=output_index,
+            test_cc=74,
+            channel=1,
+            wait=0.2,
+            hold_max=False,
+            expected_identity="BCR2000 1.10",
+            report=None,
+        )
         with contextlib.redirect_stdout(io.StringIO()):
             report = run_roundtrip(args, lambda: MacBCR(output_api))
         if not failures.empty():
             raise failures.get()
         if not report.get("valueRoundtripPassed") or report.get("finalObserved") != 11 or state["value"] != 11:
             raise RuntimeError("Virtual device roundtrip or restoration failed")
-        return {"status": "passed", "api": output_api, "physicalDestinationUsed": False,
-                "identityVerified": report["identity"]["identity"], "fiveValuesReadBack": True, "restorationVerified": True}
+        return {
+            "status": "passed",
+            "api": output_api,
+            "physicalDestinationUsed": False,
+            "identityVerified": report["identity"]["identity"],
+            "fiveValuesReadBack": True,
+            "restorationVerified": True,
+        }
     finally:
         stopped.set()
         if thread is not None:

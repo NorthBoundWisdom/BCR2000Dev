@@ -6,7 +6,7 @@ public struct AgentSlotID: Hashable, Codable, Sendable, Identifiable, Comparable
     public var id: Int { rawValue }
 
     public init(_ rawValue: Int) {
-        precondition((1...8).contains(rawValue), "Agent slot must be in 1...8")
+        precondition((1 ... 8).contains(rawValue), "Agent slot must be in 1...8")
         self.rawValue = rawValue
     }
 
@@ -15,8 +15,12 @@ public struct AgentSlotID: Hashable, Codable, Sendable, Identifiable, Comparable
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let raw = try container.decode(Int.self, forKey: .rawValue)
-        guard (1...8).contains(raw) else {
-            throw DecodingError.dataCorruptedError(forKey: .rawValue, in: container, debugDescription: "Agent slot must be 1...8")
+        guard (1 ... 8).contains(raw) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .rawValue,
+                in: container,
+                debugDescription: "Agent slot must be 1...8"
+            )
         }
         self.init(raw)
     }
@@ -95,7 +99,7 @@ public struct AgentSlot: Identifiable, Equatable, Codable, Sendable {
     }
 
     public static func mockSlots() -> [AgentSlot] {
-        (1...8).map {
+        (1 ... 8).map {
             AgentSlot(id: AgentSlotID($0), name: "Agent \($0)")
         }
     }

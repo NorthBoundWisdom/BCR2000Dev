@@ -14,7 +14,8 @@ struct ControlInspectorView: View {
                     bindingSection(control)
                     FunctionSection(model: model, control: control).id(control)
                     if let id = model.configuration.assignment(for: control)?.target.parameterID,
-                       let definition = model.configuration.parameter(id) {
+                       let definition = model.configuration.parameter(id)
+                    {
                         ParameterEditor(model: model, definition: definition)
                             .id(definition.id)
                     }
@@ -103,9 +104,11 @@ struct ControlInspectorView: View {
                     Button("清除绑定") { model.unbind(control) }
                         .disabled(model.engine.hardwareMap.midi(for: control) == nil)
                 }
-                Text("学习时请操作实体控件：编码器转动、按键按下。完成后自动跳到本区下一个未学习控件。已学习 \(model.learnedCount) / \(BCRLayout.allControls.count)。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "学习时请操作实体控件：编码器转动、按键按下。完成后自动跳到本区下一个未学习控件。已学习 \(model.learnedCount) / \(BCRLayout.allControls.count)。"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 Button("清空全部实体映射…", role: .destructive) { confirmsMapReset = true }
                     .buttonStyle(.link)
                     .font(.caption)
@@ -217,8 +220,8 @@ private struct FunctionSection: View {
                             get: { assignment?.encoderStep ?? 1 },
                             set: { value in modify { $0.encoderStep = value } }
                         ), format: .number)
-                        .accessibilityLabel("相对步长")
-                        .help("设置相对编码器每格步长")
+                            .accessibilityLabel("相对步长")
+                            .help("设置相对编码器每格步长")
                         Text("每格步长 × 消息幅度（加速度）。灯环保持绝对位置；参数吸附仍生效。")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -239,7 +242,7 @@ private struct FunctionSection: View {
                     get: { slot.rawValue },
                     set: { update(target: .agentPrimaryAction(AgentSlotID($0))) }
                 )) {
-                    ForEach(1...8, id: \.self) { Text("Agent \($0)").tag($0) }
+                    ForEach(1 ... 8, id: \.self) { Text("Agent \($0)").tag($0) }
                 }
                 Text("空闲时启动、运行时中断、等待批准时批准；LED 亮度表示 Agent 状态。")
                     .font(.caption)
@@ -286,14 +289,16 @@ private struct FunctionSection: View {
                         model.createParameter(assigningTo: control)
                     }
                 case .step, .preset, .cycle:
-                    let id = assignment?.target.parameterID ?? model.configuration.parameters.first?.id ?? model.createParameter()
+                    let id = assignment?.target.parameterID ?? model.configuration.parameters.first?.id ?? model
+                        .createParameter()
                     guard let id, let definition = model.configuration.parameter(id) else { return }
                     switch kind {
                     case .step: update(target: .stepParameter(id: id, step: definition.step ?? 1, wraps: false))
                     case .preset: update(target: .setParameter(id: id, value: definition.defaultValue))
                     case .cycle:
                         var seen = Set<Double>()
-                        let values = [definition.minimum, definition.clamp(definition.defaultValue), definition.maximum].filter { seen.insert($0).inserted }
+                        let values = [definition.minimum, definition.clamp(definition.defaultValue), definition.maximum]
+                            .filter { seen.insert($0).inserted }
                         update(target: .cycleParameter(id: id, values: values))
                     default: break
                     }
@@ -309,7 +314,8 @@ private struct FunctionSection: View {
     private func update(target: ControlTarget) {
         var next = assignment ?? ControlAssignment(control: control, target: target)
         next.target = target
-        if target.isTrigger || target.parameterID.flatMap({ model.configuration.parameter($0) })?.kind != .continuous { next.encoderMode = .absolute }
+        if target.isTrigger || target.parameterID.flatMap({ model.configuration.parameter($0) })?
+            .kind != .continuous { next.encoderMode = .absolute }
         model.setAssignment(next, for: control)
     }
 
@@ -346,10 +352,13 @@ private struct ParameterEditor: View {
 
             if let value = model.engine.value(of: definition.id) {
                 HStack {
-                    Text(definition.formatted(value, minimumFractionDigits: model.parameterFractionDigits(definition.id)))
-                        .font(.system(.title3, design: .monospaced).bold())
-                        .foregroundStyle(Theme.parameter)
-                        .frame(minWidth: 90, alignment: .leading)
+                    Text(definition.formatted(
+                        value,
+                        minimumFractionDigits: model.parameterFractionDigits(definition.id)
+                    ))
+                    .font(.system(.title3, design: .monospaced).bold())
+                    .foregroundStyle(Theme.parameter)
+                    .frame(minWidth: 90, alignment: .leading)
                     if definition.kind == .toggle {
                         Toggle("", isOn: Binding(
                             get: { value >= definition.midpoint },
@@ -359,7 +368,7 @@ private struct ParameterEditor: View {
                     } else {
                         Slider(
                             value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
-                            in: definition.minimum...definition.maximum
+                            in: definition.minimum ... definition.maximum
                         )
                     }
                 }
@@ -412,8 +421,8 @@ private struct ParameterEditor: View {
                 Button("应用修改") {
                     if let applied = model.updateParameter(draftState.value) { draftState.reload(applied) }
                 }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!draftState.isDirty || draftState.conflict != nil)
+                .buttonStyle(.borderedProminent)
+                .disabled(!draftState.isDirty || draftState.conflict != nil)
                 Button("还原") { draftState.reload(definition) }
                     .disabled(!draftState.isDirty && draftState.conflict == nil)
                 Spacer()

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """OSC/UDP arm simulator. Standard library only; defaults to loopback and stopped motion."""
+
 import argparse
 import math
 import secrets
@@ -9,8 +10,16 @@ import struct
 import time
 from urllib.parse import quote, unquote
 
-DEFAULTS = {"arm.j1": 0.0, "arm.j2": 30.0, "arm.j3": -60.0, "arm.j4": -20.0,
-            "arm.j5": 0.0, "arm.j6": 0.0, "arm.gripper": 40.0, "arm.speed": 50.0}
+DEFAULTS = {
+    "arm.j1": 0.0,
+    "arm.j2": 30.0,
+    "arm.j3": -60.0,
+    "arm.j4": -20.0,
+    "arm.j5": 0.0,
+    "arm.j6": 0.0,
+    "arm.gripper": 40.0,
+    "arm.speed": 50.0,
+}
 
 
 def osc_string(value):
@@ -38,7 +47,11 @@ def message(address, arguments):
 
 
 def bundle(messages):
-    return osc_string("#bundle") + struct.pack(">Q", 1) + b"".join(struct.pack(">I", len(item)) + item for item in messages)
+    return (
+        osc_string("#bundle")
+        + struct.pack(">Q", 1)
+        + b"".join(struct.pack(">I", len(item)) + item for item in messages)
+    )
 
 
 def decode_packet(data, depth=0):
@@ -71,7 +84,7 @@ def decode_packet(data, depth=0):
             index += 4
             if not size or size % 4 or size > len(data) - index:
                 raise ValueError("bad bundle element length")
-            result += decode_packet(data[index:index + size], depth + 1)
+            result += decode_packet(data[index : index + size], depth + 1)
             index += size
         return result
     if not address.startswith("/"):
@@ -114,7 +127,7 @@ class ArmSimulation:
 
     @staticmethod
     def newer(sequence, previous):
-        return previous is None or 0 < ((sequence - previous) & 0xffffffff) < 0x80000000
+        return previous is None or 0 < ((sequence - previous) & 0xFFFFFFFF) < 0x80000000
 
     def receive(self, data, peer, now):
         messages = decode_packet(data)
@@ -122,7 +135,12 @@ class ArmSimulation:
             args = messages[0][1]
             if len(args) != 1 or type(args[0]) is not int:
                 raise ValueError("invalid heartbeat")
-            if self.peer is not None and self.peer != peer and self.last_heartbeat is not None and now - self.last_heartbeat < self.timeout:
+            if (
+                self.peer is not None
+                and self.peer != peer
+                and self.last_heartbeat is not None
+                and now - self.last_heartbeat < self.timeout
+            ):
                 self.dropped += 1
                 return []
             if self.peer != peer:
@@ -140,9 +158,15 @@ class ArmSimulation:
         if messages[1][0] != "/bcr/frame" or messages[2][0] != "/bcr/enable":
             raise ValueError("command requires sequence and enable header")
         sequence_args, enable_args = messages[1][1], messages[2][1]
-        if len(sequence_args) != 1 or type(sequence_args[0]) is not int or len(enable_args) != 1 or type(enable_args[0]) is not int or enable_args[0] not in (0, 1):
+        if (
+            len(sequence_args) != 1
+            or type(sequence_args[0]) is not int
+            or len(enable_args) != 1
+            or type(enable_args[0]) is not int
+            or enable_args[0] not in (0, 1)
+        ):
             raise ValueError("invalid command headers")
-        sequence = sequence_args[0] & 0xffffffff
+        sequence = sequence_args[0] & 0xFFFFFFFF
         if not self.newer(sequence, self.last_command):
             self.dropped += 1
             return []
@@ -150,7 +174,7 @@ class ArmSimulation:
         for address, args in messages[3:]:
             if not address.startswith("/bcr/param/") or len(args) != 1 or type(args[0]) is not float:
                 raise ValueError("invalid parameter command")
-            identifier = unquote(address[len("/bcr/param/"):], errors="strict")
+            identifier = unquote(address[len("/bcr/param/") :], errors="strict")
             if identifier not in self.actual or identifier in updates:
                 raise ValueError("unknown/duplicate parameter")
             updates[identifier] = args[0]
@@ -187,9 +211,12 @@ class ArmSimulation:
     def telemetry(self):
         if self.peer is None:
             return None
-        self.state_sequence = (self.state_sequence + 1) & 0xffffffff
+        self.state_sequence = (self.state_sequence + 1) & 0xFFFFFFFF
         values = [message("/bcr/state/epoch", [self.epoch]), message("/bcr/state/frame", [self.state_sequence])]
-        values += [message("/bcr/state/" + quote(identifier, safe="._-"), [float(value)]) for identifier, value in sorted(self.actual.items())]
+        values += [
+            message("/bcr/state/" + quote(identifier, safe="._-"), [float(value)])
+            for identifier, value in sorted(self.actual.items())
+        ]
         return self.peer, bundle(values)
 
 

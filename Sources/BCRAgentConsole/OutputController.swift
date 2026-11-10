@@ -24,13 +24,15 @@ struct OutputSettings: Codable, Equatable, Sendable {
 
     func validate(configuration: SurfaceConfiguration) throws {
         guard version == 1, !host.isEmpty, host.utf8.count <= 255, !host.utf8.contains(0),
-              (1_024...65_535).contains(port) else { throw MotionSafetyError("输出地址、端口或设置版本无效") }
-        guard configuration.parameter(enableParameter)?.kind == .toggle else { throw MotionSafetyError("请配置一个开关类型的使能参数") }
+              (1_024 ... 65_535).contains(port) else { throw MotionSafetyError("输出地址、端口或设置版本无效") }
+        guard configuration.parameter(enableParameter)?.kind == .toggle
+        else { throw MotionSafetyError("请配置一个开关类型的使能参数") }
         for limit in limits {
             try limit.validate()
             guard let definition = configuration.parameter(limit.id), definition.kind == .continuous,
                   limit.minimum >= definition.minimum, limit.maximum <= definition.maximum,
-                  Float(limit.minimum).isFinite, Float(limit.maximum).isFinite else {
+                  Float(limit.minimum).isFinite, Float(limit.maximum).isFinite
+            else {
                 throw MotionSafetyError("输出限位必须属于现有连续参数的范围并可用 float32 表示")
             }
         }
@@ -59,8 +61,13 @@ final class OutputController: ObservableObject {
     private let automaticallyTicks: Bool
     private let now: @MainActor () -> Date
 
-    init(session: SurfaceSession, store: JSONFileStore<OutputSettings>, adapter: any OutputTransport = OSCParameterAdapter(), automaticallyTicks: Bool = true,
-         now: @escaping @MainActor () -> Date = { .now }) {
+    init(
+        session: SurfaceSession,
+        store: JSONFileStore<OutputSettings>,
+        adapter: any OutputTransport = OSCParameterAdapter(),
+        automaticallyTicks: Bool = true,
+        now: @escaping @MainActor () -> Date = { .now }
+    ) {
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
         self.automaticallyTicks = automaticallyTicks
         configuration = session.engine.configuration
@@ -160,7 +167,9 @@ final class OutputController: ObservableObject {
     }
 
     func setLEDSource(_ source: LEDFeedbackSource) {
-        guard source != .actual || (settings.enabled && !actual.isEmpty && status != .heartbeatExpired && status != .disconnected) else {
+        guard source != .actual ||
+            (settings.enabled && !actual.isEmpty && status != .heartbeatExpired && status != .disconnected)
+        else {
             error = "实际回传尚未就绪，LED 来源未改变"
             return
         }
@@ -233,6 +242,13 @@ final class OutputController: ObservableObject {
     }
 
     private func publishSnapshot() {
-        session.setMotionSafety(.init(status: status, reason: reason, outputs: outputs, actual: actual, limited: limited, baseline: gate?.baseline ?? [:]))
+        session.setMotionSafety(.init(
+            status: status,
+            reason: reason,
+            outputs: outputs,
+            actual: actual,
+            limited: limited,
+            baseline: gate?.baseline ?? [:]
+        ))
     }
 }

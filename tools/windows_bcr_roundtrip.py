@@ -5,6 +5,7 @@ Only SysEx commands 01 (identity) and 43 (current-value snapshot) are allowed.
 No preset selection, BCL/configuration transfer or firmware commands. Optional
 CC writes require --test-cc and a matching, unambiguous baseline snapshot.
 """
+
 import argparse
 import ctypes as C
 import json
@@ -16,9 +17,17 @@ from midi_feedback_probe import PTR, U32, UPTR, WinMM, bind, read_cc, _KEEPALIVE
 
 
 class MIDIHDR(C.Structure):
-    _fields_ = [("data", PTR), ("buffer_length", U32), ("recorded", U32),
-                ("user", UPTR), ("flags", U32), ("next", PTR), ("reserved", UPTR),
-                ("offset", U32), ("reserved_array", UPTR * 8)]
+    _fields_ = [
+        ("data", PTR),
+        ("buffer_length", U32),
+        ("recorded", U32),
+        ("user", UPTR),
+        ("flags", U32),
+        ("next", PTR),
+        ("reserved", UPTR),
+        ("offset", U32),
+        ("reserved_array", UPTR * 8),
+    ]
 
 
 from bcr_protocol import request_bytes, SysExFrames, identity_info, snapshot_values
@@ -46,8 +55,12 @@ class WinBCR(WinMM):
             storage = C.create_string_buffer(4096)
             header = MIDIHDR(data=C.addressof(storage), buffer_length=len(storage))
             self.buffers[C.addressof(header)] = (header, storage)
-            self.check(self.api.midiInPrepareHeader(self.input, C.byref(header), C.sizeof(header)), "Prepare input SysEx", True)
-            self.check(self.api.midiInAddBuffer(self.input, C.byref(header), C.sizeof(header)), "Queue input SysEx", True)
+            self.check(
+                self.api.midiInPrepareHeader(self.input, C.byref(header), C.sizeof(header)), "Prepare input SysEx", True
+            )
+            self.check(
+                self.api.midiInAddBuffer(self.input, C.byref(header), C.sizeof(header)), "Queue input SysEx", True
+            )
 
     def handle_native_event(self, message, data):
         if message not in (0x3C4, 0x3C6):
@@ -76,7 +89,9 @@ class WinBCR(WinMM):
             if not self.closing:
                 header, _ = self.buffers[address]
                 header.recorded = 0
-                self.check(self.api.midiInAddBuffer(self.input, C.byref(header), C.sizeof(header)), "Requeue SysEx input", True)
+                self.check(
+                    self.api.midiInAddBuffer(self.input, C.byref(header), C.sizeof(header)), "Requeue SysEx input", True
+                )
 
     def send_request(self, command):
         data = request_bytes(command)

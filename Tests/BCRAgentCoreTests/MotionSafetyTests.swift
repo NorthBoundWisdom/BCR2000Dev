@@ -4,10 +4,13 @@ import XCTest
 
 final class MotionSafetyTests: XCTestCase {
     private let t0 = Date(timeIntervalSinceReferenceDate: 8_000)
-    private func gate(speed: Double = 10, change: Double = 2, precision: MotionOutputPrecision = .double) throws -> MotionSafetyGate {
+    private func gate(speed: Double = 10, change: Double = 2,
+                      precision: MotionOutputPrecision = .double) throws -> MotionSafetyGate
+    {
         try MotionSafetyGate(limits: [.init(id: "x", minimum: -100, maximum: 100,
-                                           maximumChange: change, maximumVelocity: speed)], precision: precision)
+                                            maximumChange: change, maximumVelocity: speed)], precision: precision)
     }
+
     private func prepare(_ gate: inout MotionSafetyGate, at time: Date, actual: Double = 0) {
         gate.setConnected(true, at: time)
         gate.receiveHeartbeat(at: time)
@@ -53,7 +56,7 @@ final class MotionSafetyTests: XCTestCase {
     }
 
     func testDisableTimeoutAndDisconnectNeverRepeatMovement() throws {
-        for reason in 0..<3 {
+        for reason in 0 ..< 3 {
             var g = try gate()
             prepare(&g, at: t0)
             _ = g.evaluate(targets: ["x": 50], enabled: true, at: t0)
@@ -74,11 +77,20 @@ final class MotionSafetyTests: XCTestCase {
         var g = try gate()
         g.setConnected(true, at: t0)
         XCTAssertEqual(g.evaluate(targets: ["x": 1], enabled: true, at: t0).status, .waitingHeartbeat)
-        XCTAssertEqual(g.evaluate(targets: ["x": 1], enabled: false, at: t0.addingTimeInterval(0.3)).status, .heartbeatExpired)
+        XCTAssertEqual(
+            g.evaluate(targets: ["x": 1], enabled: false, at: t0.addingTimeInterval(0.3)).status,
+            .heartbeatExpired
+        )
         g.receiveHeartbeat(at: t0.addingTimeInterval(0.3))
-        XCTAssertEqual(g.evaluate(targets: ["x": 1], enabled: true, at: t0.addingTimeInterval(0.3)).status, .waitingActual)
+        XCTAssertEqual(
+            g.evaluate(targets: ["x": 1], enabled: true, at: t0.addingTimeInterval(0.3)).status,
+            .waitingActual
+        )
         g.receiveActual([.init(id: "x", value: 0, receivedAt: t0)])
-        XCTAssertEqual(g.evaluate(targets: ["x": 1], enabled: true, at: t0.addingTimeInterval(0.3)).status, .waitingActual)
+        XCTAssertEqual(
+            g.evaluate(targets: ["x": 1], enabled: true, at: t0.addingTimeInterval(0.3)).status,
+            .waitingActual
+        )
     }
 
     func testInvalidTargetActualAndClockNeverReachSink() throws {
@@ -119,7 +131,10 @@ final class MotionSafetyTests: XCTestCase {
     }
 
     func testFloatWireQuantizationStaysInsideSoftAndVelocityLimits() throws {
-        var g = try MotionSafetyGate(limits: [.init(id: "x", minimum: 0, maximum: 0.1, maximumChange: 1, maximumVelocity: 1)], precision: .float32)
+        var g = try MotionSafetyGate(
+            limits: [.init(id: "x", minimum: 0, maximum: 0.1, maximumChange: 1, maximumVelocity: 1)],
+            precision: .float32
+        )
         prepare(&g, at: t0)
         _ = g.evaluate(targets: ["x": 1], enabled: true, at: t0)
         _ = g.evaluate(targets: ["x": 1], enabled: true, at: t0.addingTimeInterval(0.2))
@@ -137,17 +152,21 @@ final class MotionSafetyTests: XCTestCase {
         for limit in [
             MotionLimit(id: "x", minimum: 0, maximum: 0, maximumChange: 1, maximumVelocity: 1),
             .init(id: "x", minimum: 0, maximum: 1, maximumChange: 0, maximumVelocity: 1),
-            .init(id: "x", minimum: 0, maximum: 1, maximumChange: 1, maximumVelocity: .infinity),
+            .init(id: "x", minimum: 0, maximum: 1, maximumChange: 1, maximumVelocity: .infinity)
         ] { XCTAssertThrowsError(try MotionSafetyGate(limits: [limit])) }
         XCTAssertThrowsError(try MotionSafetyGate(limits: []))
-        XCTAssertThrowsError(try MotionSafetyGate(limits: [.init(id: "x", minimum: 0, maximum: 1, maximumChange: 1, maximumVelocity: 1)], heartbeatTimeout: 1))
+        XCTAssertThrowsError(try MotionSafetyGate(
+            limits: [.init(id: "x", minimum: 0, maximum: 1, maximumChange: 1, maximumVelocity: 1)],
+            heartbeatTimeout: 1
+        ))
     }
+
     func testAlreadyEnabledStartupAndReconnectRequireObservedOffThenOn() throws {
         var g = try gate()
         g.setConnected(true, at: t0)
         g.receiveHeartbeat(at: t0)
         g.receiveActual([.init(id: "x", value: 0, receivedAt: t0)])
-        for _ in 0..<3 {
+        for _ in 0 ..< 3 {
             let held = g.evaluate(targets: ["x": 90], enabled: true, at: t0)
             XCTAssertEqual(held.status, .waitingRearm)
             XCTAssertEqual(held.command, .init(enabled: false, values: [:]))
@@ -178,16 +197,22 @@ final class MotionSafetyTests: XCTestCase {
         g.receiveHeartbeat(at: t0)
         g.receiveActual([.init(id: "x", value: 0, receivedAt: t0), .init(id: "y", value: 5, receivedAt: t0)])
         _ = g.evaluate(targets: [:], enabled: false, at: t0)
-        for i in 0..<3 {
-            let decision = g.evaluate(targets: ["x": 1, "y": 5], enabled: true, at: t0.addingTimeInterval(Double(i) * 0.1))
+        for i in 0 ..< 3 {
+            let decision = g.evaluate(
+                targets: ["x": 1, "y": 5],
+                enabled: true,
+                at: t0.addingTimeInterval(Double(i) * 0.1)
+            )
             XCTAssertEqual(Set(decision.command!.values.keys), Set(["x", "y"]))
             XCTAssertEqual(decision.command!.values["y"], 5)
         }
         let retry = g.evaluate(targets: ["x": 1, "y": 5], enabled: true, at: t0.addingTimeInterval(0.2))
         XCTAssertEqual(retry.command?.values, ["x": 1, "y": 5])
-        for _ in 0..<3 {
-            XCTAssertEqual(g.evaluate(targets: [:], enabled: false, at: t0.addingTimeInterval(0.2)).command, .init(enabled: false, values: [:]))
+        for _ in 0 ..< 3 {
+            XCTAssertEqual(
+                g.evaluate(targets: [:], enabled: false, at: t0.addingTimeInterval(0.2)).command,
+                .init(enabled: false, values: [:])
+            )
         }
     }
-
 }

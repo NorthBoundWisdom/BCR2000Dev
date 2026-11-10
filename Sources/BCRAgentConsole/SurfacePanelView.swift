@@ -68,7 +68,7 @@ extension ConsoleViewModel {
 struct PanelMetrics: Equatable {
     /// Natural panel size at scale 1, used by the window layout to pick a scale.
     static let naturalSize = CGSize(width: 800, height: 755)
-    static let scaleRange: ClosedRange<CGFloat> = 1...1.6
+    static let scaleRange: ClosedRange<CGFloat> = 1 ... 1.6
 
     var scale: CGFloat = 1
 
@@ -105,7 +105,7 @@ struct SurfacePanelView: View {
             HStack(alignment: .top, spacing: m(16)) {
                 VStack(alignment: .leading, spacing: m(10)) {
                     row("组\(model.visibleGroup)") {
-                        ForEach(1...8, id: \.self) { index in
+                        ForEach(1 ... 8, id: \.self) { index in
                             VStack(spacing: m(4)) {
                                 knob(.pushEncoder(group: model.visibleGroup, index))
                                 pushButton(.pushEncoderButton(group: model.visibleGroup, index))
@@ -113,15 +113,15 @@ struct SurfacePanelView: View {
                         }
                     }
                     divider
-                    ForEach(1...2, id: \.self) { line in
+                    ForEach(1 ... 2, id: \.self) { line in
                         row("B\(line)") {
-                            ForEach(1...8, id: \.self) { index in pad(.button(row: line, index)) }
+                            ForEach(1 ... 8, id: \.self) { index in pad(.button(row: line, index)) }
                         }
                     }
                     divider
-                    ForEach(1...3, id: \.self) { line in
+                    ForEach(1 ... 3, id: \.self) { line in
                         row("E\(line)") {
-                            ForEach(1...8, id: \.self) { index in knob(.encoder(row: line, index)) }
+                            ForEach(1 ... 8, id: \.self) { index in knob(.encoder(row: line, index)) }
                         }
                     }
                 }
@@ -134,7 +134,11 @@ struct SurfacePanelView: View {
             // Shadow the chassis shape, not the full subtree of controls and native views.
             // A subtree-wide shadow stalls WindowServer composition during window movement.
             RoundedRectangle(cornerRadius: m(18))
-                .fill(LinearGradient(colors: [Theme.chassisTop, Theme.chassisBottom], startPoint: .top, endPoint: .bottom))
+                .fill(LinearGradient(
+                    colors: [Theme.chassisTop, Theme.chassisBottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
                 .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
         }
         .overlay {
@@ -215,7 +219,7 @@ struct SurfacePanelView: View {
                 .font(m.font(8.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
             VStack(spacing: m(6)) {
-                ForEach(1...4, id: \.self) { index in pad(.userButton(index)) }
+                ForEach(1 ... 4, id: \.self) { index in pad(.userButton(index)) }
             }
         }
         .frame(width: m(80))
@@ -291,7 +295,8 @@ private struct CellLabels: View {
                 .foregroundStyle(.tertiary)
             Text(presentation.label ?? "未分配")
                 .font(m.font(10, weight: .semibold))
-                .foregroundStyle(presentation.label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
+                .foregroundStyle(presentation
+                    .label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text(presentation.detail ?? "\(presentation.value)")
@@ -352,7 +357,7 @@ private struct LEDRing: View {
     var body: some View {
         let lit = Int((Double(value) / 127 * Double(count)).rounded())
         ZStack {
-            ForEach(0..<count, id: \.self) { led in
+            ForEach(0 ..< count, id: \.self) { led in
                 Circle()
                     .fill(led < lit ? Theme.led : Theme.ledOff)
                     .frame(width: m(4), height: m(4))
@@ -397,7 +402,10 @@ private struct PadCell: View {
             RoundedRectangle(cornerRadius: m(6))
                 .fill(
                     LinearGradient(
-                        colors: isDown ? [Color(white: 0.22), Color(white: 0.16)] : [Color(white: 0.30), Color(white: 0.18)],
+                        colors: isDown ? [Color(white: 0.22), Color(white: 0.16)] : [
+                            Color(white: 0.30),
+                            Color(white: 0.18)
+                        ],
                         startPoint: .top,
                         endPoint: .bottom
                     )

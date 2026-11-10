@@ -1,7 +1,8 @@
 import Foundation
 
 public struct ParameterID: Hashable, Codable, Sendable, Comparable, CustomStringConvertible,
-    ExpressibleByStringLiteral {
+    ExpressibleByStringLiteral
+{
     public let rawValue: String
 
     public init(_ rawValue: String) {
@@ -188,7 +189,7 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         let spanDigits = span <= 2 ? 2 : (span <= 20 ? 1 : 0)
         var stepDigits = 0
         if let step {
-            for digits in 0...6 {
+            for digits in 0 ... 6 {
                 let scaled = step * pow(10, Double(digits))
                 if scaled.isFinite, abs(scaled - scaled.rounded()) <= scaled.ulp * 4 {
                     stepDigits = digits
@@ -298,14 +299,16 @@ public struct ControlAssignment: Codable, Equatable, Sendable, Identifiable {
         self.encoderStep = encoderStep
     }
 
-    private enum CodingKeys: String, CodingKey { case control, target, buttonBehavior, inverted, encoderMode, encoderStep }
+    private enum CodingKeys: String,
+        CodingKey { case control, target, buttonBehavior, inverted, encoderMode, encoderStep }
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(control: try c.decode(BCRControlID.self, forKey: .control),
                   target: try c.decode(ControlTarget.self, forKey: .target),
                   buttonBehavior: try c.decode(ButtonBehavior.self, forKey: .buttonBehavior),
                   inverted: try c.decode(Bool.self, forKey: .inverted),
-                  encoderMode: c.contains(.encoderMode) ? try c.decode(EncoderMode.self, forKey: .encoderMode) : .absolute,
+                  encoderMode: c.contains(.encoderMode) ? try c
+                      .decode(EncoderMode.self, forKey: .encoderMode) : .absolute,
                   encoderStep: c.contains(.encoderStep) ? try c.decode(Double.self, forKey: .encoderStep) : 1)
     }
 }
@@ -452,12 +455,29 @@ public extension SurfaceConfiguration {
             .init(id: "arm.j1", name: "J1 底座旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
             .init(id: "arm.j2", name: "J2 肩部", group: group, unit: "°", minimum: -90, maximum: 90, defaultValue: 30),
             .init(id: "arm.j3", name: "J3 肘部", group: group, unit: "°", minimum: -135, maximum: 135, defaultValue: -60),
-            .init(id: "arm.j4", name: "J4 腕部俯仰", group: group, unit: "°", minimum: -120, maximum: 120, defaultValue: -20),
+            .init(
+                id: "arm.j4",
+                name: "J4 腕部俯仰",
+                group: group,
+                unit: "°",
+                minimum: -120,
+                maximum: 120,
+                defaultValue: -20
+            ),
             .init(id: "arm.j5", name: "J5 腕部旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
             .init(id: "arm.j6", name: "J6 末端旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
             .init(id: "arm.gripper", name: "夹爪开合", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 40),
             .init(id: "arm.speed", name: "运动速度", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 50),
-            .init(id: "arm.enabled", name: "使能", group: group, minimum: 0, maximum: 1, defaultValue: 0, kind: .toggle, agentWritable: false),
+            .init(
+                id: "arm.enabled",
+                name: "使能",
+                group: group,
+                minimum: 0,
+                maximum: 1,
+                defaultValue: 0,
+                kind: .toggle,
+                agentWritable: false
+            )
         ]
 
         var assignments: [ControlAssignment] = []
@@ -466,7 +486,7 @@ public extension SurfaceConfiguration {
                 ControlAssignment(control: .pushEncoder(group: 1, position + 1), target: .parameter(parameter.id))
             )
         }
-        for slot in 1...8 {
+        for slot in 1 ... 8 {
             assignments.append(
                 ControlAssignment(control: .button(row: 1, slot), target: .agentPrimaryAction(AgentSlotID(slot)))
             )

@@ -14,7 +14,8 @@ public struct MotionLimit: Codable, Equatable, Sendable, Identifiable {
 
     public func validate() throws {
         guard minimum.isFinite, maximum.isFinite, minimum < maximum, (maximum - minimum).isFinite,
-              maximumChange.isFinite, maximumChange > 0, maximumVelocity.isFinite, maximumVelocity > 0 else {
+              maximumChange.isFinite, maximumChange > 0, maximumVelocity.isFinite, maximumVelocity > 0
+        else {
             throw MotionSafetyError("限位、单周期变化量和速度必须是有效的有限数值")
         }
     }
@@ -75,7 +76,8 @@ public struct MotionSafetySnapshot: Equatable, Sendable {
     public let limited: Bool
     public let baseline: [ParameterID: Double]
     public init(status: MotionGateStatus, reason: String, outputs: [ParameterID: Double],
-                actual: [ParameterID: Double], limited: Bool, baseline: [ParameterID: Double] = [:]) {
+                actual: [ParameterID: Double], limited: Bool, baseline: [ParameterID: Double] = [:])
+    {
         self.baseline = baseline
         self.status = status; self.reason = reason; self.outputs = outputs
         self.actual = actual; self.limited = limited
@@ -101,9 +103,11 @@ public struct MotionSafetyGate: Sendable {
     private var faultStatus: MotionGateStatus = .invalidActual
 
     public init(limits: [MotionLimit], heartbeatTimeout: TimeInterval = 0.3,
-                precision: MotionOutputPrecision = .double) throws {
+                precision: MotionOutputPrecision = .double) throws
+    {
         guard !limits.isEmpty, Set(limits.map(\.id)).count == limits.count,
-              heartbeatTimeout.isFinite, heartbeatTimeout > 0, heartbeatTimeout <= 0.45 else {
+              heartbeatTimeout.isFinite, heartbeatTimeout > 0, heartbeatTimeout <= 0.45
+        else {
             throw MotionSafetyError("安全门需要非空、唯一的限位与不超过 450 ms 的心跳期限")
         }
         for limit in limits { try limit.validate() }
@@ -146,7 +150,10 @@ public struct MotionSafetyGate: Sendable {
         lastStep = now
         func stopped(_ state: MotionGateStatus, _ reason: String) -> MotionSafetyDecision {
             MotionSafetyDecision(status: state, reason: reason,
-                command: previous == .ready || (connected && heartbeat != nil) ? ParameterOutputFrame(enabled: false, values: [:]) : nil, limited: false)
+                                 command: previous == .ready || (connected && heartbeat != nil) ? ParameterOutputFrame(
+                                     enabled: false,
+                                     values: [:]
+                                 ) : nil, limited: false)
         }
         if elapsed < 0 { fault = "时钟倒退，需重新连接安全门"; faultStatus = .clockError }
         let closed: MotionSafetyDecision?
@@ -171,7 +178,8 @@ public struct MotionSafetyGate: Sendable {
 
         for limit in limits {
             guard let sample = actual[limit.id], now.timeIntervalSince(sample.receivedAt) >= 0,
-                  now.timeIntervalSince(sample.receivedAt) < heartbeatTimeout else {
+                  now.timeIntervalSince(sample.receivedAt) < heartbeatTimeout
+            else {
                 let result = stopped(.waitingActual, "等待新鲜实际状态：\(limit.id)")
                 armed = false; observedDisabled = false
                 status = result.status; return result

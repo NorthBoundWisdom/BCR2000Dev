@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "BCRAgentConsole",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v14)
     ],
     products: [
         .library(
@@ -15,7 +15,7 @@ let package = Package(
         .executable(
             name: "BCRAgentConsole",
             targets: ["BCRAgentConsole"]
-        ),
+        )
     ],
     targets: [
         .target(
@@ -25,7 +25,7 @@ let package = Package(
             name: "BCRAgentConsole",
             dependencies: ["BCRAgentCore"],
             linkerSettings: [
-                .linkedFramework("CoreMIDI"),
+                .linkedFramework("CoreMIDI")
             ]
         ),
         .testTarget(
@@ -35,7 +35,7 @@ let package = Package(
         .testTarget(
             name: "BCRAgentConsoleTests",
             dependencies: ["BCRAgentConsole"]
-        ),
+        )
     ],
     swiftLanguageModes: [.v6]
 )

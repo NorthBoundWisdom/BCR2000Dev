@@ -16,6 +16,7 @@ public struct MIDIEndpointSelection: Codable, Equatable, Sendable {
     public init(sourceID: Int32? = nil, destinationID: Int32? = nil) {
         self.sourceID = sourceID; self.destinationID = destinationID
     }
+
     public func validate() throws {
         guard version == 1, sourceID != 0, destinationID != 0 else {
             throw MIDIEndpointSelectionError.invalidSettings
@@ -35,14 +36,21 @@ public enum MIDIEndpointSelectionError: Error, LocalizedError, Equatable, Sendab
 }
 
 public enum MIDIEndpointPolicy {
-    public static func resolve(_ endpoints: [MIDIEndpointDescriptor], selectedID: Int32?) throws -> MIDIEndpointDescriptor {
+    public static func resolve(_ endpoints: [MIDIEndpointDescriptor],
+                               selectedID: Int32?) throws -> MIDIEndpointDescriptor
+    {
         if let selectedID {
             guard let endpoint = endpoints.first(where: { $0.id == selectedID }) else {
                 throw MIDIEndpointSelectionError.missingSelectedEndpoint
             }
             return endpoint
         }
-        guard let endpoint = endpoints.first(where: { $0.name.localizedCaseInsensitiveContains("BCR2000") && $0.name.localizedCaseInsensitiveContains("Port 1") }) else {
+        guard let endpoint = endpoints
+            .first(where: {
+                $0.name.localizedCaseInsensitiveContains("BCR2000") && $0.name
+                    .localizedCaseInsensitiveContains("Port 1")
+            })
+        else {
             throw MIDIEndpointSelectionError.missingPortOne
         }
         return endpoint

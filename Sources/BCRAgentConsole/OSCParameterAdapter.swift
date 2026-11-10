@@ -110,7 +110,7 @@ final class OSCParameterAdapter: OutputTransport {
         var elements: [OSCPacket] = [
             .message(OSCMessage("/bcr/epoch", [.string(serverEpoch)])),
             .message(OSCMessage("/bcr/frame", [.int(Int32(bitPattern: sequence))])),
-            .message(OSCMessage("/bcr/enable", [.int(frame.enabled ? 1 : 0)])),
+            .message(OSCMessage("/bcr/enable", [.int(frame.enabled ? 1 : 0)]))
         ]
         guard frame.enabled || frame.values.isEmpty else { throw MotionSafetyError("禁止在停止帧中发送运动值") }
         for id in frame.values.keys.sorted() {
@@ -140,11 +140,14 @@ final class OSCParameterAdapter: OutputTransport {
         do {
             if messages.count == 1, messages[0].address == "/bcr/heartbeat",
                messages[0].arguments.count == 2, case let .int(id) = messages[0].arguments[0],
-               case let .string(epoch) = messages[0].arguments[1], epoch.utf8.count == 32 {
+               case let .string(epoch) = messages[0].arguments[1], epoch.utf8.count == 32
+            {
                 let echo = UInt32(bitPattern: id)
-                if let previous = lastHeartbeatEcho, Int32(bitPattern: echo &- previous) <= 0 { onDroppedPacket?(); return }
+                if let previous = lastHeartbeatEcho,
+                   Int32(bitPattern: echo &- previous) <= 0 { onDroppedPacket?(); return }
                 if let sent = pendingHeartbeats.removeValue(forKey: id),
-                   receivedAt >= sent, receivedAt.timeIntervalSince(sent) <= 0.3 {
+                   receivedAt >= sent, receivedAt.timeIntervalSince(sent) <= 0.3
+                {
                     let previousEpoch = serverEpoch
                     serverEpoch = epoch
                     if let previous = previousEpoch, previous != epoch {
@@ -159,18 +162,21 @@ final class OSCParameterAdapter: OutputTransport {
             guard messages.count >= 3, messages[0].address == "/bcr/state/epoch",
                   messages[0].arguments.count == 1, case let .string(epoch) = messages[0].arguments[0],
                   messages[1].address == "/bcr/state/frame", messages[1].arguments.count == 1,
-                  case let .int(rawSequence) = messages[1].arguments[0] else {
+                  case let .int(rawSequence) = messages[1].arguments[0]
+            else {
                 throw MotionSafetyError("OSC 回传缺少对端标识/状态帧序号")
             }
             guard epoch == serverEpoch else { onDroppedPacket?(); return }
             let sequence = UInt32(bitPattern: rawSequence)
-            if let previous = lastStateSequence, Int32(bitPattern: sequence &- previous) <= 0 { onDroppedPacket?(); return }
+            if let previous = lastStateSequence,
+               Int32(bitPattern: sequence &- previous) <= 0 { onDroppedPacket?(); return }
             var samples: [ParameterSample] = []
             var seen = Set<ParameterID>()
             for message in messages.dropFirst(2) {
                 let id = try OSCCodec.parameterID(message.address)
                 guard seen.insert(id).inserted, message.arguments.count == 1,
-                      case let .float(value) = message.arguments[0], value.isFinite else {
+                      case let .float(value) = message.arguments[0], value.isFinite
+                else {
                     throw MotionSafetyError("OSC 回传参数重复或数值无效")
                 }
                 samples.append(.init(id: id, value: Double(value), receivedAt: receivedAt))
@@ -187,7 +193,9 @@ final class OSCParameterAdapter: OutputTransport {
     ) {
         connection.receiveMessage { data, _, _, error in
             let received = Date.now
-            if let error { handler(.failure(MotionSafetyError("OSC 接收失败：\(error.localizedDescription)")), received); return }
+            if let error {
+                handler(.failure(MotionSafetyError("OSC 接收失败：\(error.localizedDescription)")), received); return
+            }
             guard let data else { handler(.failure(MotionSafetyError("OSC 接收端已关闭")), received); return }
             do { handler(.success(try OSCCodec.immediateMessages(OSCCodec.decode(data))), received) }
             catch { handler(.failure(MotionSafetyError(error.localizedDescription)), received) }

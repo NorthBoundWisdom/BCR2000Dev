@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native WP6 acceptance hook with the standard-library UDP simulator."""
+
 import os
 from pathlib import Path
 import re
@@ -14,13 +15,13 @@ client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -41,7 +42,11 @@ def wait_for(check, description, timeout=5):
 
 
 def press_help(text, area=None, sheet=False):
-    container = "group 1 of sheet 1 of window 1" if sheet else ("group 1 of window 1" if area is None else f"scroll area {area} of group 1 of window 1")
+    container = (
+        "group 1 of sheet 1 of window 1"
+        if sheet
+        else ("group 1 of window 1" if area is None else f"scroll area {area} of group 1 of window 1")
+    )
     return gui(f'''repeat with i from 1 to count of buttons of {container}
 if help of button i of {container} is "{text}" then
 perform action "AXPress" of button i of {container}
@@ -60,8 +65,12 @@ def debug_failure(kind, value, trace):
 
 
 sys.excepthook = debug_failure
-simulator = subprocess.Popen([sys.executable, "tools/arm_sim.py", "--port", "0", "--speed", "15"],
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+simulator = subprocess.Popen(
+    [sys.executable, "tools/arm_sim.py", "--port", "0", "--speed", "15"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+)
 try:
     ready = simulator.stdout.readline()
     match = re.search(r"\('127\.0\.0\.1', (\d+)\)", ready)
@@ -76,14 +85,16 @@ set value of text field "端口" of group 1 of sheet 1 of window 1 to "{port}"
 key code 48''')
     press_help("启动或停止经过安全门的 OSC 输出", sheet=True)
     wait_for(lambda: safety()["status"] == "disabled", "output did not connect and remain disabled")
-    gui("perform action \"AXPress\" of button 1 of group 1 of sheet 1 of window 1")
+    gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
     client.call("set_parameter", {"id": "arm.j1", "value": 90})
     time.sleep(0.15)
     if abs(client.call("get_parameter", {"id": "arm.j1"})["actualValue"]) > 1e-5:
         raise RuntimeError("disabled gate sent motion")
     press_help("操作 B2-1", area=1)
-    wait_for(lambda: safety()["status"] == "ready" and safety()["outputs"].get("arm.j1", 0) > 0,
-             "enabled gate did not produce limited output")
+    wait_for(
+        lambda: safety()["status"] == "ready" and safety()["outputs"].get("arm.j1", 0) > 0,
+        "enabled gate did not produce limited output",
+    )
     time.sleep(0.25)
     state = safety()
     if not (0 < state["actual"]["arm.j1"] < state["outputs"]["arm.j1"] < 90):
@@ -105,7 +116,7 @@ key code 48''')
     ring = next(item for item in controls if item["label"] == "P1-1")["value"]
     if ring == 95:
         raise RuntimeError("actual LED projection still displayed the target")
-    gui("perform action \"AXPress\" of button 1 of group 1 of sheet 1 of window 1")
+    gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
     print("Native disable stopped simulated movement; actual LED projection preserved the software target.")
     time.sleep(0.3)
     press_help("操作 B2-1", area=1)
@@ -113,14 +124,21 @@ key code 48''')
     started = time.monotonic()
     simulator.terminate()
     simulator.wait(timeout=2)
-    wait_for(lambda: safety()["status"] in {"heartbeatExpired", "disconnected", "waitingActual"},
-             "receiver loss did not close gate within 500 ms", timeout=0.5)
+    wait_for(
+        lambda: safety()["status"] in {"heartbeatExpired", "disconnected", "waitingActual"},
+        "receiver loss did not close gate within 500 ms",
+        timeout=0.5,
+    )
     elapsed = time.monotonic() - started
     if elapsed > 0.5:
         raise RuntimeError("receiver loss alarm exceeded 500 ms")
     print(f"Native receiver-loss gate alarm passed in {elapsed * 1000:.0f} ms.")
-    simulator = subprocess.Popen([sys.executable, "tools/arm_sim.py", "--port", str(port), "--speed", "15"],
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    simulator = subprocess.Popen(
+        [sys.executable, "tools/arm_sim.py", "--port", str(port), "--speed", "15"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
     if "listening" not in simulator.stdout.readline():
         raise RuntimeError("simulator restart failed")
     # Some systems report UDP refusal immediately; others retain a ready socket

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native WP7 acceptance hook; run with mcp_integration.py --configuration-write."""
+
 import json
 import os
 import subprocess
@@ -14,13 +15,13 @@ client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -34,6 +35,7 @@ def debug_failure(kind, value, trace):
     except RuntimeError:
         pass
     sys.__excepthook__(kind, value, trace)
+
 
 sys.excepthook = debug_failure
 
@@ -60,22 +62,29 @@ end repeat
 error "button help not found"''')
 
 
-
 control = {"section": "pushEncoder", "row": 1, "index": 1}
+
+
 def selected():
     return next(entry for entry in client.call("list_controls") if entry["control"] == control)
 
+
 def read():
     return client.call("get_parameter", {"id": "arm.j1"})["value"]
+
 
 def turn(action):
     # AXUnknown is how SwiftUI exposes this adjustable knob on current macOS.
     gui(f'perform action "{action}" of UI element 5 of scroll area 1 of group 1 of window 1')
 
-def mode(index):
-    gui(f'perform action "AXPress" of radio button {index} of radio group "编码器模式" of scroll area 2 of group 1 of window 1')
 
-gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
+def mode(index):
+    gui(
+        f'perform action "AXPress" of radio button {index} of radio group "编码器模式" of scroll area 2 of group 1 of window 1'
+    )
+
+
+gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 assignment = selected()["assignment"]
 assignment.update(encoderMode="relative1", encoderStep=0.5)
 client.call("assign_control", {"assignment": assignment})

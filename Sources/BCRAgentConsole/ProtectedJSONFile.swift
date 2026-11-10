@@ -26,7 +26,11 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
          normalize: @escaping @Sendable (Value) throws -> Value,
          version: @escaping @Sendable (Value) -> Int,
          fallback: @escaping @Sendable () -> Value,
-         writeBackup: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(to: $1, options: .withoutOverwriting) }) {
+         writeBackup: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(
+             to: $1,
+             options: .withoutOverwriting
+         ) })
+    {
         self.store = store
         self.title = title
         self.normalize = normalize
@@ -50,9 +54,17 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
             let failure = error.localizedDescription
             do {
                 let backup = try backupExisting(kind: "invalid")
-                return .init(value: fallback(), message: "\(title)读取/校验失败：\(failure)。已载入安全初始配置，原文件保留；备份：\(backup?.lastPathComponent ?? "文件不存在")。", failed: true)
+                return .init(
+                    value: fallback(),
+                    message: "\(title)读取/校验失败：\(failure)。已载入安全初始配置，原文件保留；备份：\(backup?.lastPathComponent ?? "文件不存在")。",
+                    failed: true
+                )
             } catch {
-                return .init(value: fallback(), message: "\(title)读取失败：\(failure)。备份也失败：\(error.localizedDescription)。原文件未改写，后续保存将在保护原文件前被阻止。", failed: true)
+                return .init(
+                    value: fallback(),
+                    message: "\(title)读取失败：\(failure)。备份也失败：\(error.localizedDescription)。原文件未改写，后续保存将在保护原文件前被阻止。",
+                    failed: true
+                )
             }
         }
     }
@@ -62,7 +74,8 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(normalized)
-        guard data.count <= Self.maximumBytes else { throw ConfigurationFileError(reason: "\(title)超过 4 MiB 上限，未覆盖原文件") }
+        guard data.count <= Self.maximumBytes
+        else { throw ConfigurationFileError(reason: "\(title)超过 4 MiB 上限，未覆盖原文件") }
         if let original = try existingData() {
             var needsProtection = false
             do {
@@ -78,7 +91,8 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
     private func existingData() throws -> Data? {
         guard FileManager.default.fileExists(atPath: store.fileURL.path) else { return nil }
         let data = try Data(contentsOf: store.fileURL, options: .mappedIfSafe)
-        guard data.count <= Self.maximumBytes else { throw ConfigurationFileError(reason: "\(title)原文件超过 4 MiB，保留原文件并拒绝覆盖") }
+        guard data.count <= Self.maximumBytes
+        else { throw ConfigurationFileError(reason: "\(title)原文件超过 4 MiB，保留原文件并拒绝覆盖") }
         return data
     }
 

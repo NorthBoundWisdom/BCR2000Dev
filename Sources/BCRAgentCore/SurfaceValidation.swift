@@ -4,8 +4,10 @@ public struct SurfaceValidationIssue: Equatable, Sendable {
     public enum Code: String, Equatable, Sendable {
         case unsupportedVersion, emptyName, invalidParameter, duplicateParameter, duplicateAssignment
         case unknownParameter, encoderTrigger, invalidAgentSlot, unknownGroup, invalidFunction
-        case invalidEncoderMode, conflictingNRPNChannel, duplicateControlBinding, duplicateMIDIBinding, encoderMessageKind
+        case invalidEncoderMode, conflictingNRPNChannel, duplicateControlBinding, duplicateMIDIBinding,
+             encoderMessageKind
     }
+
     public let code: Code
     public let subject: String
     public let detail: String
@@ -26,7 +28,7 @@ public struct SurfaceValidationError: Error, LocalizedError, Equatable, Sendable
 public extension SurfaceConfiguration {
     func validate() throws {
         var issues: [SurfaceValidationIssue] = []
-        if !(1...Self.currentVersion).contains(version) {
+        if !(1 ... Self.currentVersion).contains(version) {
             issues.append(.init(.unsupportedVersion, subject: String(version), detail: "不支持功能配置版本 \(version)"))
         }
         if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -35,15 +37,27 @@ public extension SurfaceConfiguration {
         var identifiers = Set<ParameterID>()
         for parameter in parameters {
             if !identifiers.insert(parameter.id).inserted {
-                issues.append(.init(.duplicateParameter, subject: parameter.id.rawValue, detail: "参数 ID 重复：\(parameter.id)"))
+                issues.append(.init(
+                    .duplicateParameter,
+                    subject: parameter.id.rawValue,
+                    detail: "参数 ID 重复：\(parameter.id)"
+                ))
             }
             do {
                 try parameter.validate()
-                if !(parameter.minimum...parameter.maximum).contains(parameter.defaultValue) {
-                    issues.append(.init(.invalidParameter, subject: parameter.id.rawValue, detail: "\(parameter.id)：默认值不在参数范围内"))
+                if !(parameter.minimum ... parameter.maximum).contains(parameter.defaultValue) {
+                    issues.append(.init(
+                        .invalidParameter,
+                        subject: parameter.id.rawValue,
+                        detail: "\(parameter.id)：默认值不在参数范围内"
+                    ))
                 }
             } catch {
-                issues.append(.init(.invalidParameter, subject: parameter.id.rawValue, detail: "\(parameter.id)：\(error.localizedDescription)"))
+                issues.append(.init(
+                    .invalidParameter,
+                    subject: parameter.id.rawValue,
+                    detail: "\(parameter.id)：\(error.localizedDescription)"
+                ))
             }
         }
         var controls = Set<BCRControlID>()
@@ -87,10 +101,14 @@ public extension SurfaceConfiguration {
                     }
                 }
                 if invalid {
-                    issues.append(.init(.invalidFunction, subject: label, detail: "\(label)：循环值需为 1–256 个范围内的不同值（吸附后也不可重复）"))
+                    issues.append(.init(
+                        .invalidFunction,
+                        subject: label,
+                        detail: "\(label)：循环值需为 1–256 个范围内的不同值（吸附后也不可重复）"
+                    ))
                 }
             case let .agentPrimaryAction(slot):
-                if !(1...8).contains(slot.rawValue) {
+                if !(1 ... 8).contains(slot.rawValue) {
                     issues.append(.init(.invalidAgentSlot, subject: label, detail: "\(label)：Agent 槽位必须是 1–8"))
                 }
             case let .resetGroup(group):
@@ -113,27 +131,39 @@ public extension SurfaceConfiguration {
 public extension HardwareMap {
     func validate() throws {
         var issues: [SurfaceValidationIssue] = []
-        if !(3...Self.currentVersion).contains(version) {
+        if !(3 ... Self.currentVersion).contains(version) {
             issues.append(.init(.unsupportedVersion, subject: String(version), detail: "不支持硬件映射版本 \(version)，需要重新学习"))
         }
         var controls = Set<BCRControlID>()
         var identities = Set<MIDIControlID>()
         for entry in entries {
             if !controls.insert(entry.control).inserted {
-                issues.append(.init(.duplicateControlBinding, subject: entry.control.shortName, detail: "物理控件重复绑定：\(entry.control.shortName)"))
+                issues.append(.init(
+                    .duplicateControlBinding,
+                    subject: entry.control.shortName,
+                    detail: "物理控件重复绑定：\(entry.control.shortName)"
+                ))
             }
             if !identities.insert(entry.midi).inserted {
-                issues.append(.init(.duplicateMIDIBinding, subject: entry.midi.description, detail: "MIDI 身份重复：\(entry.midi)"))
+                issues.append(.init(
+                    .duplicateMIDIBinding,
+                    subject: entry.midi.description,
+                    detail: "MIDI 身份重复：\(entry.midi)"
+                ))
             }
             if entry.control.isContinuous, entry.midi.kind == .note {
-                issues.append(.init(.encoderMessageKind, subject: entry.control.shortName, detail: "\(entry.control.shortName)：编码器只能绑定 CC 或 NRPN"))
+                issues.append(.init(
+                    .encoderMessageKind,
+                    subject: entry.control.shortName,
+                    detail: "\(entry.control.shortName)：编码器只能绑定 CC 或 NRPN"
+                ))
             }
         }
         let nrpnChannels = Set(entries.filter { $0.midi.kind == .nrpn }.map { $0.midi.channel })
         for entry in entries where entry.midi.kind == .controlChange && nrpnChannels.contains(entry.midi.channel) {
             if [6, 38, 98, 99, 100, 101, 121].contains(Int(entry.midi.number)) {
                 issues.append(.init(.conflictingNRPNChannel, subject: entry.control.shortName,
-                    detail: "\(entry.control.shortName)：此通道的 CC \(entry.midi.number) 已保留给 NRPN，请改用其他通道或控制器"))
+                                    detail: "\(entry.control.shortName)：此通道的 CC \(entry.midi.number) 已保留给 NRPN，请改用其他通道或控制器"))
             }
         }
         if !issues.isEmpty { throw SurfaceValidationError(issues) }

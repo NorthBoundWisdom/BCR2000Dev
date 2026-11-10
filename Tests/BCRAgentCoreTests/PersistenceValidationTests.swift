@@ -5,7 +5,10 @@ import XCTest
 final class PersistenceValidationTests: XCTestCase {
     func testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer() throws {
         for value in [0, 9, -1] {
-            XCTAssertThrowsError(try JSONDecoder().decode(AgentSlotID.self, from: Data("{\"rawValue\":\(value)}".utf8))) {
+            XCTAssertThrowsError(try JSONDecoder().decode(
+                AgentSlotID.self,
+                from: Data("{\"rawValue\":\(value)}".utf8)
+            )) {
                 XCTAssertTrue($0 is DecodingError)
             }
         }
@@ -20,6 +23,7 @@ final class PersistenceValidationTests: XCTestCase {
             }
         }
     }
+
     func testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted() throws {
         let definition = try JSONValue.encoded(ParameterDefinition(id: "x", name: "X")).objectValue!
         for field in ["group", "unit", "minimum", "maximum", "defaultValue", "kind", "agentWritable"] {
@@ -38,13 +42,19 @@ final class PersistenceValidationTests: XCTestCase {
     func testWholeConfigurationReportsMultipleConcreteIssues() {
         let parameter = ParameterDefinition(id: "j", name: "Joint")
         let control = BCRControlID.encoder(row: 1, 1)
-        let configuration = SurfaceConfiguration(version: 999, name: "", parameters: [parameter, parameter], assignments: [
-            ControlAssignment(control: control, target: .parameter("missing")),
-            ControlAssignment(control: control, target: .agentPrimaryAction(AgentSlotID(1))),
-        ])
+        let configuration = SurfaceConfiguration(
+            version: 999,
+            name: "",
+            parameters: [parameter, parameter],
+            assignments: [
+                ControlAssignment(control: control, target: .parameter("missing")),
+                ControlAssignment(control: control, target: .agentPrimaryAction(AgentSlotID(1)))
+            ]
+        )
         let actual = codes(configuration)
         for expected in [SurfaceValidationIssue.Code.unsupportedVersion, .emptyName, .duplicateParameter,
-                         .duplicateAssignment, .unknownParameter, .encoderTrigger] {
+                         .duplicateAssignment, .unknownParameter, .encoderTrigger]
+        {
             XCTAssertTrue(actual.contains(expected), "Missing \(expected)")
         }
     }
@@ -59,10 +69,11 @@ final class PersistenceValidationTests: XCTestCase {
             .init(id: "x", name: "Name", maximum: .nan),
             .init(id: "x", name: "Name", minimum: -1e308, maximum: 1e308),
             .init(id: "x", name: "Name", defaultValue: .nan),
-            .init(id: "x", name: "Name", defaultValue: 999),
+            .init(id: "x", name: "Name", defaultValue: 999)
         ]
         for definition in invalid {
-            XCTAssertTrue(codes(SurfaceConfiguration(name: "Test", parameters: [definition])).contains(.invalidParameter))
+            XCTAssertTrue(codes(SurfaceConfiguration(name: "Test", parameters: [definition]))
+                .contains(.invalidParameter))
         }
     }
 
@@ -76,10 +87,13 @@ final class PersistenceValidationTests: XCTestCase {
     func testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic() {
         var configuration = SurfaceConfiguration(name: "Test")
         let original = configuration
-        XCTAssertThrowsError(try configuration.assign(ControlAssignment(control: .userButton(1), target: .resetGroup("missing"))))
+        XCTAssertThrowsError(try configuration.assign(ControlAssignment(
+            control: .userButton(1),
+            target: .resetGroup("missing")
+        )))
         XCTAssertEqual(configuration, original)
         XCTAssertTrue(codes(SurfaceConfiguration(name: "Test", assignments: [
-            ControlAssignment(control: .userButton(1), target: .resetGroup("missing")),
+            ControlAssignment(control: .userButton(1), target: .resetGroup("missing"))
         ])).contains(.unknownGroup))
     }
 
@@ -89,11 +103,14 @@ final class PersistenceValidationTests: XCTestCase {
         XCTAssertThrowsError(try JSONValue.encoded(duplicates).decoded(SurfaceConfiguration.self))
         var raw = try JSONValue.encoded(SurfaceConfiguration.robotArmDemo()).objectValue!
         var assignments = raw["assignments"]!.arrayValue!
-        let index = try XCTUnwrap(assignments.firstIndex { $0.objectValue?["target"]?.objectValue?["agentPrimaryAction"] != nil })
+        let index = try XCTUnwrap(assignments
+            .firstIndex { $0.objectValue?["target"]?.objectValue?["agentPrimaryAction"] != nil })
         var assignment = assignments[index].objectValue!
         assignment["target"] = .object(["agentPrimaryAction": .object(["_0": .object(["rawValue": .number(99)])])])
         assignments[index] = .object(assignment); raw["assignments"] = .array(assignments)
-        XCTAssertThrowsError(try JSONValue.object(raw).decoded(SurfaceConfiguration.self)) { XCTAssertTrue($0 is DecodingError) }
+        XCTAssertThrowsError(try JSONValue.object(raw).decoded(SurfaceConfiguration.self)) {
+            XCTAssertTrue($0 is DecodingError)
+        }
     }
 
     func testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes() throws {
@@ -103,7 +120,7 @@ final class PersistenceValidationTests: XCTestCase {
             HardwareMap(entries: [.init(control: a, midi: cc), .init(control: a, midi: cc)]),
             HardwareMap(entries: [.init(control: a, midi: cc), .init(control: b, midi: cc)]),
             HardwareMap(entries: [.init(control: a, midi: .init(kind: .note, channel: 0, number: 1))]),
-            HardwareMap(version: 999),
+            HardwareMap(version: 999)
         ] {
             XCTAssertThrowsError(try map.validate())
             XCTAssertThrowsError(try JSONValue.encoded(map).decoded(HardwareMap.self))
@@ -113,7 +130,7 @@ final class PersistenceValidationTests: XCTestCase {
 
     func testRemovingLastGroupParameterClearsDanglingResetAction() throws {
         var configuration = SurfaceConfiguration(name: "Test", parameters: [
-            ParameterDefinition(id: "x", name: "X", group: "group"),
+            ParameterDefinition(id: "x", name: "X", group: "group")
         ], assignments: [.init(control: .userButton(1), target: .resetGroup("group"))])
         configuration.removeParameter("x")
         XCTAssertTrue(configuration.assignments.isEmpty)
@@ -122,7 +139,11 @@ final class PersistenceValidationTests: XCTestCase {
 
     func testConfigurationReplacementStopsLearningWithVisibleEventAndRejectsInvalidState() async throws {
         try await MainActor.run {
-            let session = SurfaceSession(hardwareDevice: ValidationFakeDevice(), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+            let session = SurfaceSession(
+                hardwareDevice: ValidationFakeDevice(),
+                saveHardwareMap: { _ in },
+                saveConfiguration: { _ in }
+            )
             session.selectSource(.hardware)
             let control = BCRControlID.encoder(row: 1, 1)
             session.beginLearning(at: control)
@@ -137,6 +158,7 @@ final class PersistenceValidationTests: XCTestCase {
         }
     }
 }
+
 @MainActor
 private final class ValidationFakeDevice: SurfaceDevice {
     let connection = MIDIConnectionSnapshot()

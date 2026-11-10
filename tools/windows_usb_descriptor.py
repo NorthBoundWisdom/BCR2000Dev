@@ -4,6 +4,7 @@
 Uses Microsoft USBView-style hub GET queries. No USB data output, configuration
 selection, driver installation, reset, firmware or preset operations.
 """
+
 import argparse
 import ctypes as C
 import json
@@ -52,7 +53,9 @@ def hubs(kernel, setup):
                 raise C.WinError(C.get_last_error())
             data = C.create_string_buffer(needed.value)
             U32.from_buffer(data).value = 8 if C.sizeof(PTR) == 8 else 6
-            if not setup.SetupDiGetDeviceInterfaceDetailW(devices, C.byref(item), data, len(data), C.byref(needed), None):
+            if not setup.SetupDiGetDeviceInterfaceDetailW(
+                devices, C.byref(item), data, len(data), C.byref(needed), None
+            ):
                 raise C.WinError(C.get_last_error())
             yield C.wstring_at(C.addressof(data) + 4)
             index += 1
@@ -64,7 +67,7 @@ def ioctl(kernel, handle, code, data):
     received = U32()
     if not kernel.DeviceIoControl(handle, code, data, len(data), data, len(data), C.byref(received), None):
         return None, C.get_last_error()
-    return bytes(data)[:received.value], None
+    return bytes(data)[: received.value], None
 
 
 def descriptor(kernel, handle, port, length):
@@ -85,18 +88,32 @@ def parse(data):
         length = data[index]
         if length < 2 or index + length > len(data):
             raise ValueError("Truncated USB descriptor")
-        item = data[index:index + length]
+        item = data[index : index + length]
         kind = item[1]
         if kind == 4:
             if length < 9:
                 raise ValueError("Short interface descriptor")
-            items.append({"interface": item[2], "alternate": item[3], "endpoints": item[4],
-                          "class": item[5], "subclass": item[6], "protocol": item[7]})
+            items.append(
+                {
+                    "interface": item[2],
+                    "alternate": item[3],
+                    "endpoints": item[4],
+                    "class": item[5],
+                    "subclass": item[6],
+                    "protocol": item[7],
+                }
+            )
         elif kind == 5:
             if length < 7:
                 raise ValueError("Short endpoint descriptor")
-            items.append({"endpointAddress": hex(item[2]), "attributes": item[3],
-                          "maxPacket": int.from_bytes(item[4:6], "little"), "interval": item[6]})
+            items.append(
+                {
+                    "endpointAddress": hex(item[2]),
+                    "attributes": item[3],
+                    "maxPacket": int.from_bytes(item[4:6], "little"),
+                    "interval": item[6],
+                }
+            )
         elif kind == 0x25:
             items.append({"classEndpoint": list(item)})
         elif kind == 0x24:
@@ -109,11 +126,13 @@ def full_speed_bulk_warnings(descriptors, speed):
     if speed != 1:  # USB_DEVICE_SPEED: Full Speed.
         return []
     return [
-        {"endpoint": item["endpointAddress"], "declaredMaxPacket": item["maxPacket"],
-         "reason": "Full-speed bulk endpoint declares a size outside 8/16/32/64; host compatibility needs verification"}
+        {
+            "endpoint": item["endpointAddress"],
+            "declaredMaxPacket": item["maxPacket"],
+            "reason": "Full-speed bulk endpoint declares a size outside 8/16/32/64; host compatibility needs verification",
+        }
         for item in descriptors
-        if "endpointAddress" in item and item["attributes"] & 3 == 2
-        and item["maxPacket"] not in (8, 16, 32, 64)
+        if "endpointAddress" in item and item["attributes"] & 3 == 2 and item["maxPacket"] not in (8, 16, 32, 64)
     ]
 
 
@@ -157,14 +176,20 @@ def collect():
                     raise ValueError("Invalid configuration length")
                 full = descriptor(kernel, handle, port, total)
                 parsed = parse(full)
-                report["targets"].append({
-                    "vendor": hex(vendor), "product": hex(product),
-                    "configuration": full[5], "currentConfiguration": connection[22],
-                    "numConfigurations": connection[21], "configurationBytes": len(full),
-                    "speedCode": connection[23], "usbVersionBcd": hex(struct.unpack_from("<H", connection, 6)[0]),
-                    "descriptors": parsed,
-                    "fullSpeedBulkSizeWarnings": full_speed_bulk_warnings(parsed, connection[23]),
-                })
+                report["targets"].append(
+                    {
+                        "vendor": hex(vendor),
+                        "product": hex(product),
+                        "configuration": full[5],
+                        "currentConfiguration": connection[22],
+                        "numConfigurations": connection[21],
+                        "configurationBytes": len(full),
+                        "speedCode": connection[23],
+                        "usbVersionBcd": hex(struct.unpack_from("<H", connection, 6)[0]),
+                        "descriptors": parsed,
+                        "fullSpeedBulkSizeWarnings": full_speed_bulk_warnings(parsed, connection[23]),
+                    }
+                )
         finally:
             kernel.CloseHandle(handle)
     return report

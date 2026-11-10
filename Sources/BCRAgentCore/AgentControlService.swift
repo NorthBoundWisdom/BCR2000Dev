@@ -12,7 +12,8 @@ public final class AgentControlService {
     private var usedWrites = 0
 
     public init(session: SurfaceSession, permissions: MCPPermissions = MCPPermissions(),
-                now: @escaping @MainActor () -> Date = { .now }) {
+                now: @escaping @MainActor () -> Date = { .now })
+    {
         self.session = session
         self.permissions = permissions
         self.now = now
@@ -53,9 +54,10 @@ public final class AgentControlService {
                     "connected": .bool(session.connection.isConnected),
                     "source": session.connection.connectedSource.map(JSONValue.string) ?? .null,
                     "destination": session.connection.connectedDestination.map(JSONValue.string) ?? .null,
-                    "error": session.connection.lastError.map(JSONValue.string) ?? .null,
+                    "error": session.connection.lastError.map(JSONValue.string) ?? .null
                 ]),
-                "configurationPersistenceError": session.lastConfigurationPersistenceError.map(JSONValue.string) ?? .null,
+                "configurationPersistenceError": session.lastConfigurationPersistenceError
+                    .map(JSONValue.string) ?? .null
             ])
         case "list_parameters":
             return .array(try session.engine.configuration.parameters.map { try parameterInfo($0.id) })
@@ -89,22 +91,24 @@ public final class AgentControlService {
             return .object([
                 "results": .array(try write(writable.map { ($0.id, $0.defaultValue) })),
                 "skipped": .array(skipped.map { .object(["id": .string($0.id.rawValue),
-                    "reason": .string("参数受保护，不允许 Agent 写入")]) }),
+                                                         "reason": .string("参数受保护，不允许 Agent 写入")]) })
             ])
         case "list_controls":
             return .array(try BCRLayout.allControls.map { control in
                 .object([
                     "control": try .encoded(control),
                     "label": .string(control.shortName),
-                    "assignment": try session.engine.configuration.assignment(for: control).map(JSONValue.encoded) ?? .null,
+                    "assignment": try session.engine.configuration.assignment(for: control)
+                        .map(JSONValue.encoded) ?? .null,
                     "binding": try session.engine.hardwareMap.midi(for: control).map(JSONValue.encoded) ?? .null,
-                    "value": .number(Int(session.source == .mock ? session.mock.value(of: control) : session.engine.state(of: control).value)),
+                    "value": .number(Int(session.source == .mock ? session.mock.value(of: control) : session.engine
+                            .state(of: control).value))
                 ])
             })
         case "assign_control":
             try requireConfigurationWrite()
             let assignment = try args["assignment"]!.decoded(ControlAssignment.self)
-            if case let .agentPrimaryAction(slot) = assignment.target, !(1...8).contains(slot.rawValue) {
+            if case let .agentPrimaryAction(slot) = assignment.target, !(1 ... 8).contains(slot.rawValue) {
                 throw MCPToolFailure("Agent 槽位必须为 1–8")
             }
             if case let .resetGroup(group) = assignment.target,
@@ -130,7 +134,8 @@ public final class AgentControlService {
                 }
             }
             guard definition.defaultValue.isFinite,
-                  (definition.minimum...definition.maximum).contains(definition.defaultValue) else {
+                  (definition.minimum ... definition.maximum).contains(definition.defaultValue)
+            else {
                 throw MCPToolFailure("默认值必须在参数范围内")
             }
             var candidate = session.engine.configuration
@@ -153,8 +158,10 @@ public final class AgentControlService {
         for (id, value) in entries {
             guard value.isFinite else { throw MCPToolFailure("参数值必须是有限数值") }
             guard seen.insert(id).inserted else { throw MCPToolFailure("批量写入包含重复参数：\(id)") }
-            guard let definition = session.engine.configuration.parameter(id) else { throw MCPToolFailure("未知参数：\(id)") }
-            guard definition.agentWritable, !session.isMCPProtectedParameter(id) else { throw MCPToolFailure("参数不允许 Agent 写入：\(id)") }
+            guard let definition = session.engine.configuration.parameter(id)
+            else { throw MCPToolFailure("未知参数：\(id)") }
+            guard definition.agentWritable,
+                  !session.isMCPProtectedParameter(id) else { throw MCPToolFailure("参数不允许 Agent 写入：\(id)") }
         }
         try consumeWrites(entries.count)
         // All validation completes before the first synchronous effect. No await can interleave a change.
@@ -171,14 +178,17 @@ public final class AgentControlService {
     private func parameterInfo(_ id: ParameterID) throws -> JSONValue {
         guard let definition = session.engine.configuration.parameter(id),
               let value = session.engine.value(of: id),
-              case var .object(info) = try JSONValue.encoded(definition) else {
+              case var .object(info) = try JSONValue.encoded(definition)
+        else {
             throw MCPToolFailure("未知参数：\(id)")
         }
         info["value"] = .double(value)
         info["actualValue"] = session.engine.actualFeedbackValues[id].map(JSONValue.double) ?? .null
         info["outputValue"] = session.motionSafety?.outputs[id].map(JSONValue.double) ?? .null
-        info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable && !session.isMCPProtectedParameter(id))
-        info["controls"] = .array(try session.engine.configuration.controls(targetingParameter: id).map(JSONValue.encoded))
+        info["writable"] = .bool(permissions.parameterWrite && definition.agentWritable && !session
+            .isMCPProtectedParameter(id))
+        info["controls"] = .array(try session.engine.configuration.controls(targetingParameter: id)
+            .map(JSONValue.encoded))
         return .object(info)
     }
 
@@ -188,7 +198,8 @@ public final class AgentControlService {
             .object(Dictionary(uniqueKeysWithValues: input.map { ($0.key.rawValue, .double($0.value)) }))
         }
         return .object(["status": .string(safety.status.rawValue), "reason": .string(safety.reason),
-                        "limited": .bool(safety.limited), "outputs": values(safety.outputs), "actual": values(safety.actual),
+                        "limited": .bool(safety.limited), "outputs": values(safety.outputs),
+                        "actual": values(safety.actual),
                         "baseline": values(safety.baseline)])
     }
 
@@ -218,7 +229,8 @@ public final class AgentControlService {
     }
 
     private func string(_ args: [String: JSONValue], _ key: String) throws -> String {
-        guard let value = args[key]?.stringValue, value.utf8.count <= 1_024 else { throw MCPToolFailure("\(key) 必须是长度不超过 1024 的字符串") }
+        guard let value = args[key]?.stringValue,
+              value.utf8.count <= 1_024 else { throw MCPToolFailure("\(key) 必须是长度不超过 1024 的字符串") }
         return value
     }
 

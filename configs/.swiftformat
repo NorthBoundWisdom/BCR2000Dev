@@ -1,0 +1,10 @@
+--swiftversion 6.0
+--language-mode 6
+--indent 4
+--maxwidth 120
+--commas inline
+--stripunusedargs closure-only
+--trimwhitespace always
+--header ignore
+--rules blankLineAfterImports,blankLinesAroundMark,blankLinesAtEndOfScope,blankLinesAtStartOfScope,blankLinesBetweenScopes,braces,consecutiveBlankLines,consecutiveSpaces,elseOnSameLine,emptyBraces,indent,linebreakAtEndOfFile,linebreaks,spaceAroundBraces,spaceAroundBrackets,spaceAroundComments,spaceAroundGenerics,spaceAroundOperators,spaceAroundParens,spaceInsideBraces,spaceInsideBrackets,spaceInsideComments,spaceInsideGenerics,spaceInsideParens,trailingCommas,trailingSpace,wrap,wrapArguments,wrapMultilineStatementBraces
+--exclude configs/_vendor,build,.build

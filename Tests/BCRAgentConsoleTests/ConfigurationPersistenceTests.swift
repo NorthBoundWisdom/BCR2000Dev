@@ -69,7 +69,8 @@ final class ConfigurationPersistenceTests: XCTestCase {
         XCTAssertEqual(read.value.version, SurfaceConfiguration.currentVersion)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), data)
         try file.save(read.value)
-        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0 != store.fileURL }
+        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0 != store.fileURL }
         XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == data })
     }
 
@@ -143,13 +144,15 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = stores(directory).hardwareMap
-        let original = Data("{\"version\":3,\"entries\":[{\"control\":{\"section\":\"encoder\",\"row\":1,\"index\":1},\"midi\":{\"kind\":\"controlChange\",\"channel\":16,\"number\":1}}]}".utf8)
+        let original = Data("{\"version\":3,\"entries\":[{\"control\":{\"section\":\"encoder\",\"row\":1,\"index\":1},\"midi\":{\"kind\":\"controlChange\",\"channel\":16,\"number\":1}}]}"
+            .utf8)
         try original.write(to: store.fileURL)
         let result = ProtectedJSONFile.hardware(store).load()
         XCTAssertTrue(result.failed)
         XCTAssertEqual(result.value.boundCount, 0)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), original)
     }
+
     func testRetrySaveClearsVisibleStorageFailureWithoutRequiringAnotherEdit() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -187,7 +190,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let store = stores(directory).hardwareMap
         let map = HardwareMap(version: 3, entries: [.init(control: .encoder(row: 1, 1),
-            midi: .init(kind: .controlChange, channel: 0, number: 5))])
+                                                          midi: .init(kind: .controlChange, channel: 0, number: 5))])
         let original = try JSONEncoder().encode(map)
         try original.write(to: store.fileURL)
         let file = ProtectedJSONFile.hardware(store)
@@ -198,8 +201,8 @@ final class ConfigurationPersistenceTests: XCTestCase {
         XCTAssertEqual(read.value.entries, map.entries)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), original)
         try file.save(read.value)
-        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0 != store.fileURL }
+        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0 != store.fileURL }
         XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == original })
     }
-
 }

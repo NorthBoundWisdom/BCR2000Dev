@@ -61,8 +61,10 @@ private struct MCPSettingsView: View {
             .formStyle(.columns)
             HStack {
                 Button("应用设置") { Task { await controller.apply(draft) } }.buttonStyle(.borderedProminent)
-                Button("复制 Token") { Task { await controller.copyToken() } }.disabled(!controller.settings.enabled || controller.isStarting)
-                Button("复制连接命令") { Task { await controller.copyConnectionCommand() } }.disabled(!controller.settings.enabled || controller.isStarting)
+                Button("复制 Token") { Task { await controller.copyToken() } }
+                    .disabled(!controller.settings.enabled || controller.isStarting)
+                Button("复制连接命令") { Task { await controller.copyConnectionCommand() } }
+                    .disabled(!controller.settings.enabled || controller.isStarting)
             }
             Divider()
             Text("最近 100 次调用").font(.headline)

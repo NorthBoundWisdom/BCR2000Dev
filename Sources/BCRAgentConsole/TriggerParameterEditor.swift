@@ -49,14 +49,16 @@ struct TriggerParameterEditor: View {
         case .setParameter: update(.setParameter(id: id, value: definition.defaultValue))
         case .cycleParameter:
             var seen = Set<Double>()
-            let values = [definition.minimum, definition.clamp(definition.defaultValue), definition.maximum].filter { seen.insert($0).inserted }
+            let values = [definition.minimum, definition.clamp(definition.defaultValue), definition.maximum]
+                .filter { seen.insert($0).inserted }
             update(.cycleParameter(id: id, values: values))
         default: break
         }
     }
 
     private func refreshCycleText() {
-        if case let .cycleParameter(_, values) = target { cycleText = values.map { String($0) }.joined(separator: ", ") }
+        if case let .cycleParameter(_, values) = target { cycleText = values.map { String($0) }.joined(separator: ", ")
+        }
     }
 
     private func update(_ target: ControlTarget) {

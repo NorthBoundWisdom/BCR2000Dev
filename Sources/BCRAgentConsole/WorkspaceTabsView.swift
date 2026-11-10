@@ -89,7 +89,9 @@ private struct ParameterListView: View {
                     Button("取消", role: .cancel) { pendingImport = nil }
                 } message: {
                     if let pendingImport {
-                        Text("“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。")
+                        Text(
+                            "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
+                        )
                     }
                 }
                 Button("导出配置…") { Task { await model.chooseConfigurationExport() } }
@@ -179,7 +181,7 @@ private struct ParameterRow: View {
         } else {
             Slider(
                 value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
-                in: definition.minimum...definition.maximum
+                in: definition.minimum ... definition.maximum
             )
         }
     }
@@ -288,7 +290,9 @@ private struct MIDIMonitorView: View {
                             Text(event.direction == .input ? "IN " : "OUT")
                                 .foregroundStyle(event.direction == .input ? Theme.parameter : Theme.selection)
                                 .bold()
-                            Text(event.origin == .agent ? "AGENT" : (event.origin == .external ? "STATE" : (event.source == .mock ? "MOCK" : "HW  ")))
+                            Text(event
+                                .origin == .agent ? "AGENT" :
+                                (event.origin == .external ? "STATE" : (event.source == .mock ? "MOCK" : "HW  ")))
                                 .foregroundStyle(.secondary)
                             Text(event.message.diagnosticDescription)
                                 .lineLimit(1)

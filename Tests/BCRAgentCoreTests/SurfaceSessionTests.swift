@@ -76,10 +76,10 @@ final class SurfaceSessionTests: XCTestCase {
 
     private func mirroredConfiguration() -> SurfaceConfiguration {
         SurfaceConfiguration(name: "Mirror", parameters: [
-            ParameterDefinition(id: "j", name: "Joint", minimum: 0, maximum: 127, defaultValue: 30),
+            ParameterDefinition(id: "j", name: "Joint", minimum: 0, maximum: 127, defaultValue: 30)
         ], assignments: [
             ControlAssignment(control: a, target: .parameter("j")),
-            ControlAssignment(control: b, target: .parameter("j")),
+            ControlAssignment(control: b, target: .parameter("j"))
         ])
     }
 
@@ -297,7 +297,10 @@ final class SurfaceSessionTests: XCTestCase {
         f.session.beginLearning(at: a)
         f.device.receive([message(a, 70)])
         XCTAssertEqual(f.session.engine.hardwareMap.midi(for: a), message(a, 70).controlID)
-        XCTAssertEqual(f.notifications.last, .failed(.hardwareMapPersistence, SessionTestError.unavailable.localizedDescription))
+        XCTAssertEqual(
+            f.notifications.last,
+            .failed(.hardwareMapPersistence, SessionTestError.unavailable.localizedDescription)
+        )
         XCTAssertTrue(f.state.maps.isEmpty)
     }
 
@@ -331,11 +334,17 @@ final class SurfaceSessionTests: XCTestCase {
 
     func testConfigurationValidationAndSaveErrorsAreObservable() async throws {
         let f = SessionFixture(configuration: mirroredConfiguration())
-        XCTAssertThrowsError(try f.session.setAssignment(ControlAssignment(control: a, target: .agentPrimaryAction(AgentSlotID(1))), for: a))
+        XCTAssertThrowsError(try f.session.setAssignment(
+            ControlAssignment(control: a, target: .agentPrimaryAction(AgentSlotID(1))),
+            for: a
+        ))
         XCTAssertTrue(f.state.configurations.isEmpty)
         f.state.failsSave = true
         try f.session.updateParameter(ParameterDefinition(id: "j", name: "Updated"))
-        XCTAssertEqual(f.notifications.last, .failed(.configurationPersistence, SessionTestError.unavailable.localizedDescription))
+        XCTAssertEqual(
+            f.notifications.last,
+            .failed(.configurationPersistence, SessionTestError.unavailable.localizedDescription)
+        )
         XCTAssertEqual(f.session.engine.configuration.parameter("j")?.name, "Updated")
     }
 
@@ -374,6 +383,7 @@ final class SurfaceSessionTests: XCTestCase {
         f.device.receive([message(a, 13)])
         XCTAssertEqual(f.session.events.first?.id, 306)
     }
+
     func testChangingConnectedOutputRouteResendsSnapshotOnce() async {
         let fixture = SessionFixture()
         fixture.session.selectSource(.hardware)
@@ -388,5 +398,4 @@ final class SurfaceSessionTests: XCTestCase {
         fixture.device.onConnection?(snapshot)
         XCTAssertTrue(fixture.device.sent.isEmpty)
     }
-
 }

@@ -14,8 +14,12 @@ public struct MockBCR2000: Sendable {
     /// Which push-encoder group is shown on the top row. Group switching is local to the device
     /// and sends no MIDI, exactly like the real group buttons.
     public var activeGroup = 1 {
-        didSet { activeGroup = min(max(activeGroup, BCRLayout.encoderGroups.lowerBound), BCRLayout.encoderGroups.upperBound) }
+        didSet { activeGroup = min(
+            max(activeGroup, BCRLayout.encoderGroups.lowerBound),
+            BCRLayout.encoderGroups.upperBound
+        ) }
     }
+
     public private(set) var sentCount = 0
     public private(set) var receivedCount = 0
 
@@ -91,7 +95,9 @@ public struct MockBCR2000: Sendable {
 
     /// Explicit Mock-only resolution experiment; never changes a physical device preset.
     public mutating func setNRPN(_ enabled: Bool, for control: BCRControlID) throws {
-        guard control.isContinuous, let original = HardwareMap.mockPreset().midi(for: control) else { throw HardwareBindingError.invalidMap("只有 Mock 编码器可切换 NRPN") }
+        guard control.isContinuous,
+              let original = HardwareMap.mockPreset().midi(for: control)
+        else { throw HardwareBindingError.invalidMap("只有 Mock 编码器可切换 NRPN") }
         let identity = enabled ? MIDIControlID(kind: .nrpn, channel: 15, number: original.number) : original
         try preset.bind(control, to: identity)
     }

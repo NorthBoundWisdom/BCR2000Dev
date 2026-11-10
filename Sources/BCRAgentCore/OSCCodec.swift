@@ -74,7 +74,9 @@ public enum OSCCodec {
     }
 
     public static func parameterID(_ address: String, prefix: String = "/bcr/state/") throws -> ParameterID {
-        guard address.hasPrefix(prefix), let id = String(address.dropFirst(prefix.count)).removingPercentEncoding, !id.isEmpty else {
+        guard address.hasPrefix(prefix), let id = String(address.dropFirst(prefix.count)).removingPercentEncoding,
+              !id.isEmpty
+        else {
             throw MotionSafetyError("实际状态 OSC 地址无效")
         }
         return ParameterID(id)
@@ -95,7 +97,7 @@ public enum OSCCodec {
                 guard count > 0, count % 4 == 0, count <= cursor.bytes.count - cursor.index else {
                     throw MotionSafetyError("OSC bundle 长度无效")
                 }
-                let child = Data(cursor.bytes[cursor.index..<(cursor.index + count)])
+                let child = Data(cursor.bytes[cursor.index ..< (cursor.index + count)])
                 cursor.index += count
                 elements.append(try decode(child, depth: depth + 1))
             }
@@ -121,11 +123,17 @@ public enum OSCCodec {
     }
 
     private static func integer(_ value: UInt32, into data: inout Data) {
-        data.append(contentsOf: [UInt8(value >> 24), UInt8((value >> 16) & 255), UInt8((value >> 8) & 255), UInt8(value & 255)])
+        data.append(contentsOf: [
+            UInt8(value >> 24),
+            UInt8((value >> 16) & 255),
+            UInt8((value >> 8) & 255),
+            UInt8(value & 255)
+        ])
     }
 
     private static func string(_ value: String, into data: inout Data) throws {
-        guard !value.utf8.contains(0), value.utf8.allSatisfy({ $0 < 128 }) else { throw MotionSafetyError("OSC 字符串必须是非空字符编码的 ASCII") }
+        guard !value.utf8.contains(0),
+              value.utf8.allSatisfy({ $0 < 128 }) else { throw MotionSafetyError("OSC 字符串必须是非空字符编码的 ASCII") }
         data.append(contentsOf: value.utf8); data.append(0)
         while data.count % 4 != 0 { data.append(0) }
     }
@@ -135,18 +143,21 @@ public enum OSCCodec {
         var index = 0
         mutating func integer() throws -> UInt32 {
             guard bytes.count - index >= 4 else { throw MotionSafetyError("OSC 数值不完整") }
-            let value = UInt32(bytes[index]) << 24 | UInt32(bytes[index + 1]) << 16 | UInt32(bytes[index + 2]) << 8 | UInt32(bytes[index + 3])
+            let value = UInt32(bytes[index]) << 24 | UInt32(bytes[index + 1]) << 16 | UInt32(bytes[index + 2]) << 8 |
+                UInt32(bytes[index + 3])
             index += 4
             return value
         }
+
         mutating func string() throws -> String {
             let start = index
             guard let end = bytes[index...].firstIndex(of: 0) else { throw MotionSafetyError("OSC 字符串缺少结束符") }
-            guard bytes[start..<end].allSatisfy({ $0 < 128 }) else { throw MotionSafetyError("OSC 字符串不是 ASCII") }
+            guard bytes[start ..< end].allSatisfy({ $0 < 128 }) else { throw MotionSafetyError("OSC 字符串不是 ASCII") }
             let padded = (end + 4) & ~3
-            guard padded <= bytes.count, bytes[end..<padded].allSatisfy({ $0 == 0 }) else { throw MotionSafetyError("OSC 字符串填充无效") }
+            guard padded <= bytes.count,
+                  bytes[end ..< padded].allSatisfy({ $0 == 0 }) else { throw MotionSafetyError("OSC 字符串填充无效") }
             index = padded
-            return String(decoding: bytes[start..<end], as: UTF8.self)
+            return String(decoding: bytes[start ..< end], as: UTF8.self)
         }
     }
 }

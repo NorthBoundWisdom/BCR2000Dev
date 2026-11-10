@@ -27,6 +27,7 @@ def main() -> int:
         marker = REPO_ROOT / "build/configured.json"
         marker.parent.mkdir(parents=True, exist_ok=True)
         marker.write_text(json.dumps({"schema_version": 1, "app_build": settings}, indent=2) + "\n")
+    subprocess.run(["git", "config", "--local", "core.hooksPath", "configs/githooks"], cwd=REPO_ROOT, check=True)
     print("BCR Agent Console local configuration is ready.")
     return 0
 

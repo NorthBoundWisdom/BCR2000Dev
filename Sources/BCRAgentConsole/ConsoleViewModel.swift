@@ -59,7 +59,8 @@ final class ConsoleViewModel: ObservableObject {
 
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
-         midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil) {
+         midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil)
+    {
         slots = AgentStateMachine().slots
 
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration)
@@ -94,10 +95,11 @@ final class ConsoleViewModel: ObservableObject {
         )
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
-            credentials: mcpCredentials ?? KeychainMCPCredentialStore(), integrationTest: integrationTest)
+        credentials: mcpCredentials ?? KeychainMCPCredentialStore(),
+        integrationTest: integrationTest)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
-            adapter: outputTransport ?? OSCParameterAdapter())
+        adapter: outputTransport ?? OSCParameterAdapter())
         session.onChange = { [weak self] in self?.objectWillChange.send() }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
@@ -240,10 +242,16 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func setCycleValues(_ text: String, parameter: ParameterID, for control: BCRControlID) {
-        let fields = text.replacingOccurrences(of: "，", with: ",").split(separator: ",", omittingEmptySubsequences: false)
+        let fields = text.replacingOccurrences(of: "，", with: ",").split(
+            separator: ",",
+            omittingEmptySubsequences: false
+        )
         let values = fields.compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         guard values.count == fields.count else { report(ConfigurationFileError(reason: "循环值必须是逗号分隔的数值")); return }
-        setAssignment(ControlAssignment(control: control, target: .cycleParameter(id: parameter, values: values)), for: control)
+        setAssignment(
+            ControlAssignment(control: control, target: .cycleParameter(id: parameter, values: values)),
+            for: control
+        )
     }
 
     func bulkAssignmentPlan(section: BCRSection, row: Int, group: String) -> BulkAssignmentPlan? {
@@ -276,7 +284,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func parameterFractionDigits(_ id: ParameterID) -> Int {
         configuration.controls(targetingParameter: id).contains {
-            configuration.assignment(for: $0)?.encoderMode != .absolute || engine.hardwareMap.midi(for: $0)?.kind == .nrpn
+            configuration.assignment(for: $0)?.encoderMode != .absolute || engine.hardwareMap.midi(for: $0)?
+                .kind == .nrpn
         } ? 3 : 0
     }
 
@@ -433,7 +442,7 @@ final class ConsoleViewModel: ObservableObject {
         case let .learningInterruptedByConfiguration(control):
             let previous = notice?.text ?? ""
             notice = ConsoleNotice(level: notice?.level ?? .info,
-                text: previous + " 配置替换已停止 \(control.shortName) 的学习。", action: notice?.action)
+                                   text: previous + " 配置替换已停止 \(control.shortName) 的学习。", action: notice?.action)
         case let .learned(control, midi, next):
             selectedControl = next ?? control
             notice = ConsoleNotice(level: .info, text: next.map {
@@ -449,7 +458,7 @@ final class ConsoleViewModel: ObservableObject {
             case .configurationPersistence: prefix = "功能配置保存失败"
             }
             notice = ConsoleNotice(level: .error, text: "\(prefix)：\(message)",
-                action: operation == .configurationPersistence ? .retryConfigurationSave : nil)
+                                   action: operation == .configurationPersistence ? .retryConfigurationSave : nil)
         }
     }
 

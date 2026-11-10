@@ -53,15 +53,16 @@ def load_build_environment(
     if not isinstance(variables, dict) or any(
         not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
         or key.upper() in {"PATH", "REPO_ROOT"}
-        or not isinstance(value, str) or any(char in value for char in "\r\n\0")
+        or not isinstance(value, str)
+        or any(char in value for char in "\r\n\0")
         for key, value in variables.items()
     ):
         raise ValueError(f"{LOCAL_FILE} environment must contain single-line string variables; use path for PATH.")
     if not isinstance(paths, list) or any(
-        not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n\0")
-        for value in paths
+        not isinstance(value, str) or not value.strip() or any(char in value for char in "\r\n\0") for value in paths
     ):
         raise ValueError(f"{LOCAL_FILE} path must be a list of nonempty single-line strings.")
+
     def normalize(name: str) -> str:
         return name.upper() if WINDOWS_ENVIRONMENT else name
 
@@ -79,6 +80,7 @@ def load_build_environment(
             if name == "REPO_ROOT":
                 return str(root)
             return resolve(name)
+
         value = VARIABLE.sub(replace, value)
         if value == "~" or value.startswith(("~/", "~\\")):
             home = inherited.get("HOME") or inherited.get("USERPROFILE")

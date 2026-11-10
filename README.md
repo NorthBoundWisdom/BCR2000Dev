@@ -51,6 +51,9 @@ python3 configs/setup_local_project.py
 python3 configs/macos_workflow.py run
 ```
 
+项目配置同时启用提交时自动格式化钩子；SwiftFormat、Ruff 安装和全仓格式化命令见
+[开发规范](CONTRIBUTING.md#自动格式化)。
+
 也可以直接打开生成的应用：
 
 ```bash

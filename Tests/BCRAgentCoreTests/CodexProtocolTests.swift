@@ -9,7 +9,7 @@ final class CodexProtocolTests: XCTestCase {
             method: "model/list",
             params: .object([
                 "cursor": .string("cursor-1"),
-                "limit": .number(20),
+                "limit": .number(20)
             ]),
             result: .object(["ok": .bool(true)])
         )

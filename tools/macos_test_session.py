@@ -5,6 +5,7 @@ Matrix mode adds whitelisted BCR identity/snapshot requests. CC writes require
 an explicit previously learned target and a verified identity/snapshot pair.
 No reset, seize, driver/service/configuration change or preset/firmware writes.
 """
+
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -55,8 +56,12 @@ def compare_usb(native, baseline):
         descriptors = parse(raw)
     except (KeyError, ValueError, TypeError) as error:
         return {"status": "error", "reason": str(error)}
-    result = {"status": "no_baseline", "configurationBytes": len(raw), "descriptors": descriptors,
-              "fullSpeedBulkSizeWarnings": full_speed_bulk_warnings(descriptors, targets[0].get("USBSpeed"))}
+    result = {
+        "status": "no_baseline",
+        "configurationBytes": len(raw),
+        "descriptors": descriptors,
+        "fullSpeedBulkSizeWarnings": full_speed_bulk_warnings(descriptors, targets[0].get("USBSpeed")),
+    }
     if len(reference) == 1:
         differences = []
         if len(raw) != reference[0].get("configurationBytes"):
@@ -70,9 +75,11 @@ def compare_usb(native, baseline):
 def inventory():
     backend = MacMIDI()
     try:
-        return {"inputs": [p.__dict__ for p in backend.ports(True) if "bcr2000" in p.name.casefold()],
-                "outputs": [p.__dict__ for p in backend.ports(False) if "bcr2000" in p.name.casefold()],
-                "availabilityNotes": backend.availability_notes}
+        return {
+            "inputs": [p.__dict__ for p in backend.ports(True) if "bcr2000" in p.name.casefold()],
+            "outputs": [p.__dict__ for p in backend.ports(False) if "bcr2000" in p.name.casefold()],
+            "availabilityNotes": backend.availability_notes,
+        }
     finally:
         backend.close()
 
@@ -93,7 +100,12 @@ def verify_manifest(root):
 
 def load_target_profile(path):
     value = json.loads(Path(path).read_text())
-    if not isinstance(value, dict) or set(value) - {"version", "channel", "controller", "expectedIdentity"} or type(value.get("version")) is not int or value.get("version") != 1:
+    if (
+        not isinstance(value, dict)
+        or set(value) - {"version", "channel", "controller", "expectedIdentity"}
+        or type(value.get("version")) is not int
+        or value.get("version") != 1
+    ):
         raise ValueError("Unsupported target profile")
     channel, controller = value.get("channel"), value.get("controller")
     if type(channel) is not int or type(controller) is not int:
@@ -111,17 +123,30 @@ def session(args):
     root.mkdir(parents=True, exist_ok=True)
     directory = root / (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4))
     directory.mkdir(mode=0o700)
-    report = {"schemaVersion": 1, "mode": args.mode, "stages": [], "hardwareStatus": "not_tested",
-              "visualLED": "not observed automatically", "writesRequested": args.test_cc is not None,
-              "system": {"macOS": platform.mac_ver()[0], "architecture": platform.machine(), "python": platform.python_version(),
-                         "ssh": bool(os.environ.get("SSH_CONNECTION")), "guiAgent": os.environ.get("BCR_DIAGNOSTIC_GUI") == "1"}}
+    report = {
+        "schemaVersion": 1,
+        "mode": args.mode,
+        "stages": [],
+        "hardwareStatus": "not_tested",
+        "visualLED": "not observed automatically",
+        "writesRequested": args.test_cc is not None,
+        "system": {
+            "macOS": platform.mac_ver()[0],
+            "architecture": platform.machine(),
+            "python": platform.python_version(),
+            "ssh": bool(os.environ.get("SSH_CONNECTION")),
+            "guiAgent": os.environ.get("BCR_DIAGNOSTIC_GUI") == "1",
+        },
+    }
     exit_code = 0
     deadline = time.monotonic() + args.deadline
+
     def stage_command(name, command, timeout):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError("Session deadline exceeded; no further test stages started")
         return command_stage(name, command, directory, min(timeout, remaining))
+
     try:
         report["bundle"] = verify_manifest(ROOT)
         native = Path(args.usb_helper).resolve() if args.usb_helper else ROOT / "bin/macos-usb-descriptor"
@@ -133,13 +158,21 @@ def session(args):
             usb = stage.get("data") or {}
         else:
             usb = {}
-            report["stages"].append({"name": "usb-descriptors", "status": "unavailable", "error": "Use packaged helper or build tools/macos_usb_descriptor.swift"})
+            report["stages"].append(
+                {
+                    "name": "usb-descriptors",
+                    "status": "unavailable",
+                    "error": "Use packaged helper or build tools/macos_usb_descriptor.swift",
+                }
+            )
         baseline_path = Path(args.baseline) if args.baseline else ROOT / "baselines/windows-usb.json"
         if args.baseline and not baseline_path.is_file():
             raise ValueError("Explicit Windows baseline does not exist")
         baseline = json.loads(baseline_path.read_text()) if baseline_path.exists() else None
         report["usbComparison"] = compare_usb(usb, baseline)
-        stage = stage_command("midi-inventory", [sys.executable, str(ROOT / "macos_test_session.py"), "--inventory-worker"], 20)
+        stage = stage_command(
+            "midi-inventory", [sys.executable, str(ROOT / "macos_test_session.py"), "--inventory-worker"], 20
+        )
         report["stages"].append(stage)
         ports = stage.get("data") or {}
         tests_ok = True
@@ -161,7 +194,11 @@ def session(args):
         # Virtual endpoints were created and removed. Refresh physical indices
         # instead of relying on enumeration order from before the self-tests.
         if tests_ok and args.mode == "matrix":
-            refreshed = stage_command("midi-inventory-after-selftest", [sys.executable, str(ROOT / "macos_test_session.py"), "--inventory-worker"], 20)
+            refreshed = stage_command(
+                "midi-inventory-after-selftest",
+                [sys.executable, str(ROOT / "macos_test_session.py"), "--inventory-worker"],
+                20,
+            )
             report["stages"].append(refreshed)
             ports = refreshed.get("data") or {}
         if not tests_ok:
@@ -191,12 +228,30 @@ def session(args):
                 for destination in outputs:
                     case += 1
                     filename = directory / f"read-{case}.json"
-                    command = [sys.executable, str(ROOT / "macos_bcr_roundtrip.py"), "--mac-api", api,
-                               "--input", str(source["id"]), "--output", str(destination["id"]), "--wait", str(args.wait), "--report", str(filename)]
+                    command = [
+                        sys.executable,
+                        str(ROOT / "macos_bcr_roundtrip.py"),
+                        "--mac-api",
+                        api,
+                        "--input",
+                        str(source["id"]),
+                        "--output",
+                        str(destination["id"]),
+                        "--wait",
+                        str(args.wait),
+                        "--report",
+                        str(filename),
+                    ]
                     stage = stage_command(f"read-{case}", command, 20)
                     data = json.loads(filename.read_text()) if filename.exists() else None
                     stage["verification"] = classify_probe(data) if stage["status"] == "ok" else stage["status"]
-                    stage["route"] = {"input": source["name"], "output": destination["name"], "inputIndex": source["id"], "outputIndex": destination["id"], "api": api}
+                    stage["route"] = {
+                        "input": source["name"],
+                        "output": destination["name"],
+                        "inputIndex": source["id"],
+                        "outputIndex": destination["id"],
+                        "api": api,
+                    }
                     report["stages"].append(stage)
                     if stage["verification"] == "readback_verified":
                         verified.append((source, destination, api))
@@ -212,9 +267,24 @@ def session(args):
             return directory, report, 2
         source, destination, api = verified[0]
         filename = directory / "write-roundtrip.json"
-        command = [sys.executable, str(ROOT / "macos_bcr_roundtrip.py"), "--mac-api", api,
-                   "--input", str(source["id"]), "--output", str(destination["id"]), "--wait", str(args.wait),
-                   "--test-cc", str(args.test_cc), "--channel", str(args.channel), "--report", str(filename)]
+        command = [
+            sys.executable,
+            str(ROOT / "macos_bcr_roundtrip.py"),
+            "--mac-api",
+            api,
+            "--input",
+            str(source["id"]),
+            "--output",
+            str(destination["id"]),
+            "--wait",
+            str(args.wait),
+            "--test-cc",
+            str(args.test_cc),
+            "--channel",
+            str(args.channel),
+            "--report",
+            str(filename),
+        ]
         if args.expected_identity:
             command += ["--expected-identity", args.expected_identity]
         if args.hold_max:
@@ -232,14 +302,23 @@ def session(args):
     finally:
         if args.mode == "matrix":
             predicate = '(process == "MIDIServer" OR process == "kernel" OR subsystem CONTAINS[c] "usb") AND (eventMessage CONTAINS[c] "BCR2000" OR eventMessage CONTAINS[c] "MaxPacket" OR eventMessage CONTAINS[c] "packet size" OR eventMessage CONTAINS[c] "CreatePipe")'
-            report["stages"].append(command_stage("filtered-usb-log", ["/usr/bin/log", "show", "--last", "5m", "--style", "json", "--predicate", predicate], directory, 15))
+            report["stages"].append(
+                command_stage(
+                    "filtered-usb-log",
+                    ["/usr/bin/log", "show", "--last", "5m", "--style", "json", "--predicate", predicate],
+                    directory,
+                    15,
+                )
+            )
         write_json(directory / "session.json", report)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=["preflight", "matrix"], default="preflight")
-    parser.add_argument("--reports", default=str(Path.home() / "Library/Application Support/BCRAgentConsole/Diagnostics"))
+    parser.add_argument(
+        "--reports", default=str(Path.home() / "Library/Application Support/BCRAgentConsole/Diagnostics")
+    )
     parser.add_argument("--baseline")
     parser.add_argument("--usb-helper")
     parser.add_argument("--input", type=int)
@@ -247,7 +326,9 @@ def main():
     parser.add_argument("--max-cases", type=int, default=24)
     parser.add_argument("--test-cc", type=int)
     parser.add_argument("--channel", type=int)
-    parser.add_argument("--target-profile", help="private previously learned target; enables writes only with matrix mode")
+    parser.add_argument(
+        "--target-profile", help="private previously learned target; enables writes only with matrix mode"
+    )
     parser.add_argument("--expected-identity")
     parser.add_argument("--hold-max", action="store_true")
     parser.add_argument("--wait", type=float, default=0.75)
@@ -271,7 +352,12 @@ def main():
             parser.error("Conflicting expected identity/profile")
         args.expected_identity = target["expectedIdentity"]
     args.channel = args.channel if args.channel is not None else 1
-    if not 0.2 <= args.wait <= 2 or not 1 <= args.channel <= 16 or not 1 <= args.max_cases <= 48 or not 30 <= args.deadline <= 600:
+    if (
+        not 0.2 <= args.wait <= 2
+        or not 1 <= args.channel <= 16
+        or not 1 <= args.max_cases <= 48
+        or not 30 <= args.deadline <= 600
+    ):
         parser.error("Invalid response deadline or channel")
     if args.test_cc is not None:
         CC(args.channel, args.test_cc, 0).packed()

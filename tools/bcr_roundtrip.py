@@ -1,4 +1,5 @@
 """Shared guarded identity/snapshot/CC verification for native MIDI adapters."""
+
 import json
 import sys
 import time
@@ -7,15 +8,25 @@ from bcr_protocol import identity_info, snapshot_values
 from diagnostic_io import write_json
 from midi_feedback_probe import CC, resolve
 
+
 def run_roundtrip(args, backend_factory):
     backend = backend_factory()
-    report = {"schemaVersion": 1, "platform": sys.platform, "identity": None, "snapshotCCCount": 0, "writes": [], "visualLED": "not observed remotely"}
+    report = {
+        "schemaVersion": 1,
+        "platform": sys.platform,
+        "identity": None,
+        "snapshotCCCount": 0,
+        "writes": [],
+        "visualLED": "not observed remotely",
+    }
     original = None
     write_attempted = False
     failure = None
     try:
         inputs, outputs = backend.ports(True), backend.ports(False)
-        print(json.dumps({"inputs": [p.__dict__ for p in inputs], "outputs": [p.__dict__ for p in outputs]}), flush=True)
+        print(
+            json.dumps({"inputs": [p.__dict__ for p in inputs], "outputs": [p.__dict__ for p in outputs]}), flush=True
+        )
         source, destination = resolve(inputs, args.input, "input"), resolve(outputs, args.output, "output")
         if "bcr2000" not in source.name.lower() or "bcr2000" not in destination.name.lower():
             raise ValueError("Only explicitly named BCR2000 endpoints are supported")
@@ -54,15 +65,23 @@ def run_roundtrip(args, backend_factory):
             pre_snapshot = backend.collect(0.25)
             messages, _ = backend.query(0x43, args.wait)
             observed = snapshot_values(messages, args.channel, args.test_cc)
-            result = {"requested": target, "observed": observed, "matches": observed == target,
-                      "echoCandidatesWithin250ms": sum(m.channel == args.channel and m.controller == args.test_cc for m in pre_snapshot)}
+            result = {
+                "requested": target,
+                "observed": observed,
+                "matches": observed == target,
+                "echoCandidatesWithin250ms": sum(
+                    m.channel == args.channel and m.controller == args.test_cc for m in pre_snapshot
+                ),
+            }
             report["writes"].append(result)
             print(json.dumps(result), flush=True)
         report["inputDropped"] = backend.events.dropped
         if backend.events.dropped:
             raise RuntimeError("Input overflow; roundtrip result is incomplete")
         report["valueRoundtripPassed"] = all(item["matches"] for item in report["writes"])
-        report["testStatus"] = "value_roundtrip_verified" if report["valueRoundtripPassed"] else "value_roundtrip_failed"
+        report["testStatus"] = (
+            "value_roundtrip_verified" if report["valueRoundtripPassed"] else "value_roundtrip_failed"
+        )
         return report
     except BaseException as error:
         failure = error

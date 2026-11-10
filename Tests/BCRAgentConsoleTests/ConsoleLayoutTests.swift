@@ -28,7 +28,11 @@ final class ConsoleLayoutTests: XCTestCase {
     }
 
     func testScaleIsCappedAndContentNeverExceedsAvailableWidth() {
-        for size in [CGSize(width: 2_400, height: 1_500), CGSize(width: 4_000, height: 2_200), CGSize(width: 1_500, height: 700)] {
+        for size in [
+            CGSize(width: 2_400, height: 1_500),
+            CGSize(width: 4_000, height: 2_200),
+            CGSize(width: 1_500, height: 700)
+        ] {
             let layout = ConsoleLayout(available: size)
             XCTAssertLessThanOrEqual(layout.scale, PanelMetrics.scaleRange.upperBound)
             XCTAssertGreaterThanOrEqual(layout.scale, PanelMetrics.scaleRange.lowerBound)
@@ -41,6 +45,9 @@ final class ConsoleLayoutTests: XCTestCase {
         let size = CGSize(width: 2_000, height: 900)
         let layout = ConsoleLayout(available: size)
         XCTAssertTrue(layout.isSideBySide)
-        XCTAssertLessThanOrEqual(PanelMetrics.naturalSize.height * layout.scale, size.height - ConsoleLayout.padding * 2 + 0.5)
+        XCTAssertLessThanOrEqual(
+            PanelMetrics.naturalSize.height * layout.scale,
+            size.height - ConsoleLayout.padding * 2 + 0.5
+        )
     }
 }

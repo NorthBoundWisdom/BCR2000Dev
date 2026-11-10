@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Native MIDI endpoint settings acceptance hook; run with mcp_integration.py --configuration-write."""
+
 import json
 import os
 import subprocess
@@ -14,13 +15,13 @@ client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f'''tell application "System Events"
+    source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {pid}
 tell targetProcess
 set mainWindow to first window whose name starts with "BCRTest-"
 {body.replace("window 1", "mainWindow")}
 end tell
-end tell'''
+end tell"""
     result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
     if result.returncode:
         raise RuntimeError(result.stderr.strip())
@@ -34,6 +35,7 @@ def debug_failure(kind, value, trace):
     except RuntimeError:
         pass
     sys.__excepthook__(kind, value, trace)
+
 
 sys.excepthook = debug_failure
 
@@ -60,8 +62,7 @@ end repeat
 error "button help not found"''')
 
 
-
-gui('set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}')
+gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 gui('''repeat with i from 1 to count of buttons of group 1 of window 1
 if help of button i of group 1 of window 1 is "选择实体 MIDI 输入与输出端口" then
 perform action "AXPress" of button i of group 1 of window 1

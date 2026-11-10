@@ -20,9 +20,7 @@ def _codex_version() -> str:
         check=False,
     )
     if completed.returncode != 0:
-        raise SystemExit(
-            "codex 命令不可用，请先安装 codex CLI 或确认 PATH 中可执行"
-        )
+        raise SystemExit("codex 命令不可用，请先安装 codex CLI 或确认 PATH 中可执行")
 
     value = completed.stdout.strip() or completed.stderr.strip()
     if not value:
@@ -35,9 +33,7 @@ def _codex_version() -> str:
 def generate_schema() -> None:
     actual = _codex_version()
     if not actual.startswith(CLI_VERSION):
-        raise SystemExit(
-            f"当前 codex 版本 {actual} 与预期 {CLI_VERSION} 不一致，请先同步文档/脚本"
-        )
+        raise SystemExit(f"当前 codex 版本 {actual} 与预期 {CLI_VERSION} 不一致，请先同步文档/脚本")
 
     SCHEMA_OUT.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(

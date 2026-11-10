@@ -31,8 +31,7 @@ BUNDLE_ID = "dev.bcragentconsole.app"
 SMOKE_MARKER = '"type":"bcr.native_startup"'
 
 
-def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_ROOT,
-         timeout: int | None = None) -> str:
+def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_ROOT, timeout: int | None = None) -> str:
     command = [str(part) for part in command]
     print(">>", " ".join(command), flush=True)
     completed = subprocess.run(command, cwd=cwd, text=True, capture_output=capture, timeout=timeout)
@@ -55,8 +54,16 @@ def _swift_build(configuration: str, architecture: str) -> Path:
     for arch in _architectures(architecture):
         if arch not in {"arm64", "x86_64"}:
             raise ValueError(f"Unsupported macOS architecture: {arch}")
-        options = ["swift", "build", "--build-path", str(SWIFTPM_BUILD_ROOT / arch),
-                   "--configuration", configuration, "--triple", f"{arch}-apple-macosx14.0"]
+        options = [
+            "swift",
+            "build",
+            "--build-path",
+            str(SWIFTPM_BUILD_ROOT / arch),
+            "--configuration",
+            configuration,
+            "--triple",
+            f"{arch}-apple-macosx14.0",
+        ]
         _run([*options, "--product", PRODUCT])
         binary = Path(_run([*options, "--show-bin-path"], capture=True)) / PRODUCT
         if not binary.is_file():
@@ -80,8 +87,10 @@ def _build_icon() -> Path:
         for scale in (1, 2):
             pixels = size * scale
             suffix = "@2x" if scale == 2 else ""
-            _run(["sips", "-z", str(pixels), str(pixels), source, "--out",
-                  iconset / f"icon_{size}x{size}{suffix}.png"], capture=True)
+            _run(
+                ["sips", "-z", str(pixels), str(pixels), source, "--out", iconset / f"icon_{size}x{size}{suffix}.png"],
+                capture=True,
+            )
     output = iconset.parent / "AppIcon.icns"
     _run(["iconutil", "-c", "icns", iconset, "-o", output])
     return output
@@ -103,15 +112,23 @@ def _sign(bundle: Path, distribution: str, identity: str | None) -> None:
                     matches.append(sha)
         if len(matches) != 1:
             raise ValueError(f"Select exactly one {prefix} identity with --identity or BCR_SIGNING_IDENTITY.")
-        command = ["codesign", "--force", "--sign", matches[0], "--options", "runtime",
-                   "--timestamp" if distribution == "developer-id" else "--timestamp=none"]
+        command = [
+            "codesign",
+            "--force",
+            "--sign",
+            matches[0],
+            "--options",
+            "runtime",
+            "--timestamp" if distribution == "developer-id" else "--timestamp=none",
+        ]
     # This app contains one executable and system frameworks only; sign the bundle as a whole.
     _run([*command, bundle])
     _run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", bundle])
 
 
-def build(configuration: str, architecture: str = "native", distribution: str = "ad-hoc",
-          identity: str | None = None) -> Path:
+def build(
+    configuration: str, architecture: str = "native", distribution: str = "ad-hoc", identity: str | None = None
+) -> Path:
     settings = load_app_build_settings()
     executable = _swift_build(configuration, architecture)
     icon = _build_icon()
@@ -151,9 +168,12 @@ def build(configuration: str, architecture: str = "native", distribution: str = 
 
 def verify_bundle(bundle: Path) -> dict:
     info = plistlib.loads((bundle / "Contents/Info.plist").read_bytes())
-    if (info.get("CFBundleIdentifier") != BUNDLE_ID or info.get("CFBundleExecutable") != PRODUCT
-            or info.get("CFBundleIconFile") != "AppIcon.icns"
-            or info.get("LSMinimumSystemVersion") != "14.0"):
+    if (
+        info.get("CFBundleIdentifier") != BUNDLE_ID
+        or info.get("CFBundleExecutable") != PRODUCT
+        or info.get("CFBundleIconFile") != "AppIcon.icns"
+        or info.get("LSMinimumSystemVersion") != "14.0"
+    ):
         raise ValueError("Unexpected app bundle metadata.")
     if not (bundle / "Contents/Resources/AppIcon.icns").is_file():
         raise ValueError("Packaged application icon is missing.")
@@ -176,8 +196,9 @@ def smoke(bundle: Path) -> None:
     verify_bundle(bundle)
     executable = (bundle / "Contents/MacOS" / PRODUCT).resolve()
     with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
-        result = subprocess.run([str(executable), "--startup-smoke"], cwd=temporary,
-                                text=True, capture_output=True, timeout=40)
+        result = subprocess.run(
+            [str(executable), "--startup-smoke"], cwd=temporary, text=True, capture_output=True, timeout=40
+        )
     if result.returncode or SMOKE_MARKER not in result.stdout + result.stderr:
         raise RuntimeError(f"Native window startup failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
     print("Verified native window startup with bundled icon.")
@@ -196,13 +217,39 @@ def _dmg(bundle: Path, destination: Path) -> None:
         layout = Path(temporary)
         shutil.copytree(bundle, layout / bundle.name, symlinks=True)
         (layout / "Applications").symlink_to("/Applications")
-        _run(["hdiutil", "create", "-volname", "BCR Agent Console", "-srcfolder", layout,
-              "-ov", "-format", "UDZO", destination])
+        _run(
+            [
+                "hdiutil",
+                "create",
+                "-volname",
+                "BCR Agent Console",
+                "-srcfolder",
+                layout,
+                "-ov",
+                "-format",
+                "UDZO",
+                destination,
+            ]
+        )
 
 
 def _notarize(archive: Path, profile: str) -> None:
-    result = json.loads(_run(["xcrun", "notarytool", "submit", archive, "--keychain-profile",
-                              profile, "--wait", "--output-format", "json"], capture=True))
+    result = json.loads(
+        _run(
+            [
+                "xcrun",
+                "notarytool",
+                "submit",
+                archive,
+                "--keychain-profile",
+                profile,
+                "--wait",
+                "--output-format",
+                "json",
+            ],
+            capture=True,
+        )
+    )
     if result.get("status") != "Accepted":
         raise RuntimeError(f"Notarization failed: {result}")
 
@@ -225,11 +272,20 @@ def _write_records(assets: list[Path], architecture: str, distribution: str) -> 
     checksums = []
     for asset in assets:
         checksum = _sha(asset)
-        record = {"schema_version": 1, "asset": asset.name, "sha256": checksum,
-                  "version": settings["MARKETING_VERSION"], "build": settings["ARCHIVE_ID"],
-                  "commit": commit, "dirty": dirty, "architecture": architecture,
-                  "signature": distribution, "notarized": distribution == "developer-id",
-                  "minimum_macos": "14.0", "swift": swift}
+        record = {
+            "schema_version": 1,
+            "asset": asset.name,
+            "sha256": checksum,
+            "version": settings["MARKETING_VERSION"],
+            "build": settings["ARCHIVE_ID"],
+            "commit": commit,
+            "dirty": dirty,
+            "architecture": architecture,
+            "signature": distribution,
+            "notarized": distribution == "developer-id",
+            "minimum_macos": "14.0",
+            "swift": swift,
+        }
         asset.with_suffix(asset.suffix + ".build.json").write_text(json.dumps(record, indent=2) + "\n")
         checksums.append(f"{checksum}  {asset.name}")
     # Per-build checksums avoid accidentally publishing artifacts left by a previous version.
@@ -237,9 +293,13 @@ def _write_records(assets: list[Path], architecture: str, distribution: str) -> 
     (PACKAGE_ROOT / checksum_name).write_text("\n".join(checksums) + "\n")
 
 
-def package(architecture: str = "native", distribution: str = "ad-hoc",
-            identity: str | None = None, notary_profile: str | None = None,
-            package_format: str = "both") -> list[Path]:
+def package(
+    architecture: str = "native",
+    distribution: str = "ad-hoc",
+    identity: str | None = None,
+    notary_profile: str | None = None,
+    package_format: str = "both",
+) -> list[Path]:
     profile = notary_profile or os.environ.get("BCR_NOTARY_KEYCHAIN_PROFILE", "")
     if distribution == "developer-id" and (not profile or any(c in profile for c in "\r\n\0")):
         raise ValueError("Developer ID packaging requires --notary-profile or BCR_NOTARY_KEYCHAIN_PROFILE.")
@@ -269,8 +329,18 @@ def package(architecture: str = "native", distribution: str = "ad-hoc",
         if distribution == "developer-id":
             _notarize(archive, profile)
             _staple(archive)
-            _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature",
-                  "--verbose=2", archive])
+            _run(
+                [
+                    "spctl",
+                    "--assess",
+                    "--type",
+                    "open",
+                    "--context",
+                    "context:primary-signature",
+                    "--verbose=2",
+                    archive,
+                ]
+            )
         assets.append(archive)
     _write_records(assets, arch, distribution)
     for asset in assets:
@@ -307,9 +377,11 @@ def check_package(archive: Path) -> None:
 
 def _check_payload(bundle: Path, proof: dict) -> None:
     info = verify_bundle(bundle)
-    if (info["CFBundleShortVersionString"] != proof["version"]
-            or info["CFBundleVersion"] != proof["build"]
-            or info["BCRDistribution"] != proof["signature"]):
+    if (
+        info["CFBundleShortVersionString"] != proof["version"]
+        or info["CFBundleVersion"] != proof["build"]
+        or info["BCRDistribution"] != proof["signature"]
+    ):
         raise ValueError("Package metadata differs from build record.")
     archs = _run(["lipo", "-archs", bundle / "Contents/MacOS" / PRODUCT], capture=True).split()
     if set(archs) != set(_architectures(proof["architecture"])):

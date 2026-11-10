@@ -11,7 +11,11 @@ class ArmSimulationTests(unittest.TestCase):
     peer = ("127.0.0.1", 12345)
 
     def frame(self, sequence, enabled, values=None):
-        messages = [sim.message("/bcr/epoch", [self.epoch]), sim.message("/bcr/frame", [sequence]), sim.message("/bcr/enable", [int(enabled)])]
+        messages = [
+            sim.message("/bcr/epoch", [self.epoch]),
+            sim.message("/bcr/frame", [sequence]),
+            sim.message("/bcr/enable", [int(enabled)]),
+        ]
         messages += [sim.message("/bcr/param/" + key, [float(value)]) for key, value in (values or {}).items()]
         return sim.bundle(messages)
 
@@ -77,7 +81,7 @@ class ArmSimulationTests(unittest.TestCase):
     def test_sequence_wrap_and_telemetry_epoch(self):
         arm = sim.ArmSimulation()
         self.connect(arm)
-        arm.receive(self.frame(0xffffffff, False), self.peer, 0.1)
+        arm.receive(self.frame(0xFFFFFFFF, False), self.peer, 0.1)
         arm.receive(self.frame(0, True, {"arm.j1": 10}), self.peer, 0.2)
         self.assertTrue(arm.enabled)
         _, packet = arm.telemetry()

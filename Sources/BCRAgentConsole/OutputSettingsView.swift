@@ -32,8 +32,16 @@ struct OutputReadoutView: View {
                         GridRow {
                             Text(definition.name).lineLimit(1)
                             Text(model.engine.value(of: limit.id).map { definition.formatted($0) } ?? "—")
-                            Text(controller.outputs[limit.id].map { definition.formatted($0, snap: false, minimumFractionDigits: 2) } ?? "—")
-                            Text(controller.actual[limit.id].map { definition.formatted($0, snap: false, minimumFractionDigits: 2) } ?? "—")
+                            Text(controller.outputs[limit.id].map { definition.formatted(
+                                $0,
+                                snap: false,
+                                minimumFractionDigits: 2
+                            ) } ?? "—")
+                            Text(controller.actual[limit.id].map { definition.formatted(
+                                $0,
+                                snap: false,
+                                minimumFractionDigits: 2
+                            ) } ?? "—")
                         }
                         .font(.caption.monospacedDigit())
                     }

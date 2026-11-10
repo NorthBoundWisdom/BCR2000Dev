@@ -18,9 +18,7 @@ from configs._vendor.freecm.repo_commands import validate_repo_command_manifest 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Validate configs/freecm.commands.jsonc without Node or npm."
-    )
+    parser = argparse.ArgumentParser(description="Validate configs/freecm.commands.jsonc without Node or npm.")
     parser.add_argument("repo_root", nargs="?", default=".")
     args = parser.parse_args(argv)
     try:
@@ -29,8 +27,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(error, file=sys.stderr)
         return 1
     print(
-        f"Validated {summary.manifest_path} "
-        f"({summary.configuration_count} Configs, {summary.variant_count} variants)"
+        f"Validated {summary.manifest_path} ({summary.configuration_count} Configs, {summary.variant_count} variants)"
     )
     return 0
 

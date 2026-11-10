@@ -33,7 +33,7 @@ final class SurfaceEngineTests: XCTestCase {
         XCTAssertEqual(engine.value(of: "j"), 0)
         XCTAssertNil(engine.learnTarget)
         XCTAssertEqual(sent(engine.fullFeedback(at: t0)), [
-            MIDI1UMPCodec.feedback(control: midi(control), value: 96),
+            MIDI1UMPCodec.feedback(control: midi(control), value: 96)
         ])
     }
 
@@ -42,7 +42,7 @@ final class SurfaceEngineTests: XCTestCase {
         let b = BCRControlID.encoder(row: 1, 1)
         var engine = makeEngine([
             ControlAssignment(control: a, target: .parameter("j")),
-            ControlAssignment(control: b, target: .parameter("j")),
+            ControlAssignment(control: b, target: .parameter("j"))
         ])
 
         let effects = engine.handleInput(.controlChange(channel: 0, number: UInt8(midi(a).number), value: 127), at: t0)
@@ -72,7 +72,10 @@ final class SurfaceEngineTests: XCTestCase {
         XCTAssertTrue(engine.handleInput(echo, at: t0.addingTimeInterval(0.05)).isEmpty)
         XCTAssertEqual(engine.state(of: a).lastInput, nil)
 
-        _ = engine.handleInput(.controlChange(channel: 0, number: UInt8(midi(a).number), value: 0), at: t0.addingTimeInterval(1))
+        _ = engine.handleInput(
+            .controlChange(channel: 0, number: UInt8(midi(a).number), value: 0),
+            at: t0.addingTimeInterval(1)
+        )
         XCTAssertEqual(engine.value(of: "j"), -90)
     }
 
@@ -85,7 +88,10 @@ final class SurfaceEngineTests: XCTestCase {
         XCTAssertEqual(engine.value(of: "on"), 1)
         XCTAssertEqual(sent(press), [.controlChange(channel: 0, number: number, value: 127)])
 
-        let release = engine.handleInput(.controlChange(channel: 0, number: number, value: 0), at: t0.addingTimeInterval(0.3))
+        let release = engine.handleInput(
+            .controlChange(channel: 0, number: number, value: 0),
+            at: t0.addingTimeInterval(0.3)
+        )
         XCTAssertEqual(engine.value(of: "on"), 1)
         XCTAssertEqual(sent(release), [.controlChange(channel: 0, number: number, value: 127)])
 
@@ -95,7 +101,11 @@ final class SurfaceEngineTests: XCTestCase {
 
     func testMomentaryButtonIsOnOnlyWhileHeld() {
         let button = BCRControlID.button(row: 2, 2)
-        var engine = makeEngine([ControlAssignment(control: button, target: .parameter("on"), buttonBehavior: .momentary)])
+        var engine = makeEngine([ControlAssignment(
+            control: button,
+            target: .parameter("on"),
+            buttonBehavior: .momentary
+        )])
 
         _ = engine.press(button, isDown: true, at: t0)
         XCTAssertEqual(engine.value(of: "on"), 1)
@@ -111,7 +121,10 @@ final class SurfaceEngineTests: XCTestCase {
 
         let first = engine.handleInput(.controlChange(channel: 0, number: number, value: 127), at: t0)
         XCTAssertTrue(first.contains(.triggerAgent(slot)))
-        let bounce = engine.handleInput(.controlChange(channel: 0, number: number, value: 127), at: t0.addingTimeInterval(0.1))
+        let bounce = engine.handleInput(
+            .controlChange(channel: 0, number: number, value: 127),
+            at: t0.addingTimeInterval(0.1)
+        )
         XCTAssertFalse(bounce.contains(.triggerAgent(slot)))
 
         let led = engine.setAgentFeedback(slot, value: 96, at: t0)
@@ -121,7 +134,14 @@ final class SurfaceEngineTests: XCTestCase {
     func testResetGroupReturnsParametersToDefaults() {
         let encoder = BCRControlID.pushEncoder(group: 1, 1)
         let home = BCRControlID.userButton(1)
-        let groupedJoint = ParameterDefinition(id: "g", name: "G", group: "arm", minimum: 0, maximum: 100, defaultValue: 25)
+        let groupedJoint = ParameterDefinition(
+            id: "g",
+            name: "G",
+            group: "arm",
+            minimum: 0,
+            maximum: 100,
+            defaultValue: 25
+        )
         var engine = SurfaceEngine(
             hardwareMap: .mockPreset(),
             configuration: SurfaceConfiguration(
@@ -129,7 +149,7 @@ final class SurfaceEngineTests: XCTestCase {
                 parameters: [groupedJoint],
                 assignments: [
                     ControlAssignment(control: encoder, target: .parameter("g")),
-                    ControlAssignment(control: home, target: .resetGroup("arm")),
+                    ControlAssignment(control: home, target: .resetGroup("arm"))
                 ]
             )
         )
@@ -161,7 +181,10 @@ final class SurfaceEngineTests: XCTestCase {
 
     func testUnmappedInputIsReported() {
         var engine = SurfaceEngine(hardwareMap: HardwareMap(), configuration: SurfaceConfiguration(name: "t"))
-        XCTAssertEqual(engine.handleInput(.controlChange(channel: 3, number: 9, value: 1), at: t0), [.unmappedInput(cc(9, channel: 3))])
+        XCTAssertEqual(
+            engine.handleInput(.controlChange(channel: 3, number: 9, value: 1), at: t0),
+            [.unmappedInput(cc(9, channel: 3))]
+        )
     }
 
     // MARK: Learning
@@ -182,7 +205,10 @@ final class SurfaceEngineTests: XCTestCase {
         engine.beginLearning(.encoder(row: 1, 1))
         _ = engine.handleInput(.controlChange(channel: 0, number: 40, value: 70), at: t0)
 
-        let effects = engine.handleInput(.controlChange(channel: 0, number: 40, value: 71), at: t0.addingTimeInterval(1))
+        let effects = engine.handleInput(
+            .controlChange(channel: 0, number: 40, value: 71),
+            at: t0.addingTimeInterval(1)
+        )
 
         XCTAssertTrue(effects.isEmpty)
         XCTAssertEqual(engine.hardwareMap.boundCount, 1)
@@ -197,7 +223,10 @@ final class SurfaceEngineTests: XCTestCase {
         XCTAssertTrue(engine.handleInput(.noteOff(channel: 0, number: 60, velocity: 0), at: t0).isEmpty)
         _ = engine.handleInput(.noteOn(channel: 0, number: 60, velocity: 127), at: t0)
 
-        XCTAssertEqual(engine.hardwareMap.midi(for: .button(row: 1, 1)), MIDIControlID(kind: .note, channel: 0, number: 60))
+        XCTAssertEqual(
+            engine.hardwareMap.midi(for: .button(row: 1, 1)),
+            MIDIControlID(kind: .note, channel: 0, number: 60)
+        )
     }
 
     func testEncoderLearningRejectsNoteMessagesVisibly() {
@@ -206,7 +235,10 @@ final class SurfaceEngineTests: XCTestCase {
 
         let effects = engine.handleInput(.noteOn(channel: 0, number: 60, velocity: 127), at: t0)
 
-        XCTAssertEqual(effects, [.learnRejected(.encoder(row: 1, 1), .encoderRequiresControlChange(.encoder(row: 1, 1)))])
+        XCTAssertEqual(
+            effects,
+            [.learnRejected(.encoder(row: 1, 1), .encoderRequiresControlChange(.encoder(row: 1, 1)))]
+        )
         XCTAssertEqual(engine.learnTarget, .encoder(row: 1, 1))
     }
 
