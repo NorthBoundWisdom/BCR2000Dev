@@ -13,7 +13,7 @@
 
 ## 已验证
 
-- 204 条 Swift（157 Core/47 Console）和 64 条 Python（19 工作流/8 仿真/10 MIDI/9 BCR/18 准备设施）通过。
+- 204 条 Swift（157 Core/47 Console）和 65 条 Python（19 工作流/8 仿真/10 MIDI/9 BCR/19 准备设施）通过。
 - App build/startup smoke、两版通用 MCP 冒烟、最小窗口端口设置原生检查通过，无新增编译警告。
 - USB 读取器 ARM/Intel 都 warnings-as-errors 编译并合并签名；本机架构运行，Intel 仅编译/结构检查，不冒称 Intel 实机通过。
 - 直接及 GUI 入口、本机无设备阻止实机写入、GUI 临时任务移除已实际验证。

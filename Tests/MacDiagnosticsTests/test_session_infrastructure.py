@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parents[2] / "tools"))
 from diagnostic_io import command_stage, write_json
 from macos_bcr_roundtrip import request_words
 from macos_test_session import classify_probe, compare_usb, load_target_profile, verify_manifest
-from package_macos_diagnostics import sanitize_baseline
+from package_macos_diagnostics import sanitize_baseline, verify_architectures
 
 
 class SessionInfrastructureTests(unittest.TestCase):
@@ -81,6 +81,12 @@ class SessionInfrastructureTests(unittest.TestCase):
             timeout=command_stage("timeout",[sys.executable,"-c","import time;time.sleep(5)"],directory,timeout=.05)
             self.assertEqual(timeout["status"],"timeout")
             self.assertIsNone(timeout["exitCode"])
+
+    def test_native_architecture_listing_requires_both_and_only_supported_slices(self):
+        verify_architectures("x86_64 arm64\n")
+        verify_architectures("arm64 x86_64")
+        for value in ["arm64", "x86_64", "arm64 x86_64 extra", "arm64 arm64", ""]:
+            with self.assertRaises(RuntimeError): verify_architectures(value)
 
     def test_packaging_reference_filters_unrelated_metadata(self):
         value={"targets":[{"vendor":"0x1397","product":"0xbc","descriptors":[],"serial":"private"}],"password":"private"}

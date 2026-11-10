@@ -54,6 +54,12 @@ def sanitize_baseline(value):
     return {"targets": [{key: target[key] for key in allowed if key in target}]}
 
 
+def verify_architectures(output):
+    architectures = output.split()
+    if len(architectures) != 2 or set(architectures) != {"arm64", "x86_64"}:
+        raise RuntimeError("Universal helper must contain exactly arm64 and x86_64")
+
+
 def build(output, baseline=None, target_profile=None, allow_dirty=False):
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO, text=True).strip())
@@ -80,7 +86,7 @@ def build(output, baseline=None, target_profile=None, allow_dirty=False):
         subprocess.run(["xcrun", "lipo", "-create", *objects, "-output", str(helper)], check=True)
         subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(helper)], check=True, capture_output=True)
         subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True, capture_output=True)
-        subprocess.run(["xcrun", "lipo", str(helper), "-verify_arch", "arm64", "x86_64"], check=True)
+        verify_architectures(subprocess.check_output(["xcrun", "lipo", str(helper), "-archs"], text=True))
         if baseline:
             directory = root / "baselines"; directory.mkdir()
             (directory / "windows-usb.json").write_text(json.dumps(sanitize_baseline(json.loads(Path(baseline).read_text())), indent=2))
