@@ -150,3 +150,7 @@ Stop All 与重连一致性。Agent 继续作为一种控件功能（`agentPrima
 - 是否用 BCL / SysEx 直接给 BCR 写入预设，以替代逐个学习？需评估对用户现有预设的风险。
 - 机械臂目标平台（真实型号 / ROS 版本）确定后再细化 R5 的消息格式。
 - R8：首版是否需要 SSE 推送？如果确有需要，是否引入官方 Swift MCP SDK（属于新增第三方依赖，需开发者批准）。
+
+R7 发布补充：tag 正式签署/公证与 DriverKit 配套工具管线已准备；
+Apple 正式授权、CI 凭证与未注册机器的完整安装验收仍是前置条件。
+见 [发布准备](docs/TAG_RELEASE_SETUP.md)。

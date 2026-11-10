@@ -25,9 +25,13 @@ def release_version(value: str) -> str:
     return version
 
 
-def validate_assets(directory: Path, version: str, commit: str) -> None:
+def validate_assets(
+    directory: Path, version: str, commit: str, distribution: str = "ad-hoc", build_number: str = "1"
+) -> None:
     version = release_version(version)
-    stem = f"{PRODUCT}_v{version}_1_macOS_universal_ad-hoc"
+    if distribution not in {"ad-hoc", "developer-id"} or not re.fullmatch(r"[1-9][0-9]*", build_number):
+        raise ValueError("Invalid release distribution/build number")
+    stem = f"{PRODUCT}_v{version}_{build_number}_macOS_universal_{distribution}"
     expected_assets = {f"{stem}.zip", f"{stem}.dmg"}
     actual_assets = {p.name for p in directory.iterdir() if p.suffix in {".zip", ".dmg"}}
     if actual_assets != expected_assets:
@@ -40,18 +44,34 @@ def validate_assets(directory: Path, version: str, commit: str) -> None:
             "schema_version": 1,
             "asset": name,
             "version": version,
-            "build": "1",
+            "build": build_number,
             "commit": commit,
             "dirty": False,
             "architecture": "universal",
-            "signature": "ad-hoc",
-            "notarized": False,
+            "signature": distribution,
+            "notarized": distribution == "developer-id",
             "sha256": _sha(asset),
         }
-        if any(proof.get(key) != value for key, value in expected.items()):
+        if any(type(proof.get(key)) is not type(value) or proof.get(key) != value for key, value in expected.items()):
             raise ValueError(f"Release artifact provenance/hash mismatch: {name}")
+        if distribution == "developer-id":
+            from configs.driverkit_release import DRIVER_ID, HOST_PRODUCT
+
+            if proof.get("driverkit") != {
+                "host": HOST_PRODUCT + ".app",
+                "bundle_id": DRIVER_ID,
+                "signature": "developer-id",
+                "supported_mode": "U-1",
+                "notarized": True,
+            }:
+                raise ValueError("Formal release requires the approved, notarized DriverKit companion")
         checksums.append(f"{proof['sha256']}  {name}")
     (directory / "SHA256SUMS").write_text("\n".join(checksums) + "\n")
+    (directory / (stem + ".SHA256SUMS")).write_text("\n".join(checksums) + "\n")
+    names = sorted(
+        [*expected_assets, *(name + ".build.json" for name in expected_assets), "SHA256SUMS", stem + ".SHA256SUMS"]
+    )
+    (directory / "release-assets.json").write_text(json.dumps(names, indent=2) + "\n")
     print("Verified universal ZIP and DMG provenance and SHA-256 checksums.")
 
 
@@ -60,16 +80,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action", choices=("metadata", "verify"))
     parser.add_argument("--version", default=os.environ.get("RELEASE_VERSION", ""))
     parser.add_argument("--directory", type=Path, default=REPO_ROOT / "build/package")
+    parser.add_argument(
+        "--distribution",
+        choices=("ad-hoc", "developer-id"),
+        default=os.environ.get("BCR_RELEASE_DISTRIBUTION", "developer-id"),
+    )
+    parser.add_argument("--build-number", default=os.environ.get("ARCHIVE_ID", "1"))
     args = parser.parse_args(argv)
     version = release_version(args.version)
     if args.action == "metadata":
         if os.environ.get("GITHUB_OUTPUT"):
             with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
                 stream.write(f"version={version}\n")
+                if not re.fullmatch(r"[1-9][0-9]*", args.build_number):
+                    raise ValueError("Invalid build number")
+                stream.write(f"build_number={args.build_number}\ndistribution={args.distribution}\n")
         print(version)
     else:
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
-        validate_assets(args.directory, version, commit)
+        validate_assets(args.directory, version, commit, args.distribution, args.build_number)
     return 0
 
 

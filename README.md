@@ -189,3 +189,6 @@ git diff --check
 
 纯 USB 兼容性研究：当前 Mac 已通过保持 SIP 的 DriverKit 开发签署实验；
 代码、实测范围与正式分发前提见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
+
+正式 tag 自动发布的授权与凭证准备见 [发布配置](docs/TAG_RELEASE_SETUP.md)；
+配置未齐时发布会停止，不将实验开发包当作公开发行版。

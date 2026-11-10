@@ -9,6 +9,7 @@ final class ProbeHost: NSObject, NSApplicationDelegate, OSSystemExtensionRequest
     private var window: NSWindow?
     private let driverID = "dev.bcragentconsole.descriptorprobe.driver"
     private var action = "none"
+    private var labMode: Bool { Bundle.main.object(forInfoDictionaryKey: "BCRProbeLabMode") as? Bool ?? true }
 
     private func publish(_ phase: String, _ message: String) {
         status.stringValue = message
@@ -27,8 +28,16 @@ final class ProbeHost: NSObject, NSApplicationDelegate, OSSystemExtensionRequest
     }
 
     func applicationDidFinishLaunching(_: Notification) {
-        let activateButton = NSButton(title: "载入测试扩展", target: self, action: #selector(activateDriver))
-        let deactivate = NSButton(title: "移除测试扩展", target: self, action: #selector(deactivateDriver))
+        let activateButton = NSButton(
+            title: labMode ? "载入测试扩展" : "启用 USB 兼容修复",
+            target: self,
+            action: #selector(activateDriver)
+        )
+        let deactivate = NSButton(
+            title: labMode ? "移除测试扩展" : "移除 USB 兼容修复",
+            target: self,
+            action: #selector(deactivateDriver)
+        )
         let stack = NSStackView(views: [status, activateButton, deactivate])
         stack.orientation = .vertical
         stack.spacing = 18
@@ -37,12 +46,19 @@ final class ProbeHost: NSObject, NSApplicationDelegate, OSSystemExtensionRequest
             contentRect: NSRect(x: 0, y: 0, width: 550, height: 210),
             styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false
         )
-        window.title = "BCR DriverKit 可行性验证"
+        window.title = labMode ? "BCR DriverKit 可行性验证" : "BCR2000 USB 兼容修复"
+        if !labMode { status.stringValue = "适用于 BCR2000 固件 1.10、USB U-1 模式。启用后请重新连接设备。" }
         window.contentView = stack
         window.center()
         window.makeKeyAndOrderFront(nil)
         self.window = window
         NSApplication.shared.activate(ignoringOtherApps: true)
+        if CommandLine.arguments.contains("--startup-smoke") {
+            window.displayIfNeeded()
+            print("{\"type\":\"bcr.usb_compatibility_startup\",\"hardwareAccessed\":false,\"labMode\":\(labMode)}")
+            NSApplication.shared.terminate(nil)
+            return
+        }
         if CommandLine.arguments.contains("--activate") { activate(confirm: false) }
         if CommandLine.arguments.contains("--deactivate") { deactivateDriver() }
     }
@@ -56,13 +72,17 @@ final class ProbeHost: NSObject, NSApplicationDelegate, OSSystemExtensionRequest
             "Contents/Library/SystemExtensions/\(driverID).dext/embedded.provisionprofile"
         )
         guard FileManager.default.fileExists(atPath: profile.path) else {
-            publish("missing_profile", "缺少 DriverKit provisioning profile；不提交载入请求。")
+            publish("missing_profile", labMode
+                ? "缺少 DriverKit provisioning profile；不提交载入请求。"
+                : "安装包缺少所需的驱动授权文件，无法启用修复。请使用完整正式版本。")
             return
         }
         if confirm {
             let alert = NSAlert()
-            alert.messageText = "载入当前打包的实验扩展？"
-            alert.informativeText = "只用于已指定的 BCR2000。保持 SIP 与启动安全设置；若系统拒绝载入，记录错误后停止。"
+            alert.messageText = labMode ? "载入当前打包的实验扩展？" : "启用 BCR2000 USB 兼容修复？"
+            alert.informativeText = labMode
+                ? "只用于已指定的 BCR2000。保持 SIP 与启动安全设置；若系统拒绝载入，记录错误后停止。"
+                : "请先确认设备为 BCR2000、固件 1.10、USB U-1 模式。启用后重新连接设备；此修复不修改固件或预设。"
             alert.addButton(withTitle: "载入")
             alert.addButton(withTitle: "取消")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -93,7 +113,11 @@ final class ProbeHost: NSObject, NSApplicationDelegate, OSSystemExtensionRequest
 
     nonisolated func request(_: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
         let message = "系统请求已结束（结果 \(result.rawValue)）；仍须独立验证 OUT 管道与身份回复。"
-        Task { @MainActor in self.publish("finished_\(result.rawValue)", message) }
+        let rawResult = result.rawValue
+        Task { @MainActor in
+            let text = self.labMode ? message : "系统已完成扩展请求；请重新连接 BCR2000，并在控制台检查灯环反馈。"
+            self.publish("finished_\(rawResult)", text)
+        }
     }
 
     nonisolated func request(

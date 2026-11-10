@@ -224,3 +224,14 @@ WP1 验证时没有实体 BCR2000，使用本机构建的 ad-hoc App。已观察
 实验代码与限制见 [DriverKit 实测](docs/DRIVERKIT_USB_PROOF.md)。
 此前“本机直连尚无保持安全设置的成功方案”是研究前的阶段记录，已由这次受控实验更新；
 完整 R1 仍依照 HW0–HW6 继续，不把两个绝对旋钮的结果扩大为全部控件通过。
+
+## Tag 正式发布准备
+
+- [x] tag 构建强制 Developer ID、公证、获批 DriverKit 配套工具；缺件失败，不发布 ad-hoc 替代包。
+- [x] 一次性 CI Keychain、只导入显式提供的凭证、清理、发布资产白名单与源码/哈希校验。
+- [x] 真实第三方关系的 Apple 申请草稿及一次性配置文档，尚未提交。
+- [ ] Apple 正式 entitlement 审核及两个 Developer ID profiles。
+- [ ] 账号持有人批准凭证用途并安全配置 CI Secrets；当前没有导出/上传私钥或创建 API key。
+- [ ] 使用真实正式授权运行签署/公证，并在未注册干净 Mac 验证安装和 USB；准备测试不代替此验收。
+
+见 [TAG_RELEASE_SETUP.md](docs/TAG_RELEASE_SETUP.md)。

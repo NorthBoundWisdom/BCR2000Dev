@@ -96,7 +96,7 @@ def _build_icon() -> Path:
     return output
 
 
-def _sign(bundle: Path, distribution: str, identity: str | None) -> None:
+def _sign(bundle: Path, distribution: str, identity: str | None, *, hardened: bool = True) -> None:
     if distribution == "ad-hoc":
         command = ["codesign", "--force", "--sign", "-", "--timestamp=none"]
     else:
@@ -117,11 +117,10 @@ def _sign(bundle: Path, distribution: str, identity: str | None) -> None:
             "--force",
             "--sign",
             matches[0],
-            "--options",
-            "runtime",
+            *(["--options", "runtime"] if hardened else []),
             "--timestamp" if distribution == "developer-id" else "--timestamp=none",
         ]
-    # This app contains one executable and system frameworks only; sign the bundle as a whole.
+    # The companion builder signs its nested driver first. Sign this payload/container explicitly.
     _run([*command, bundle])
     _run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", bundle])
 
@@ -204,18 +203,27 @@ def smoke(bundle: Path) -> None:
     print("Verified native window startup with bundled icon.")
 
 
-def _zip(bundle: Path, destination: Path) -> None:
+def _zip(bundle: Path, destination: Path, companion: Path | None = None) -> None:
     if destination.exists():
         destination.unlink()
+    if companion:
+        with tempfile.TemporaryDirectory(dir=BUILD_ROOT, prefix="zip-layout-") as temporary:
+            layout = Path(temporary)
+            shutil.copytree(bundle, layout / bundle.name, symlinks=True)
+            shutil.copytree(companion, layout / companion.name, symlinks=True)
+            _run(["ditto", "-c", "-k", "--sequesterRsrc", layout, destination])
+        return
     _run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", bundle, destination])
 
 
-def _dmg(bundle: Path, destination: Path) -> None:
+def _dmg(bundle: Path, destination: Path, companion: Path | None = None) -> None:
     stage = BUILD_ROOT / "package-staging"
     stage.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=stage, prefix="dmg-") as temporary:
         layout = Path(temporary)
         shutil.copytree(bundle, layout / bundle.name, symlinks=True)
+        if companion:
+            shutil.copytree(companion, layout / companion.name, symlinks=True)
         (layout / "Applications").symlink_to("/Applications")
         _run(
             [
@@ -234,6 +242,7 @@ def _dmg(bundle: Path, destination: Path) -> None:
 
 
 def _notarize(archive: Path, profile: str) -> None:
+    keychain = os.environ.get("BCR_NOTARY_KEYCHAIN")
     result = json.loads(
         _run(
             [
@@ -243,6 +252,7 @@ def _notarize(archive: Path, profile: str) -> None:
                 archive,
                 "--keychain-profile",
                 profile,
+                *(["--keychain", keychain] if keychain else []),
                 "--wait",
                 "--output-format",
                 "json",
@@ -264,7 +274,7 @@ def _sha(path: Path) -> str:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def _write_records(assets: list[Path], architecture: str, distribution: str) -> None:
+def _write_records(assets: list[Path], architecture: str, distribution: str, driverkit: dict | None = None) -> None:
     settings = load_app_build_settings()
     commit = _run(["git", "rev-parse", "HEAD"], capture=True)
     dirty = bool(_run(["git", "status", "--porcelain"], capture=True))
@@ -286,6 +296,8 @@ def _write_records(assets: list[Path], architecture: str, distribution: str) -> 
             "minimum_macos": "14.0",
             "swift": swift,
         }
+        if driverkit:
+            record["driverkit"] = {**driverkit, "notarized": True}
         asset.with_suffix(asset.suffix + ".build.json").write_text(json.dumps(record, indent=2) + "\n")
         checksums.append(f"{checksum}  {asset.name}")
     # Per-build checksums avoid accidentally publishing artifacts left by a previous version.
@@ -299,12 +311,28 @@ def package(
     identity: str | None = None,
     notary_profile: str | None = None,
     package_format: str = "both",
+    driverkit_host: Path | None = None,
 ) -> list[Path]:
     profile = notary_profile or os.environ.get("BCR_NOTARY_KEYCHAIN_PROFILE", "")
     if distribution == "developer-id" and (not profile or any(c in profile for c in "\r\n\0")):
         raise ValueError("Developer ID packaging requires --notary-profile or BCR_NOTARY_KEYCHAIN_PROFILE.")
     settings = load_app_build_settings()
+    companion = None
+    driverkit = None
+    if driverkit_host:
+        if distribution != "developer-id" or architecture != "universal":
+            raise ValueError("A DriverKit release requires universal Developer ID packaging")
+        from configs.driverkit_release import HOST_PRODUCT, verify_companion
+
+        driverkit = verify_companion(driverkit_host, settings["MARKETING_VERSION"], settings["ARCHIVE_ID"])
     bundle = build("release", architecture, distribution, identity)
+    if driverkit_host:
+        companion = bundle.parent / (HOST_PRODUCT + ".app")
+        if companion.resolve() == driverkit_host.resolve():
+            raise ValueError("Compatibility input must be outside the packaging staging directory")
+        if companion.exists():
+            shutil.rmtree(companion)
+        shutil.copytree(driverkit_host, companion, symlinks=True)
     if platform.machine() in _architectures(architecture):
         smoke(bundle)
     PACKAGE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -314,19 +342,23 @@ def package(
         # Notarize/staple the app first so both ZIP and DMG contain an offline-verifiable app.
         with tempfile.TemporaryDirectory(dir=BUILD_ROOT, prefix="notary-") as temporary:
             submission = Path(temporary) / "submission.zip"
-            _zip(bundle, submission)
+            _zip(bundle, submission, companion)
             _notarize(submission, profile)
         _staple(bundle)
         _run(["spctl", "--assess", "--type", "execute", "--verbose=2", bundle])
+        if companion:
+            _staple(companion)
+            _run(["spctl", "--assess", "--type", "execute", "--verbose=2", companion])
     assets = []
     if package_format in {"zip", "both"}:
         archive = PACKAGE_ROOT / f"{stem}.zip"
-        _zip(bundle, archive)
+        _zip(bundle, archive, companion)
         assets.append(archive)
     if package_format in {"dmg", "both"}:
         archive = PACKAGE_ROOT / f"{stem}.dmg"
-        _dmg(bundle, archive)
+        _dmg(bundle, archive, companion)
         if distribution == "developer-id":
+            _sign(archive, distribution, identity, hardened=False)
             _notarize(archive, profile)
             _staple(archive)
             _run(
@@ -342,7 +374,7 @@ def package(
                 ]
             )
         assets.append(archive)
-    _write_records(assets, arch, distribution)
+    _write_records(assets, arch, distribution, driverkit)
     for asset in assets:
         print(f"Packaged {asset.relative_to(REPO_ROOT)}")
     return assets
@@ -359,7 +391,12 @@ def check_package(archive: Path) -> None:
             _run(["ditto", "-x", "-k", archive, root])
             bundle = root / f"{PRODUCT}.app"
             _check_payload(bundle, proof)
+            _check_companion(root, proof)
         elif archive.suffix == ".dmg":
+            if proof.get("notarized"):
+                _run(["codesign", "--verify", "--strict", archive])
+                _run(["xcrun", "stapler", "validate", archive])
+                _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", archive])
             mount = root / "mounted"
             _run(["hdiutil", "attach", archive, "-readonly", "-nobrowse", "-mountpoint", mount])
             try:
@@ -368,11 +405,33 @@ def check_package(archive: Path) -> None:
                 bundle = root / f"{PRODUCT}.app"
                 _run(["ditto", mount / f"{PRODUCT}.app", bundle])
                 _check_payload(bundle, proof)
+                _check_companion(mount, proof)
             finally:
                 _run(["hdiutil", "detach", mount])
         else:
             raise ValueError("Expected a ZIP or DMG package.")
     print(f"Verified package: {archive.name}")
+
+
+def _check_companion(root: Path, proof: dict) -> None:
+    from configs.driverkit_release import HOST_PRODUCT, verify_companion
+
+    companion = root / (HOST_PRODUCT + ".app")
+    if proof.get("driverkit"):
+        metadata = verify_companion(companion, proof["version"], proof["build"])
+        if proof["driverkit"] != {**metadata, "notarized": True}:
+            raise ValueError("Compatibility companion differs from release record")
+        _run(["xcrun", "stapler", "validate", companion])
+        _run(["spctl", "--assess", "--type", "execute", companion])
+        result = _run([companion / "Contents/MacOS/BCRDriverKitProbe", "--startup-smoke"], capture=True, timeout=40)
+        if (
+            '"type":"bcr.usb_compatibility_startup"' not in result
+            or '"hardwareAccessed":false' not in result
+            or '"labMode":false' not in result
+        ):
+            raise RuntimeError("Compatibility companion native startup failed")
+    elif companion.exists():
+        raise ValueError("Unexpected compatibility companion without a release record")
 
 
 def _check_payload(bundle: Path, proof: dict) -> None:
@@ -387,6 +446,9 @@ def _check_payload(bundle: Path, proof: dict) -> None:
     if set(archs) != set(_architectures(proof["architecture"])):
         raise ValueError("Packaged executable architectures differ from build record.")
     if proof.get("notarized"):
+        from configs.driverkit_release import verify_developer_id
+
+        verify_developer_id(bundle)
         _run(["xcrun", "stapler", "validate", bundle])
         _run(["spctl", "--assess", "--type", "execute", bundle])
     if platform.machine() in archs:
@@ -406,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("zip", "dmg", "both"), default="both")
     parser.add_argument("--bundle", type=Path, default=APP_BUNDLE, help="Bundle for the smoke action.")
     parser.add_argument("--archive", type=Path, help="ZIP/DMG for check-package (with .build.json sidecar).")
+    parser.add_argument("--driverkit-host", type=Path, help="Approved Developer ID compatibility companion to include.")
     args = parser.parse_args(argv)
     with use_build_environment(REPO_ROOT):
         if sys.platform != "darwin":
@@ -413,7 +476,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "test":
             _run(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT])
         elif args.action == "package":
-            package(args.architecture, args.distribution, args.identity, args.notary_profile, args.format)
+            package(
+                args.architecture,
+                args.distribution,
+                args.identity,
+                args.notary_profile,
+                args.format,
+                args.driverkit_host,
+            )
         elif args.action == "smoke":
             smoke(args.bundle)
         elif args.action == "check-package":
