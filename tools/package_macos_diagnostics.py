@@ -80,7 +80,7 @@ def build(output, baseline=None, target_profile=None, allow_dirty=False):
         subprocess.run(["xcrun", "lipo", "-create", *objects, "-output", str(helper)], check=True)
         subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(helper)], check=True, capture_output=True)
         subprocess.run(["codesign", "--verify", "--strict", str(helper)], check=True, capture_output=True)
-        subprocess.run(["xcrun", "lipo", "-verify_arch", "arm64", "x86_64", str(helper)], check=True)
+        subprocess.run(["xcrun", "lipo", str(helper), "-verify_arch", "arm64", "x86_64"], check=True)
         if baseline:
             directory = root / "baselines"; directory.mkdir()
             (directory / "windows-usb.json").write_text(json.dumps(sanitize_baseline(json.loads(Path(baseline).read_text())), indent=2))
