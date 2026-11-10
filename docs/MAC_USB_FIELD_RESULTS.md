@@ -76,3 +76,38 @@ sudo 可以授权写入安装目录，却不能代替签名信任和启动安全
 这不证明所有保持安全设置的 USB 方案都不可能。用户态 USB 兼容处理、Windows USB 桥接或虚拟机
 是分立待验证方案，当前没有实现或实测，不能声称只加 sudo 就能成功。
 本项目现阶段保留完整安全设置，不继续执行 Recovery、驱动安装或 USB 接管步骤。
+
+## 保持安全设置的后续对照
+
+用户要求继续尝试替代路径，本轮保持 SIP 完全启用，未安装扩展。
+
+- 用户尝试将设备移到现有集线器路径；该连接下 USB 与 MIDI 均未枚举到设备，
+  因此不能把它算作已完成的集线器输出测试。用户随后接回可识别的接口。
+- 重连后设备位于另一根端口/控制器路径，配置描述仍为原始 101 字节、OUT 最大包长 4；
+  只读身份/快照依旧无回复。
+- 用 IORegistryEntrySetCFProperties 提交原始、未修改的配置描述，探测主机运行时覆盖能力。
+  普通用户返回 kIOReturnUnsupported（0xe00002c7），覆盖属性没有出现；不是权限不足的返回码。
+  SSH 的管理员授权未完成，不将其写成已经通过 root 实测。现场 sudo 对照仍需用户返回结果。
+- 另写独立的 IOUSBHost 原生探针，在不提权、不强制接管的情况下短暂打开当前 BCR 的 MIDI Streaming 接口。
+  IN 0x81 的原始和当前描述均存在，最大包长 64；OUT 0x02 虽有 Objective-C 对象返回，
+  其 originalDescriptors/descriptors 实际均为 NULL。对象存在不能当作管道已经建好。
+- 通过这个 OUT 对象直接发送标准 USB-MIDI 包装的只读身份查询，传输失败，字节数 0，
+  错误 kIOReturnNotFound（0xe00002f0）。没有通过 CoreMIDI，也未向其他设备发送数据。
+- 在同一短暂会话内尝试将这个 OUT 管道的主机策略设为包长 8，adjustPipe 同样返回
+  kIOReturnNotFound；没有形成可用的替代管道。关闭接口后重开，再读配置仍为 4，未留下描述覆盖。
+- 初版一次性原生探针直接解引用了 SDK 声明非空、实际为空的 OUT 描述指针，导致该探针进程退出 139。
+  加入 NULL 检查后重新执行成功，保留前次失败，不把探针异常算作设备响应或系统崩溃。
+  这是独立实验程序的问题，没有修改 App，也没有影响内核或预设。
+
+原生探针均关闭接口并结束，没有驻留 USB 占用。最后 CoreMIDI 仍可列出一组 BCR 输入/输出，
+USB 配置没有改变；未重启 MIDI 服务、整机或修改设备全局/预设设置。
+本轮临时启动一小时限时 caffeinate 供远程测试使用，不改永久电源设置。
+
+另核对了 [Apple 开源 XNU 的 IOCatalogueSendData 实现](https://github.com/apple-oss-distributions/xnu/blob/main/iokit/Kernel/IOUserClient.cpp)：
+驱动 personality 注入还要求专用 catalogue management entitlement；没有该资格时甚至可能返回伪成功。
+因此不将普通 sudo 调用该接口包装成已验证修复，也没有尝试注入或伪造 entitlement。
+
+本轮仍没有找到保持完整安全设置的本机直连修复。后续可分开验证的路径是：
+有现成环境时测试 Windows 虚拟机 USB 接管，或设备接回 Windows 后实现 MIDI 网络桥接。
+目标 Mac 当前未发现 Parallels/VMware/UTM/VirtualBox 应用，未安装新虚拟机或软件；
+这两项均未实测，不要求用户现在购买线材或许可证。
