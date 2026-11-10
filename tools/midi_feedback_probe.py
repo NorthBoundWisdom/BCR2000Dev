@@ -145,10 +145,7 @@ class WinMM:
         callback_type = C.WINFUNCTYPE(None, PTR, U32, UPTR, UPTR, UPTR)
         def received(handle, message, instance, data, timestamp):
             # No WinMM calls, printing or waits in the driver callback.
-            if message in (0x3C3, 0x3CC):
-                self.events.put(int(data))
-            elif message == 0x3C5:
-                self.events.put(RuntimeError("WinMM reported malformed input"))
+            self.handle_native_event(message, int(data))
         self.callback = callback_type(received)  # Retained until midiInClose succeeds.
         handle = PTR()
         self.check(self.api.midiInOpen(C.byref(handle), input_port.id, C.cast(self.callback, PTR).value, 0, 0x30000), "Open input", True)
@@ -158,6 +155,12 @@ class WinMM:
             handle = PTR()
             self.check(self.api.midiOutOpen(C.byref(handle), output_port.id, 0, 0, 0), "Open output")
             self.output = handle
+
+    def handle_native_event(self, message, data):
+        if message in (0x3C3, 0x3CC):
+            self.events.put(data)
+        elif message == 0x3C5:
+            self.events.put(RuntimeError("WinMM reported malformed input"))
 
     def send(self, message):
         self.check(self.api.midiOutShortMsg(self.output, message.packed()), "Send CC")

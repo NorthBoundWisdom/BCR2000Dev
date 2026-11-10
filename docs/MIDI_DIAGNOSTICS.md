@@ -81,3 +81,22 @@ macOS 按当前 SDK 的 ARM 四字节对齐规则遍历可变长包；Windows �
   和 [BCR 用户手册 S-4/参数反馈](https://mediadl.musictribe.com/media/PLM/data/docs/P0245/BCF2000_BCR2000_M_EN.pdf)。
 
 建议先借到接口验证，再决定购买；不要将只有单向转换或不支持当前系统的线当作双向反馈方案。
+
+## Windows 无人值守回读
+
+新增 `windows_bcr_roundtrip.py` 使用设备只读身份和当前值快照命令，无需人工按 Snapshot 键。
+它与普通五段扫描工具不同：会发送两种白名单只读 SysEx 查询，但不发送预设/BCL/固件命令。
+默认只读：
+
+```powershell
+py -3 tools/windows_bcr_roundtrip.py --report readonly-report.json
+py -3 tools/windows_usb_descriptor.py --report usb-report.json
+```
+
+写入测试必须明确填写此前学到的编码器 `--test-cc` 和 `--channel`，且先验证设备身份与快照。
+不要猜控制器编号。`--hold-max` 会保留 127，否则尽力恢复基线值；两种情况下均再请求快照核对。
+一个单独回显不算快照；目标缺失、同身份冲突、输入溢出时不报通过。
+
+本轮已在用户提供的 Windows 测试机经 SSH 实测：身份、56 条 CC 快照、五值写入与回读全部通过，
+最终设备回读为 127。未远程观察 LED 外观。完整硬件与 USB 描述基线见
+[Windows USB 基线](WINDOWS_USB_BASELINE.md)。
