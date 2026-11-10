@@ -72,6 +72,8 @@ def validate_assets(
         [*expected_assets, *(name + ".build.json" for name in expected_assets), "SHA256SUMS", stem + ".SHA256SUMS"]
     )
     (directory / "release-assets.json").write_text(json.dumps(names, indent=2) + "\n")
+    template = "RELEASE_NOTES_DEVELOPER_ID.md" if distribution == "developer-id" else "RELEASE_NOTES.md"
+    (directory / "release-notes.md").write_text((REPO_ROOT / "configs" / template).read_text())
     print("Verified universal ZIP and DMG provenance and SHA-256 checksums.")
 
 
@@ -83,17 +85,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--distribution",
         choices=("ad-hoc", "developer-id"),
-        default=os.environ.get("BCR_RELEASE_DISTRIBUTION", "developer-id"),
+        default=os.environ.get("BCR_RELEASE_DISTRIBUTION") or "ad-hoc",
     )
     parser.add_argument("--build-number", default=os.environ.get("ARCHIVE_ID", "1"))
     args = parser.parse_args(argv)
     version = release_version(args.version)
+    if args.distribution not in {"ad-hoc", "developer-id"}:
+        raise ValueError("Unknown release distribution; choose ad-hoc or developer-id explicitly")
+    if not re.fullmatch(r"[1-9][0-9]*", args.build_number):
+        raise ValueError("Invalid build number")
     if args.action == "metadata":
         if os.environ.get("GITHUB_OUTPUT"):
             with Path(os.environ["GITHUB_OUTPUT"]).open("a") as stream:
                 stream.write(f"version={version}\n")
-                if not re.fullmatch(r"[1-9][0-9]*", args.build_number):
-                    raise ValueError("Invalid build number")
                 stream.write(f"build_number={args.build_number}\ndistribution={args.distribution}\n")
         print(version)
     else:

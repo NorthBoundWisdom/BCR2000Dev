@@ -227,7 +227,7 @@ WP1 验证时没有实体 BCR2000，使用本机构建的 ad-hoc App。已观察
 
 ## Tag 正式发布准备
 
-- [x] tag 构建强制 Developer ID、公证、获批 DriverKit 配套工具；缺件失败，不发布 ad-hoc 替代包。
+- [x] Developer ID/Profile/公证的本机预备工具保留；当前已按自用阶段要求从 CI 移除所有凭证步骤。
 - [x] 一次性 CI Keychain、只导入显式提供的凭证、清理、发布资产白名单与源码/哈希校验。
 - [x] 真实第三方关系的 Apple 申请草稿及一次性配置文档，尚未提交。
 - [ ] Apple 正式 entitlement 审核及两个 Developer ID profiles。
@@ -235,3 +235,10 @@ WP1 验证时没有实体 BCR2000，使用本机构建的 ad-hoc App。已观察
 - [ ] 使用真实正式授权运行签署/公证，并在未注册干净 Mac 验证安装和 USB；准备测试不代替此验收。
 
 见 [TAG_RELEASE_SETUP.md](docs/TAG_RELEASE_SETUP.md)。
+
+## 当前 CI 选择（覆盖此前正式发布预备策略）
+
+- [x] main/PR 和 tag 固定常规 ad-hoc 构建；不读证书、私钥、profiles、公证 key 或 Secrets。
+- [x] tag 验证通过后发布主程序 ZIP/DMG；手动任务只出 artifacts，不发布。
+- [x] README 和发布说明区分当前主程序与需要 Apple 签署的完整 DriverKit 包。
+- [ ] 正式 DriverKit 分发申请及凭证配置暂停，待用户以后明确需要公开完整版时再推进。

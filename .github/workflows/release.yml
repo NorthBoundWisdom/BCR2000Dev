@@ -16,7 +16,7 @@ concurrency:
 jobs:
   package:
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
       build_number: ${{ steps.version.outputs.build_number }}
@@ -33,54 +33,21 @@ jobs:
         env:
           RELEASE_VERSION: ${{ github.event_name == 'push' && github.ref_name || inputs.version }}
           ARCHIVE_ID: ${{ github.run_number }}
-          BCR_RELEASE_DISTRIBUTION: ${{ github.event_name == 'push' && 'developer-id' || 'ad-hoc' }}
-        run: python3 configs/ci_release.py metadata
-      - name: Require a main commit for signing a pushed tag
+          BCR_RELEASE_DISTRIBUTION: ad-hoc
+        run: python3 configs/ci_release.py metadata --distribution ad-hoc
+      - name: Require a main commit for a pushed tag
         if: github.event_name == 'push'
         run: git merge-base --is-ancestor HEAD origin/main
       - run: python3 configs/setup_local_project.py
       - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
       - run: python3 configs/macos_workflow.py test
-      - run: python3 configs/macos_workflow.py build
+      - run: python3 configs/macos_workflow.py build --distribution ad-hoc
       - run: python3 tools/mcp_integration.py
-      - name: Configure ephemeral release credentials
-        if: github.event_name == 'push'
-        env:
-          BCR_SIGNING_P12_BASE64: ${{ secrets.BCR_SIGNING_P12_BASE64 }}
-          BCR_SIGNING_P12_PASSWORD: ${{ secrets.BCR_SIGNING_P12_PASSWORD }}
-          BCR_DRIVERKIT_HOST_PROFILE_BASE64: ${{ secrets.BCR_DRIVERKIT_HOST_PROFILE_BASE64 }}
-          BCR_DRIVERKIT_PROFILE_BASE64: ${{ secrets.BCR_DRIVERKIT_PROFILE_BASE64 }}
-          BCR_NOTARY_KEY_P8_BASE64: ${{ secrets.BCR_NOTARY_KEY_P8_BASE64 }}
-          BCR_NOTARY_KEY_ID: ${{ secrets.BCR_NOTARY_KEY_ID }}
-          BCR_NOTARY_ISSUER_ID: ${{ secrets.BCR_NOTARY_ISSUER_ID }}
-        run: python3 configs/ci_signing.py setup
-      - name: Validate approved DriverKit release profiles
-        if: github.event_name == 'push'
-        run: python3 configs/driverkit_release.py preflight
-      - name: Build the signed USB compatibility companion
-        if: github.event_name == 'push'
+      - name: Build credential-free ad-hoc packages
         env:
           MARKETING_VERSION: ${{ steps.version.outputs.version }}
           ARCHIVE_ID: ${{ steps.version.outputs.build_number }}
-        run: python3 configs/driverkit_release.py build
-      - name: Build-only ad-hoc packages
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          MARKETING_VERSION: ${{ steps.version.outputs.version }}
-          ARCHIVE_ID: ${{ steps.version.outputs.build_number }}
-        run: python3 configs/macos_workflow.py package --architecture universal
-      - name: Sign, notarize and package the formal release
-        if: github.event_name == 'push'
-        env:
-          MARKETING_VERSION: ${{ steps.version.outputs.version }}
-          ARCHIVE_ID: ${{ steps.version.outputs.build_number }}
-        run: >-
-          python3 configs/macos_workflow.py package --architecture universal
-          --distribution developer-id
-          --driverkit-host build/driverkit-release/derived/Build/Products/Release/BCRDriverKitProbe.app
-      - name: Remove ephemeral signing material
-        if: always() && github.event_name == 'push'
-        run: python3 configs/ci_signing.py cleanup
+        run: python3 configs/macos_workflow.py package --architecture universal --distribution ad-hoc
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: macos-universal
@@ -139,8 +106,8 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.package.outputs.version }}
           ARCHIVE_ID: ${{ needs.package.outputs.build_number }}
-          BCR_RELEASE_DISTRIBUTION: ${{ needs.package.outputs.distribution }}
-        run: python3 configs/ci_release.py verify
+          BCR_RELEASE_DISTRIBUTION: ad-hoc
+        run: python3 configs/ci_release.py verify --distribution ad-hoc
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-release
@@ -176,5 +143,5 @@ jobs:
           assets = [str(directory / name) for name in json.loads((directory / 'release-assets.json').read_text())]
           tag = os.environ['RELEASE_TAG']
           subprocess.run(['gh', 'release', 'create', tag, '--verify-tag', '--title', tag,
-                          '--notes-file', 'configs/RELEASE_NOTES.md', *assets], check=True)
+                          '--notes-file', str(directory / 'release-notes.md'), *assets], check=True)
           PY

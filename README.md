@@ -6,6 +6,25 @@
 CC/Note 按键，在 SwiftUI 与确定性 Mock Agent 之间共享同一状态机，并把状态值回写到
 同一按键 LED 或编码器灯环。真实 Codex 接入不在本里程碑内。
 
+## CI 构建与包含 USB 修复的完整版
+
+普通 CI（main/PR）和版本 tag CI 都固定使用无需证书的 ad-hoc 构建，不读取 Apple
+开发者证书、私钥、provisioning profiles、公证 API key 或 GitHub Secrets。
+推送如 `v1.2.3` 的版本 tag 后，测试和 ARM/Intel 包验证通过才创建 GitHub Release，
+上传主程序的 Universal ZIP/DMG、构建记录和 SHA-256；手动触发只构建、不发布。
+发布使用 GitHub 自动提供的 GITHUB_TOKEN，无需另行配置凭证。这些包未经 Apple 公证。
+
+**当前 CI 安装包只含 BCRAgentConsole.app，不包含或自动安装 DriverKit USB 兼容修复。**
+已经在本机安装的开发签署修复可继续使用；新机器仅安装主程序不等于同时安装了该修复。
+
+**含 DriverKit USB 修复的完整安装包需要 Apple 开发者证书和对应授权/profile 签署。**
+自用可使用已验证的付费账号开发签署，在已登记 Mac 上运行；DriverKit 扩展不能改为
+ad-hoc 后在完整 SIP 下正常加载。面向未登记用户公开分发，还需正式 DriverKit USB
+分发授权、Developer ID 签署和公证。目前先不申请，当前 CI 也不执行这条流程。
+
+流程说明见 [Tag 发布](docs/TAG_RELEASE_SETUP.md)，实机结果见
+[DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
+
 ## 已实现
 
 - Swift 6、SwiftUI、macOS 14+；
@@ -190,5 +209,5 @@ git diff --check
 纯 USB 兼容性研究：当前 Mac 已通过保持 SIP 的 DriverKit 开发签署实验；
 代码、实测范围与正式分发前提见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
 
-正式 tag 自动发布的授权与凭证准备见 [发布配置](docs/TAG_RELEASE_SETUP.md)；
-配置未齐时发布会停止，不将实验开发包当作公开发行版。
+当前 tag 发布使用无需凭证的 ad-hoc 构建，见 [发布配置](docs/TAG_RELEASE_SETUP.md)；
+完整 USB 修复的 Apple 签署路径保留为将来独立配置，不在当前 CI 启用。

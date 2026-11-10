@@ -87,8 +87,9 @@ python3 configs/macos_workflow.py package \
 此流程启用 Hardened Runtime 和安全时间戳，提交临时 ZIP 公证，确认 `Accepted` 后给
 `.app` staple ticket，再生成最终 ZIP/DMG；DMG 另外公证、staple。应用和镜像均检查 ticket，
 并执行 Gatekeeper assessment。缺少 profile、证书歧义、公证失败或校验失败均返回非零，
-不会降级为 ad-hoc 成功产物。普通 CI 和手动只构建任务维持 ad-hoc；显式版本 tag 使用下述正式签署流程。
-本机打包仍可复用 Keychain；GitHub-hosted 正式发布需另行安全配置 Secrets，不自动导出本机私钥。
+不会降级为 ad-hoc 成功产物。普通 CI、手动任务和版本 tag 都固定使用 ad-hoc；Developer ID 仅作为本机显式选择的工具保留。
+本机显式签署仍可复用 Keychain；将来若另行启用 Developer ID 的 GitHub 发布才需配置 Secrets，
+当前 CI 不使用这条路径，也不自动导出本机私钥。
 
 ## 检查最终安装包
 
@@ -112,15 +113,14 @@ python3 configs/macos_workflow.py check-package \
 
 - `ci.yml`：main push/PR 时检查插件清单、Python 工作流测试、Swift 测试、Debug 构建与启动。
 - `release.yml`：手动输入版本可生成 Universal ZIP/DMG、记录和校验和，不发布 Release。
-  显式推送 `v<major>.<minor>.<patch>` tag 时，使用正式签署、公证、DriverKit companion，
-  同一流程验证通过后发布该 tag 的 GitHub Release；构建号采用 workflow run number。
+  显式推送版本 tag 时，以固定 ad-hoc 构建验证后发布 GitHub Release；
+  构建号采用 workflow run number。不读取证书、签署 Secrets 或公证凭证。
 - 打包后分别在新的 `macos-15`（ARM）和 `macos-15-intel` runner 上验证 ZIP 与 DMG。
   runner 没有构建目录，应用从临时安装目录运行。
 - 最后验证所有记录的 Git commit、干净工作区、版本、架构及 SHA-256，再生成统一
   `SHA256SUMS`。缺件、混入旧包、记录或哈希不一致均阻止发布。
-- 手动构建产物注明 ad-hoc、未经公证；版本 tag 强制 Developer ID、公证和获批 DriverKit 配套工具。
-- 正式流程的凭证、profiles、双 App 包装与外部前置条件见 [TAG_RELEASE_SETUP.md](TAG_RELEASE_SETUP.md)。
-  尚未配置完成时 tag 构建会失败，不发布开发签署或 ad-hoc 替代包。
+- 手动与 tag 产物都注明 ad-hoc、未经公证，当前只含主程序，不含 DriverKit 配套工具。
+- 当前无需凭证的 tag 发布行为及完整版要求见 [TAG_RELEASE_SETUP.md](TAG_RELEASE_SETUP.md)。
 
 仅配置上述流程不会创建 tag 或发布；发布动作由显式推送版本 tag 触发。
 
@@ -144,7 +144,7 @@ Package 默认 DMG + ZIP，保留原 `release-zip` ID，并新增 Developer ID �
 
 ## DriverKit 正式配套工具
 
-默认构建不依赖 DriverKit。正式 tag 包增加独立的 BCRUSBCompatibility.app，
+默认构建与当前 tag 构建均不依赖 DriverKit。将来显式配置完整发行包时可增加独立的 BCRUSBCompatibility.app，
 主应用继续保持 SwiftPM 构建；配套工具由生成于忽略目录的 Xcode 工程构建。
 两个 App 都签署、公证并附加票据，最终 ZIP/DMG 同时包含它们。
 `--driverkit-host` 只接受已获批、无开发调试权限的 universal Developer ID 配套工具；

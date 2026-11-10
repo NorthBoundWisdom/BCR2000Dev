@@ -154,3 +154,6 @@ Stop All 与重连一致性。Agent 继续作为一种控件功能（`agentPrima
 R7 发布补充：tag 正式签署/公证与 DriverKit 配套工具管线已准备；
 Apple 正式授权、CI 凭证与未注册机器的完整安装验收仍是前置条件。
 见 [发布准备](docs/TAG_RELEASE_SETUP.md)。
+
+当前发布选择：自用阶段不申请正式 DriverKit 授权；普通/tag CI 固定无需凭证的 ad-hoc 主程序构建。
+包含 USB 修复的完整版仍需 Apple 签署，作为以后显式启用的工作，见 README。
