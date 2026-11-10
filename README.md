@@ -186,3 +186,6 @@ git diff --check
 
 远程接线、只读预检、自动读回矩阵和 GUI 会话入口见 [Mac 远程测试计划](docs/MAC_REMOTE_TEST_PLAN.md)。
 使用 `tools/package_macos_diagnostics.py` 生成带校验清单的 Apple Silicon/Intel 通用诊断包，默认不写实体 CC。
+
+纯 USB 兼容性研究：当前 Mac 已通过保持 SIP 的 DriverKit 开发签署实验；
+代码、实测范围与正式分发前提见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。

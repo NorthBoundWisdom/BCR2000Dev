@@ -77,3 +77,9 @@ USB 描述还提供了 OUT 最大包长 4 bytes 的具体兼容性线索；与 M
 已核对针对这个描述错误的第三方主机覆盖修复，但未安装或更改系统安全策略。
 详细证据、固定源码版本、后续验收与回退条件见 [现场诊断](MAC_USB_FIELD_RESULTS.md)。
 此前“具体失败层次尚未确定”的记录是历史阶段；目前首要方向已缩小到 USB OUT 管道。
+
+## DriverKit 纯 USB 已通过基础闭环
+
+后续在当前 Mac 用合法开发签署的 codeless dext 完成主机描述覆盖，SIP 保持启用、未进入 Recovery。
+OUT 管道包长 8、身份/快照、五值回读一致；用户现场确认顶部左侧灯环变化。
+实测范围与分发限制见 [DriverKit 验证](DRIVERKIT_USB_PROOF.md)。

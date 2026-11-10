@@ -1,0 +1,4 @@
+#include <DriverKit/IOService.iig>
+
+// Intentionally empty: test provider-property merging, not a replacement MIDI driver.
+class BCRDescriptorProbe : public IOService {};

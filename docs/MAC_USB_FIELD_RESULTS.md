@@ -1,5 +1,8 @@
 # Mac 现场 USB 输出诊断（2026-11-10）
 
+后续更新：已通过合法开发签署的 codeless dext，在保持 SIP 的情况下完成纯 USB 修复与现场灯环验收，
+见 [DriverKit 实测](DRIVERKIT_USB_PROOF.md)。下文保留此前未找到替代路径时的实验记录。
+
 ## 实测结论
 
 用户在硬件旁，通过 SSH 在其指定的另一台 Apple Silicon Mac 上执行；工作区为干净 main。

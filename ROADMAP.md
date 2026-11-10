@@ -14,6 +14,10 @@
 - 实体 BCR2000 已连接（CoreMIDI 可见 Port 1/2 输入、Port 1/2/3 输出），尚未完成 R1 实机验证。
 - 视窗保留自定义无标题栏样式，AppKit 处理移动与双击放大；面板阴影限于背景形状，避免拖曳合成卡顿。
 
+2026-11-10 补充：DriverKit codeless dext 的纯 USB 可行性验证已在保持 SIP 的当前 Mac 通过，
+包含设备回读与现场灯环；它是独立开发签署实验，尚未产品化分发。见
+[DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)，不改变 R1 全量验收要求。
+
 ## 目标与优先级
 
 | 阶段 | 优先级 | 目标 |
