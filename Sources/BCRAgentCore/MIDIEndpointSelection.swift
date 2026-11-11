@@ -28,9 +28,9 @@ public enum MIDIEndpointSelectionError: Error, LocalizedError, Equatable, Sendab
     case invalidSettings, missingSelectedEndpoint, missingPortOne
     public var errorDescription: String? {
         switch self {
-        case .invalidSettings: "MIDI 端口设置版本或身份无效"
-        case .missingSelectedEndpoint: "手动选择的 MIDI 端口不可用，请重新选择；未自动切换其他端口"
-        case .missingPortOne: "未找到 BCR2000 Port 1，请连接设备或手动选择端口"
+        case .invalidSettings: L10n.text("MIDI 端口设置版本或身份无效")
+        case .missingSelectedEndpoint: L10n.text("手动选择的 MIDI 端口不可用，请重新选择；未自动切换其他端口")
+        case .missingPortOne: L10n.text("未找到 BCR2000 Port 1，请连接设备或手动选择端口")
         }
     }
 }

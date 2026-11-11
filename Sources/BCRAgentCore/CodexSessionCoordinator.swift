@@ -10,15 +10,15 @@ public enum CodexSessionCoordinatorError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .invalidState(message):
-            "会话状态异常：\(message)"
+            L10n.text("会话状态异常：\(message)")
         case let .malformedPayload(message):
-            "响应异常：\(message)"
+            L10n.text("响应异常：\(message)")
         case .missingThreadID:
-            "缺少 threadId"
+            L10n.text("缺少 threadId")
         case .missingTurnID:
-            "缺少 turnId"
+            L10n.text("缺少 turnId")
         case .modelUnavailable:
-            "模型不可用"
+            L10n.text("模型不可用")
         }
     }
 }

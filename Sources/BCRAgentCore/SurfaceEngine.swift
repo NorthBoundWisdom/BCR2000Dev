@@ -201,7 +201,8 @@ public struct SurfaceEngine: Sendable {
                                            at now: Date = .now) throws -> [SurfaceEffect]
     {
         for (id, value) in values {
-            guard configuration.parameter(id) != nil, value.isFinite else { throw MotionSafetyError("实际状态参数未知或数值无效") }
+            guard configuration.parameter(id) != nil,
+                  value.isFinite else { throw MotionSafetyError(L10n.text("实际状态参数未知或数值无效")) }
         }
         var changed: [BCRControlID] = []
         for (id, value) in values where actualFeedbackValues[id] != value {

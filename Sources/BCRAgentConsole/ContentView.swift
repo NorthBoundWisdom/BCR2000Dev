@@ -117,48 +117,59 @@ private struct HeaderBar: View {
     @ObservedObject var model: ConsoleViewModel
 
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("BCR CONSOLE")
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .tracking(1.6)
-                Text(model.configuration.name)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-            }
-
-            Picker("设备", selection: Binding(get: { model.source }, set: { model.selectSource($0) })) {
-                ForEach(DeviceSource.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 240)
-
-            Spacer()
-
-            if let target = model.engine.learnTarget {
-                HStack(spacing: 8) {
-                    Image(systemName: "record.circle")
-                        .symbolEffect(.pulse)
-                    Text("学习中：请操作实体 \(target.shortName)")
-                        .font(.callout.bold())
-                    Button("停止") { model.stopLearning() }
-                        .controlSize(.small)
+        VStack(spacing: 10) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("BCR CONSOLE")
+                        .font(.system(size: 20, weight: .black, design: .rounded))
+                        .tracking(1.6)
+                    Text(model.configuration.name)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
                 }
-                .foregroundStyle(Theme.learn)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Theme.learn.opacity(0.12), in: Capsule())
+
+                Picker(L10n.text("设备"), selection: Binding(get: { model.source }, set: { model.selectSource($0) })) {
+                    ForEach(DeviceSource.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 240)
+
+                Spacer()
+
+                Toggle(L10n.text("跟随触碰"), isOn: $model.followsTouch)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .help(L10n.text("操作设备上的控件时自动在检查器中选中它"))
+
+                SettingsLink {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .help(L10n.text("设置"))
+                .accessibilityLabel(L10n.text("设置"))
             }
+            HStack(spacing: 16) {
+                if let target = model.engine.learnTarget {
+                    HStack(spacing: 8) {
+                        Image(systemName: "record.circle")
+                            .symbolEffect(.pulse)
+                        Text(L10n.text("学习中：请操作实体 \(target.shortName)"))
+                            .font(.callout.bold())
+                        Button(L10n.text("停止")) { model.stopLearning() }
+                            .controlSize(.small)
+                    }
+                    .foregroundStyle(Theme.learn)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Theme.learn.opacity(0.12), in: Capsule())
+                }
 
-            Toggle("跟随触碰", isOn: $model.followsTouch)
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .help("操作设备上的控件时自动在检查器中选中它")
-
-            OutputStatusButton(controller: model.output)
-            MCPStatusButton(controller: model.mcp)
-            DeviceStatus(model: model)
+                Spacer(minLength: 0)
+                OutputStatusButton(controller: model.output)
+                MCPStatusButton(controller: model.mcp)
+                DeviceStatus(model: model)
+            }
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)
@@ -187,27 +198,27 @@ private struct DeviceStatus: View {
             .frame(maxWidth: 360, alignment: .trailing)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("MIDI 端口设置：\(title)")
-        .help("选择实体 MIDI 输入与输出端口")
+        .accessibilityLabel(L10n.text("MIDI 端口设置：\(title)"))
+        .help(L10n.text("选择实体 MIDI 输入与输出端口"))
         .sheet(isPresented: $showsPorts) { MIDIEndpointSettingsView(model: model) }
     }
 
     private var status: (String, String, Color, String) {
         let hardware = model.connection.isConnected
             ? "\(model.connection.connectedSource ?? "—") → \(model.connection.connectedDestination ?? "—")"
-            : (model.connection.lastError ?? "未找到 BCR2000 Port 1（建议 USB 模式 U-1）")
+            : (model.connection.lastError ?? L10n.text("未找到 BCR2000 Port 1（建议 USB 模式 U-1）"))
         switch model.source {
         case .mock:
             return (
-                "Mock 设备运行中",
-                "收 \(model.mock.receivedCount) · 发 \(model.mock.sentCount) · 实体：\(hardware)",
+                L10n.text("Mock 设备运行中"),
+                L10n.text("收 \(model.mock.receivedCount) · 发 \(model.mock.sentCount) · 实体：\(hardware)"),
                 Theme.parameter,
                 "cpu"
             )
         case .hardware:
-            let dropped = model.droppedFeedbackCount > 0 ? " · \(model.droppedFeedbackCount) 条反馈未发送" : ""
+            let dropped = model.droppedFeedbackCount > 0 ? L10n.text(" · \(model.droppedFeedbackCount) 条反馈未发送") : ""
             return (
-                model.connection.isConnected ? "BCR2000 已连接" : "BCR2000 未连接",
+                model.connection.isConnected ? L10n.text("BCR2000 已连接") : L10n.text("BCR2000 未连接"),
                 hardware + dropped,
                 model.connection.isConnected ? .green : .orange,
                 model.connection.isConnected ? "cable.connector.horizontal" : "cable.connector.slash"
@@ -238,11 +249,11 @@ private struct NoticeBanner: View {
                 .textSelection(.enabled)
             Spacer()
             if notice.action == .switchToHardware {
-                Button("切换到实体") { model.performNoticeAction(.switchToHardware) }
+                Button(L10n.text("切换到实体")) { model.performNoticeAction(.switchToHardware) }
                     .controlSize(.small)
             }
             if notice.action == .retryConfigurationSave {
-                Button("重试保存") { model.performNoticeAction(.retryConfigurationSave) }
+                Button(L10n.text("重试保存")) { model.performNoticeAction(.retryConfigurationSave) }
                     .controlSize(.small)
             }
             Button {

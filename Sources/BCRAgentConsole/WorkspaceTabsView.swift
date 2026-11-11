@@ -17,7 +17,7 @@ struct WorkspaceTabsView: View {
         let tab = model.workspacePanels.resolved(selection, outputActive: outputActive)
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Picker("工作区", selection: Binding(get: { tab }, set: { selection = $0 })) {
+                Picker(L10n.text("工作区"), selection: Binding(get: { tab }, set: { selection = $0 })) {
                     ForEach(tabs) { Label($0.title, systemImage: $0.systemImage).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -40,7 +40,7 @@ struct WorkspaceTabsView: View {
 
     private func panelMenu(outputActive: Bool) -> some View {
         Menu {
-            Section("专业面板") {
+            Section(L10n.text("专业面板")) {
                 ForEach(WorkspaceTab.optional) { panel in
                     Toggle(isOn: Binding(
                         get: { model.workspacePanels.isEnabled(panel) },
@@ -54,17 +54,17 @@ struct WorkspaceTabsView: View {
                 }
             }
             if outputActive, !model.workspacePanels.isEnabled(.output) {
-                Text("输出运行期间始终显示“输出”面板")
+                Text(L10n.text("输出运行期间始终显示“输出”面板"))
             }
         } label: {
-            Label("面板", systemImage: "rectangle.stack.badge.plus")
+            Label(L10n.text("面板"), systemImage: "rectangle.stack.badge.plus")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .controlSize(.small)
-        .accessibilityLabel("专业面板")
+        .accessibilityLabel(L10n.text("专业面板"))
         .accessibilityIdentifier("workspace.panels")
-        .help("启用或隐藏机械臂预览、输出等专业面板")
+        .help(L10n.text("启用或隐藏机械臂预览、输出等专业面板"))
     }
 }
 
@@ -78,42 +78,45 @@ private struct ParameterListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。")
+            Text(L10n.text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), alignment: .leading)], alignment: .leading) {
                 Button {
                     model.createParameter()
                 } label: {
-                    Label("新建参数", systemImage: "plus")
+                    Label(L10n.text("新建参数"), systemImage: "plus")
                 }
-                Button("导入配置…") {
+                Button(L10n.text("导入配置…")) {
                     Task {
                         pendingImport = await model.chooseConfigurationImport()
                         confirmsImport = pendingImport != nil
                     }
                 }
-                .accessibilityLabel("导入配置")
+                .accessibilityLabel(L10n.text("导入配置"))
                 .accessibilityIdentifier("configuration.import")
-                .help("导入参数与功能分配，确认后替换当前配置")
-                .confirmationDialog("替换当前全部参数与分配？", isPresented: $confirmsImport) {
-                    Button("导入并替换", role: .destructive) {
+                .help(L10n.text("导入参数与功能分配，确认后替换当前配置"))
+                .confirmationDialog(L10n.text("替换当前全部参数与分配？"), isPresented: $confirmsImport) {
+                    Button(L10n.text("导入并替换"), role: .destructive) {
                         if let pendingImport { model.installConfiguration(pendingImport) }
                         pendingImport = nil
                     }
-                    Button("取消", role: .cancel) { pendingImport = nil }
+                    Button(L10n.text("取消"), role: .cancel) { pendingImport = nil }
                 } message: {
                     if let pendingImport {
                         Text(
-                            "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
+                            L10n
+                                .text(
+                                    "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
+                                )
                         )
                     }
                 }
-                Button("导出配置…") { Task { await model.chooseConfigurationExport() } }
-                    .accessibilityLabel("导出配置")
+                Button(L10n.text("导出配置…")) { Task { await model.chooseConfigurationExport() } }
+                    .accessibilityLabel(L10n.text("导出配置"))
                     .accessibilityIdentifier("configuration.export")
-                    .help("导出参数与功能分配，不包含实体映射")
-                Menu("载入预置…") {
+                    .help(L10n.text("导出参数与功能分配，不包含实体映射"))
+                Menu(L10n.text("载入预置…")) {
                     ForEach(ConfigurationPreset.allCases) { preset in
                         Button {
                             pendingPreset = preset
@@ -124,30 +127,29 @@ private struct ParameterListView: View {
                     }
                 }
                 .fixedSize()
-                .accessibilityLabel("载入预置配置")
+                .accessibilityLabel(L10n.text("载入预置配置"))
                 .accessibilityIdentifier("configuration.preset")
-                .help("用内置的默认配置或示例替换当前配置")
+                .help(L10n.text("用内置的默认配置或示例替换当前配置"))
                 .confirmationDialog(
-                    "载入“\(pendingPreset?.title ?? "")”？",
+                    L10n.text("载入“\(pendingPreset?.title ?? "")”？"),
                     isPresented: Binding(get: { pendingPreset != nil }, set: { if !$0 { pendingPreset = nil } }),
                     presenting: pendingPreset
                 ) { preset in
-                    Button("载入并替换", role: .destructive) { model.loadPreset(preset) }
-                    Button("取消", role: .cancel) {}
+                    Button(L10n.text("载入并替换"), role: .destructive) { model.loadPreset(preset) }
+                    Button(L10n.text("取消"), role: .cancel) {}
                 } message: { preset in
-                    Text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。")
+                    Text(L10n.text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。"))
                 }
-                Spacer(minLength: 0)
             }
             .controlSize(.small)
 
             ForEach(model.configuration.parameterGroups, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(group.isEmpty ? "未分组" : group)
+                        Text(group.isEmpty ? L10n.text("未分组") : group)
                             .font(.subheadline.bold())
                         Spacer()
-                        Button("复位到默认") { model.resetGroup(group) }
+                        Button(L10n.text("复位到默认")) { model.resetGroup(group) }
                             .controlSize(.small)
                     }
                     ForEach(model.configuration.parameters.filter { $0.group == group }) { definition in
@@ -224,7 +226,7 @@ private struct ParameterRow: View {
         HStack(spacing: 4) {
             let controls = model.configuration.controls(targetingParameter: definition.id)
             if controls.isEmpty {
-                Text("未绑定").font(.caption2).foregroundStyle(.tertiary)
+                Text(L10n.text("未绑定")).font(.caption2).foregroundStyle(.tertiary)
             }
             ForEach(controls) { control in
                 Button(control.shortName) {
@@ -274,10 +276,10 @@ private struct AgentGridView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(stateColor(slot.state))
                         if slot.state == .waitingApproval {
-                            Button("拒绝") { model.decline(slot.id) }
+                            Button(L10n.text("拒绝")) { model.decline(slot.id) }
                         }
                         Spacer()
-                        Text(controls.isEmpty ? "未绑定" : controls.map(\.shortName).joined(separator: " "))
+                        Text(controls.isEmpty ? L10n.text("未绑定") : controls.map(\.shortName).joined(separator: " "))
                             .font(.caption2.monospaced())
                             .foregroundStyle(.secondary)
                     }
@@ -304,15 +306,15 @@ private struct MIDIMonitorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("IN = 设备 → 软件，OUT = 软件 → 设备。灰色为 Mock 模式下收到但未处理的实体输入。")
+                Text(L10n.text("IN = 设备 → 软件，OUT = 软件 → 设备。灰色为 Mock 模式下收到但未处理的实体输入。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button("清空") { model.clearMonitor() }
+                Button(L10n.text("清空")) { model.clearMonitor() }
                     .controlSize(.small)
             }
             if model.events.isEmpty {
-                Text("还没有 MIDI 事件。")
+                Text(L10n.text("还没有 MIDI 事件。"))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, minHeight: 80)
             } else {
@@ -332,7 +334,7 @@ private struct MIDIMonitorView: View {
                                 .lineLimit(1)
                                 .layoutPriority(1)
                             Spacer(minLength: 4)
-                            Text(event.control?.shortName ?? "未映射")
+                            Text(event.control?.shortName ?? L10n.text("未映射"))
                                 .foregroundStyle(event.control == nil ? .orange : .secondary)
                         }
                         .font(.system(size: 11, design: .monospaced))

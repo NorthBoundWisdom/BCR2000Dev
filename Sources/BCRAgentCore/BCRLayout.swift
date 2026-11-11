@@ -35,11 +35,11 @@ public enum BCRSection: String, Codable, Sendable, CaseIterable, Comparable {
 
     public var displayName: String {
         switch self {
-        case .pushEncoder: "推钮编码器"
-        case .pushEncoderButton: "编码器按下"
-        case .button: "按键"
-        case .encoder: "编码器"
-        case .userButton: "用户按键"
+        case .pushEncoder: L10n.text("推钮编码器")
+        case .pushEncoderButton: L10n.text("编码器按下")
+        case .button: L10n.text("按键")
+        case .encoder: L10n.text("编码器")
+        case .userButton: L10n.text("用户按键")
         }
     }
 
@@ -107,9 +107,9 @@ public struct BCRControlID: Hashable, Codable, Sendable, Comparable, Identifiabl
     public var description: String {
         switch section {
         case .pushEncoder, .pushEncoderButton:
-            "\(section.displayName) 组\(row) #\(index)"
+            L10n.text("\(section.displayName) 组\(row) #\(index)")
         case .button, .encoder:
-            "\(section.displayName) 第\(row)行 #\(index)"
+            L10n.text("\(section.displayName) 第\(row)行 #\(index)")
         case .userButton:
             "\(section.displayName) #\(index)"
         }

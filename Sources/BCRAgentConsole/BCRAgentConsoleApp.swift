@@ -1,3 +1,4 @@
+import BCRAgentCore
 import AppKit
 import Darwin
 import SwiftUI
@@ -18,12 +19,14 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }),
                    let view = window.contentView, view.bounds.width > 0, view.bounds.height > 0
                 {
+                    window.setContentSize(NSSize(width: 1_200, height: 760))
+                    view.layoutSubtreeIfNeeded()
                     view.displayIfNeeded()
                     guard Bundle.main.url(forResource: "AppIcon", withExtension: "icns") != nil else {
                         FileHandle.standardError.write(Data("Bundled application icon is missing.\n".utf8))
                         Darwin.exit(2)
                     }
-                    let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true}\n"
+                    let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true,\"language\":\"\(L10n.language.rawValue)\",\"settings\":\"\(L10n.text("设置"))\"}\n"
                     FileHandle.standardOutput.write(Data(marker.utf8))
                     Darwin.exit(0)
                 }
@@ -51,7 +54,7 @@ struct BCRAgentConsoleApp: App {
         if CommandLine.arguments.contains("--integration-test") {
             #if DEBUG
                 do {
-                    guard !smoke else { throw MCPHTTPParseError(reason: "集成测试与 startup-smoke 不能同时启用") }
+                    guard !smoke else { throw MCPHTTPParseError(reason: L10n.text("集成测试与 startup-smoke 不能同时启用")) }
                     let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
                     _model = StateObject(wrappedValue: ConsoleViewModel(
                         stores: context.stores, startsMIDI: false,
@@ -61,11 +64,12 @@ struct BCRAgentConsoleApp: App {
                     ))
                     return
                 } catch {
-                    FileHandle.standardError.write(Data(("隔离测试启动失败：" + error.localizedDescription + "\n").utf8))
+                    FileHandle.standardError
+                        .write(Data((L10n.text("隔离测试启动失败：") + error.localizedDescription + "\n").utf8))
                     Darwin.exit(2)
                 }
             #else
-                FileHandle.standardError.write(Data("隔离测试仅支持 Debug 构建。\n".utf8))
+                FileHandle.standardError.write(Data(L10n.text("隔离测试仅支持 Debug 构建。\n").utf8))
                 Darwin.exit(2)
             #endif
         }
@@ -78,10 +82,16 @@ struct BCRAgentConsoleApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
+                .environment(\.locale, Locale(identifier: L10n.language.rawValue))
                 .frame(minWidth: 1_200, minHeight: 760)
                 .background(WindowTitlebar().frame(width: 0, height: 0))
         }
         .defaultSize(width: 1_260, height: 920)
         .windowStyle(.hiddenTitleBar)
+
+        Settings {
+            LanguageSettingsView()
+                .environment(\.locale, Locale(identifier: L10n.language.rawValue))
+        }
     }
 }

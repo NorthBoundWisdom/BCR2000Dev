@@ -31,9 +31,9 @@ public enum ControlAssignmentPlanError: Error, Equatable, LocalizedError, Sendab
     case invalidRow, emptyGroup, stalePreview
     public var errorDescription: String? {
         switch self {
-        case .invalidRow: "所选控件行无效"
-        case .emptyGroup: "所选分组没有参数"
-        case .stalePreview: "配置已在其他位置修改，请重新预览后确认"
+        case .invalidRow: L10n.text("所选控件行无效")
+        case .emptyGroup: L10n.text("所选分组没有参数")
+        case .stalePreview: L10n.text("配置已在其他位置修改，请重新预览后确认")
         }
     }
 }

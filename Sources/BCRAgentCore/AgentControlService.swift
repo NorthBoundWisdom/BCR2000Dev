@@ -27,11 +27,11 @@ public final class AgentControlService {
 
     public func call(_ name: String, arguments: JSONValue = .object([:])) -> MCPToolResult {
         do {
-            guard MCPToolCatalog.names.contains(name) else { throw MCPToolFailure("未知工具") }
-            guard let args = arguments.objectValue else { throw MCPToolFailure("arguments 必须是对象") }
+            guard MCPToolCatalog.names.contains(name) else { throw MCPToolFailure(L10n.text("未知工具")) }
+            guard let args = arguments.objectValue else { throw MCPToolFailure(L10n.text("arguments 必须是对象")) }
             try validateArguments(args, tool: name)
             let result = try execute(name, args)
-            record(name, succeeded: true, detail: "完成")
+            record(name, succeeded: true, detail: L10n.text("完成"))
             return MCPToolResult(value: result, isError: false)
         } catch {
             // Error messages only include domain validation details, never HTTP headers or tokens.
@@ -67,17 +67,17 @@ public final class AgentControlService {
             return try write([(ParameterID(string(args, "id")), number(args, "value"))])[0]
         case "nudge_parameter":
             let id = ParameterID(try string(args, "id"))
-            guard let value = session.engine.value(of: id) else { throw MCPToolFailure("未知参数：\(id)") }
+            guard let value = session.engine.value(of: id) else { throw MCPToolFailure(L10n.text("未知参数：\(id)")) }
             let next = value + (try number(args, "delta"))
-            guard next.isFinite else { throw MCPToolFailure("增量结果必须是有限数值") }
+            guard next.isFinite else { throw MCPToolFailure(L10n.text("增量结果必须是有限数值")) }
             return try write([(id, next)])[0]
         case "set_parameters":
             guard case let .array(values) = args["values"], !values.isEmpty, values.count <= 256 else {
-                throw MCPToolFailure("values 必须包含 1–256 个参数")
+                throw MCPToolFailure(L10n.text("values 必须包含 1–256 个参数"))
             }
             let entries: [(ParameterID, Double)] = try values.map { entry in
                 guard let entry = entry.objectValue, Set(entry.keys) == ["id", "value"] else {
-                    throw MCPToolFailure("每条批量写入必须只包含 id 和 value")
+                    throw MCPToolFailure(L10n.text("每条批量写入必须只包含 id 和 value"))
                 }
                 return (ParameterID(try string(entry, "id")), try number(entry, "value"))
             }
@@ -85,13 +85,13 @@ public final class AgentControlService {
         case "reset_group":
             let group = try string(args, "group")
             let parameters = session.engine.configuration.parameters.filter { $0.group == group }
-            guard !parameters.isEmpty else { throw MCPToolFailure("未知参数组") }
+            guard !parameters.isEmpty else { throw MCPToolFailure(L10n.text("未知参数组")) }
             let writable = parameters.filter { $0.agentWritable && !session.isMCPProtectedParameter($0.id) }
             let skipped = parameters.filter { !$0.agentWritable || session.isMCPProtectedParameter($0.id) }
             return .object([
                 "results": .array(try write(writable.map { ($0.id, $0.defaultValue) })),
                 "skipped": .array(skipped.map { .object(["id": .string($0.id.rawValue),
-                                                         "reason": .string("参数受保护，不允许 Agent 写入")]) })
+                                                         "reason": .string(L10n.text("参数受保护，不允许 Agent 写入"))]) })
             ])
         case "list_controls":
             return .array(try BCRLayout.allControls.map { control in
@@ -109,10 +109,11 @@ public final class AgentControlService {
             try requireConfigurationWrite()
             let assignment = try args["assignment"]!.decoded(ControlAssignment.self)
             if case let .agentPrimaryAction(slot) = assignment.target, !(1 ... 8).contains(slot.rawValue) {
-                throw MCPToolFailure("Agent 槽位必须为 1–8")
+                throw MCPToolFailure(L10n.text("Agent 槽位必须为 1–8"))
             }
             if case let .resetGroup(group) = assignment.target,
-               !session.engine.configuration.parameterGroups.contains(group) { throw MCPToolFailure("未知参数组") }
+               !session.engine.configuration.parameterGroups
+                   .contains(group) { throw MCPToolFailure(L10n.text("未知参数组")) }
             // Validate without effects before consuming rate allowance or changing session state.
             var candidate = session.engine.configuration
             try candidate.assign(assignment)
@@ -125,18 +126,19 @@ public final class AgentControlService {
             let definition = try args["definition"]!.decoded(ParameterDefinition.self)
             try definition.validate()
             guard !session.isMCPProtectedParameter(definition.id) else {
-                throw MCPToolFailure("MCP 不允许修改使能参数定义：\(definition.id)")
+                throw MCPToolFailure(L10n.text("MCP 不允许修改使能参数定义：\(definition.id)"))
             }
             if name == "update_parameter", let previous = session.engine.configuration.parameter(definition.id) {
-                guard previous.agentWritable else { throw MCPToolFailure("MCP 不允许修改不可写参数定义：\(definition.id)") }
+                guard previous.agentWritable
+                else { throw MCPToolFailure(L10n.text("MCP 不允许修改不可写参数定义：\(definition.id)")) }
                 guard previous.agentWritable == definition.agentWritable else {
-                    throw MCPToolFailure("MCP 不允许修改 agentWritable")
+                    throw MCPToolFailure(L10n.text("MCP 不允许修改 agentWritable"))
                 }
             }
             guard definition.defaultValue.isFinite,
                   (definition.minimum ... definition.maximum).contains(definition.defaultValue)
             else {
-                throw MCPToolFailure("默认值必须在参数范围内")
+                throw MCPToolFailure(L10n.text("默认值必须在参数范围内"))
             }
             var candidate = session.engine.configuration
             if name == "create_parameter" { try candidate.addParameter(definition) }
@@ -148,20 +150,20 @@ public final class AgentControlService {
             }
             try requireSavedConfiguration()
             return try parameterInfo(definition.id)
-        default: throw MCPToolFailure("未知工具")
+        default: throw MCPToolFailure(L10n.text("未知工具"))
         }
     }
 
     private func write(_ entries: [(ParameterID, Double)]) throws -> [JSONValue] {
-        guard permissions.parameterWrite else { throw MCPToolFailure("未开启参数写入权限") }
+        guard permissions.parameterWrite else { throw MCPToolFailure(L10n.text("未开启参数写入权限")) }
         var seen = Set<ParameterID>()
         for (id, value) in entries {
-            guard value.isFinite else { throw MCPToolFailure("参数值必须是有限数值") }
-            guard seen.insert(id).inserted else { throw MCPToolFailure("批量写入包含重复参数：\(id)") }
+            guard value.isFinite else { throw MCPToolFailure(L10n.text("参数值必须是有限数值")) }
+            guard seen.insert(id).inserted else { throw MCPToolFailure(L10n.text("批量写入包含重复参数：\(id)")) }
             guard let definition = session.engine.configuration.parameter(id)
-            else { throw MCPToolFailure("未知参数：\(id)") }
+            else { throw MCPToolFailure(L10n.text("未知参数：\(id)")) }
             guard definition.agentWritable,
-                  !session.isMCPProtectedParameter(id) else { throw MCPToolFailure("参数不允许 Agent 写入：\(id)") }
+                  !session.isMCPProtectedParameter(id) else { throw MCPToolFailure(L10n.text("参数不允许 Agent 写入：\(id)")) }
         }
         try consumeWrites(entries.count)
         // All validation completes before the first synchronous effect. No await can interleave a change.
@@ -180,7 +182,7 @@ public final class AgentControlService {
               let value = session.engine.value(of: id),
               case var .object(info) = try JSONValue.encoded(definition)
         else {
-            throw MCPToolFailure("未知参数：\(id)")
+            throw MCPToolFailure(L10n.text("未知参数：\(id)"))
         }
         info["value"] = .double(value)
         info["actualValue"] = session.engine.actualFeedbackValues[id].map(JSONValue.double) ?? .null
@@ -205,12 +207,13 @@ public final class AgentControlService {
 
     private func requireSavedConfiguration() throws {
         if let error = session.lastConfigurationPersistenceError {
-            throw MCPToolFailure("配置已在内存更新，但持久化失败：\(error)")
+            throw MCPToolFailure(L10n.text("配置已在内存更新，但持久化失败：\(error)"))
         }
     }
 
     private func requireConfigurationWrite() throws {
-        guard permissions.parameterWrite, permissions.configurationWrite else { throw MCPToolFailure("未开启配置写入权限") }
+        guard permissions.parameterWrite,
+              permissions.configurationWrite else { throw MCPToolFailure(L10n.text("未开启配置写入权限")) }
     }
 
     private func consumeWrites(_ count: Int) throws {
@@ -220,7 +223,7 @@ public final class AgentControlService {
             usedWrites = 0
         }
         guard permissions.writesPerSecond > 0,
-              count <= permissions.writesPerSecond - usedWrites else { throw MCPToolFailure("写入超过每秒限额") }
+              count <= permissions.writesPerSecond - usedWrites else { throw MCPToolFailure(L10n.text("写入超过每秒限额")) }
         usedWrites += count
     }
 
@@ -230,12 +233,12 @@ public final class AgentControlService {
 
     private func string(_ args: [String: JSONValue], _ key: String) throws -> String {
         guard let value = args[key]?.stringValue,
-              value.utf8.count <= 1_024 else { throw MCPToolFailure("\(key) 必须是长度不超过 1024 的字符串") }
+              value.utf8.count <= 1_024 else { throw MCPToolFailure(L10n.text("\(key) 必须是长度不超过 1024 的字符串")) }
         return value
     }
 
     private func number(_ args: [String: JSONValue], _ key: String) throws -> Double {
-        guard let value = args[key]?.finiteNumber else { throw MCPToolFailure("\(key) 必须是有限数值") }
+        guard let value = args[key]?.finiteNumber else { throw MCPToolFailure(L10n.text("\(key) 必须是有限数值")) }
         return value
     }
 }

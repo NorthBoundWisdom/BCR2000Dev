@@ -11,17 +11,17 @@ public enum WorkspacePolicyError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .pathMissing(path):
-            "路径不存在：\(path)"
+            L10n.text("路径不存在：\(path)")
         case let .pathNotAbsolute(path):
-            "必须使用绝对路径：\(path)"
+            L10n.text("必须使用绝对路径：\(path)")
         case let .pathNotDirectory(path):
-            "必须是目录：\(path)"
+            L10n.text("必须是目录：\(path)")
         case .writableRootEmpty:
-            "workspaceWrite 需要可解析且存在的 writableRoot"
+            L10n.text("workspaceWrite 需要可解析且存在的 writableRoot")
         case .writableRootMismatch:
-            "writableRoots 必须严格等于当前工作目录，禁止放宽为父目录"
+            L10n.text("writableRoots 必须严格等于当前工作目录，禁止放宽为父目录")
         case .pathTraversalDetected:
-            "路径包含不可追踪的符号链接或越界风险"
+            L10n.text("路径包含不可追踪的符号链接或越界风险")
         }
     }
 }

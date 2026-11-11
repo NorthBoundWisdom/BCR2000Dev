@@ -97,6 +97,41 @@ class BuildConfigurationTests(unittest.TestCase):
                     load_build_environment(self.root, environ={})
 
 
+class LocalizationPackagingTests(unittest.TestCase):
+    def test_universal_binary_carries_both_resource_catalogs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for arch in ("arm64", "x86_64"):
+                binary = root / arch / "release" / macos_workflow.PRODUCT
+                binary.parent.mkdir(parents=True)
+                binary.write_bytes(b"executable")
+                for language in ("en", "zh-Hans"):
+                    catalog = (
+                        binary.parent / "BCRAgentConsole_BCRAgentCore.bundle" / f"{language}.lproj/Localizable.strings"
+                    )
+                    catalog.parent.mkdir(parents=True)
+                    catalog.write_text(language)
+
+            def run(command, **kwargs):
+                if "--show-bin-path" in command:
+                    triple = command[command.index("--triple") + 1]
+                    return str(root / triple.split("-")[0] / "release")
+                if command[0] == "lipo":
+                    Path(command[-1]).write_bytes(b"universal executable")
+                return ""
+
+            with (
+                patch.object(macos_workflow, "SWIFTPM_BUILD_ROOT", root),
+                patch.object(macos_workflow, "_run", side_effect=run),
+            ):
+                binary = macos_workflow._swift_build("release", "universal")
+            for language in ("en", "zh-Hans"):
+                catalog = (
+                    binary.parent / "BCRAgentConsole_BCRAgentCore.bundle" / f"{language}.lproj/Localizable.strings"
+                )
+                self.assertEqual(catalog.read_text(), language)
+
+
 class ReleaseIntegrityTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

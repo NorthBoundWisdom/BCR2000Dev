@@ -23,6 +23,12 @@ def main():
     parser.add_argument("--port", type=int, default=18787)
     parser.add_argument("--script", type=Path, help="optional acceptance script after standard MCP probes")
     parser.add_argument("--configuration-write", action="store_true")
+    parser.add_argument(
+        "--language",
+        choices=("en", "zh-Hans"),
+        default="zh-Hans",
+        help="isolated app language (Chinese by default for existing UI acceptance scripts)",
+    )
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("--port must be 1024–65535")
@@ -72,7 +78,10 @@ def main():
     )
     with (directory / "app.log").open("w") as log:
         app = subprocess.Popen(
-            [str(executable), "--integration-test"], env=environment, stdout=log, stderr=subprocess.STDOUT
+            [str(executable), "--integration-test", "-AppleLanguages", f"({args.language})"],
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
         environment["BCR_INTEGRATION_APP_PID"] = str(app.pid)
         try:

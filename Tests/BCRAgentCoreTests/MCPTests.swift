@@ -185,7 +185,7 @@ final class MCPTests: XCTestCase {
         let service = makeService()
         for _ in 0 ..< 110 { _ = service.call("get_status") }
         XCTAssertEqual(service.audit.count, 100)
-        XCTAssertTrue(service.audit.allSatisfy { $0.method == "get_status" && $0.detail == "完成" })
+        XCTAssertTrue(service.audit.allSatisfy { $0.method == "get_status" && $0.detail == L10n.text("完成") })
     }
 
     func testModernDiscoveryToolCallsAndVersionMetadata() async throws {
@@ -271,7 +271,8 @@ final class MCPTests: XCTestCase {
             "definition": try .encoded(ParameterDefinition(id: "x", name: "X"))
         ]))
         XCTAssertTrue(result.isError)
-        XCTAssertTrue(result.value.objectValue?["error"]?.stringValue?.contains("内存") == true)
+        XCTAssertTrue(result.value.objectValue?["error"]?.stringValue?
+            .contains(L10n.language == .chinese ? "内存" : "memory") == true)
         XCTAssertNotNil(session.engine.configuration.parameter("x"))
         XCTAssertEqual(session.lastConfigurationPersistenceError, "test store unavailable")
     }

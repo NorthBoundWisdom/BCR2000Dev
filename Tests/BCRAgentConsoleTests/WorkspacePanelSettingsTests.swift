@@ -71,13 +71,15 @@ final class WorkspacePanelSettingsTests: XCTestCase {
         let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
         XCTAssertEqual(model.workspacePanels, WorkspacePanelSettings())
         XCTAssertEqual(model.notice?.level, .error)
-        XCTAssertTrue(model.notice?.text.contains("面板设置读取失败") == true)
+        XCTAssertTrue(model.notice?.text
+            .contains(L10n.language == .chinese ? "面板设置读取失败" : "Could not read panel settings") == true)
         // The unreadable file is left untouched until the user makes an explicit choice.
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), #"{"version":1,"enabled":["hologram"]}"#)
 
         XCTAssertFalse(model.setWorkspacePanel(.monitor, enabled: true))
         XCTAssertEqual(model.workspacePanels, WorkspacePanelSettings())
-        XCTAssertTrue(model.notice?.text.contains("面板设置保存失败") == true)
+        XCTAssertTrue(model.notice?.text
+            .contains(L10n.language == .chinese ? "面板设置保存失败" : "Could not save panel settings") == true)
     }
 }
 
@@ -100,13 +102,13 @@ final class ConfigurationPresetTests: XCTestCase {
 
         model.loadPreset(.robotArm)
         XCTAssertEqual(model.configuration, .robotArmDemo())
-        XCTAssertTrue(model.notice?.text.contains("“面板”菜单") == true)
+        XCTAssertTrue(model.notice?.text.contains(L10n.text("可从工作区“面板”菜单启用机械臂预览。")) == true)
 
         XCTAssertTrue(model.setWorkspacePanel(.arm, enabled: true))
         model.loadPreset(.starter)
         XCTAssertEqual(model.configuration, .starter())
         model.loadPreset(.robotArm)
-        XCTAssertEqual(model.notice?.text, "已载入“机械臂示例”。")
+        XCTAssertEqual(model.notice?.text, L10n.text("已载入“\(ConfigurationPreset.robotArm.title)”。"))
     }
 
     func testSavedConfigurationWinsOverTheInitialPreset() throws {

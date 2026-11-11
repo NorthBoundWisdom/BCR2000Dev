@@ -101,7 +101,9 @@ python3 configs/macos_workflow.py check-package \
   --archive build/package/BCRAgentConsole_v0.1.0_1_macOS_universal_ad-hoc.dmg
 ```
 
-`smoke` 要求图形登录会话，并等待原生窗口和第一帧，确认图标可读取后自动退出。
+`smoke` 要求图形登录会话，分别以 English 和简体中文启动 1200 × 760 窗口，
+等待第一帧并确认图标与对应翻译资源可读取后自动退出。语言通过进程参数覆盖，不改用户偏好。
+原生和 universal 构建均携带 SwiftPM 本地化资源包，打包校验会拒绝缺失任一语言资源的应用。
 该模式使用临时空映射并禁用 MIDI 连接，不读写个人映射或向硬件发送消息。
 
 `check-package` 要求对应 `.build.json`：先校验包哈希，再解压 ZIP 或挂载 DMG、将应用

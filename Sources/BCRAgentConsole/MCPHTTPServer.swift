@@ -17,23 +17,24 @@ struct MCPHTTPParseError: Error, LocalizedError {
 /// Bounded HTTP/1.1 framing. No chunked transfer or pipelining is advertised or accepted.
 enum MCPHTTPParser {
     static func parse(_ data: Data) throws -> MCPHTTPRequest? {
-        guard data.count <= 1_064_964 else { throw MCPHTTPParseError(reason: "请求超过大小上限") }
+        guard data.count <= 1_064_964 else { throw MCPHTTPParseError(reason: L10n.text("请求超过大小上限")) }
         guard let separator = data.range(of: Data("\r\n\r\n".utf8)) else {
-            guard data.count <= 16_384 else { throw MCPHTTPParseError(reason: "HTTP 头过长") }
+            guard data.count <= 16_384 else { throw MCPHTTPParseError(reason: L10n.text("HTTP 头过长")) }
             return nil
         }
         guard separator.lowerBound <= 16_384,
               let text = String(data: data[..<separator.lowerBound], encoding: .utf8)
         else {
-            throw MCPHTTPParseError(reason: "HTTP 头无效")
+            throw MCPHTTPParseError(reason: L10n.text("HTTP 头无效"))
         }
         let lines = text.components(separatedBy: "\r\n")
         let request = lines[0].split(separator: " ", omittingEmptySubsequences: false)
-        guard request.count == 3, request[2] == "HTTP/1.1" else { throw MCPHTTPParseError(reason: "仅支持 HTTP/1.1") }
+        guard request.count == 3,
+              request[2] == "HTTP/1.1" else { throw MCPHTTPParseError(reason: L10n.text("仅支持 HTTP/1.1")) }
         var headers: [String: String] = [:]
         for line in lines.dropFirst() {
             guard let colon = line.firstIndex(of: ":"), !line.hasPrefix(" "), !line.hasPrefix("\t") else {
-                throw MCPHTTPParseError(reason: "HTTP 头格式无效")
+                throw MCPHTTPParseError(reason: L10n.text("HTTP 头格式无效"))
             }
             let key = String(line[..<colon]).lowercased()
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
@@ -41,22 +42,23 @@ enum MCPHTTPParser {
                   key.utf8.allSatisfy({ (97 ... 122).contains($0) || (48 ... 57).contains($0) || $0 == 45 }),
                   !value.contains("\r"), !value.contains("\n"), headers[key] == nil
             else {
-                throw MCPHTTPParseError(reason: "HTTP 头重复或无效")
+                throw MCPHTTPParseError(reason: L10n.text("HTTP 头重复或无效"))
             }
             headers[key] = value
         }
-        guard headers["transfer-encoding"] == nil else { throw MCPHTTPParseError(reason: "不支持 Transfer-Encoding") }
+        guard headers["transfer-encoding"] == nil
+        else { throw MCPHTTPParseError(reason: L10n.text("不支持 Transfer-Encoding")) }
         let length: Int
         if let raw = headers["content-length"] {
             guard !raw.isEmpty, raw.utf8.allSatisfy({ (48 ... 57).contains($0) }),
                   let parsed = Int(raw),
-                  parsed <= 1_048_576 else { throw MCPHTTPParseError(reason: "Content-Length 无效") }
+                  parsed <= 1_048_576 else { throw MCPHTTPParseError(reason: L10n.text("Content-Length 无效")) }
             length = parsed
         } else if request[0] == "POST" {
-            throw MCPHTTPParseError(reason: "POST 必须包含 Content-Length")
+            throw MCPHTTPParseError(reason: L10n.text("POST 必须包含 Content-Length"))
         } else { length = 0 }
         let count = data.distance(from: separator.upperBound, to: data.endIndex)
-        guard count <= length else { throw MCPHTTPParseError(reason: "不支持 HTTP 管线或多余请求数据") }
+        guard count <= length else { throw MCPHTTPParseError(reason: L10n.text("不支持 HTTP 管线或多余请求数据")) }
         guard count == length else { return nil }
         return MCPHTTPRequest(method: String(request[0]), path: String(request[1]), headers: headers,
                               body: Data(data[separator.upperBound...]))
@@ -86,7 +88,7 @@ final class MCPHTTPServer {
     /// Port zero is only used by isolated loopback tests. The settings controller rejects it.
     func start(port: UInt16, token: String) async throws -> UInt16 {
         stop()
-        guard !token.isEmpty else { throw MCPHTTPParseError(reason: "缺少 Bearer token") }
+        guard !token.isEmpty else { throw MCPHTTPParseError(reason: L10n.text("缺少 Bearer token")) }
         self.token = token
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = false
@@ -104,7 +106,7 @@ final class MCPHTTPServer {
                     switch state {
                     case .ready:
                         guard let bound = self.listener?.port?.rawValue, bound > 0 else {
-                            self.fail("监听未返回有效端口")
+                            self.fail(L10n.text("监听未返回有效端口"))
                             return
                         }
                         self.port = bound
@@ -115,7 +117,7 @@ final class MCPHTTPServer {
                         self.startContinuation = nil
                         self.onChange?()
                     case let .failed(error), let .waiting(error):
-                        self.fail("MCP 监听失败：\(error.localizedDescription)")
+                        self.fail(L10n.text("MCP 监听失败：\(error.localizedDescription)"))
                     default: break
                     }
                 }
@@ -129,7 +131,7 @@ final class MCPHTTPServer {
             listener.start(queue: .main)
             startTimeout = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                self?.fail("MCP 监听启动超时")
+                self?.fail(L10n.text("MCP 监听启动超时"))
             }
         }
     }
@@ -170,7 +172,7 @@ final class MCPHTTPServer {
         timeouts[id] = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(5)) } catch { return }
             guard self?.connections[id] != nil else { return }
-            self?.router.service.record("http", succeeded: false, detail: "请求接收超时")
+            self?.router.service.record("http", succeeded: false, detail: L10n.text("请求接收超时"))
             self?.close(id)
         }
         receive(id, accumulated: Data())
@@ -202,7 +204,7 @@ final class MCPHTTPServer {
         guard request.path == "/mcp" else { send(id, reply: MCPReply(status: 404)); return }
         let allowedHosts = ["127.0.0.1:\(port)", "localhost:\(port)"]
         guard let host = request.headers["host"]?.lowercased(), allowedHosts.contains(host) else {
-            reject(id, status: 403, detail: "Host 不属于本机 MCP 端点")
+            reject(id, status: 403, detail: L10n.text("Host 不属于本机 MCP 端点"))
             return
         }
         if let raw = request.headers["origin"] {
@@ -211,14 +213,14 @@ final class MCPHTTPServer {
                   origin.port == Int(port), origin.user == nil, origin.password == nil,
                   origin.query == nil, origin.fragment == nil, origin.path.isEmpty
             else {
-                reject(id, status: 403, detail: "Origin 不允许")
+                reject(id, status: 403, detail: L10n.text("Origin 不允许"))
                 return
             }
         }
         guard let authorization = request.headers["authorization"], authorization.prefix(7).lowercased() == "bearer ",
               constantTimeEqual(String(authorization.dropFirst(7)), token)
         else {
-            reject(id, status: 401, detail: "Bearer 鉴权失败")
+            reject(id, status: 401, detail: L10n.text("Bearer 鉴权失败"))
             return
         }
         if request.method == "DELETE" {
@@ -259,7 +261,7 @@ final class MCPHTTPServer {
         let body: Data
         do { body = try reply.body.map { try JSONEncoder().encode($0) } ?? Data() }
         catch {
-            router.service.record("http", succeeded: false, detail: "MCP 响应编码失败")
+            router.service.record("http", succeeded: false, detail: L10n.text("MCP 响应编码失败"))
             close(id)
             return
         }
@@ -274,7 +276,8 @@ final class MCPHTTPServer {
         response.append(body)
         connection.send(content: response, completion: .contentProcessed { [weak self] error in
             Task { @MainActor [weak self] in
-                if error != nil { self?.router.service.record("http", succeeded: false, detail: "MCP 响应发送失败") }
+                if error !=
+                    nil { self?.router.service.record("http", succeeded: false, detail: L10n.text("MCP 响应发送失败")) }
                 self?.close(id)
             }
         })

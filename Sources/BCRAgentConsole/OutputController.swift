@@ -24,16 +24,16 @@ struct OutputSettings: Codable, Equatable, Sendable {
 
     func validate(configuration: SurfaceConfiguration) throws {
         guard version == 1, !host.isEmpty, host.utf8.count <= 255, !host.utf8.contains(0),
-              (1_024 ... 65_535).contains(port) else { throw MotionSafetyError("输出地址、端口或设置版本无效") }
+              (1_024 ... 65_535).contains(port) else { throw MotionSafetyError(L10n.text("输出地址、端口或设置版本无效")) }
         guard configuration.parameter(enableParameter)?.kind == .toggle
-        else { throw MotionSafetyError("请配置一个开关类型的使能参数") }
+        else { throw MotionSafetyError(L10n.text("请配置一个开关类型的使能参数")) }
         for limit in limits {
             try limit.validate()
             guard let definition = configuration.parameter(limit.id), definition.kind == .continuous,
                   limit.minimum >= definition.minimum, limit.maximum <= definition.maximum,
                   Float(limit.minimum).isFinite, Float(limit.maximum).isFinite
             else {
-                throw MotionSafetyError("输出限位必须属于现有连续参数的范围并可用 float32 表示")
+                throw MotionSafetyError(L10n.text("输出限位必须属于现有连续参数的范围并可用 float32 表示"))
             }
         }
         _ = try MotionSafetyGate(limits: limits)
@@ -44,7 +44,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
 final class OutputController: ObservableObject {
     @Published private(set) var settings: OutputSettings
     @Published private(set) var status: MotionGateStatus = .disconnected
-    @Published private(set) var reason = "输出关闭"
+    @Published private(set) var reason = L10n.text("输出关闭")
     @Published private(set) var outputs: [ParameterID: Double] = [:]
     @Published private(set) var actual: [ParameterID: Double] = [:]
     @Published private(set) var limited = false
@@ -75,7 +75,7 @@ final class OutputController: ObservableObject {
         configurationRevision = session.configurationRevision
         settings = .defaults(for: configuration)
         do { if let stored = try store.load() { settings = stored } }
-        catch { self.error = "输出设置读取失败：\(error.localizedDescription)" }
+        catch { self.error = L10n.text("输出设置读取失败：\(error.localizedDescription)") }
         session.setOutputEnableParameter(settings.enableParameter)
         adapter.onConnection = { [weak self] connected, failure in
             guard let self, !self.isStopping else { return }
@@ -102,9 +102,9 @@ final class OutputController: ObservableObject {
         // Restoring saved settings never reconnects an actuator or resumes motion.
         if settings.enabled {
             settings.enabled = false
-            reason = "上次输出未恢复；请手动启动并先关闭再开启使能"
+            reason = L10n.text("上次输出未恢复；请手动启动并先关闭再开启使能")
             do { try store.save(settings) }
-            catch { self.error = "输出设置保存失败：\(error.localizedDescription)" }
+            catch { self.error = L10n.text("输出设置保存失败：\(error.localizedDescription)") }
         }
     }
 
@@ -143,11 +143,11 @@ final class OutputController: ObservableObject {
         gate?.setConnected(false, at: now())
         status = .disconnected
         limited = false
-        reason = failure.map { $0 + "；输出已停止，LED 恢复目标值" } ?? "输出已停止，LED 恢复目标值"
+        reason = failure.map { $0 + L10n.text("；输出已停止，LED 恢复目标值") } ?? L10n.text("输出已停止，LED 恢复目标值")
         error = failure
         session.setLEDFeedbackSource(.target)
         do { try store.save(settings) }
-        catch { self.error = reason + "；设置保存失败：\(error.localizedDescription)" }
+        catch { self.error = reason + L10n.text("；设置保存失败：\(error.localizedDescription)") }
         publishSnapshot()
         isStopping = false
     }
@@ -173,7 +173,7 @@ final class OutputController: ObservableObject {
         guard source != .actual ||
             (settings.enabled && !actual.isEmpty && status != .heartbeatExpired && status != .disconnected)
         else {
-            error = "实际回传尚未就绪，LED 来源未改变"
+            error = L10n.text("实际回传尚未就绪，LED 来源未改变")
             return
         }
         var candidate = settings
@@ -197,7 +197,7 @@ final class OutputController: ObservableObject {
             var values: [ParameterID: Double] = [:]
             for sample in samples {
                 guard session.engine.configuration.parameter(sample.id) != nil, sample.value.isFinite else {
-                    throw MotionSafetyError("实际回传包含未知参数或非法数值")
+                    throw MotionSafetyError(L10n.text("实际回传包含未知参数或非法数值"))
                 }
                 values[sample.id] = sample.value
             }
@@ -218,11 +218,11 @@ final class OutputController: ObservableObject {
         guard session.configurationRevision == configurationRevision,
               session.engine.configuration == configuration
         else {
-            stop(failure: "配置已变化，请确认使能和限位后重新启动输出")
+            stop(failure: L10n.text("配置已变化，请确认使能和限位后重新启动输出"))
             return
         }
         if session.source == .hardware && !session.connection.isConnected {
-            stop(failure: "实体控制器断开")
+            stop(failure: L10n.text("实体控制器断开"))
             return
         }
         do {

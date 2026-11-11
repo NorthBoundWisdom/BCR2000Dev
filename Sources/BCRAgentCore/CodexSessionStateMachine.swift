@@ -9,13 +9,13 @@ public enum CodexSessionStateMachineError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .slotMissing(slotID):
-            "缺失槽位状态：\(slotID.rawValue)"
+            L10n.text("缺失槽位状态：\(slotID.rawValue)")
         case let .threadMissing(threadID):
-            "缺失 thread-id：\(threadID)"
+            L10n.text("缺失 thread-id：\(threadID)")
         case let .invalidTransition(slot, from, to):
-            "槽位 \(slot.rawValue) 不允许从 \(from.rawValue) 转 \(to.rawValue)"
+            L10n.text("槽位 \(slot.rawValue) 不允许从 \(from.rawValue) 转 \(to.rawValue)")
         case .unexpectedEvent:
-            "收到无法处理的事件"
+            L10n.text("收到无法处理的事件")
         }
     }
 }

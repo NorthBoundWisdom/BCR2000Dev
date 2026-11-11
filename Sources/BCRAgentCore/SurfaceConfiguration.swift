@@ -37,8 +37,8 @@ public enum ParameterKind: String, Codable, Sendable, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .continuous: "连续"
-        case .toggle: "开关"
+        case .continuous: L10n.text("连续")
+        case .toggle: L10n.text("开关")
         }
     }
 }
@@ -54,13 +54,13 @@ public enum ParameterDefinitionError: Error, Equatable, LocalizedError, Sendable
 
     public var errorDescription: String? {
         switch self {
-        case .emptyIdentifier: "参数 ID 不能为空"
-        case .emptyName: "参数名称不能为空"
-        case let .invalidRange(minimum, maximum): "范围无效：最小值 \(minimum) 必须小于最大值 \(maximum)"
-        case let .duplicateIdentifier(id): "参数 ID \(id) 已存在"
-        case let .unknownParameter(id): "未知参数 \(id)"
-        case .nonFiniteDefault: "默认值必须是有限数值"
-        case .invalidStep: "步长必须是正的有限数值，并能表示当前范围"
+        case .emptyIdentifier: L10n.text("参数 ID 不能为空")
+        case .emptyName: L10n.text("参数名称不能为空")
+        case let .invalidRange(minimum, maximum): L10n.text("范围无效：最小值 \(minimum) 必须小于最大值 \(maximum)")
+        case let .duplicateIdentifier(id): L10n.text("参数 ID \(id) 已存在")
+        case let .unknownParameter(id): L10n.text("未知参数 \(id)")
+        case .nonFiniteDefault: L10n.text("默认值必须是有限数值")
+        case .invalidStep: L10n.text("步长必须是正的有限数值，并能表示当前范围")
         }
     }
 }
@@ -180,10 +180,10 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     }
 
     public func formatted(_ value: Double, snap: Bool = true, minimumFractionDigits: Int = 0) -> String {
-        guard value.isFinite else { return "无效值" }
+        guard value.isFinite else { return L10n.text("无效值") }
         let value = snap ? clamp(value) : value
         if kind == .toggle {
-            return value >= midpoint ? "开" : "关"
+            return value >= midpoint ? L10n.text("开") : L10n.text("关")
         }
         let span = maximum - minimum
         let spanDigits = span <= 2 ? 2 : (span <= 20 ? 1 : 0)
@@ -212,8 +212,8 @@ public enum ButtonBehavior: String, Codable, Sendable, CaseIterable {
 
     public var displayName: String {
         switch self {
-        case .toggle: "切换"
-        case .momentary: "按住"
+        case .toggle: L10n.text("切换")
+        case .momentary: L10n.text("按住")
         }
     }
 }
@@ -319,8 +319,8 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case let .triggerRequiresButton(control): "\(control.shortName) 是编码器，触发类功能只能分配给按键"
-        case let .unknownParameter(id): "未知参数 \(id)"
+        case let .triggerRequiresButton(control): L10n.text("\(control.shortName) 是编码器，触发类功能只能分配给按键")
+        case let .unknownParameter(id): L10n.text("未知参数 \(id)")
         }
     }
 }
@@ -453,15 +453,15 @@ public enum ConfigurationPreset: String, CaseIterable, Identifiable, Sendable {
 
     public var title: String {
         switch self {
-        case .starter: "默认配置"
-        case .robotArm: "机械臂示例"
+        case .starter: L10n.text("默认配置")
+        case .robotArm: L10n.text("机械臂示例")
         }
     }
 
     public var summary: String {
         switch self {
-        case .starter: "8 个通用参数（P1-1…P1-8）、Agent 1–8（B1 行）、B2-8 复位"
-        case .robotArm: "J1–J6、夹爪、速度（P1-1…P1-8）、Agent 1–8（B1 行）、B2-1 使能、B2-8 复位"
+        case .starter: L10n.text("8 个通用参数（P1-1…P1-8）、Agent 1–8（B1 行）、B2-8 复位")
+        case .robotArm: L10n.text("J1–J6、夹爪、速度（P1-1…P1-8）、Agent 1–8（B1 行）、B2-1 使能、B2-8 复位")
         }
     }
 
@@ -474,15 +474,15 @@ public enum ConfigurationPreset: String, CaseIterable, Identifiable, Sendable {
 }
 
 public extension SurfaceConfiguration {
-    static let starterGroup = "通用"
-    static let robotArmGroup = "机械臂"
+    static let starterGroup = L10n.text("通用")
+    static let robotArmGroup = L10n.text("机械臂")
 
     /// Neutral first-launch layout: eight generic percentage parameters on push encoders group 1,
     /// agent slots on button row 1 and a group reset on B2-8. Nothing here assumes a use case.
     static func starter() -> SurfaceConfiguration {
         let parameters = (1 ... 8).map { index in
             ParameterDefinition(
-                id: ParameterID("general.\(index)"), name: "参数 \(index)", group: starterGroup,
+                id: ParameterID("general.\(index)"), name: L10n.text("参数 \(index)"), group: starterGroup,
                 unit: "%", minimum: 0, maximum: 100, defaultValue: 0
             )
         }
@@ -504,25 +504,81 @@ public extension SurfaceConfiguration {
     static func robotArmDemo() -> SurfaceConfiguration {
         let group = robotArmGroup
         let parameters: [ParameterDefinition] = [
-            .init(id: "arm.j1", name: "J1 底座旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
-            .init(id: "arm.j2", name: "J2 肩部", group: group, unit: "°", minimum: -90, maximum: 90, defaultValue: 30),
-            .init(id: "arm.j3", name: "J3 肘部", group: group, unit: "°", minimum: -135, maximum: 135, defaultValue: -60),
+            .init(
+                id: "arm.j1",
+                name: L10n.text("J1 底座旋转"),
+                group: group,
+                unit: "°",
+                minimum: -180,
+                maximum: 180,
+                defaultValue: 0
+            ),
+            .init(
+                id: "arm.j2",
+                name: L10n.text("J2 肩部"),
+                group: group,
+                unit: "°",
+                minimum: -90,
+                maximum: 90,
+                defaultValue: 30
+            ),
+            .init(
+                id: "arm.j3",
+                name: L10n.text("J3 肘部"),
+                group: group,
+                unit: "°",
+                minimum: -135,
+                maximum: 135,
+                defaultValue: -60
+            ),
             .init(
                 id: "arm.j4",
-                name: "J4 腕部俯仰",
+                name: L10n.text("J4 腕部俯仰"),
                 group: group,
                 unit: "°",
                 minimum: -120,
                 maximum: 120,
                 defaultValue: -20
             ),
-            .init(id: "arm.j5", name: "J5 腕部旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
-            .init(id: "arm.j6", name: "J6 末端旋转", group: group, unit: "°", minimum: -180, maximum: 180, defaultValue: 0),
-            .init(id: "arm.gripper", name: "夹爪开合", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 40),
-            .init(id: "arm.speed", name: "运动速度", group: group, unit: "%", minimum: 0, maximum: 100, defaultValue: 50),
+            .init(
+                id: "arm.j5",
+                name: L10n.text("J5 腕部旋转"),
+                group: group,
+                unit: "°",
+                minimum: -180,
+                maximum: 180,
+                defaultValue: 0
+            ),
+            .init(
+                id: "arm.j6",
+                name: L10n.text("J6 末端旋转"),
+                group: group,
+                unit: "°",
+                minimum: -180,
+                maximum: 180,
+                defaultValue: 0
+            ),
+            .init(
+                id: "arm.gripper",
+                name: L10n.text("夹爪开合"),
+                group: group,
+                unit: "%",
+                minimum: 0,
+                maximum: 100,
+                defaultValue: 40
+            ),
+            .init(
+                id: "arm.speed",
+                name: L10n.text("运动速度"),
+                group: group,
+                unit: "%",
+                minimum: 0,
+                maximum: 100,
+                defaultValue: 50
+            ),
             .init(
                 id: "arm.enabled",
-                name: "使能",
+                name: L10n.text("使能"),
                 group: group,
                 minimum: 0,
                 maximum: 1,
@@ -546,6 +602,6 @@ public extension SurfaceConfiguration {
         assignments.append(ControlAssignment(control: .button(row: 2, 1), target: .parameter("arm.enabled")))
         assignments.append(ControlAssignment(control: .button(row: 2, 8), target: .resetGroup(group)))
 
-        return SurfaceConfiguration(name: "机械臂示例", parameters: parameters, assignments: assignments)
+        return SurfaceConfiguration(name: L10n.text("机械臂示例"), parameters: parameters, assignments: assignments)
     }
 }

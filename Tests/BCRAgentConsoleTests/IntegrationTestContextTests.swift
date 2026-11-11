@@ -1,3 +1,4 @@
+import BCRAgentCore
 #if DEBUG
     import Foundation
     import XCTest
@@ -22,7 +23,7 @@
             let model = ConsoleViewModel(stores: context.stores, startsMIDI: false,
                                          mcpCredentials: context.credentials, integrationTest: true)
             XCTAssertTrue(model.mcp.integrationTest)
-            XCTAssertTrue(model.notice?.text.contains("隔离") == true)
+            XCTAssertTrue(model.notice?.text.contains(L10n.language == .chinese ? "隔离" : "Isolated") == true)
         }
 
         func testInvalidIntegrationEnvironmentFailsInsteadOfUsingUserData() async {

@@ -13,21 +13,21 @@ public enum CodexRPCError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .disconnected:
-            "Codex 连接未建立"
+            L10n.text("Codex 连接未建立")
         case let .timeout(id):
-            "请求 \(id.stringValue) 超时"
+            L10n.text("请求 \(id.stringValue) 超时")
         case let .invalidMessage(text):
-            "无效消息：\(text)"
+            L10n.text("无效消息：\(text)")
         case let .transport(text):
-            "传输错误：\(text)"
+            L10n.text("传输错误：\(text)")
         case let .responseWithoutRequest(id):
-            "未匹配到请求 ID \(id.stringValue) 的 pending 回调"
+            L10n.text("未匹配到请求 ID \(id.stringValue) 的 pending 回调")
         case let .requestRejected(code, message):
-            "服务端拒绝（code: \(code)）：\(message)"
+            L10n.text("服务端拒绝（code: \(code)）：\(message)")
         case let .malformedResponse(id):
-            "响应 ID \(id.stringValue) 不包含 result 或 error"
+            L10n.text("响应 ID \(id.stringValue) 不包含 result 或 error")
         case let .unexpectedMessageShape(text):
-            "异常消息结构：\(text)"
+            L10n.text("异常消息结构：\(text)")
         }
     }
 }
@@ -160,7 +160,7 @@ public actor CodexRPCClient {
                     continue
                 }
                 if trimmed.utf8.count > maxLineLength {
-                    await stopWithError(CodexRPCError.invalidMessage("行长度超限"))
+                    await stopWithError(CodexRPCError.invalidMessage(L10n.text("行长度超限")))
                     break
                 }
 
@@ -182,7 +182,7 @@ public actor CodexRPCClient {
                     continue
                 }
 
-                await stopWithError(CodexRPCError.unexpectedMessageShape("缺少 method/id 结构"))
+                await stopWithError(CodexRPCError.unexpectedMessageShape(L10n.text("缺少 method/id 结构")))
             } catch is CancellationError {
                 break
             } catch {
@@ -231,7 +231,7 @@ public actor CodexRPCClient {
     }
 
     private func failResponseWithoutId(_ message: CodexEnvelope) async {
-        await stopWithError(CodexRPCError.unexpectedMessageShape("响应缺少 id: \(message)"))
+        await stopWithError(CodexRPCError.unexpectedMessageShape(L10n.text("响应缺少 id: \(message)")))
     }
 
     private func dispatchServerMessage(_ message: CodexEnvelope) async {

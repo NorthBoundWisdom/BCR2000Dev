@@ -124,7 +124,7 @@ final class OutputControllerTests: XCTestCase {
         try session.updateParameter(definition)
         controller.tick()
         XCTAssertFalse(controller.settings.enabled)
-        XCTAssertTrue(controller.error?.contains("配置") == true)
+        XCTAssertTrue(controller.error?.contains(L10n.language == .chinese ? "配置" : "Configuration") == true)
         XCTAssertEqual(session.engine.ledFeedbackSource, .target)
     }
 
@@ -172,7 +172,7 @@ final class OutputControllerTests: XCTestCase {
         controller.tick()
 
         XCTAssertFalse(controller.settings.enabled)
-        XCTAssertTrue(controller.error?.contains("配置") == true)
+        XCTAssertTrue(controller.error?.contains(L10n.language == .chinese ? "配置" : "Configuration") == true)
         XCTAssertFalse(transport.frames.dropFirst(sentBeforeTick).contains { $0.enabled })
     }
 

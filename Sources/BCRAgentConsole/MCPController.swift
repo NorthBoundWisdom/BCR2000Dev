@@ -34,24 +34,26 @@ final class KeychainMCPCredentialStore: MCPCredentialStore {
                   value.utf8.count == 64,
                   value.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) })
             else {
-                throw MCPHTTPParseError(reason: "Keychain 中的 MCP 凭据无效")
+                throw MCPHTTPParseError(reason: L10n.text("Keychain 中的 MCP 凭据无效"))
             }
             return value
         }
-        guard status == errSecItemNotFound else { throw MCPHTTPParseError(reason: "读取 Keychain 失败（\(status)）") }
+        guard status == errSecItemNotFound
+        else { throw MCPHTTPParseError(reason: L10n.text("读取 Keychain 失败（\(status)）")) }
         var random = [UInt8](repeating: 0, count: 32)
         let randomStatus = random.withUnsafeMutableBytes { SecRandomCopyBytes(
             kSecRandomDefault,
             $0.count,
             $0.baseAddress!
         ) }
-        guard randomStatus == errSecSuccess else { throw MCPHTTPParseError(reason: "生成 MCP 凭据失败（\(randomStatus)）") }
+        guard randomStatus == errSecSuccess
+        else { throw MCPHTTPParseError(reason: L10n.text("生成 MCP 凭据失败（\(randomStatus)）")) }
         let value = random.map { String(format: "%02x", Int($0)) }.joined()
         var item = identity
         item[kSecValueData as String] = Data(value.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         let added = SecItemAdd(item as CFDictionary, nil)
-        guard added == errSecSuccess else { throw MCPHTTPParseError(reason: "保存 MCP 凭据失败（\(added)）") }
+        guard added == errSecSuccess else { throw MCPHTTPParseError(reason: L10n.text("保存 MCP 凭据失败（\(added)）")) }
         return value
     }
 }
@@ -63,13 +65,14 @@ struct MCPSettings: Codable, Equatable, Sendable {
     var permissions = MCPPermissions()
 
     func validate() throws {
-        guard version == 1 else { throw MCPHTTPParseError(reason: "MCP 设置版本不受支持") }
-        guard (1_024 ... 65_535).contains(port) else { throw MCPHTTPParseError(reason: "MCP 端口必须为 1024–65535") }
+        guard version == 1 else { throw MCPHTTPParseError(reason: L10n.text("MCP 设置版本不受支持")) }
+        guard (1_024 ... 65_535).contains(port)
+        else { throw MCPHTTPParseError(reason: L10n.text("MCP 端口必须为 1024–65535")) }
         guard !permissions.configurationWrite || permissions.parameterWrite else {
-            throw MCPHTTPParseError(reason: "只读模式不能开启配置写入")
+            throw MCPHTTPParseError(reason: L10n.text("只读模式不能开启配置写入"))
         }
         guard (1 ... 10_000).contains(permissions.writesPerSecond)
-        else { throw MCPHTTPParseError(reason: "写入限额必须为每秒 1–10000") }
+        else { throw MCPHTTPParseError(reason: L10n.text("写入限额必须为每秒 1–10000")) }
     }
 }
 
@@ -95,7 +98,7 @@ final class MCPController: ObservableObject {
         server = MCPHTTPServer(router: MCPRouter(service: service))
         do {
             if let loaded = try store.load() { try loaded.validate(); settings = loaded }
-        } catch { self.error = "MCP 设置读取失败：\(error.localizedDescription)" }
+        } catch { self.error = L10n.text("MCP 设置读取失败：\(error.localizedDescription)") }
         service.permissions = settings.permissions
         service.onChange = { [weak self] in self?.objectWillChange.send() }
         server.onChange = { [weak self] in
@@ -107,14 +110,15 @@ final class MCPController: ObservableObject {
     }
 
     var status: String {
-        if isStarting { return "MCP 等待启动" }
-        if error != nil { return "MCP 错误" }
+        if isStarting { return L10n.text("MCP 等待启动") }
+        if error != nil { return L10n.text("MCP 错误") }
         switch server.state {
-        case .stopped: return "MCP 关闭"
-        case .starting: return "MCP 启动中"
+        case .stopped: return L10n.text("MCP 关闭")
+        case .starting: return L10n.text("MCP 启动中")
         case .listening:
-            return server.router.sessionCount > 0 ? "MCP 监听中 · \(server.router.sessionCount) 会话" : "MCP 监听中"
-        case .failed: return "MCP 错误"
+            return server.router.sessionCount > 0 ? L10n.text("MCP 监听中 · \(server.router.sessionCount) 会话") : L10n
+                .text("MCP 监听中")
+        case .failed: return L10n.text("MCP 错误")
         }
     }
 
@@ -131,7 +135,7 @@ final class MCPController: ObservableObject {
         settings.enabled = enabled
         if !enabled { server.stop() }
         do { try store.save(settings) }
-        catch { self.error = "MCP 设置保存失败：\(error.localizedDescription)"; return }
+        catch { self.error = L10n.text("MCP 设置保存失败：\(error.localizedDescription)"); return }
         if enabled { await start() }
     }
 
@@ -158,23 +162,25 @@ final class MCPController: ObservableObject {
         server.stop()
         settings.enabled = false
         do { try store.save(settings); error = nil }
-        catch { self.error = "MCP 已停止，但设置保存失败：\(error.localizedDescription)" }
+        catch { self.error = L10n.text("MCP 已停止，但设置保存失败：\(error.localizedDescription)") }
     }
 
     func copyToken() async {
         do {
-            guard settings.enabled, !isStarting else { throw MCPHTTPParseError(reason: "请先启用 MCP 服务并等待启动完成") }
+            guard settings.enabled,
+                  !isStarting else { throw MCPHTTPParseError(reason: L10n.text("请先启用 MCP 服务并等待启动完成")) }
             let token = try await credentials.loadOrCreate()
             NSPasteboard.general.clearContents()
             guard NSPasteboard.general.setString(token, forType: .string) else {
-                throw MCPHTTPParseError(reason: "无法复制 MCP 凭据")
+                throw MCPHTTPParseError(reason: L10n.text("无法复制 MCP 凭据"))
             }
         } catch { self.error = error.localizedDescription }
     }
 
     func copyConnectionCommand() async {
         do {
-            guard settings.enabled, !isStarting else { throw MCPHTTPParseError(reason: "请先启用 MCP 服务并等待启动完成") }
+            guard settings.enabled,
+                  !isStarting else { throw MCPHTTPParseError(reason: L10n.text("请先启用 MCP 服务并等待启动完成")) }
             let token = try await credentials.loadOrCreate()
             let body: JSONValue = .object([
                 "jsonrpc": .string("2.0"), "id": .number(1), "method": .string("server/discover"),
@@ -186,7 +192,7 @@ final class MCPController: ObservableObject {
             let command = "curl -X POST '\(endpoint)' -H 'Authorization: Bearer \(token)' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -H 'MCP-Protocol-Version: \(MCPVersions.current)' -H 'Mcp-Method: server/discover' --data '\(try body.jsonText)'"
             NSPasteboard.general.clearContents()
             guard NSPasteboard.general.setString(command, forType: .string) else {
-                throw MCPHTTPParseError(reason: "无法复制连接命令")
+                throw MCPHTTPParseError(reason: L10n.text("无法复制连接命令"))
             }
         } catch { self.error = error.localizedDescription }
     }

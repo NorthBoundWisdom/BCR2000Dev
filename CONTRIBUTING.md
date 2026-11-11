@@ -121,7 +121,9 @@ MCP 控制接口（ROADMAP R8）完成后，每轮验收还要在运行中的 Ap
   由用户从“面板”菜单启用；涉及安全读数的面板在相关功能运行期间必须保持可见。
 - 首次启动的配置保持领域中性（`ConfigurationPreset.starter`）；领域示例作为预置由用户显式载入。
 - README 截图用 `tools/capture_readme_screenshots.py` 从隔离 Mock 实例重新生成，不手工截取桌面。
-- 界面文字使用简体中文；控件简称沿用 `P组-序号`、`B行-序号`、`E行-序号`、`U序号`。
+- 界面支持简体中文与 English，默认跟随系统。新增界面/提示/错误文字通过 `L10n.text` 和
+  `Sources/BCRAgentCore/Resources/{en,zh-Hans}.lproj/Localizable.strings` 提供成对翻译；
+  插值占位符两种语言必须一致，用户输入的名称不翻译。语言设置重启生效。控件简称沿用 `P组-序号`、`B行-序号`、`E行-序号`、`U序号`。
 - 交互控件提供无障碍标签；可调节控件支持 `accessibilityAdjustableAction`。
 - 破坏性操作（清空映射、删除参数、替换配置）必须二次确认。
 

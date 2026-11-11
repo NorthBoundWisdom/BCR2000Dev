@@ -1,3 +1,4 @@
+import BCRAgentCore
 import AppKit
 import SwiftUI
 
@@ -31,7 +32,7 @@ final class KnobValueInputView: NSView {
         self.onTouch = onTouch
         self.onDelta = onDelta
         super.init(frame: .zero)
-        toolTip = "上下拖动或滚轮调整（按住 Shift 精调）"
+        toolTip = L10n.text("上下拖动或滚轮调整（按住 Shift 精调）")
     }
 
     @available(*, unavailable)

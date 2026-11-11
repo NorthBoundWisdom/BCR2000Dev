@@ -1,3 +1,4 @@
+import BCRAgentCore
 import Foundation
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
@@ -7,11 +8,11 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var title: String {
         switch self {
-        case .parameters: "参数"
-        case .arm: "机械臂预览"
+        case .parameters: L10n.text("参数")
+        case .arm: L10n.text("机械臂预览")
         case .agents: "Agent"
-        case .monitor: "MIDI 监视"
-        case .output: "输出"
+        case .monitor: L10n.text("MIDI 监视")
+        case .output: L10n.text("输出")
         }
     }
 
@@ -35,8 +36,8 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
 
     var optionalSummary: String? {
         switch self {
-        case .arm: "示例机械臂的侧视 / 俯视姿态示意"
-        case .output: "OSC 目标、受限输出与实际回传读数"
+        case .arm: L10n.text("示例机械臂的侧视 / 俯视姿态示意")
+        case .output: L10n.text("OSC 目标、受限输出与实际回传读数")
         case .parameters, .agents, .monitor: nil
         }
     }
@@ -51,9 +52,9 @@ enum WorkspacePanelSettingsError: Error, LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case let .unsupportedVersion(version): "面板设置版本 \(version) 不受支持"
-        case let .notOptional(name): "“\(name)”不是可选面板"
-        case let .duplicate(name): "面板“\(name)”重复出现"
+        case let .unsupportedVersion(version): L10n.text("面板设置版本 \(version) 不受支持")
+        case let .notOptional(name): L10n.text("“\(name)”不是可选面板")
+        case let .duplicate(name): L10n.text("面板“\(name)”重复出现")
         }
     }
 }

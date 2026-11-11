@@ -161,8 +161,21 @@ public final class SurfaceSession {
         let id = engine.configuration.makeParameterID()
         let number = id.rawValue.split(separator: ".").last.map(String.init) ?? ""
         let definition = control.map { !$0.isContinuous } ?? false
-            ? ParameterDefinition(id: id, name: "开关 \(number)", group: "自定义", minimum: 0, maximum: 1, kind: .toggle)
-            : ParameterDefinition(id: id, name: "参数 \(number)", group: "自定义", minimum: 0, maximum: 127)
+            ? ParameterDefinition(
+                id: id,
+                name: L10n.text("开关 \(number)"),
+                group: L10n.text("自定义"),
+                minimum: 0,
+                maximum: 1,
+                kind: .toggle
+            )
+            : ParameterDefinition(
+                id: id,
+                name: L10n.text("参数 \(number)"),
+                group: L10n.text("自定义"),
+                minimum: 0,
+                maximum: 127
+            )
         try addParameter(definition, assigningTo: control)
         return id
     }

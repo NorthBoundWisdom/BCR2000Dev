@@ -1,3 +1,4 @@
+import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -20,7 +21,7 @@ final class ArmPreviewTests: XCTestCase {
             XCTAssertLessThanOrEqual(abs(radians), 2 * .pi)
             XCTAssertTrue(sin(radians).isFinite)
         }
-        XCTAssertEqual(ArmPreviewNumbers.text(.infinity), "无效值")
-        XCTAssertEqual(ArmPreviewNumbers.text(.nan), "无效值")
+        XCTAssertEqual(ArmPreviewNumbers.text(.infinity), L10n.text("无效值"))
+        XCTAssertEqual(ArmPreviewNumbers.text(.nan), L10n.text("无效值"))
     }
 }

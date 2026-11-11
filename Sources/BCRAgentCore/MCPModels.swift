@@ -193,16 +193,16 @@ public enum MCPToolCatalog {
     }
 
     private static let descriptions = [
-        "get_status": "读取设备连接、反馈丢弃计数与 MCP 权限。",
-        "list_parameters": "列出参数定义、当前值、Agent 写入权限与绑定控件。",
-        "get_parameter": "读取一个参数的定义与当前值。",
-        "set_parameter": "写入参数并同步所有绑定 LED；报告实际值与 clamp。",
-        "set_parameters": "原子批量写入；任一参数校验失败则全部不写。",
-        "nudge_parameter": "按增量修改一个参数。",
-        "reset_group": "复位组内可写参数，返回 results 和受保护参数的 skipped 列表。",
-        "list_controls": "列出物理控件、功能分配、MIDI 绑定与当前值。",
-        "assign_control": "修改控件分配，需要配置写入权限。",
-        "create_parameter": "创建参数，需要配置写入权限。",
-        "update_parameter": "更新参数定义，需要配置写入权限。"
+        "get_status": L10n.text("读取设备连接、反馈丢弃计数与 MCP 权限。"),
+        "list_parameters": L10n.text("列出参数定义、当前值、Agent 写入权限与绑定控件。"),
+        "get_parameter": L10n.text("读取一个参数的定义与当前值。"),
+        "set_parameter": L10n.text("写入参数并同步所有绑定 LED；报告实际值与 clamp。"),
+        "set_parameters": L10n.text("原子批量写入；任一参数校验失败则全部不写。"),
+        "nudge_parameter": L10n.text("按增量修改一个参数。"),
+        "reset_group": L10n.text("复位组内可写参数，返回 results 和受保护参数的 skipped 列表。"),
+        "list_controls": L10n.text("列出物理控件、功能分配、MIDI 绑定与当前值。"),
+        "assign_control": L10n.text("修改控件分配，需要配置写入权限。"),
+        "create_parameter": L10n.text("创建参数，需要配置写入权限。"),
+        "update_parameter": L10n.text("更新参数定义，需要配置写入权限。")
     ]
 }

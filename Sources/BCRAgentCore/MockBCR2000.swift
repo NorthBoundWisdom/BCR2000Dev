@@ -97,7 +97,7 @@ public struct MockBCR2000: Sendable {
     public mutating func setNRPN(_ enabled: Bool, for control: BCRControlID) throws {
         guard control.isContinuous,
               let original = HardwareMap.mockPreset().midi(for: control)
-        else { throw HardwareBindingError.invalidMap("只有 Mock 编码器可切换 NRPN") }
+        else { throw HardwareBindingError.invalidMap(L10n.text("只有 Mock 编码器可切换 NRPN")) }
         let identity = enabled ? MIDIControlID(kind: .nrpn, channel: 15, number: original.number) : original
         try preset.bind(control, to: identity)
     }

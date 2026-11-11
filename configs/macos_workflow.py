@@ -74,6 +74,9 @@ def _swift_build(configuration: str, architecture: str) -> Path:
     output = SWIFTPM_BUILD_ROOT / "universal" / configuration / PRODUCT
     output.parent.mkdir(parents=True, exist_ok=True)
     _run(["lipo", "-create", *binaries, "-output", output])
+    # Resource bundles are architecture-independent, but must also accompany the lipo output.
+    localization = binaries[0].parent / "BCRAgentConsole_BCRAgentCore.bundle"
+    shutil.copytree(localization, output.parent / localization.name, dirs_exist_ok=True)
     return output
 
 
@@ -140,8 +143,13 @@ def build(
     shutil.copy2(executable, macos / PRODUCT)
     (macos / PRODUCT).chmod(0o755)
     shutil.copy2(icon, resources / "AppIcon.icns")
+    localization = executable.parent / "BCRAgentConsole_BCRAgentCore.bundle"
+    if not localization.is_dir():
+        raise ValueError("SwiftPM localization resource bundle is missing.")
+    shutil.copytree(localization, resources / localization.name)
     info = {
-        "CFBundleDevelopmentRegion": "zh_CN",
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleLocalizations": ["en", "zh-Hans"],
         "CFBundleDisplayName": "BCR Agent Console",
         "CFBundleExecutable": PRODUCT,
         "CFBundleIdentifier": BUNDLE_ID,
@@ -176,6 +184,13 @@ def verify_bundle(bundle: Path) -> dict:
         raise ValueError("Unexpected app bundle metadata.")
     if not (bundle / "Contents/Resources/AppIcon.icns").is_file():
         raise ValueError("Packaged application icon is missing.")
+    if info.get("CFBundleLocalizations") != ["en", "zh-Hans"]:
+        raise ValueError("Application language metadata is missing.")
+    localization = bundle / "Contents/Resources/BCRAgentConsole_BCRAgentCore.bundle"
+    for language in ("en", "zh-Hans"):
+        candidates = [localization / "Contents/Resources", localization]
+        if not any((root / f"{language}.lproj/Localizable.strings").is_file() for root in candidates):
+            raise ValueError(f"Bundled {language} translations are missing.")
     executable = bundle / "Contents/MacOS" / PRODUCT
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise ValueError("Packaged executable is missing or not executable.")
@@ -194,13 +209,22 @@ def verify_bundle(bundle: Path) -> dict:
 def smoke(bundle: Path) -> None:
     verify_bundle(bundle)
     executable = (bundle / "Contents/MacOS" / PRODUCT).resolve()
-    with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
-        result = subprocess.run(
-            [str(executable), "--startup-smoke"], cwd=temporary, text=True, capture_output=True, timeout=40
-        )
-    if result.returncode or SMOKE_MARKER not in result.stdout + result.stderr:
-        raise RuntimeError(f"Native window startup failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
-    print("Verified native window startup with bundled icon.")
+    for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置")):
+        with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
+            # Argument-domain language overrides never modify user preferences.
+            result = subprocess.run(
+                [str(executable), "--startup-smoke", "-AppleLanguages", f"({language})"],
+                cwd=temporary,
+                text=True,
+                capture_output=True,
+                timeout=40,
+            )
+        if result.returncode or SMOKE_MARKER not in result.stdout:
+            raise RuntimeError(f"Native window startup failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
+        marker = next(json.loads(line) for line in result.stdout.splitlines() if SMOKE_MARKER in line)
+        if marker.get("language") != language or marker.get("settings") != settings_title:
+            raise RuntimeError(f"Bundled {language} localization did not resolve correctly: {marker}")
+    print("Verified English and Chinese native startup at 1200 × 760 with bundled icon and translations.")
 
 
 def _zip(bundle: Path, destination: Path, companion: Path | None = None) -> None:

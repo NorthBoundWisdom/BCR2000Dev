@@ -94,6 +94,6 @@ final class OSCCodecTests: XCTestCase {
         let definition = ParameterDefinition(id: "x", name: "X", unit: "°", minimum: -180, maximum: 180, step: 0.5)
         XCTAssertTrue(definition.formatted(90.5).contains("90.5"))
         XCTAssertTrue(definition.formatted(181.25, snap: false, minimumFractionDigits: 2).contains("181.25"))
-        XCTAssertTrue(definition.formatted(.nan, snap: false).contains("无效"))
+        XCTAssertTrue(definition.formatted(.nan, snap: false).contains(L10n.text("无效值")))
     }
 }

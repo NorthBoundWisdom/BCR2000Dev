@@ -46,7 +46,7 @@
 
 ```bash
 python3 configs/macos_workflow.py build
-python3 tools/mcp_integration.py --configuration-write --script tools/capture_readme_screenshots.py
+python3 tools/mcp_integration.py --language zh-Hans --configuration-write --script tools/capture_readme_screenshots.py
 ```
 
 ## 快速开始
@@ -71,6 +71,14 @@ open build/app/BCRAgentConsole.app
 想看一个完整的领域示例，在“参数”页点 **载入预置…** 选择“机械臂示例”（J1–J6、夹爪、速度、使能与复位）；
 同一菜单也可随时回到默认配置。载入预置会替换参数与功能分配，不影响已学习的实体映射。
 已移除的控件会清零反馈；运行中的外部输出会停止，即使重新载入同一配置也需要重新确认并启动。
+
+### 界面语言
+
+默认跟随 macOS 的首选语言顺序，支持简体中文与 English；其他语言回退到 English。
+点击顶栏齿轮，或使用应用菜单的 **设置… / Settings…（⌘,）**，选择“跟随系统 / 简体中文 / English”。
+选择自动保存，**退出并重新打开应用后生效**，使原生菜单、后台状态与界面保持一致。
+已有配置、参数和分组名称保留原文；新建参数和载入内置预置时使用当前语言。
+语言设置不修改 MIDI 身份、Quick Learn 映射或参数 ID。
 
 ## 界面结构
 

@@ -33,18 +33,18 @@ extension ConsoleViewModel {
                 accent = stateColor(slot.state)
             }
         case let .resetGroup(group)?:
-            label = "复位 \(group)"
+            label = L10n.text("复位 \(group)")
             accent = Theme.trigger
         case let .stepParameter(id, step, _)?:
-            label = step > 0 ? "步进 +" : "步进 −"
+            label = step > 0 ? L10n.text("步进 +") : L10n.text("步进 −")
             detail = configuration.parameter(id)?.name
             accent = Theme.trigger
         case let .setParameter(id, value)?:
-            label = "设为 " + (configuration.parameter(id)?.formatted(value) ?? String(value))
+            label = L10n.text("设为 ") + (configuration.parameter(id)?.formatted(value) ?? String(value))
             detail = configuration.parameter(id)?.name
             accent = Theme.trigger
         case let .cycleParameter(id, values)?:
-            label = "循环 \(values.count) 个值"
+            label = L10n.text("循环 \(values.count) 个值")
             detail = configuration.parameter(id)?.name
             accent = Theme.trigger
         case nil:
@@ -104,7 +104,7 @@ struct SurfacePanelView: View {
             header
             HStack(alignment: .top, spacing: m(16)) {
                 VStack(alignment: .leading, spacing: m(10)) {
-                    row("组\(model.visibleGroup)") {
+                    row(L10n.text("组\(model.visibleGroup)")) {
                         ForEach(1 ... 8, id: \.self) { index in
                             VStack(spacing: m(4)) {
                                 knob(.pushEncoder(group: model.visibleGroup, index))
@@ -159,8 +159,8 @@ struct SurfacePanelView: View {
                 .background((model.source == .mock ? Theme.parameter : Theme.selection).opacity(0.14), in: Capsule())
             Spacer()
             Text(model.source == .mock
-                ? "拖动旋钮 / 按下按键 = 模拟实体操作"
-                : "拖动旋钮 / 按下按键 = 软件修改并回写硬件")
+                ? L10n.text("拖动旋钮 / 按下按键 = 模拟实体操作")
+                : L10n.text("拖动旋钮 / 按下按键 = 软件修改并回写硬件"))
                 .font(m.font(10))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -210,8 +210,8 @@ struct SurfacePanelView: View {
                 }
             }
             .help(model.source == .mock
-                ? "切换 Mock 设备的编码器组（与实体一样不发送 MIDI）"
-                : "实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。")
+                ? L10n.text("切换 Mock 设备的编码器组（与实体一样不发送 MIDI）")
+                : L10n.text("实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。"))
 
             Spacer(minLength: m(24))
 
@@ -278,7 +278,7 @@ private struct CellChrome: ViewModifier {
                         .font(m.font(9))
                         .foregroundStyle(.orange)
                         .padding(m(4))
-                        .help("此控件尚未学习 MIDI 身份")
+                        .help(L10n.text("此控件尚未学习 MIDI 身份"))
                 }
             }
     }
@@ -293,7 +293,7 @@ private struct CellLabels: View {
             Text(presentation.control.shortName)
                 .font(m.font(8.5, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.tertiary)
-            Text(presentation.label ?? "未分配")
+            Text(presentation.label ?? L10n.text("未分配"))
                 .font(m.font(10, weight: .semibold))
                 .foregroundStyle(presentation
                     .label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
@@ -341,7 +341,7 @@ private struct KnobCell: View {
         }
         .modifier(CellChrome(presentation: presentation))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? "未分配")")
+        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
         .accessibilityValue(presentation.detail ?? "\(presentation.value)")
         .accessibilityAdjustableAction { direction in
             onTurn(direction == .increment ? 1 : -1)
@@ -425,9 +425,9 @@ private struct PadCell: View {
         }
         .modifier(CellChrome(presentation: presentation))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? "未分配")")
+        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
         .accessibilityAddTraits(.isButton)
-        .help("操作 \(presentation.control.shortName)")
+        .help(L10n.text("操作 \(presentation.control.shortName)"))
         .accessibilityAction {
             onPress()
             onRelease()

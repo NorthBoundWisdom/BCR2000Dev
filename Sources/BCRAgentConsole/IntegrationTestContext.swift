@@ -1,3 +1,4 @@
+import BCRAgentCore
 #if DEBUG
     import Foundation
 
@@ -9,12 +10,12 @@
 
         init(environment: [String: String]) throws {
             guard let path = environment["BCR_INTEGRATION_DIRECTORY"], path.hasPrefix("/"), path != "/" else {
-                throw MCPHTTPParseError(reason: "隔离测试需要绝对路径 BCR_INTEGRATION_DIRECTORY")
+                throw MCPHTTPParseError(reason: L10n.text("隔离测试需要绝对路径 BCR_INTEGRATION_DIRECTORY"))
             }
             guard let token = environment["BCR_INTEGRATION_TOKEN"], token.utf8.count == 64,
                   token.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) })
             else {
-                throw MCPHTTPParseError(reason: "隔离测试需要 64 位十六进制测试凭据")
+                throw MCPHTTPParseError(reason: L10n.text("隔离测试需要 64 位十六进制测试凭据"))
             }
             directory = URL(fileURLWithPath: path, isDirectory: true)
             self.token = token

@@ -39,7 +39,7 @@ final class OSCParameterAdapter: OutputTransport {
     func start(host: String, port: UInt16) throws {
         stop()
         guard !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, port > 0 else {
-            throw MotionSafetyError("OSC 目标地址或端口无效")
+            throw MotionSafetyError(L10n.text("OSC 目标地址或端口无效"))
         }
         let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .udp)
         self.connection = connection
@@ -53,7 +53,7 @@ final class OSCParameterAdapter: OutputTransport {
                     self.onConnection?(true, nil)
                 case let .failed(error), let .waiting(error):
                     self.isConnected = false
-                    self.onConnection?(false, "OSC 连接失败：\(error.localizedDescription)")
+                    self.onConnection?(false, L10n.text("OSC 连接失败：\(error.localizedDescription)"))
                 default: break
                 }
             }
@@ -98,31 +98,31 @@ final class OSCParameterAdapter: OutputTransport {
                 connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
             } catch {
                 connection.cancel()
-                onFailure?("OSC 停止帧编码失败")
+                onFailure?(L10n.text("OSC 停止帧编码失败"))
             }
         } else { connection.cancel() }
         serverEpoch = nil
     }
 
     private func commandPacket(_ frame: ParameterOutputFrame) throws -> OSCPacket {
-        guard let serverEpoch else { throw MotionSafetyError("尚未确认对端标识") }
+        guard let serverEpoch else { throw MotionSafetyError(L10n.text("尚未确认对端标识")) }
         sequence &+= 1
         var elements: [OSCPacket] = [
             .message(OSCMessage("/bcr/epoch", [.string(serverEpoch)])),
             .message(OSCMessage("/bcr/frame", [.int(Int32(bitPattern: sequence))])),
             .message(OSCMessage("/bcr/enable", [.int(frame.enabled ? 1 : 0)]))
         ]
-        guard frame.enabled || frame.values.isEmpty else { throw MotionSafetyError("禁止在停止帧中发送运动值") }
+        guard frame.enabled || frame.values.isEmpty else { throw MotionSafetyError(L10n.text("禁止在停止帧中发送运动值")) }
         for id in frame.values.keys.sorted() {
             let value = Float(frame.values[id]!)
-            guard value.isFinite else { throw MotionSafetyError("OSC 输出超出 float32 范围") }
+            guard value.isFinite else { throw MotionSafetyError(L10n.text("OSC 输出超出 float32 范围")) }
             elements.append(.message(OSCMessage(OSCCodec.parameterAddress(id), [.float(value)])))
         }
         return .bundle(timetag: 1, elements: elements)
     }
 
     private func transmit(_ packet: OSCPacket) throws {
-        guard isConnected, let connection else { throw MotionSafetyError("OSC UDP 端点未就绪") }
+        guard isConnected, let connection else { throw MotionSafetyError(L10n.text("OSC UDP 端点未就绪")) }
         let generation = generation
         let data = try OSCCodec.encode(packet)
         connection.send(content: data, completion: .contentProcessed { [weak self] error in
@@ -130,7 +130,7 @@ final class OSCParameterAdapter: OutputTransport {
                 let reason = error.localizedDescription
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == generation else { return }
-                    self.onFailure?("OSC 发送失败：\(reason)")
+                    self.onFailure?(L10n.text("OSC 发送失败：\(reason)"))
                 }
             }
         })
@@ -164,7 +164,7 @@ final class OSCParameterAdapter: OutputTransport {
                   messages[1].address == "/bcr/state/frame", messages[1].arguments.count == 1,
                   case let .int(rawSequence) = messages[1].arguments[0]
             else {
-                throw MotionSafetyError("OSC 回传缺少对端标识/状态帧序号")
+                throw MotionSafetyError(L10n.text("OSC 回传缺少对端标识/状态帧序号"))
             }
             guard epoch == serverEpoch else { onDroppedPacket?(); return }
             let sequence = UInt32(bitPattern: rawSequence)
@@ -177,11 +177,11 @@ final class OSCParameterAdapter: OutputTransport {
                 guard seen.insert(id).inserted, message.arguments.count == 1,
                       case let .float(value) = message.arguments[0], value.isFinite
                 else {
-                    throw MotionSafetyError("OSC 回传参数重复或数值无效")
+                    throw MotionSafetyError(L10n.text("OSC 回传参数重复或数值无效"))
                 }
                 samples.append(.init(id: id, value: Double(value), receivedAt: receivedAt))
             }
-            guard !samples.isEmpty else { throw MotionSafetyError("OSC 状态帧为空") }
+            guard !samples.isEmpty else { throw MotionSafetyError(L10n.text("OSC 状态帧为空")) }
             lastStateSequence = sequence
             onSamples?(samples)
         } catch { onFailure?(error.localizedDescription) }
@@ -194,9 +194,12 @@ final class OSCParameterAdapter: OutputTransport {
         connection.receiveMessage { data, _, _, error in
             let received = Date.now
             if let error {
-                handler(.failure(MotionSafetyError("OSC 接收失败：\(error.localizedDescription)")), received); return
+                handler(
+                    .failure(MotionSafetyError(L10n.text("OSC 接收失败：\(error.localizedDescription)"))),
+                    received
+                ); return
             }
-            guard let data else { handler(.failure(MotionSafetyError("OSC 接收端已关闭")), received); return }
+            guard let data else { handler(.failure(MotionSafetyError(L10n.text("OSC 接收端已关闭"))), received); return }
             do { handler(.success(try OSCCodec.immediateMessages(OSCCodec.decode(data))), received) }
             catch { handler(.failure(MotionSafetyError(error.localizedDescription)), received) }
             receiveLoop(connection, handler: handler)

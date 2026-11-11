@@ -10,11 +10,11 @@ enum CoreMIDIServiceError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .operation(name, status):
-            "\(name) 失败（OSStatus \(status)）"
+            L10n.text("\(name) 失败（OSStatus \(status)）")
         case .outputUnavailable:
-            "BCR2000 输出端口尚未连接"
+            L10n.text("BCR2000 输出端口尚未连接")
         case .eventListFull:
-            "无法构造 MIDI Event List"
+            L10n.text("无法构造 MIDI Event List")
         }
     }
 }
@@ -129,7 +129,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
                     self?.reconnect()
                 }
             }
-            try Self.check(clientStatus, operation: "创建 MIDI Client")
+            try Self.check(clientStatus, operation: L10n.text("创建 MIDI Client"))
             client = newClient
 
             var newInputPort: MIDIPortRef = 0
@@ -148,7 +148,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
                 }
             }
             do {
-                try Self.check(inputStatus, operation: "创建 MIDI Input Port")
+                try Self.check(inputStatus, operation: L10n.text("创建 MIDI Input Port"))
             } catch {
                 MIDIClientDispose(client)
                 client = 0
@@ -163,7 +163,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
                 &newOutputPort
             )
             do {
-                try Self.check(outputStatus, operation: "创建 MIDI Output Port")
+                try Self.check(outputStatus, operation: L10n.text("创建 MIDI Output Port"))
             } catch {
                 MIDIPortDispose(inputPort)
                 MIDIClientDispose(client)
@@ -233,7 +233,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             }
 
             let status = MIDISend(outputPort, destination, &packetList)
-            try Self.check(status, operation: "发送 MIDI Feedback")
+            try Self.check(status, operation: L10n.text("发送 MIDI Feedback"))
         }
     }
 
@@ -283,7 +283,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             let status = MIDIPortConnectSource(inputPort, selectedSource.endpoint, nil)
             if status == noErr { connectedSources = [selectedSource.endpoint] }
             else {
-                lastError = CoreMIDIServiceError.operation(name: "连接 \(selectedSource.name)", status: status)
+                lastError = CoreMIDIServiceError.operation(name: L10n.text("连接 \(selectedSource.name)"), status: status)
                     .localizedDescription
             }
         }
@@ -331,7 +331,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
                 availabilityKnown: availabilityStatus == noErr,
                 endpoint: endpoint,
                 id: id,
-                name: endpointName(endpoint) ?? "未命名 MIDI 端点"
+                name: endpointName(endpoint) ?? L10n.text("未命名 MIDI 端点")
             )
         }
     }

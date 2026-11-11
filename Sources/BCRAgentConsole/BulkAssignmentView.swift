@@ -10,25 +10,25 @@ struct BulkAssignmentSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("批量分配", icon: "rectangle.grid.1x2")
-            Picker("控件区", selection: $section) {
+            SectionTitle(L10n.text("批量分配"), icon: "rectangle.grid.1x2")
+            Picker(L10n.text("控件区"), selection: $section) {
                 ForEach(BCRSection.allCases, id: \.self) { Text($0.displayName).tag($0) }
             }
-            Picker("组 / 行", selection: $row) {
+            Picker(L10n.text("组 / 行"), selection: $row) {
                 ForEach(Array(section.rowRange), id: \.self) { Text(String($0)).tag($0) }
             }
-            Picker("参数组", selection: $group) {
+            Picker(L10n.text("参数组"), selection: $group) {
                 ForEach(model.configuration.parameterGroups, id: \.self) {
-                    Text($0.isEmpty ? "未分组" : $0).tag($0)
+                    Text($0.isEmpty ? L10n.text("未分组") : $0).tag($0)
                 }
             }
-            Button("预览批量分配…") {
+            Button(L10n.text("预览批量分配…")) {
                 if let plan = model.bulkAssignmentPlan(section: section, row: row, group: group) {
                     preview = BulkPreviewPresentation(plan: plan)
                 }
             }
             .disabled(model.configuration.parameters.isEmpty)
-            .help("预览整行与参数组的顺序绑定，确认后应用")
+            .help(L10n.text("预览整行与参数组的顺序绑定，确认后应用"))
         }
         .panelStyle()
         .onAppear { selectValidGroup() }
@@ -57,8 +57,8 @@ private struct BulkAssignmentPreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle("确认批量分配", icon: "rectangle.grid.1x2")
-            Text("将按参数组的顺序绑定。已有分配会被替换，参数当前值与硬件映射保留。")
+            SectionTitle(L10n.text("确认批量分配"), icon: "rectangle.grid.1x2")
+            Text(L10n.text("将按参数组的顺序绑定。已有分配会被替换，参数当前值与硬件映射保留。"))
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
@@ -76,20 +76,21 @@ private struct BulkAssignmentPreview: View {
                 }
             }
             if plan.skippedParameters > 0 {
-                Text("本行容量不足，分组末尾 \(plan.skippedParameters) 个参数不会分配。").font(.caption).foregroundStyle(.orange)
+                Text(L10n.text("本行容量不足，分组末尾 \(plan.skippedParameters) 个参数不会分配。")).font(.caption)
+                    .foregroundStyle(.orange)
             }
             if model.configuration != plan.base {
-                Text("配置已改变，请关闭并重新预览。").foregroundStyle(.orange)
+                Text(L10n.text("配置已改变，请关闭并重新预览。")).foregroundStyle(.orange)
             }
             HStack {
-                Button("取消") { dismiss() }
+                Button(L10n.text("取消")) { dismiss() }
                 Spacer()
-                Button("确认分配", role: .destructive) {
+                Button(L10n.text("确认分配"), role: .destructive) {
                     if model.applyBulkAssignment(plan) { dismiss() }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(model.configuration != plan.base)
-                .help("确认应用预览中的批量分配")
+                .help(L10n.text("确认应用预览中的批量分配"))
             }
         }
         .padding(24)
@@ -99,18 +100,20 @@ private struct BulkAssignmentPreview: View {
     }
 
     private func summary(_ assignment: ControlAssignment?) -> String {
-        guard let assignment else { return "未分配" }
+        guard let assignment else { return L10n.text("未分配") }
         let configuration = plan.base
         let title: String
         switch assignment.target {
         case let .parameter(id): title = configuration.parameter(id)?.name ?? id.rawValue
         case let .agentPrimaryAction(slot): title = "Agent \(slot.rawValue)"
-        case let .resetGroup(group): title = "复位 \(group)"
-        case let .stepParameter(id, step, _): title = "\(configuration.parameter(id)?.name ?? id.rawValue) 步进 \(step)"
+        case let .resetGroup(group): title = L10n.text("复位 \(group)")
+        case let .stepParameter(id, step, _): title = L10n
+            .text("\(configuration.parameter(id)?.name ?? id.rawValue) 步进 \(step)")
         case let .setParameter(id, value): title = "\(configuration.parameter(id)?.name ?? id.rawValue) = \(value)"
-        case let .cycleParameter(id, values): title = "\(configuration.parameter(id)?.name ?? id.rawValue) 循环 \(values.count) 项"
+        case let .cycleParameter(id, values): title = L10n
+            .text("\(configuration.parameter(id)?.name ?? id.rawValue) 循环 \(values.count) 项")
         }
-        let inverted = assignment.inverted ? " · 反向" : ""
+        let inverted = assignment.inverted ? L10n.text(" · 反向") : ""
         let behavior = !assignment.control.isContinuous && assignment.target.parameterID != nil && !assignment.target
             .isTrigger
             ? " · \(assignment.buttonBehavior.displayName)" : ""

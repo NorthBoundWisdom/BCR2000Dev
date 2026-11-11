@@ -14,13 +14,13 @@ public enum CodexProtocolError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .malformedJSON(message):
-            "协议数据错误：\(message)"
+            L10n.text("协议数据错误：\(message)")
         case let .nonObjectPayload(method):
-            "\(method) 返回参数不是对象结构"
+            L10n.text("\(method) 返回参数不是对象结构")
         case let .missingPayloadField(field):
-            "缺少必要字段：\(field)"
+            L10n.text("缺少必要字段：\(field)")
         case let .invalidPayloadField(field):
-            "字段类型不匹配：\(field)"
+            L10n.text("字段类型不匹配：\(field)")
         }
     }
 }

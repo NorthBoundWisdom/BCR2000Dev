@@ -21,9 +21,9 @@ public enum HardwareBindingError: Error, Equatable, LocalizedError, Sendable {
         switch self {
         case let .invalidMap(reason): reason
         case let .alreadyBound(midi, control):
-            "\(midi) 已绑定到 \(control.shortName)，请先清除该绑定"
+            L10n.text("\(midi) 已绑定到 \(control.shortName)，请先清除该绑定")
         case let .encoderRequiresControlChange(control):
-            "\(control.shortName) 是编码器，只能学习 CC 或 NRPN 消息"
+            L10n.text("\(control.shortName) 是编码器，只能学习 CC 或 NRPN 消息")
         }
     }
 }

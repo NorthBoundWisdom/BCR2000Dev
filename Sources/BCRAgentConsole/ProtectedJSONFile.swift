@@ -47,7 +47,7 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
             let original = try JSONDecoder().decode(Value.self, from: data)
             let value = try normalize(original)
             let message = version(original) != version(value)
-                ? "\(title)已从 v\(version(original)) 迁移到 v\(version(value))；原文件尚未改写。"
+                ? L10n.text("\(title)已从 v\(version(original)) 迁移到 v\(version(value))；原文件尚未改写。")
                 : nil
             return .init(value: value, message: message, failed: false)
         } catch {
@@ -56,13 +56,17 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
                 let backup = try backupExisting(kind: "invalid")
                 return .init(
                     value: fallback(),
-                    message: "\(title)读取/校验失败：\(failure)。已载入安全初始配置，原文件保留；备份：\(backup?.lastPathComponent ?? "文件不存在")。",
+                    message: L10n
+                        .text(
+                            "\(title)读取/校验失败：\(failure)。已载入安全初始配置，原文件保留；备份：\(backup?.lastPathComponent ?? L10n.text("文件不存在"))。"
+                        ),
                     failed: true
                 )
             } catch {
                 return .init(
                     value: fallback(),
-                    message: "\(title)读取失败：\(failure)。备份也失败：\(error.localizedDescription)。原文件未改写，后续保存将在保护原文件前被阻止。",
+                    message: L10n
+                        .text("\(title)读取失败：\(failure)。备份也失败：\(error.localizedDescription)。原文件未改写，后续保存将在保护原文件前被阻止。"),
                     failed: true
                 )
             }
@@ -75,7 +79,7 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(normalized)
         guard data.count <= Self.maximumBytes
-        else { throw ConfigurationFileError(reason: "\(title)超过 4 MiB 上限，未覆盖原文件") }
+        else { throw ConfigurationFileError(reason: L10n.text("\(title)超过 4 MiB 上限，未覆盖原文件")) }
         if let original = try existingData() {
             var needsProtection = false
             do {
@@ -92,7 +96,7 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
         guard FileManager.default.fileExists(atPath: store.fileURL.path) else { return nil }
         let data = try Data(contentsOf: store.fileURL, options: .mappedIfSafe)
         guard data.count <= Self.maximumBytes
-        else { throw ConfigurationFileError(reason: "\(title)原文件超过 4 MiB，保留原文件并拒绝覆盖") }
+        else { throw ConfigurationFileError(reason: L10n.text("\(title)原文件超过 4 MiB，保留原文件并拒绝覆盖")) }
         return data
     }
 
@@ -102,11 +106,13 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
         let digest = SHA256.hash(data: data).map { String(format: "%02x", Int($0)) }.joined()
         let url = store.fileURL.appendingPathExtension("\(kind).\(digest).json")
         if FileManager.default.fileExists(atPath: url.path) {
-            guard try Data(contentsOf: url) == data else { throw ConfigurationFileError(reason: "备份冲突，未覆盖原文件") }
+            guard try Data(contentsOf: url) == data
+            else { throw ConfigurationFileError(reason: L10n.text("备份冲突，未覆盖原文件")) }
         } else {
             try writeBackup(data, url)
         }
-        guard try Data(contentsOf: url) == data else { throw ConfigurationFileError(reason: "备份校验失败，未覆盖原文件") }
+        guard try Data(contentsOf: url) == data
+        else { throw ConfigurationFileError(reason: L10n.text("备份校验失败，未覆盖原文件")) }
         return url
     }
 }
@@ -114,14 +120,14 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
 extension ProtectedJSONFile where Value == SurfaceConfiguration {
     /// `preset` is used only when no valid saved configuration exists.
     static func configuration(_ store: JSONFileStore<Value>, preset: ConfigurationPreset = .starter) -> Self {
-        Self(store: store, title: "功能配置", normalize: { try $0.migrated() },
+        Self(store: store, title: L10n.text("功能配置"), normalize: { try $0.migrated() },
              version: { $0.version }, fallback: { preset.makeConfiguration() })
     }
 }
 
 extension ProtectedJSONFile where Value == HardwareMap {
     static func hardware(_ store: JSONFileStore<Value>) -> Self {
-        Self(store: store, title: "硬件映射", normalize: { try $0.migrated() },
+        Self(store: store, title: L10n.text("硬件映射"), normalize: { try $0.migrated() },
              version: { $0.version }, fallback: { HardwareMap() })
     }
 }
@@ -129,7 +135,7 @@ extension ProtectedJSONFile where Value == HardwareMap {
 enum ConfigurationTransfer {
     static func decode(_ data: Data) throws -> SurfaceConfiguration {
         guard data.count <= ProtectedJSONFile<SurfaceConfiguration>.maximumBytes else {
-            throw ConfigurationFileError(reason: "导入文件超过 4 MiB")
+            throw ConfigurationFileError(reason: L10n.text("导入文件超过 4 MiB"))
         }
         return try JSONDecoder().decode(SurfaceConfiguration.self, from: data).migrated()
     }
@@ -140,7 +146,7 @@ enum ConfigurationTransfer {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(current)
         guard data.count <= ProtectedJSONFile<SurfaceConfiguration>.maximumBytes else {
-            throw ConfigurationFileError(reason: "导出配置超过 4 MiB")
+            throw ConfigurationFileError(reason: L10n.text("导出配置超过 4 MiB"))
         }
         return data
     }

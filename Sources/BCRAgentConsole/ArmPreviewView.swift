@@ -38,7 +38,7 @@ struct ArmPreviewView: View {
                 }
             }
         } else {
-            Text("当前配置不含 arm.j1–arm.j4 参数。可在“参数”页“载入预置…”中选择“机械臂示例”。")
+            Text(L10n.text("当前配置不含 arm.j1–arm.j4 参数。可在“参数”页“载入预置…”中选择“机械臂示例”。"))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 120)
         }
@@ -57,11 +57,11 @@ struct ArmPreviewView: View {
                 .frame(width: 150, height: 150)
                 .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 4) {
-                readout("J5 腕旋", pose.wristRoll, "°")
-                readout("J6 末端", pose.toolRoll, "°")
-                readout("夹爪", pose.gripper, "%")
-                readout("速度", pose.speed, "%")
-                Text(pose.enabled ? "● 已使能" : "○ 未使能（B2-1 切换）")
+                readout(L10n.text("J5 腕旋"), pose.wristRoll, "°")
+                readout(L10n.text("J6 末端"), pose.toolRoll, "°")
+                readout(L10n.text("夹爪"), pose.gripper, "%")
+                readout(L10n.text("速度"), pose.speed, "%")
+                Text(pose.enabled ? L10n.text("● 已使能") : L10n.text("○ 未使能（B2-1 切换）"))
                     .font(.caption.bold())
                     .foregroundStyle(pose.enabled ? .green : .orange)
             }
@@ -146,7 +146,10 @@ private struct SideView: View {
 
             context.draw(
                 Text(
-                    "侧视 · J2 \(ArmPreviewNumbers.text(pose.shoulder))°  J3 \(ArmPreviewNumbers.text(pose.elbow))°  J4 \(ArmPreviewNumbers.text(pose.wristPitch))°"
+                    L10n
+                        .text(
+                            "侧视 · J2 \(ArmPreviewNumbers.text(pose.shoulder))°  J3 \(ArmPreviewNumbers.text(pose.elbow))°  J4 \(ArmPreviewNumbers.text(pose.wristPitch))°"
+                        )
                 )
                 .font(.caption2.monospaced())
                 .foregroundColor(.secondary),
@@ -181,7 +184,7 @@ private struct TopView: View {
                 with: .color(.white.opacity(0.6))
             )
             context.draw(
-                Text("俯视 · J1 \(ArmPreviewNumbers.text(pose.base))°").font(.caption2.monospaced())
+                Text(L10n.text("俯视 · J1 \(ArmPreviewNumbers.text(pose.base))°")).font(.caption2.monospaced())
                     .foregroundColor(.secondary),
                 at: CGPoint(x: size.width / 2, y: 12)
             )
@@ -192,7 +195,7 @@ private struct TopView: View {
 /// Presentation uses floating-point formatting; no narrowing conversion to a machine integer.
 enum ArmPreviewNumbers {
     static func text(_ value: Double) -> String {
-        guard value.isFinite else { return "无效值" }
+        guard value.isFinite else { return L10n.text("无效值") }
         if abs(value) >= 1e9 {
             return value.formatted(.number.notation(.scientific).precision(.significantDigits(4)))
         }

@@ -50,13 +50,13 @@ public enum AgentRunState: String, CaseIterable, Codable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .idle: "空闲"
-        case .queued: "排队中"
-        case .running: "运行中"
-        case .waitingApproval: "等待批准"
-        case .completed: "已完成"
-        case .interrupted: "已中断"
-        case .error: "错误"
+        case .idle: L10n.text("空闲")
+        case .queued: L10n.text("排队中")
+        case .running: L10n.text("运行中")
+        case .waitingApproval: L10n.text("等待批准")
+        case .completed: L10n.text("已完成")
+        case .interrupted: L10n.text("已中断")
+        case .error: L10n.text("错误")
         }
     }
 
@@ -87,7 +87,7 @@ public struct AgentSlot: Identifiable, Equatable, Codable, Sendable {
         name: String,
         state: AgentRunState = .idle,
         progress: Double = 0,
-        statusText: String = "等待任务",
+        statusText: String = L10n.text("等待任务"),
         lastUpdated: Date = .now
     ) {
         self.id = id
@@ -112,9 +112,9 @@ public enum AgentStateMachineError: Error, Equatable, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .unknownSlot(slot):
-            "未知槽位 \(slot.rawValue)"
+            L10n.text("未知槽位 \(slot.rawValue)")
         case let .invalidTransition(slot, from, to):
-            "槽位 \(slot.rawValue) 不能从 \(from.rawValue) 转换到 \(to.rawValue)"
+            L10n.text("槽位 \(slot.rawValue) 不能从 \(from.rawValue) 转换到 \(to.rawValue)")
         }
     }
 }

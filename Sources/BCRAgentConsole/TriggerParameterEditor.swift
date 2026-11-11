@@ -10,7 +10,7 @@ struct TriggerParameterEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let id = target.parameterID {
-                Picker("参数", selection: Binding(get: { id }, set: { changeParameter($0) })) {
+                Picker(L10n.text("参数"), selection: Binding(get: { id }, set: { changeParameter($0) })) {
                     ForEach(model.configuration.parameters) { Text($0.name).tag($0.id) }
                 }
                 fields(id)
@@ -24,20 +24,20 @@ struct TriggerParameterEditor: View {
     private func fields(_ id: ParameterID) -> some View {
         switch target {
         case let .stepParameter(_, step, wraps):
-            TextField("步进量", value: Binding(get: { step }, set: {
+            TextField(L10n.text("步进量"), value: Binding(get: { step }, set: {
                 update(.stepParameter(id: id, step: $0, wraps: wraps))
             }), format: .number)
-            Toggle("越界循环到另一端", isOn: Binding(get: { wraps }, set: {
+            Toggle(L10n.text("越界循环到另一端"), isOn: Binding(get: { wraps }, set: {
                 update(.stepParameter(id: id, step: step, wraps: $0))
             }))
         case let .setParameter(_, value):
-            TextField("指定值", value: Binding(get: { value }, set: {
+            TextField(L10n.text("指定值"), value: Binding(get: { value }, set: {
                 update(.setParameter(id: id, value: $0))
             }), format: .number)
         case .cycleParameter:
-            TextField("循环值（逗号分隔）", text: $cycleText)
-            Button("应用循环值") { model.setCycleValues(cycleText, parameter: id, for: control) }
-            Text("按给定顺序循环；当前值不在列表时从第一项开始。").font(.caption).foregroundStyle(.secondary)
+            TextField(L10n.text("循环值（逗号分隔）"), text: $cycleText)
+            Button(L10n.text("应用循环值")) { model.setCycleValues(cycleText, parameter: id, for: control) }
+            Text(L10n.text("按给定顺序循环；当前值不在列表时从第一项开始。")).font(.caption).foregroundStyle(.secondary)
         default: EmptyView()
         }
     }

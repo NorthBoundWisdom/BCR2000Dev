@@ -9,13 +9,13 @@ public enum CodexProcessSupervisorError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .alreadyRunning:
-            "Codex 进程已在运行"
+            L10n.text("Codex 进程已在运行")
         case let .executableNotFound(path):
-            "未找到可执行文件：\(path)"
+            L10n.text("未找到可执行文件：\(path)")
         case let .launchFailed(message):
-            "启动 Codex 失败：\(message)"
+            L10n.text("启动 Codex 失败：\(message)")
         case .alreadyStopped:
-            "Codex 进程未启动"
+            L10n.text("Codex 进程未启动")
         }
     }
 }
@@ -187,7 +187,7 @@ public actor CodexProcessSupervisor {
 
     private func launch(for generation: Int) async throws {
         guard let config else {
-            throw CodexProcessSupervisorError.launchFailed("配置未设置")
+            throw CodexProcessSupervisorError.launchFailed(L10n.text("配置未设置"))
         }
 
         guard let resolvedExecutable = Self.resolveExecutable(config.executablePath) else {

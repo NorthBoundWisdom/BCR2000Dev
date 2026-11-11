@@ -10,15 +10,15 @@ public enum CodexApprovalGateError: Error, LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .requestMissing(id):
-            "未找到待处理审批 request-id=\(id)"
+            L10n.text("未找到待处理审批 request-id=\(id)")
         case let .requestExpired(id):
-            "审批 request-id=\(id) 已超时关闭"
+            L10n.text("审批 request-id=\(id) 已超时关闭")
         case let .slotMismatch(expected, actual):
-            "审批 slot-id 不匹配（期望 \(expected.rawValue) 实际 \(actual.rawValue)）"
+            L10n.text("审批 slot-id 不匹配（期望 \(expected.rawValue) 实际 \(actual.rawValue)）")
         case .visibilityMismatch:
-            "审批按钮当前不可见，拒绝处理"
+            L10n.text("审批按钮当前不可见，拒绝处理")
         case let .requestReplayed(id):
-            "审批 request-id=\(id) 已被重复处理"
+            L10n.text("审批 request-id=\(id) 已被重复处理")
         }
     }
 }

@@ -222,7 +222,7 @@ final class MCPHTTPServerTests: XCTestCase {
         let model = ConsoleViewModel(stores: stores, startsMIDI: false)
         XCTAssertEqual(model.configuration.version, SurfaceConfiguration.currentVersion)
         XCTAssertFalse(model.configuration.parameter("arm.enabled")!.agentWritable)
-        XCTAssertTrue(model.persistenceNotice?.text.contains("迁移") == true)
+        XCTAssertTrue(model.persistenceNotice?.text.contains(L10n.language == .chinese ? "迁移" : "migrated") == true)
         XCTAssertEqual(try Data(contentsOf: stores.configuration.fileURL), data)
     }
 

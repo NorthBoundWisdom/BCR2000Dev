@@ -7,8 +7,8 @@ import Foundation
 extension DeviceSource {
     var title: String {
         switch self {
-        case .mock: "Mock 设备"
-        case .hardware: "实体 BCR2000"
+        case .mock: L10n.text("Mock 设备")
+        case .hardware: L10n.text("实体 BCR2000")
         }
     }
 }
@@ -88,14 +88,14 @@ final class ConsoleViewModel: ObservableObject {
         var savedSelection = MIDIEndpointSelection()
         do {
             if let stored = try endpointStore.load() { try stored.validate(); savedSelection = stored }
-        } catch { endpointError = "MIDI 端口设置读取失败：\(error.localizedDescription)" }
+        } catch { endpointError = L10n.text("MIDI 端口设置读取失败：\(error.localizedDescription)") }
         endpointSelection = savedSelection
         let workspacePanelStore = JSONFileStore<WorkspacePanelSettings>(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "workspace-panels.json"))
         self.workspacePanelStore = workspacePanelStore
         var panelError: String?
         do { if let stored = try workspacePanelStore.load() { workspacePanels = stored } }
-        catch { panelError = "面板设置读取失败，专业面板保持隐藏：\(error.localizedDescription)" }
+        catch { panelError = L10n.text("面板设置读取失败，专业面板保持隐藏：\(error.localizedDescription)") }
         let midi = midiService ?? CoreMIDIService(selection: savedSelection)
         self.midi = midi
         session = SurfaceSession(
@@ -114,7 +114,7 @@ final class ConsoleViewModel: ObservableObject {
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
         if integrationTest {
-            notice = ConsoleNotice(level: .info, text: "隔离集成测试：使用独立配置与内存凭据，不连接实体设备。")
+            notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
         }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
@@ -128,7 +128,7 @@ final class ConsoleViewModel: ObservableObject {
         guard startsMIDI else { return }
         midi.selectEndpoints(savedSelection)
         do { try midi.start() }
-        catch { notice = ConsoleNotice(level: .error, text: "CoreMIDI 启动失败：\(error.localizedDescription)") }
+        catch { notice = ConsoleNotice(level: .error, text: L10n.text("CoreMIDI 启动失败：\(error.localizedDescription)")) }
     }
 
     // MARK: Read model
@@ -169,7 +169,7 @@ final class ConsoleViewModel: ObservableObject {
             workspacePanels = updated
             return true
         } catch {
-            notice = ConsoleNotice(level: .error, text: "面板设置保存失败：\(error.localizedDescription)")
+            notice = ConsoleNotice(level: .error, text: L10n.text("面板设置保存失败：\(error.localizedDescription)"))
             return false
         }
     }
@@ -178,18 +178,18 @@ final class ConsoleViewModel: ObservableObject {
 
     func applyEndpointSelection(_ selection: MIDIEndpointSelection) {
         guard canConfigureMIDI else {
-            notice = ConsoleNotice(level: .warning, text: "隔离测试未启用实体 MIDI")
+            notice = ConsoleNotice(level: .warning, text: L10n.text("隔离测试未启用实体 MIDI"))
             return
         }
         do {
             try selection.validate()
             try endpointStore.save(selection)
-            if output.settings.enabled { output.stop(failure: "MIDI 端口已改变，请重新确认使能") }
+            if output.settings.enabled { output.stop(failure: L10n.text("MIDI 端口已改变，请重新确认使能")) }
             endpointSelection = selection
             if isLearning { session.stopLearning() }
             midi.selectEndpoints(selection)
             try midi.start()
-            notice = ConsoleNotice(level: .info, text: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
+            notice = ConsoleNotice(level: .info, text: L10n.text("MIDI 端口设置已保存；端口缺失时不会自动替换手动选择"))
         } catch { report(error) }
     }
 
@@ -247,7 +247,7 @@ final class ConsoleViewModel: ObservableObject {
     @discardableResult
     func updateParameter(_ definition: ParameterDefinition) -> ParameterDefinition? {
         do {
-            notice = ConsoleNotice(level: .info, text: "参数“\(definition.name)”已更新。")
+            notice = ConsoleNotice(level: .info, text: L10n.text("参数“\(definition.name)”已更新。"))
             try session.updateParameter(definition)
             return configuration.parameter(definition.id)
         } catch {
@@ -263,8 +263,8 @@ final class ConsoleViewModel: ObservableObject {
     /// Replaces all parameters and assignments with a built-in preset; the hardware map is kept.
     func loadPreset(_ preset: ConfigurationPreset) {
         let hint = preset == .robotArm && !workspacePanels.isEnabled(.arm)
-            ? "可从工作区“面板”菜单启用机械臂预览。" : ""
-        notice = ConsoleNotice(level: .info, text: "已载入“\(preset.title)”。" + hint)
+            ? L10n.text("可从工作区“面板”菜单启用机械臂预览。") : ""
+        notice = ConsoleNotice(level: .info, text: L10n.text("已载入“\(preset.title)”。") + hint)
         do { try session.replaceConfiguration(preset.makeConfiguration()) }
         catch { report(error) }
     }
@@ -282,7 +282,8 @@ final class ConsoleViewModel: ObservableObject {
             omittingEmptySubsequences: false
         )
         let values = fields.compactMap { Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        guard values.count == fields.count else { report(ConfigurationFileError(reason: "循环值必须是逗号分隔的数值")); return }
+        guard values.count == fields.count
+        else { report(ConfigurationFileError(reason: L10n.text("循环值必须是逗号分隔的数值"))); return }
         setAssignment(
             ControlAssignment(control: control, target: .cycleParameter(id: parameter, values: values)),
             for: control
@@ -297,7 +298,7 @@ final class ConsoleViewModel: ObservableObject {
     @discardableResult
     func applyBulkAssignment(_ plan: BulkAssignmentPlan) -> Bool {
         do {
-            notice = ConsoleNotice(level: .info, text: "已批量分配 \(plan.changes.count) 个控件。")
+            notice = ConsoleNotice(level: .info, text: L10n.text("已批量分配 \(plan.changes.count) 个控件。"))
             try session.applyBulkAssignment(plan)
             return session.lastConfigurationPersistenceError == nil
         } catch { report(error); return false }
@@ -307,13 +308,13 @@ final class ConsoleViewModel: ObservableObject {
 
     func beginLearning(at control: BCRControlID, format: MIDILearnFormat = .voice) {
         guard session.beginLearning(at: control, format: format) else {
-            notice = ConsoleNotice(level: .warning, text: "Mock 设备的预设已知，学习只用于实体 BCR2000。")
+            notice = ConsoleNotice(level: .warning, text: L10n.text("Mock 设备的预设已知，学习只用于实体 BCR2000。"))
             return
         }
         selectedControl = control
         notice = ConsoleNotice(
             level: .info,
-            text: "学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。"
+            text: L10n.text("学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。")
         )
     }
 
@@ -331,7 +332,10 @@ final class ConsoleViewModel: ObservableObject {
 
     func stopLearning() {
         session.stopLearning()
-        notice = ConsoleNotice(level: .info, text: "学习已停止，已学习 \(learnedCount) / \(BCRLayout.allControls.count) 个控件。")
+        notice = ConsoleNotice(
+            level: .info,
+            text: L10n.text("学习已停止，已学习 \(learnedCount) / \(BCRLayout.allControls.count) 个控件。")
+        )
     }
 
     func unbind(_ control: BCRControlID) {
@@ -341,7 +345,7 @@ final class ConsoleViewModel: ObservableObject {
 
     func resetHardwareMap() {
         guard source == .hardware else { return }
-        notice = ConsoleNotice(level: .info, text: "实体映射已清空，请重新学习。")
+        notice = ConsoleNotice(level: .info, text: L10n.text("实体映射已清空，请重新学习。"))
         session.resetHardwareMap()
     }
 
@@ -366,7 +370,7 @@ final class ConsoleViewModel: ObservableObject {
         case .retryConfigurationSave:
             session.retryConfigurationPersistence()
             if session.lastConfigurationPersistenceError == nil {
-                notice = ConsoleNotice(level: .info, text: "配置已保存。")
+                notice = ConsoleNotice(level: .info, text: L10n.text("配置已保存。"))
             }
         }
     }
@@ -383,7 +387,7 @@ final class ConsoleViewModel: ObservableObject {
             let candidate = try candidate.migrated()
             // Commit the durable configuration before changing the live engine.
             try configurationFile.save(candidate)
-            notice = ConsoleNotice(level: .info, text: "已导入“\(candidate.name)”；实体映射保留。")
+            notice = ConsoleNotice(level: .info, text: L10n.text("已导入“\(candidate.name)”；实体映射保留。"))
             try session.replaceConfiguration(candidate, persist: false)
             return true
         } catch { report(error); return false }
@@ -393,7 +397,7 @@ final class ConsoleViewModel: ObservableObject {
         guard let window = NSApp.windows.first(where: {
             $0.isVisible && $0.canBecomeMain && $0.attachedSheet == nil
         }) else {
-            notice = ConsoleNotice(level: .error, text: "无法打开配置面板：请先关闭其他对话框。")
+            notice = ConsoleNotice(level: .error, text: L10n.text("无法打开配置面板：请先关闭其他对话框。"))
             return nil
         }
         NSApp.activate()
@@ -405,8 +409,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func chooseConfigurationImport() async -> SurfaceConfiguration? {
         let panel = NSOpenPanel()
-        panel.title = "导入参数与功能分配"
-        panel.prompt = "导入"
+        panel.title = L10n.text("导入参数与功能分配")
+        panel.prompt = L10n.text("导入")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -414,7 +418,7 @@ final class ConsoleViewModel: ObservableObject {
         guard response == .OK, let url = panel.url else { return nil }
         do { return try readConfiguration(from: url) }
         catch {
-            notice = ConsoleNotice(level: .error, text: "配置导入失败：\(error.localizedDescription)")
+            notice = ConsoleNotice(level: .error, text: L10n.text("配置导入失败：\(error.localizedDescription)"))
             return nil
         }
     }
@@ -430,8 +434,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func chooseConfigurationExport() async {
         let panel = NSSavePanel()
-        panel.title = "导出参数与功能分配"
-        panel.prompt = "导出"
+        panel.title = L10n.text("导出参数与功能分配")
+        panel.prompt = L10n.text("导出")
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "surface-configuration.json"
         panel.canCreateDirectories = true
@@ -439,9 +443,9 @@ final class ConsoleViewModel: ObservableObject {
         guard response == .OK, let url = panel.url else { return }
         do {
             try exportConfiguration(to: url)
-            notice = ConsoleNotice(level: .info, text: "配置已导出，不含实体映射。")
+            notice = ConsoleNotice(level: .info, text: L10n.text("配置已导出，不含实体映射。"))
         } catch {
-            notice = ConsoleNotice(level: .error, text: "配置导出失败：\(error.localizedDescription)")
+            notice = ConsoleNotice(level: .error, text: L10n.text("配置导出失败：\(error.localizedDescription)"))
         }
     }
 
@@ -452,19 +456,22 @@ final class ConsoleViewModel: ObservableObject {
         case let .sourceChanged(source):
             switch source {
             case .mock:
-                notice = ConsoleNotice(level: .info, text: "已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。")
+                notice = ConsoleNotice(level: .info, text: L10n.text("已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。"))
             case .hardware:
                 notice = connection.isConnected
-                    ? ConsoleNotice(level: .info, text: "已切换到实体 BCR2000，软件状态已整体回写。")
-                    : ConsoleNotice(level: .warning, text: "已切换到实体模式，但尚未找到 BCR2000 Port 1。")
+                    ? ConsoleNotice(level: .info, text: L10n.text("已切换到实体 BCR2000，软件状态已整体回写。"))
+                    : ConsoleNotice(level: .warning, text: L10n.text("已切换到实体模式，但尚未找到 BCR2000 Port 1。"))
             }
         case let .connected(snapshot):
             if source == .hardware {
-                notice = ConsoleNotice(level: .info, text: "已连接 \(snapshot.connectedSource ?? "BCR2000")，软件状态已整体回写。")
+                notice = ConsoleNotice(
+                    level: .info,
+                    text: L10n.text("已连接 \(snapshot.connectedSource ?? "BCR2000")，软件状态已整体回写。")
+                )
             } else {
                 notice = ConsoleNotice(
                     level: .info,
-                    text: "检测到 \(snapshot.connectedSource ?? "BCR2000")。当前仍在 Mock 模式，实体输入只记录不执行。",
+                    text: L10n.text("检测到 \(snapshot.connectedSource ?? "BCR2000")。当前仍在 Mock 模式，实体输入只记录不执行。"),
                     action: .switchToHardware
                 )
             }
@@ -477,20 +484,21 @@ final class ConsoleViewModel: ObservableObject {
         case let .learningInterruptedByConfiguration(control):
             let previous = notice?.text ?? ""
             notice = ConsoleNotice(level: notice?.level ?? .info,
-                                   text: previous + " 配置替换已停止 \(control.shortName) 的学习。", action: notice?.action)
+                                   text: previous + L10n.text(" 配置替换已停止 \(control.shortName) 的学习。"),
+                                   action: notice?.action)
         case let .learned(control, midi, next):
             selectedControl = next ?? control
             notice = ConsoleNotice(level: .info, text: next.map {
-                "\(control.shortName) = \(midi)。下一个：请操作 \($0.shortName)。"
-            } ?? "\(control.shortName) = \(midi)。本区已全部学习，学习结束。")
+                L10n.text("\(control.shortName) = \(midi)。下一个：请操作 \($0.shortName)。")
+            } ?? L10n.text("\(control.shortName) = \(midi)。本区已全部学习，学习结束。"))
         case let .learnRejected(_, error):
             notice = ConsoleNotice(level: .warning, text: error.localizedDescription)
         case let .failed(operation, message):
             let prefix: String
             switch operation {
-            case .feedback: prefix = "反馈发送失败"
-            case .hardwareMapPersistence: prefix = "硬件映射保存失败"
-            case .configurationPersistence: prefix = "功能配置保存失败"
+            case .feedback: prefix = L10n.text("反馈发送失败")
+            case .hardwareMapPersistence: prefix = L10n.text("硬件映射保存失败")
+            case .configurationPersistence: prefix = L10n.text("功能配置保存失败")
             }
             notice = ConsoleNotice(level: .error, text: "\(prefix)：\(message)",
                                    action: operation == .configurationPersistence ? .retryConfigurationSave : nil)

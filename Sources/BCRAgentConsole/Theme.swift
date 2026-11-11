@@ -30,9 +30,9 @@ func stateColor(_ state: AgentRunState) -> Color {
 
 func primaryActionTitle(_ state: AgentRunState) -> String {
     switch state {
-    case .waitingApproval: "批准"
-    case .queued, .running: "中断"
-    case .idle, .completed, .interrupted, .error: "启动"
+    case .waitingApproval: L10n.text("批准")
+    case .queued, .running: L10n.text("中断")
+    case .idle, .completed, .interrupted, .error: L10n.text("启动")
     }
 }
 
