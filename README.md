@@ -249,3 +249,6 @@ git diff --check
 | 协作 | [开发规范](CONTRIBUTING.md) · [路线图](ROADMAP.md) · [TODO](TODO.md) · [Agent 指南](AGENTS.md) |
 
 历史工作包与一次性交接见 [封存索引](docs/archive/README.md)。后续工作的顺序与状态以 [TODO](TODO.md) 为准。
+
+Codex 进程管理已补基础生命週期回归：未启动及启动失败后的读取返回 EOF，失败后可重试；
+标准输入输出、重复启动拒绝、停止释放等待读取与重新启动均有测试。App 当前仍使用 Mock Agent。

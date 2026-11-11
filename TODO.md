@@ -71,10 +71,10 @@ App 与工具只发送只读查询 SysEx，不改写设备 Preset，不回放备
 
 App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在 `BCRAgentCore` 完成，
 但 `BCRAgentConsole` 尚未引用任何 Codex 类型（App 仍只跑 Mock Agent），
-`CodexProcessSupervisor` 也没有测试。剩余：
+`CodexProcessSupervisor` 已补启动失败、标准输入输出回路、重复启动、停止和重启测试。剩余：
 
 - [ ] P0-S5 把 Codex 会话接入 App：依赖注入、Mock / Codex 切换与可见的失败状态；
-  补 `CodexProcessSupervisor` 测试。
+  继续补异常退出、自动重启与超时强制停止测试。
 - [ ] P0-S4 基础集成与稳定性
   - [ ] 关键集成测试：`mock app-server` + 真实 `swift test` 的 protocol/integration 覆盖
   - [ ] App Server 异常路径：提前退出、乱序响应、重复请求、错误响应、Malformed JSONL

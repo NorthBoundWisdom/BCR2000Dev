@@ -92,7 +92,7 @@ public actor CodexProcessSupervisor {
     private var config: CodexProcessSupervisorConfig?
 
     private var isStopping = false
-    private var isClosed = false
+    private var isClosed = true
     private var currentGeneration = 0
     private var restartCount = 0
 
@@ -145,7 +145,13 @@ public actor CodexProcessSupervisor {
         restartCount = 0
         currentGeneration += 1
 
-        try await launch(for: currentGeneration)
+        do {
+            try await launch(for: currentGeneration)
+        } catch {
+            isClosed = true
+            cleanup()
+            throw error
+        }
     }
 
     public func stop() async {
