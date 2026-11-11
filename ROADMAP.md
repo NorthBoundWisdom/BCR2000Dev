@@ -32,16 +32,16 @@
 | R3 精度与编码器模式 | P1 | 机械臂关节可精调：相对模式、14-bit、加速度 |
 | R4 功能系统 | P1 | 每个控件可配置更丰富的功能：步进、页面/层、宏、配置导入导出 |
 | R5 外部系统适配 | P1 | 参数双向连接机械臂或仿真（OSC / WebSocket / ROS 2），带安全门 |
-| R6 Agent / Codex | P2 | 把 Mock Agent 替换为 `codex app-server` adapter（沿用 TODO 中 P0-S4、M6） |
+| R6 Agent / Codex | P2 | 把 Mock Agent 替换为 `codex app-server` adapter（沿用 TODO 中 P0-S4） |
 | R7 发布 | P2 | 公证发布、macOS 14 真机安装验收 |
 
 R1、R2 是后续所有工作的前提。R8 只依赖 R2 的会话层与反馈调度，可以在无真机时完成，
 并作为之后每轮验收的自动化入口。R3 与 R5 可以并行；R4 依赖 R2 的效果管线稳定。
 R5 的安全门同时约束硬件、滑块和 MCP 三种来源的写入。
 
-无真机阶段已完成 WP1、WP3–WP7；WP2 移到实机测量之后。当前执行顺序（细项见 TODO.md A–E）：
-审查修正并推送 → R1 实机验证（HW0–HW6）→ 按实测修正 Mock 与引擎 → OSC 幂等帧、相对模式余量、
-WP2 反馈调度 → 页面/层、宏、WebSocket/ROS、Codex、发布。
+无真机阶段已完成 WP1、WP3–WP7 及审查修正；WP2 移到实机测量之后。当前执行顺序（细项见 TODO.md 1–6）：
+R1 实机验证（HW0–HW6）→ 按实测修正 Mock 与引擎 → WP2 反馈调度与 MCP 推送 →
+Codex（可并行）→ 发布 → 页面/层、宏、WebSocket/ROS。
 
 ---
 
@@ -140,7 +140,7 @@ WP2 反馈调度 → 页面/层、宏、WebSocket/ROS、Codex、发布。
 
 ## R6 Agent / Codex（P2）
 
-沿用 [TODO.md](TODO.md) 中的 P0-S4 与 M6：`codex app-server` 集成测试、异常路径、
+沿用 [TODO.md](TODO.md) 中的 P0-S4：`codex app-server` 集成测试、异常路径、
 Stop All 与重连一致性。Agent 继续作为一种控件功能（`agentPrimaryAction`）存在，不再
 单独占用映射。
 
