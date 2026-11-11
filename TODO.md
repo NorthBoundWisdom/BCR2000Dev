@@ -3,6 +3,9 @@
 > 阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 > 本文只保留未完成事项；已完成事项见 git 历史与 `docs/` 下的交接、实测记录。
 
+通用领域隔离与外部设备/模拟器供应方接口的新增需求见 [领域与接口 TODO](TODO_DOMAIN_INTERFACES.md)。
+该文档用于职责、合同与验收范围评审，不代表这些能力已实现，也不自动启动全部开发。
+
 状态（截至 2026-11-11）：
 
 - 仓库整理 Z2–Z6 已完成；六项隔离 Mock UI 验收均通过，入口见 [原生 UI 验收](docs/UI_ACCEPTANCE.md)。
