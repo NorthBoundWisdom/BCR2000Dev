@@ -9,6 +9,14 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
     #if DEBUG
         var snapshotModel: ConsoleViewModel?
     #endif
+    private static func newWindowCommand(in menu: NSMenu) -> NSMenuItem? {
+        for item in menu.items {
+            if item.keyEquivalent == "n", item.keyEquivalentModifierMask == .command { return item }
+            if let submenu = item.submenu, let found = newWindowCommand(in: submenu) { return found }
+        }
+        return nil
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
@@ -20,7 +28,15 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         Task { @MainActor in
             let deadline = Date().addingTimeInterval(25)
+            var requestedWindow = false
             while Date() < deadline {
+                if NSApp.windows.isEmpty, !requestedWindow, let menu = NSApp.mainMenu,
+                   let command = Self.newWindowCommand(in: menu), let owner = command.menu,
+                   command.isEnabled
+                {
+                    owner.performActionForItem(at: owner.index(of: command))
+                    requestedWindow = true
+                }
                 if let window = NSApp.windows.first(where: { $0.canBecomeMain && $0.contentView != nil }),
                    let view = window.contentView
                 {
@@ -73,7 +89,7 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                 "main=\($0.canBecomeMain), visible=\($0.isVisible), frame=\($0.frame), content=\(String(describing: $0.contentView))"
             }.joined(separator: "\n")
             FileHandle.standardError.write(Data(
-                "Native startup timed out before displaying a window. active=\(NSApp.isActive) windows=\(NSApp.windows.count)\n\(windows)\n"
+                "Native startup timed out before displaying a window. active=\(NSApp.isActive) windows=\(NSApp.windows.count) requestedWindow=\(requestedWindow) menu=\(String(describing: NSApp.mainMenu))\n\(windows)\n"
                     .utf8
             ))
             Darwin.exit(2)
