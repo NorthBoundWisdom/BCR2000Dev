@@ -93,7 +93,7 @@ struct AgentBackendStatusView: View {
     }
 }
 
-/// Mounted in the main window so a physical review intent works from every workspace tab.
+/// Keep an explicitly opened UI review attached to the main window across workspace tabs.
 struct CodexApprovalPresentation: View {
     @ObservedObject var controller: CodexAgentController
     var body: some View {
