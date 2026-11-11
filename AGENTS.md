@@ -6,7 +6,10 @@
 - GUI and headless hosts share versioned MCP/HTTP/SSE provider contracts on IPv4 loopback; consumer business logic remains outside this repository.
 - Scope and dependency direction are recorded in `docs/adr/0001-provider-domain-boundaries.md`; real actuator connections and public releases remain separately authorized.
 - The current product milestone is a SwiftUI/CoreMIDI MVP with a deterministic Mock Agent.
-- `BCRFoundation` contains shared value contracts and localization; `BCRSurfaceDomain`, `BCRAgentDomain`, `BCRRobotDomain`, and `BCRChassisDomain` own independent domain state.
+- `BCRFoundation` contains host value contracts/localization. `BCRSurfaceDomain`, `BCRRobotDomain`, and `BCRChassisDomain` own independent state. Shared `AgentPlugin` owns Mock Agent state/timing; `BCRAgentDomain` is a compatibility projection (shared state alias, legacy Date/name/Codable/errors), with transition policy delegated to the shared machine.
+- `SurfacePlugins` is a separate MIT package, not a clone of this host. Depend on the exact `0.1.0` git version; `SURFACE_PLUGINS_PATH` selects an authorized local checkout. It has no host/device/localization assumptions. See `docs/SHARED_PLUGINS.md`.
+- `BCRPluginHost` owns explicit transactional composition and MainActor time driving. `BCRConfigurationAdapter` owns old binding translation, legacy feedback API extensions and BCR indicator presentation. Both GUI and headless composition inject neutral bindings; the surface engine stores feedback only by `IndicatorID`.
+- Workspace D8 retains `agentPrimaryAction`, `triggerAgent`, `onTriggerAgent` and uninjected legacy fallback for old enum patterns. Production routes generic `triggerAction`. External exhaustive `SurfaceEffect` switches must add the new case; old disk JSON and Provider 1.0 remain unchanged.
 - `BCRCodexAdapter`, `BCRCoreMIDIDriver`, persistence, MCP and HTTP/SSE are outer adapters. `BCRProviderApplication` owns explicit composition, not transport or UI.
 - `BCRAgentCore` is a source-compatibility export facade only; new domains must not import it. Run `python3 configs/check_domain_boundaries.py` to enforce direction.
 - `BCRAgentConsole` is the GUI composition host; `BCRProviderService` is the headless host. Both use the same domain and application services.
@@ -24,6 +27,7 @@
 - Develop and verify only in the `main` working tree: no branches, no `git worktree`, no extra clones
   (unless the user explicitly asks). After each verified change, commit with a Conventional Commit
   message and push to `origin/main`; never force-push `main`.
+- During the authorized shared-plugin integration, the parent workspace D6 overrides automatic pushing: one local commit per task, no push/tag/remote creation. Publishing the planned dependency version remains the user's decision.
 - The working tree may be shared with other developers/agents: check `git status` first and never
   overwrite, stash, reset, or commit someone else's uncommitted changes without confirming.
 - Version tags and releases are created or pushed only when explicitly requested.
@@ -39,6 +43,10 @@ python3 configs/macos_workflow.py run
 ```
 
 Focused checks:
+
+Before the shared remote version is published, set `SURFACE_PLUGINS_PATH=../SurfacePlugins` in the shell
+for direct Swift/check commands, or in ignored `build.local.json` for `macos_workflow.py` build/test.
+No absolute paths or local dependency override is committed to the package manifest.
 
 ```bash
 python3 -m compileall -q configs

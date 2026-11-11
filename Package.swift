@@ -32,7 +32,9 @@ let package = Package(
     dependencies: [surfacePlugins],
     targets: [
         .target(name: "BCRFoundation", resources: [.process("Resources")]),
-        .target(name: "BCRAgentDomain", dependencies: ["BCRFoundation"]),
+        .target(name: "BCRAgentDomain", dependencies: [
+            "BCRFoundation", .product(name: "AgentPlugin", package: "SurfacePlugins")
+        ]),
         .target(name: "BCRPluginHost", dependencies: [
             "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "BCRConfigurationAdapter",
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
@@ -63,7 +65,7 @@ let package = Package(
         .target(name: "BCROutputDomain", dependencies: ["BCRFoundation"]),
         .target(name: "BCRExamples", dependencies: ["BCRFoundation", "BCRSurfaceDomain"]),
         .target(name: "BCRConfigurationAdapter", dependencies: [
-            "BCRFoundation", "BCRSurfaceDomain", "BCRExamples",
+            "BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRAgentDomain",
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
         ]),
         .target(

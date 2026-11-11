@@ -65,7 +65,9 @@ GUI 通过 `--robot-sim` / `--chassis-sim` 显式启用可选模块，默认不�
 
 ## 快速开始
 
-需要 macOS 14+ 与 Swift 6 工具链；构建不依赖第三方包。
+需要 macOS 14+ 与 Swift 6 工具链；Mock Agent 依赖同源共享包 `SurfacePlugins` 的精确 `0.1.0`。
+远端版本尚未发布，当前从已有并列工作副本构建，先在 shell 设置 `export SURFACE_PLUGINS_PATH=../SurfacePlugins`
+（或给工作流配置 ignored `build.local.json`）。依赖、时序与旧 API 边界见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 
 ```bash
 python3 configs/setup_local_project.py   # 首次：生成本机配置并启用提交钩子

@@ -1,25 +1,14 @@
 import BCRFoundation
 import Foundation
 
-public enum AgentRunState: String, CaseIterable, Codable, Sendable {
-    case idle
-    case queued
-    case running
-    case waitingApproval
-    case completed
-    case interrupted
-    case error
+import enum AgentPlugin.AgentRunState
+import struct AgentPlugin.AgentStateMachine
 
-    public var isActive: Bool {
-        switch self {
-        case .queued, .running, .waitingApproval:
-            true
-        case .idle, .completed, .interrupted, .error:
-            false
-        }
-    }
+/// Source-compatible name for the shared plugin state. Presentation stays in the host.
+public typealias AgentRunState = AgentPlugin.AgentRunState
 
-    public var displayName: String {
+public extension AgentRunState {
+    var displayName: String {
         switch self {
         case .idle: L10n.text("空闲")
         case .queued: L10n.text("排队中")
@@ -30,21 +19,9 @@ public enum AgentRunState: String, CaseIterable, Codable, Sendable {
         case .error: L10n.text("错误")
         }
     }
-
-    /// A single 7-bit value that can drive either a BCR2000 button LED or encoder ring.
-    public var feedbackValue: UInt8 {
-        switch self {
-        case .idle: 0
-        case .queued: 40
-        case .running: 127
-        case .waitingApproval: 96
-        case .completed: 72
-        case .interrupted: 20
-        case .error: 8
-        }
-    }
 }
 
+/// Legacy Codable projection: names, localized text and Date belong to the host.
 public struct AgentSlot: Identifiable, Equatable, Codable, Sendable {
     public let id: AgentSlotID
     public var name: String
@@ -90,6 +67,8 @@ public enum AgentStateMachineError: Error, Equatable, LocalizedError, Sendable {
     }
 }
 
+/// Legacy Date-based compatibility facade only. Production Mock state is AgentPlugin.
+/// It retains old snapshots/errors and delegates transition policy to the shared machine.
 public struct AgentStateMachine: Sendable {
     public private(set) var slots: [AgentSlot]
 
@@ -158,28 +137,6 @@ public struct AgentStateMachine: Sendable {
     }
 
     public static func allows(from oldState: AgentRunState, to newState: AgentRunState) -> Bool {
-        if oldState == newState {
-            return true
-        }
-        if newState == .error {
-            return true
-        }
-
-        return switch (oldState, newState) {
-        case (.idle, .queued),
-             (.completed, .queued),
-             (.interrupted, .queued),
-             (.error, .queued),
-             (.queued, .running),
-             (.queued, .interrupted),
-             (.running, .waitingApproval),
-             (.running, .completed),
-             (.running, .interrupted),
-             (.waitingApproval, .running),
-             (.waitingApproval, .interrupted):
-            true
-        default:
-            false
-        }
+        AgentPlugin.AgentStateMachine.allows(from: oldState, to: newState)
     }
 }

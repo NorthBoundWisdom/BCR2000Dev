@@ -1,6 +1,6 @@
 # ADR 0001：独立领域与供应方接口
 
-日期：2026-11-11。状态：范围决定已由用户确认；实现与逐项证据随 `TODO_DOMAIN_INTERFACES.md` 更新。
+日期：2026-11-12。状态：范围决定已由用户确认；实现与逐项证据随 `TODO_DOMAIN_INTERFACES.md` 更新。
 
 ## 用户确认的范围（G01–G05）
 
@@ -14,31 +14,48 @@
 
 ## 依赖与职责
 
-共享模块只承载 JSON、标识、时间/来源合同和本地化等基础类型。控制台、Agent、机器人和底盘
-分别拥有状态、生命周期、错误和测试；机器人/底盘实现不依赖控制台参数、MIDI 或 Agent。
-具体 Agent 后端、设备驱动、MCP、持久化及 UI 均属于适配器或应用装配。
+`BCRFoundation` 承载宿主 JSON/标识/本地化。独立 `SurfacePlugins` 包的合同和插件仅依赖 Foundation，
+不含平台、设备、本地化、套接字或真实后端。`AgentPlugin` 是唯一 Mock 七态/时序实现；
+`BCRAgentDomain` 仅保留共享状态 alias 与 Date/name/Codable/旧错误兼容投影，转换允许规则委托共享状态机。
+机器人和底盘仍拥有独立的本仓库领域状态（后续M2再迁），不依赖控制台参数、MIDI 或 Agent。
 
 ```mermaid
 flowchart BT
-  Foundation[共享合同与基础类型]
-  Surface[控制台领域] --> Foundation
-  Agent[Agent 领域] --> Foundation
-  Robot[机器人模拟领域] --> Foundation
-  Chassis[底盘模拟领域] --> Foundation
-  Codex[具体 Agent 后端适配] --> Agent
-  Driver[CoreMIDI 驱动适配] --> Surface
-  Application[应用服务与显式装配] --> Surface
-  Application --> Agent
-  Application --> Robot
-  Application --> Chassis
-  MCP[MCP / HTTP / SSE 适配] --> Application
-  GUI[GUI 宿主] --> Application
-  Service[无界面宿主] --> MCP
+  Contracts[SurfacePluginContracts]
+  SharedAgent[AgentPlugin] --> Contracts
+  Foundation[BCRFoundation 宿主基础]
+  Surface[BCRSurfaceDomain] --> Foundation
+  Surface --> Contracts
+  Compat[BCRAgentDomain 兼容投影] --> SharedAgent
+  Compat --> Foundation
+  Config[BCRConfigurationAdapter 绑定翻译与设备呈现] --> Surface
+  Config --> Compat
+  Config --> Contracts
+  Host[BCRPluginHost 事务组合与MainActor时钟] --> SharedAgent
+  Host --> Config
+  Codex[BCRCodexAdapter 真实进程与审批] --> Compat
+  Application[ProviderApplication 显式装配] --> Surface
+  Application --> Robot[机器人模拟领域]
+  Application --> Chassis[底盘模拟领域]
+  GUI[GUI组合根] --> Host
+  GUI --> Application
+  Service[无界面组合根] --> Config
+  Service --> Application
 ```
 
-模块以 Swift target 和依赖检查落实。先拆 Agent/具体后端及共享类型，再拆控制台与外围设施。
-旧 `BCRAgentCore` 可保留为兼容导出入口，新领域不得反向依赖该兼容入口。
-历史配置兼容逻辑属于明确的迁移适配器；机械臂示例与旧示例参数保护不作为通用领域常量。
+生产 GUI 和无界面 console Session 均注入配置适配器的中性动作/指示绑定，引擎只派发 `ActionReference`，
+反馈storage只按 `IndicatorID`。旧 `agentPrimaryAction` 磁盘表示/保护规则和 Provider 1.0 合同不变。
+设备呈现的七位值、旧反馈API、命名空间翻译留配置适配器，Quick Learn、映射、调度、反馈最终发送边界仍在宿主。
+
+工作区 D8 为源码兼容保留旧 `ControlTarget.agentPrimaryAction`、`SurfaceEffect.triggerAgent`、
+`onTriggerAgent` 及未注入映射时的legacy fallback；它们不是生产业务路径。
+新增 `triggerAction` 后，外部无default穷举旧 `SurfaceEffect` 的switch需增加case；旧成员构造、pattern、方法行为保持，
+不声称所有消费者源码零修改。此窄例外避免复制整个配置/引擎/会话。
+`BCRAgentCore` 继续作为兼容导出入口，新领域不得依赖它。完整依赖/兼容与验证边界见 [共享插件接入](../SHARED_PLUGINS.md)。
+
+共享包是授权的独立仓库，不是额外宿主clone；清单git精确版本，本地仅用环境覆盖。
+联调期间每任务本地提交、不push/tag/创建远端，远端发布时机由用户决定。
+历史配置迁移属于适配器；机械臂示例与旧示例保护不作为通用领域常量。
 
 ## 状态隔离
 

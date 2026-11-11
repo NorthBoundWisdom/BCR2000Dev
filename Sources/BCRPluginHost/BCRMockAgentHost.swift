@@ -6,21 +6,6 @@ import BCRSurfaceDomain
 import Foundation
 import SurfacePluginContracts
 
-/// Device presentation lives in this adapter, never in the shared plugin.
-public enum BCRIndicatorPresentation {
-    public static func value(for semantic: IndicatorSemantic) -> UInt8 {
-        switch semantic {
-        case .idle: 0
-        case .queued: 40
-        case .active: 127
-        case .attention: 96
-        case .done: 72
-        case .stopped: 20
-        case .fault: 8
-        }
-    }
-}
-
 /// Explicit composition of the Mock plugin. Codex processes and approvals remain in the App.
 @MainActor
 public final class BCRMockAgentHost {
@@ -48,12 +33,9 @@ public final class BCRMockAgentHost {
     public var slots: [BCRAgentDomain.AgentSlot] {
         get throws {
             try plugin().slots.map { slot in
-                guard let state = BCRAgentDomain.AgentRunState(rawValue: slot.state.rawValue) else {
-                    throw PluginError(code: .unsupported, fields: ["state": .string(slot.state.rawValue)])
-                }
-                return BCRAgentDomain.AgentSlot(
+                BCRAgentDomain.AgentSlot(
                     id: AgentSlotID(slot.id), name: "Agent \(slot.id)",
-                    state: state,
+                    state: slot.state,
                     progress: slot.progress, statusText: Self.statusText(slot.statusKey),
                     lastUpdated: Date(timeIntervalSince1970: epoch + slot.lastUpdated)
                 )
@@ -120,7 +102,6 @@ public final class BCRMockAgentHost {
                           let index = projection.firstIndex(where: { $0.id.rawValue == id }),
                           let rawState = event.fields["state"]?.stringValue,
                           let state = BCRAgentDomain.AgentRunState(rawValue: rawState),
-                          let semantic = SharedAgentRunState(rawValue: rawState)?.indicatorSemantic,
                           let progress = event.fields["progress"]?.finiteNumber,
                           let key = event.fields["statusKey"]?.stringValue,
                           let time = event.fields["time"]?.finiteNumber
@@ -130,7 +111,10 @@ public final class BCRMockAgentHost {
                     projection[index].statusText = Self.statusText(key)
                     projection[index].lastUpdated = Date(timeIntervalSince1970: epoch + time)
                     lastPublished = projection
-                    onUpdate?(projection, [projection[index].id: BCRIndicatorPresentation.value(for: semantic)])
+                    onUpdate?(
+                        projection,
+                        [projection[index].id: BCRIndicatorPresentation.value(for: state.indicatorSemantic)]
+                    )
                 }
             }
             let slots = try slots

@@ -248,7 +248,7 @@ public struct SurfaceEngine: Sendable {
             .flatMap { setParameter($0.id, to: $0.defaultValue, at: now) }
     }
 
-    /// Records an agent slot's LED value and writes it to every control bound to that slot.
+    /// Associates a host-declared semantic indicator with a persisted target.
     public mutating func bindIndicator(_ indicator: IndicatorID, to target: ControlTarget) {
         pluginBindings.indicators[target] = indicator
     }

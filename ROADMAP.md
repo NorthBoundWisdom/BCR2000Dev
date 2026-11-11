@@ -1,6 +1,6 @@
 # BCR Console 后续开发计划
 
-> 更新：2026-11-11。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
+> 更新：2026-11-12。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
 > 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的历史任务说明见
 > [封存开发任务](docs/archive/DEV_PROMPT.md)（WP1–WP7，不作为当前待办）。
 
@@ -10,11 +10,16 @@
 只开放回环 MCP/HTTP/SSE。代码、合同与黑盒交付按 [领域 TODO](TODO_DOMAIN_INTERFACES.md) 和
 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md) 验证；未测实体行为与既有 R1 待办保持分开。
 
+BCR 已接入 `SurfacePlugins` Agent：共享七态/注入时间，控制台引擎与硬件适配留本仓库。
+BCR 旧配置和 Provider 1.0 保持兼容，XTouch 接入与跨宿主 M1 验收尚待完成。
+当前远端版本未发布，仅本地提交；详见 [共享插件接入](docs/SHARED_PLUGINS.md)。
+
 ## 当前基线
 
 - 现行文档与历史交接已分离；六项隔离 Mock 的 [原生 UI 验收](docs/UI_ACCEPTANCE.md) 全部通过。
 - 108 个物理控件模型（`BCRLayout`）、实体学习映射（`HardwareMap`）、功能分配与参数
-  （`SurfaceConfiguration`）、双向同步引擎（`SurfaceEngine`）均在 `BCRAgentCore`，有单元测试。
+  （`SurfaceConfiguration`）、双向同步引擎（`SurfaceEngine`）位于 `BCRSurfaceDomain`，
+  `BCRAgentCore` 保留兼容导出，有单元测试。
 - `MockBCR2000` 模拟 U-1 模式行为；虚拟面板在 Mock 下即硬件，在实体模式下为镜像。
 - 首次启动载入中性“默认配置”（8 个通用参数 + 8 个 Mock Agent + 复位）；“机械臂示例”
   （6 关节 + 夹爪 + 速度 + 使能 + 复位）改为从“载入预置…”显式载入，集成测试仍以它为基线。

@@ -1,17 +1,17 @@
 # 领域接口与共享业务插件 TODO
 
-日期：2026-11-11。本文合并了原《通用领域隔离与对外能力接口 TODO》和《共享领域包与宿主插件化草案》
+日期：2026-11-12。本文合并了原《通用领域隔离与对外能力接口 TODO》和《共享领域包与宿主插件化草案》
 （`DRAFT_SHARED_DOMAIN_PLATFORM.md`，已被本文取代）。
 
 - **第一部分（已交付）**：本仓库的供应方接口与领域隔离。43 项中 41 项完成，C03、C05 等待实体 BCR 复验。
-- **第二部分（待开工）**：共享业务插件。最终目标是 BCR2000Dev 与 XTouchCompactDev 共用同一套业务插件。
-  尚未创建仓库、未移动源码。
+- **第二部分（BCR Agent 已接入）**：共享包合同和 Agent 已实现，BCR B0–B2 已审查通过；B3 为兼容与文档收敛。
+  XTouch 接入本轮暂停，跨宿主 M1、远端版本发布和 M2/M3 未完成。工作区总指导是决定与排期的权威。
 
 范围决定见 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md)，能力盘点见
 [供应方能力盘点](docs/provider-capability-inventory.md)，既有待办与实机记录见 [TODO.md](TODO.md)、
 [ROADMAP.md](ROADMAP.md)。
 
-编号：第一部分使用 G / DM / I / C / RB / V / A / M；第二部分使用 P（前置决定）、S（阶段任务）、X（验收）。
+编号：第一部分使用 G / DM / I / C / RB / V / A / M；第二部分使用 D/U（工作区已定事项/用户待办）、S（阶段任务）、X（验收）。
 这些前缀与 ROADMAP 的 R1–R8、TODO 的 D3 / HW 无关。
 
 ---
@@ -80,7 +80,7 @@
    放在最前面抽离。两个引擎差别很大：BCR 有 108 个控件、Quick Learn、相对编码、14 位 NRPN、页面与宏、
    反馈调度；XTouch 有 A/B 层、触摸所有权、电机门禁、观测失效。合并引擎风险最高，
    而且共用插件并不需要它。引擎、绑定配置、反馈调度留在各自宿主；是否共享留到 S6 评估。
-2. **只统一参数的“定义与取值规则”。** 插件需要声明参数，所以参数描述和量化规则必须一致（见 P03）。
+2. **只统一参数的“定义与取值规则”。** 插件需要声明参数，所以参数描述和量化规则必须一致（见 D3）。
    这比共享整个引擎小得多，也足够。
 3. **补上原草案缺失的宿主—插件接口。** 原草案的 `ResourceService` 提供“领域类型化命令”，
    这要求宿主认识每个领域的类型，等于每加一个插件就要改两个宿主。本文定义统一的控制台面
@@ -104,14 +104,14 @@
 | --- | --- | --- | --- |
 | 参数 ID | `ParameterID` 结构体，JSON 为单个字符串 | `String` | 类型化 ID，JSON 仍为单个字符串，两端旧文件可读 |
 | 参数种类 | `kind: continuous / toggle` | `isSwitch: Bool` | `kind` 枚举 |
-| 步长 | `step: Double?`，网格以 0 为锚点，平分时取较小值 | `step: Double`（0 表示无），网格以 `minimum` 为锚点，`.rounded()` | 见 P03 |
+| 步长 | `step: Double?`，网格以 0 为锚点，平分时取较小值 | `step: Double`（0 表示无），网格以 `minimum` 为锚点，`.rounded()` | 见 D3 |
 | 默认值 | 缺省为 `minimum` | 缺省为 0 | 描述中必须显式给出 |
 | 写入保护 | `agentWritable` + `externallyProtected` | 仅 `agentWritable` | 两个字段都保留 |
 | Agent 状态 | 7 种（含 queued、error），状态机校验转换 | 5 种，另有 `approved` 标志 | 采用 7 种状态机 |
-| Agent 指示 | `feedbackValue: UInt8`（0/40/127/96/72/20/8），写在领域模型里 | `ButtonLight` off/on/blink | 插件给语义状态，设备适配器决定呈现 |
-| 槽位 | `AgentSlotID` 用 `precondition` 限定 1…8，位于 `BCRFoundation` | 配置校验限定 1…8 | 数量由插件配置给出，越界返回错误而不是崩溃 |
-| Mock 时间线 | `Task.sleep` 驱动，位于 App 层 | `advance(to:)` 注入时间，位于 Core | 注入时间 |
-| 触发方式 | `SurfaceEffect.triggerAgent`、`ControlTarget.agentPrimaryAction` | `ParameterAction.agent(Int)`，`receive` 返回槽位号 | 统一为带命名空间的动作引用 |
+| Agent 指示 | 同值兼容属性已移设备适配扩展，状态alias共享 | `ButtonLight` off/on/blink | 插件给语义状态，设备适配器决定呈现 |
+| 槽位 | `AgentSlotID` legacy类型留基础层；checked构造/插件边界抛错，无precondition | 配置校验限定 1…8 | 数量由插件配置给出，越界返回错误而不是崩溃 |
+| Mock 时间线 | 已迁共享 `AgentPlugin.advance`；MainActor宿主单调时钟驱动 | `advance(to:)` 注入时间，位于 Core | 注入时间 |
+| 触发方式 | 生产通用 `triggerAction`；旧case按D8仅兼容 | `ParameterAction.agent(Int)`，`receive` 返回槽位号 | 统一为带命名空间的动作引用 |
 | 本地化 | 领域模型直接调用 `L10n.text`，资源在 `BCRFoundation` | 独立本地化模块，Core 不含文案 | 共享包只给稳定键与代码，文案由宿主提供 |
 | 错误 | `ProviderDomainError(code, message)` 与本地化枚举并存 | 枚举 | 稳定代码加结构化字段 |
 | 并发模型 | `@MainActor final class` 加观察者 | `Sendable` 值类型 | 值类型 |
@@ -120,24 +120,21 @@
 | 输出与安全门 | `BCROutputDomain`：OSC、JSON 链路、`MotionSafetyGate` | `OSC.swift` 内的 `OSCCodec`、`MotionSafetyGate` | S4 对照后合并为一个插件核心 |
 | 装配 | `ProviderApplication` 按 `domain: String` 硬编码机器人与底盘 | `ConsoleModel` 直接持有 `MockAgents` | 组合根注册，运行器不写 `switch domain` |
 
-另外两点与流程有关：
-
-- XTouch 工作区目前有未提交改动（`CompactSession.swift`、`ConsoleModel.swift` 等 5 个文件，另有 2 个未跟踪文件），
-  本地 `main` 领先远端 5 个提交。S3 要改 `CompactSession.swift`，开工前需要先让那些改动落地或确认归属。
-- XTouch 的 `AGENTS.md` 规定“没有明确需求前不加外部运行时依赖”；BCR 的 `AGENTS.md` 规定不建分支、不建额外克隆。
-  共享包是新仓库，两条规则都需要按 P01 的结论更新后才能提交依赖。
+当前协作边界：XTouch 因用户待处理的旧检出改动而暂停，本仓库不读写旧检出；是否带入由用户决定。
+两个宿主不依赖彼此源码。共享包是独立仓库；已授权的本地路径覆盖不属于额外宿主 clone。
+BCR 本阶段每任务本地提交，不推送/标签/远端创建，覆盖原默认提交后推送规则。
 
 ## 4. 架构
 
 ```mermaid
 flowchart TB
     subgraph Kit[共享包]
-        PC[PluginContracts]
+        PC[SurfacePluginContracts]
         AP[AgentPlugin] --> PC
         RP[RobotPlugin] --> PC
         CP[ChassisPlugin] --> PC
         OP[ParameterOutputPlugin] --> PC
-        CT[PluginConformance 测试支持] --> PC
+        CT[SurfacePluginConformance 测试支持] --> PC
     end
     subgraph BCR[BCR 宿主]
         BH[插件宿主适配] --> BE[BCR 控制台引擎与设备适配]
@@ -155,9 +152,9 @@ flowchart TB
 
 | 归属 | 包含 | 不包含 |
 | --- | --- | --- |
-| `PluginContracts` | 插件清单、参数描述与取值规则、动作与指示灯描述、输入/更新类型、来源、结构化错误、JSON 值 | 控件布局、MIDI、领域状态、本地化资源、可变全局状态 |
+| `SurfacePluginContracts` | 插件清单、参数描述与取值规则、动作与指示灯描述、输入/更新类型、来源、结构化错误、JSON 值 | 控件布局、MIDI、领域状态、本地化资源、可变全局状态 |
 | 各业务插件 | 本领域状态机、命令、快照、参考模型 | 其他插件、宿主类型、平台框架、套接字、文件路径 |
-| `PluginConformance` | 所有插件和两个宿主共同运行的一致性检查 | 产品代码不依赖它 |
+| `SurfacePluginConformance` | 所有插件和两个宿主共同运行的一致性检查 | 产品代码不依赖它 |
 | BCR 设备适配 | 实体布局、Quick Learn、编码器模式、反馈编码与调度、原生诊断、设备 Mock | 不因迁移改变已学习映射，不猜设备预设 |
 | XTouch 设备适配 | 出厂 Standard MIDI 映射、层、触摸、电机、灯光编码、设备 Mock | 保留触摸禁驱动、显式召回、观测失效规则 |
 | 两个宿主各自 | 控制台引擎与绑定配置、插件宿主适配、GUI、偏好、Keychain、路径、日志、打包、具体 Agent 后端进程 | 不进入共享包 |
@@ -181,7 +178,7 @@ flowchart TB
 
 ### 4.3 接口草图
 
-具体签名在 S1 收敛，下面只固定形状：
+以下概述已稳定的合同；精确 API 以 `SurfacePlugins` README 和公开源码为准：
 
 ```swift
 public protocol ControlPlugin: Sendable {
@@ -210,7 +207,7 @@ public struct PluginUpdate: Sendable {
 - `handle` 同步、确定：相同的输入序列和时间给出相同的更新。
 - 一个插件类型可以创建多个实例。插件 ID、实例 ID、配置代次、控制权代次是不同的字段，不合并成一个字符串。
 - `InputOrigin` 区分硬件输入、界面操作、远程写入。它描述产生路径，不代表人的身份或业务审批。
-  设备来源的动作不能批准真实审批，这条现有规则由插件按来源判断。
+  BCR设备来源不能批准真实Codex审批，由原宿主审批边界保持；Mock维持允许设备批准，插件亦可配置interfaceOnly策略。
 - 停止：`stop` 之后拒绝新的写入并撤销控制权；涉及运动的插件必须先完成停止过程再报告已停止，
   停止失败要呈现结果，不能标记为成功。
 - 错误使用稳定代码。至少区分：参数无效、能力不支持、无权限、控制权过期、代次不匹配、未初始化、结果未知。
@@ -228,27 +225,23 @@ public struct PluginUpdate: Sendable {
 - 由宿主的 `@MainActor` 模型持有插件实例并驱动时间，不依赖窗口刷新。
 - 发送成功只表示传输层接受，不作为物理到位的观测。
 
-## 5. 前置决定（由用户确认，S1 之前完成）
+## 5. 已定事项与待处理事项（取代旧 P01–P06）
 
-- [ ] **P01 仓库与依赖方式。** 建议：新建独立仓库，放在 `NorthBoundWisdom` 下，本地检出与两个宿主并列；
-  宿主的 `Package.swift` 提交的是 git 地址加精确版本，本地联调用 `swift package edit` 指向并列目录，
-  不提交相对路径依赖（否则两边 CI 都会失败）。包名与仓库名建议 `SurfacePluginKit`；合同 target 相应命名为 `SurfacePluginContracts`，
-  避免 `PluginContracts` 这种过于通用的模块名与其他包冲突。
-  同时确认：两个仓库的 `AGENTS.md` 相应更新；共享包的许可证与两个宿主一致。
-- [ ] **P02 插件范围。** 建议首批为 Agent（M1），随后机器人、底盘、参数输出与安全门、示例参数集。
-  Codex 后端的进程管理、审批界面留在 BCR 宿主，只有会话状态机可以以后再评估。
-- [ ] **P03 参数取值规则。** 建议以 BCR 现有语义为基线：`step` 可选、网格以 0 为锚点并包含两个端点、
-  平分时取较小值、toggle 以中点分界。理由是 BCR 的规则有 7 位往返的测试，C03 的实机复验也依赖它；
-  XTouch 的实机尚未签收，调整成本更低。XTouch 侧的行为变化出现在两处：`minimum` 不是 `step` 整数倍的参数，以及恰好落在两个网格点正中的值
-  （现在向上取，改后向下取）。两处都需要回归测试并在提交说明里写明。
-- [ ] **P04 Agent 状态与指示。** 建议采用 BCR 的 7 状态机和转换表；槽位数由配置给出，默认 8；
-  Mock 时间线改为注入时间。BCR 的指示映射必须逐值复现现有的 0/40/127/96/72/20/8，
-  XTouch 复现现有的 running → on、waitingApproval → blink、其余 off。
-- [ ] **P05 XTouch 是否装配机器人与底盘。** 建议 M2 只要求“可装配、状态经控制台面可见”，
-  远程工具放到 S5；如果 XTouch 暂时没有使用场景，S4 对 XTouch 的要求可以只保留参数输出插件。
-- [ ] **P06 XTouch 未提交改动的处理顺序**（见第 3 节），以及两个仓库的实现窗口如何分工。
+跨仓决定以父工作区 `AGENTS.md` 第 4、5 节为准；本文同步当前设计，不另设确认门槛。
 
-P01–P04 未定时，只允许做 S0 的盘点。
+| 编号 | 决定 |
+| --- | --- |
+| D1 | 包/目录 `SurfacePlugins`；targets `SurfacePluginContracts`、`SurfacePluginConformance`、`AgentPlugin`，后续各业务插件独立产品 |
+| D2 | 清单 git 地址加精确 `0.1.0`，`SURFACE_PLUGINS_PATH` 提供本地覆盖；值仅在 ignored local 配置/shell，不提交绝对路径 |
+| D3 | BCR 参数基线：可选step、0锚点网格、包含端点、平分取较小值、toggle中点分界；XTouch后续对齐 |
+| D4 | 共享七态转换表，可配置槽位默认8，越界错误；Mock改注入时间 |
+| D5 | BCR逐值0/40/127/96/72/20/8，XTouch running/on、waitingApproval/blink、其余off；呈现留各宿主 |
+| D6 | 每任务仅本地Conventional Commit，不push/tag/创建远端 |
+| D7 | 各仓测试记录数量；硬件未连接，不能宣称实机已验证 |
+| D8 | BCR旧枚举case/callback和无注入fallback仅为兼容；生产注入配置适配的通用动作/指示绑定，storage只IndicatorID；不复制整个引擎。新增triggerAction要求旧穷举switch补case，保留旧case构造/pattern/方法行为 |
+
+U1：远端已有初始main，共享实现与0.1.0尚未推送发布，等用户决定；U2：XTouch旧检出改动归属尚待用户处理，当前暂停该宿主；
+U3：M2在XTouch装配哪些可选模拟器尚待决定；U4：三个仓库统一MIT/NorthBoundWisdom，已确定。
 
 ## 6. 阶段任务
 
@@ -265,30 +258,33 @@ P01–P04 未定时，只允许做 S0 的盘点。
 
 ### S1 合同包
 
-- [ ] S1-1 建仓库与 `PluginContracts`：第 4.2、4.3 节的类型，参数描述与取值规则按 P03。
+- [x] S1-1 建仓库与 `SurfacePluginContracts`：第 4.2、4.3 节的类型，参数描述与取值规则按 D3。
   只依赖 Foundation，无全局可变状态，无 `L10n`。
-- [ ] S1-2 参数取值规则的测试：从 BCR 的 `SurfaceConfigurationTests`、`EncoderPrecisionTests` 中
+- [x] S1-2 参数取值规则的测试：从 BCR 的 `SurfaceConfigurationTests`、`EncoderPrecisionTests` 中
   与设备无关的用例移植，覆盖端点、平分、toggle、非有限值、无法表示的步长。
-- [ ] S1-3 `PluginConformance`：任意插件都要通过的检查，包括确定性重放、`snapshot` 无副作用、
+- [x] S1-3 `SurfacePluginConformance`：任意插件都要通过的检查，包括确定性重放、`snapshot` 无副作用、
   未知动作与越界索引返回错误、`stop` 之后拒绝写入、声明的参数与指示灯 ID 唯一且带命名空间。
-- [ ] S1-4 用两个虚构布局的测试宿主（一个只有按键和 7 位灯环，一个有层和三态灯）驱动同一个测试插件，
+- [x] S1-4 用两个虚构布局的测试宿主（一个只有按键和 7 位灯环，一个有层和三态灯）驱动同一个测试插件，
   证明合同不含布局假设。
 - [ ] S1-5 边界检查脚本：禁止导入 AppKit、SwiftUI、CoreMIDI、Network、Combine、Security；
-  禁止出现宿主名、设备名和具体下游业务名。CI 在 macOS 和 Linux 上构建并测试。
+  禁止出现宿主名、设备名和具体下游业务名。边界检查已实现；双平台CI已配置，实际Linux/CI执行待远端发布，不把本机macOS结果视为Linux验证。
 
 完成标准：包可独立构建测试；没有宿主导入；没有固定控件数量、槽位数量或 7 位值域。
 
 ### S2 Agent 插件与 BCR 接入
 
-- [ ] S2-1 `AgentPlugin`：状态机取自 `BCRAgentDomain/AgentModels.swift`，去掉 `L10n`、`Date.now` 默认值
+- [x] S2-1 `AgentPlugin`：状态机取自 `BCRAgentDomain/AgentModels.swift`，去掉 `L10n`、`Date.now` 默认值
   和 `feedbackValue`；Mock 时间线从 `ConsoleViewModel+Agents.swift` 的 `Task.sleep` 序列改写为注入时间的步进，
-  阶段与进度值保持一致。通过 `PluginConformance`。
-- [ ] S2-2 BCR 插件宿主适配：注册、动作引用翻译、指示灯到 7 位值的映射（P04 的逐值表）。
-- [ ] S2-3 `BCRSurfaceDomain` 去掉对 Agent 的直接认识：`SurfaceEffect.triggerAgent` 改为通用的动作触发，
-  `agentFeedback` 改为按指示灯 ID 存储。旧配置里的 `agentPrimaryAction` 仍可解码，翻译在配置适配器中，补回归测试。
-- [ ] S2-4 `BCRAgentDomain` 改为从共享包再导出或删除，`BCRAgentCore` 的兼容导出保持源码兼容；
-  Codex 路径行为不变，设备来源不能批准真实审批的规则保留并有测试。
-- [ ] S2-5 更新 `configs/check_domain_boundaries.py`、ADR、`AGENTS.md`。
+  阶段与进度值保持一致。通过 `SurfacePluginConformance`。
+- [x] S2-2 BCR 插件宿主适配：注册、动作引用翻译、指示灯到 7 位值的映射（D4/D5 的逐值表）。
+- [x] S2-3 生产引擎按中性bindings触发通用动作，反馈只按指示ID存储。旧配置仍可解码、翻译在配置适配器。
+  按D8保留旧enum case/callback和未注入fallback，仅供旧调用；新增case的穷举switch限制已文档化，回归测试保留。
+- [x] S2-4 `BCRAgentDomain.AgentRunState` alias共享enum，Date/name/Codable/旧错误留compat-only包装，唯一转换表委托共享allows；
+  `BCRAgentCore`旧成员调用与pattern保留（穷举switch例外见D8）。Codex路径及设备禁止真实审批的断言保持。
+- [x] S2-5 更新 `configs/check_domain_boundaries.py`、ADR、`AGENTS.md`。
+
+BCR证据：原始356、B0锁定359、B1为369、B2为374、B3为376；B2/B3自包含产物各14组Provider黑盒通过。
+B3最终检查与审查见工作区 `reports/B.md` / `reports/REVIEW.md`；共享包合同可用，跨宿主M1尚未通过。
 
 完成标准：BCR 既有测试数量不减少且全部通过；Provider 1.0 的工具名、错误语义和事件顺序不变；
 C03、C05 涉及的反馈路径没有行为变化。
@@ -298,7 +294,7 @@ C03、C05 涉及的反馈路径没有行为变化。
 - [ ] S3-1 XTouch 插件宿主适配：注册、`.agent(Int)` 的翻译、指示灯到 `ButtonLight` 的映射。
 - [ ] S3-2 用 `AgentPlugin` 取代 `MockAgents`；`CompactSession.updateAgentLights` 改为接收指示灯状态。
   磁盘上的配置格式不变，仍然拒绝载入 BCR 的配置。
-- [ ] S3-3 按 P03 对齐参数取值规则，列出行为变化并补测试。
+- [ ] S3-3 按 D3 对齐参数取值规则，列出行为变化并补测试。
 - [ ] S3-4 Core 测试保持可在 Linux 运行；更新 XTouch 的 `AGENTS.md` 中关于外部依赖的规则。
 
 完成标准：两个宿主依赖共享包的同一个精确版本；各自独立检出即可构建，不需要对方的源码；
@@ -314,7 +310,7 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
   套接字与凭据留在宿主。不一致之处取更保守的行为，并列出每个宿主的变化。
 - [ ] S4-5 示例参数集：机械臂示例和它的受保护参数声明作为可显式载入的数据插件；默认配置保持领域中性，
   旧配置迁移后仍受保护。
-- [ ] S4-6 XTouch 按 P05 的结论装配。
+- [ ] S4-6 XTouch 按 U3 的结论装配。
 
 完成标准：任一插件可单独引入，不会带入其他插件；撤销或重置一个实例不影响其他实例的状态、控制权和订阅。
 
@@ -334,7 +330,7 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 
 ## 7. 验收矩阵
 
-- **X1 依赖边界**：只引入 `PluginContracts` 不会编译任何插件；只引入一个插件不会编译其他插件、
+- **X1 依赖边界**：只引入 `SurfacePluginContracts` 不会编译任何插件；只引入一个插件不会编译其他插件、
   GUI、CoreMIDI 或网络代码。
 - **X2 同源同版本**：两个宿主的锁定文件指向共享包的同一个版本；任一宿主在没有另一个宿主源码的机器上可以构建和测试。
 - **X3 行为一致**：同一段插件输入序列在两个宿主的适配测试里得到相同的插件快照；

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
     "BCRFoundation": set(),
-    "BCRAgentDomain": {"BCRFoundation"},
+    "BCRAgentDomain": {"BCRFoundation", "AgentPlugin"},
     "BCRPluginHost": {
         "BCRFoundation",
         "BCRAgentDomain",
@@ -29,7 +29,13 @@ ALLOWED = {
     "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel"},
     "BCRProviderApplication": {"BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"},
     "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain"},
-    "BCRConfigurationAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "SurfacePluginContracts"},
+    "BCRConfigurationAdapter": {
+        "BCRFoundation",
+        "BCRSurfaceDomain",
+        "BCRExamples",
+        "BCRAgentDomain",
+        "SurfacePluginContracts",
+    },
     "BCRPersistenceAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRConfigurationAdapter"},
     "BCRMCPAdapter": {"BCRFoundation", "BCRSurfaceDomain"},
     "BCRProviderMCPAdapter": {
