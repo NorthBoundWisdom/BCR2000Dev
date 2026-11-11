@@ -1,5 +1,7 @@
 import BCRFoundation
 import Foundation
+import struct SurfacePluginContracts.ActionReference
+import struct SurfacePluginContracts.IndicatorID
 
 public enum MIDILearnFormat: String, CaseIterable, Sendable { case voice, nrpn14 }
 
@@ -104,7 +106,9 @@ public final class SurfaceSession {
 
     public var onChange: (@MainActor () -> Void)?
     public var onEvent: (@MainActor (SurfaceSessionEvent) -> Void)?
+    /// Legacy-only callback for callers without injected plugin bindings (workspace D8).
     public var onTriggerAgent: (@MainActor (AgentSlotID) -> Void)?
+    public var onTriggerAction: (@MainActor (ActionReference) -> Void)?
 
     private let hardwareDevice: any SurfaceDevice
     private let mockDevice: MockSurfaceDevice
@@ -136,6 +140,7 @@ public final class SurfaceSession {
         mockDevice: MockSurfaceDevice = MockSurfaceDevice(),
         hardwareMap: HardwareMap = HardwareMap(),
         configuration: SurfaceConfiguration = .neutral(),
+        pluginBindings: SurfacePluginBindings = .init(),
         now: @escaping @MainActor () -> Date = { .now },
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
@@ -147,7 +152,8 @@ public final class SurfaceSession {
         self.saveHardwareMap = saveHardwareMap
         self.saveConfiguration = saveConfiguration
         connection = hardwareDevice.connection
-        engine = SurfaceEngine(hardwareMap: mockDevice.model.preset, configuration: configuration)
+        engine = SurfaceEngine(hardwareMap: mockDevice.model.preset, configuration: configuration,
+                               pluginBindings: pluginBindings)
         publishedValues = engine.parameterValues
         mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
@@ -255,8 +261,12 @@ public final class SurfaceSession {
         publishChange()
     }
 
-    public func setAgentFeedback(_ slot: AgentSlotID, value: UInt8) {
-        perform(engine.setAgentFeedback(slot, value: value, at: now()))
+    public func bindIndicator(_ indicator: IndicatorID, to target: ControlTarget) {
+        engine.bindIndicator(indicator, to: target)
+    }
+
+    public func setIndicatorFeedback(_ id: IndicatorID, value: UInt8) {
+        perform(engine.setIndicatorFeedback(id, value: value, at: now()))
         publishChange()
     }
 
@@ -473,6 +483,7 @@ public final class SurfaceSession {
                 onEvent?(.pageChanged)
             case let .send(message): transmit(message)
             case let .triggerAgent(slot): onTriggerAgent?(slot)
+            case let .triggerAction(action): onTriggerAction?(action)
             case let .learned(control, midi):
                 onEvent?(.learned(control, midi, next: engine.learnTarget))
                 persistHardwareMap()

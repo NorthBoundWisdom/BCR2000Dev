@@ -34,7 +34,7 @@ let package = Package(
         .target(name: "BCRFoundation", resources: [.process("Resources")]),
         .target(name: "BCRAgentDomain", dependencies: ["BCRFoundation"]),
         .target(name: "BCRPluginHost", dependencies: [
-            "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain",
+            "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "BCRConfigurationAdapter",
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
             .product(name: "AgentPlugin", package: "SurfacePlugins")
         ]),
@@ -57,10 +57,15 @@ let package = Package(
             ]
         ),
         .target(name: "BCRCodexAdapter", dependencies: ["BCRFoundation", "BCRAgentDomain"]),
-        .target(name: "BCRSurfaceDomain", dependencies: ["BCRFoundation"]),
+        .target(name: "BCRSurfaceDomain", dependencies: [
+            "BCRFoundation", .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
+        ]),
         .target(name: "BCROutputDomain", dependencies: ["BCRFoundation"]),
         .target(name: "BCRExamples", dependencies: ["BCRFoundation", "BCRSurfaceDomain"]),
-        .target(name: "BCRConfigurationAdapter", dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRExamples"]),
+        .target(name: "BCRConfigurationAdapter", dependencies: [
+            "BCRFoundation", "BCRSurfaceDomain", "BCRExamples",
+            .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
+        ]),
         .target(
             name: "BCRPersistenceAdapter",
             dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRConfigurationAdapter", "BCRExamples"]
@@ -121,7 +126,11 @@ let package = Package(
         ),
         .testTarget(
             name: "BCRPluginHostTests",
-            dependencies: ["BCRPluginHost", .product(name: "AgentPlugin", package: "SurfacePlugins")]
+            dependencies: [
+                "BCRPluginHost",
+                "BCRConfigurationAdapter",
+                .product(name: "AgentPlugin", package: "SurfacePlugins")
+            ]
         ),
         .testTarget(
             name: "BCRAgentCoreTests",

@@ -1,5 +1,6 @@
 import AgentPlugin
 import BCRAgentDomain
+import BCRConfigurationAdapter
 import BCRFoundation
 import BCRSurfaceDomain
 import Foundation
@@ -17,13 +18,6 @@ public enum BCRIndicatorPresentation {
         case .stopped: 20
         case .fault: 8
         }
-    }
-}
-
-/// Legacy binding translation; B2 moves this bridge into the configuration adapter.
-public enum AgentBindingTranslation {
-    public static func action(for slot: AgentSlotID) -> ActionReference {
-        .init(pluginID: AgentPlugin.pluginID, actionID: AgentPlugin.primaryActionID, index: slot.rawValue)
     }
 }
 

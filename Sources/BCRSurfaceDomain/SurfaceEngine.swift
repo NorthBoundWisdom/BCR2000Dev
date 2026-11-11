@@ -1,5 +1,7 @@
 import BCRFoundation
 import Foundation
+import struct SurfacePluginContracts.ActionReference
+import struct SurfacePluginContracts.IndicatorID
 
 /// What the software believes one physical control currently shows.
 public struct SurfaceControlState: Equatable, Sendable {
@@ -25,7 +27,9 @@ public enum MIDIObservationDirection: String, Equatable, Sendable {
 public enum SurfaceEffect: Equatable, Sendable {
     /// Feedback to write to the device (LED ring / button LED).
     case send(MIDIVoiceMessage)
+    /// Legacy-only enum case retained for source-compatible pattern matching (workspace D8).
     case triggerAgent(AgentSlotID)
+    case triggerAction(ActionReference)
     case pageChanged
     case programsChanged
     case learned(BCRControlID, MIDIControlID)
@@ -48,7 +52,8 @@ public struct SurfaceEngine: Sendable {
     public private(set) var learnTarget: BCRControlID?
     public private(set) var actualFeedbackValues: [ParameterID: Double] = [:]
     public private(set) var ledFeedbackSource: LEDFeedbackSource = .target
-    public private(set) var agentFeedback: [AgentSlotID: UInt8] = [:]
+    public private(set) var indicatorFeedback: [IndicatorID: UInt8] = [:]
+    public private(set) var pluginBindings: SurfacePluginBindings
 
     public var recordFeedbackWhenGenerated = true
     public var echoWindow: TimeInterval = 0.18
@@ -61,9 +66,12 @@ public struct SurfaceEngine: Sendable {
     private var absoluteInputs: [BCRControlID: AbsoluteInput] = [:]
     private var lastTrigger: [BCRControlID: Date] = [:]
 
-    public init(hardwareMap: HardwareMap, configuration: SurfaceConfiguration) {
+    public init(hardwareMap: HardwareMap, configuration: SurfaceConfiguration,
+                pluginBindings: SurfacePluginBindings = .init())
+    {
         self.hardwareMap = hardwareMap
         self.configuration = configuration
+        self.pluginBindings = pluginBindings
         parameterValues = Dictionary(
             uniqueKeysWithValues: configuration.parameters.map { ($0.id, $0.clamp($0.defaultValue)) }
         )
@@ -241,9 +249,14 @@ public struct SurfaceEngine: Sendable {
     }
 
     /// Records an agent slot's LED value and writes it to every control bound to that slot.
-    public mutating func setAgentFeedback(_ slot: AgentSlotID, value: UInt8, at now: Date = .now) -> [SurfaceEffect] {
-        agentFeedback[slot] = min(value, 127)
-        return feedback(to: configuration.controls(targeting: .agentPrimaryAction(slot)), at: now)
+    public mutating func bindIndicator(_ indicator: IndicatorID, to target: ControlTarget) {
+        pluginBindings.indicators[target] = indicator
+    }
+
+    public mutating func setIndicatorFeedback(_ id: IndicatorID, value: UInt8, at now: Date = .now) -> [SurfaceEffect] {
+        indicatorFeedback[id] = min(value, 127)
+        let controls = configuration.assignments.filter { pluginBindings.indicators[$0.target] == id }.map(\.control)
+        return feedback(to: controls, at: now)
     }
 
     /// Writes the software state to every bound, assigned control (connect / device switch).
@@ -307,18 +320,19 @@ public struct SurfaceEngine: Sendable {
         actualFeedbackValues[id] = nil
     }
 
-    /// Resets parameters while preserving Agent feedback and device timing policy.
+    /// Resets parameters while preserving indicator feedback, bindings and device timing policy.
     /// Returned effects clear controls no longer assigned; follow with fullFeedback for the new snapshot.
     public mutating func replaceConfiguration(_ configuration: SurfaceConfiguration,
                                               at now: Date = .now) -> [SurfaceEffect]
     {
-        let feedback = agentFeedback
+        let feedback = indicatorFeedback
+        let pluginBindings = pluginBindings
         let echoWindow = echoWindow
         let triggerDebounce = triggerDebounce
         let recordFeedbackWhenGenerated = recordFeedbackWhenGenerated
         let removed = self.configuration.assignments.map(\.control).filter { configuration.assignment(for: $0) == nil }
-        self = SurfaceEngine(hardwareMap: hardwareMap, configuration: configuration)
-        agentFeedback = feedback
+        self = SurfaceEngine(hardwareMap: hardwareMap, configuration: configuration, pluginBindings: pluginBindings)
+        indicatorFeedback = feedback
         self.echoWindow = echoWindow
         self.triggerDebounce = triggerDebounce
         self.recordFeedbackWhenGenerated = recordFeedbackWhenGenerated
@@ -443,6 +457,12 @@ public struct SurfaceEngine: Sendable {
             return []
         }
 
+        if let action = pluginBindings.actions[assignment.target] {
+            guard isPositive, acceptTrigger(control, at: now) else { return feedback(to: [control], at: now) }
+            // Feedback precedes synchronous action callbacks, just as on the legacy path.
+            return feedback(to: [control], at: now) + [.triggerAction(action)]
+        }
+
         switch assignment.target {
         case let .switchPage(id):
             guard isPositive, acceptTrigger(control, at: now) else { return [] }
@@ -501,6 +521,7 @@ public struct SurfaceEngine: Sendable {
             return setParameter(id, to: values[next], at: now)
 
         case let .agentPrimaryAction(slot):
+            // Legacy-only fallback for callers that did not inject host bindings (D8).
             var effects: [SurfaceEffect] = []
             if isPositive, acceptTrigger(control, at: now) {
                 effects.append(.triggerAgent(slot))
@@ -569,6 +590,7 @@ public struct SurfaceEngine: Sendable {
         guard let assignment = configuration.assignment(for: control) else {
             return controls[control]?.value
         }
+        if let indicator = pluginBindings.indicators[assignment.target] { return indicatorFeedback[indicator] ?? 0 }
         switch assignment.target {
         case let .switchPage(id): return (configuration.activePageID ?? SurfaceConfiguration.basePageID) == id ? 127 : 0
         case .runMacro: return 0
@@ -591,8 +613,8 @@ public struct SurfaceEngine: Sendable {
         case let .cycleParameter(id, values):
             guard let definition = configuration.parameter(id), let current = value(of: id) else { return nil }
             return values.contains { approximatelyEqual(definition.clamp($0), current) } ? 127 : 0
-        case let .agentPrimaryAction(slot):
-            return agentFeedback[slot] ?? 0
+        case .agentPrimaryAction:
+            return 0 // Legacy unbound indicator defaults to off; namespaces belong to the adapter.
         case .resetGroup:
             return nil
         }

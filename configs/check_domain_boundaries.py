@@ -13,16 +13,23 @@ ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
     "BCRFoundation": set(),
     "BCRAgentDomain": {"BCRFoundation"},
-    "BCRPluginHost": {"BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "SurfacePluginContracts", "AgentPlugin"},
+    "BCRPluginHost": {
+        "BCRFoundation",
+        "BCRAgentDomain",
+        "BCRSurfaceDomain",
+        "BCRConfigurationAdapter",
+        "SurfacePluginContracts",
+        "AgentPlugin",
+    },
     "BCRCodexAdapter": {"BCRFoundation", "BCRAgentDomain"},
-    "BCRSurfaceDomain": {"BCRFoundation"},
+    "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts"},
     "BCROutputDomain": {"BCRFoundation"},
     "BCRSimulationKernel": {"BCRFoundation"},
     "BCRRobotDomain": {"BCRFoundation", "BCRSimulationKernel"},
     "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel"},
     "BCRProviderApplication": {"BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"},
     "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain"},
-    "BCRConfigurationAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples"},
+    "BCRConfigurationAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "SurfacePluginContracts"},
     "BCRPersistenceAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRConfigurationAdapter"},
     "BCRMCPAdapter": {"BCRFoundation", "BCRSurfaceDomain"},
     "BCRProviderMCPAdapter": {
@@ -75,7 +82,9 @@ def check():
             errors.append(f"{name} has forbidden dependencies: {sorted(dependencies - allowed)}")
         for path in (ROOT / "Sources" / name).glob("*.swift"):
             text = path.read_text()
-            imports = set(re.findall(r"^import (\w+)", text, re.MULTILINE))
+            imports = set(
+                re.findall(r"^import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)", text, re.MULTILINE)
+            )
             internal = {
                 value
                 for value in imports
@@ -91,6 +100,10 @@ def check():
         text = path.read_text()
         if '"arm.enabled"' in text or "CodexSession" in text or "AgentStateMachine" in text:
             errors.append(f"Example/backend policy leaked into {path.relative_to(ROOT)}")
+        # Workspace D8 preserves only legacy enum/callback shapes. Actual interpretation,
+        # namespaces and slot-keyed feedback belong to the configuration adapter.
+        if re.search(r'\bagentFeedback\b|\bsetAgentFeedback\b|"agent\.', text):
+            errors.append(f"Legacy plugin interpretation leaked into {path.relative_to(ROOT)}")
     canonical = ROOT / "Schemas/Provider/1.0/provider.schema.json"
     resource = ROOT / "Sources/BCRFoundation/Resources/provider.schema.json"
     if canonical.read_bytes() != resource.read_bytes():

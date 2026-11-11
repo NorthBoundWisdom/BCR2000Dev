@@ -1,5 +1,6 @@
 import AgentPlugin
 import BCRAgentDomain
+import BCRConfigurationAdapter
 import BCRFoundation
 import BCRPluginHost
 import Foundation
@@ -89,7 +90,7 @@ final class MockAgentHostTests: XCTestCase {
         var shared = try AgentPlugin(at: 0)
         _ = try shared.handle(.start, at: 0)
         let slot = AgentSlotID(1)
-        let action = AgentBindingTranslation.action(for: slot)
+        let action = try AgentBindingTranslation.action(for: slot)
         XCTAssertEqual(action, .init(pluginID: "agent", actionID: "agent.primary", index: 1))
         var states: [String] = []
         var progress: [Double] = []
@@ -153,6 +154,16 @@ final class MockAgentHostTests: XCTestCase {
 
     func testSemanticFeedbackMappingPinsAllSevenLegacyValues() {
         XCTAssertEqual(IndicatorSemantic.allCases.map(BCRIndicatorPresentation.value), [0, 40, 127, 96, 72, 20, 8])
+    }
+
+    func testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot() throws {
+        let host = try BCRMockAgentHost(clock: { 0 })
+        let before = try host.snapshot()
+        for index in [0, 9, Int.max] {
+            XCTAssertThrowsError(try host.invoke(AgentSlotID(index), origin: .interface))
+            XCTAssertThrowsError(try host.interrupt(AgentSlotID(index)))
+            XCTAssertEqual(try host.snapshot(), before)
+        }
     }
 
     func testMainActorDriverAdvancesWithoutAWindowOrRefreshCallback() async throws {

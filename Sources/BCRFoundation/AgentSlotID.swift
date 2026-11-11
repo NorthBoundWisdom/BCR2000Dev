@@ -1,13 +1,24 @@
 import Foundation
 
-/// Legacy surface action identity; contains no Agent state or backend behavior.
+public enum AgentSlotIDError: Error, Equatable, LocalizedError, Sendable {
+    case outOfRange(Int)
+    public var errorDescription: String? { L10n.text("Agent 槽位必须为 1–8") }
+}
+
+/// Legacy disk/source identity only. New plugin APIs use checked, configurable integer indices.
 public struct AgentSlotID: Hashable, Codable, Sendable, Identifiable, Comparable {
     public let rawValue: Int
 
     public var id: Int { rawValue }
 
+    /// Unchecked source-compatible construction; invalid input is rejected at decoding,
+    /// configuration validation, and the plugin adapter boundary instead of trapping.
     public init(_ rawValue: Int) {
-        precondition((1 ... 8).contains(rawValue), "Agent slot must be in 1...8")
+        self.rawValue = rawValue
+    }
+
+    public init(validating rawValue: Int) throws {
+        guard (1 ... 8).contains(rawValue) else { throw AgentSlotIDError.outOfRange(rawValue) }
         self.rawValue = rawValue
     }
 

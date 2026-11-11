@@ -119,6 +119,7 @@ final class ConsoleViewModel: ObservableObject {
         self.midi = midi
         session = SurfaceSession(
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
+            pluginBindings: AgentBindingTranslation.bindings,
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
         )
@@ -196,7 +197,11 @@ final class ConsoleViewModel: ObservableObject {
             }
         }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
-        session.onTriggerAgent = { [weak self] in self?.performSurfaceAgentAction($0) }
+        session.onTriggerAction = { [weak self] action in
+            guard let self else { return }
+            do { self.performSurfaceAgentAction(try AgentBindingTranslation.slot(for: action)) }
+            catch { self.report(error) }
+        }
         if integrationTest {
             notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
         }
@@ -210,7 +215,9 @@ final class ConsoleViewModel: ObservableObject {
                 let previous = Dictionary(uniqueKeysWithValues: self.slots.map { ($0.id, $0.state) })
                 self.slots = slots
                 for slot in slots where previous[slot.id] != slot.state {
-                    if let value = feedback[slot.id] { self.session.setAgentFeedback(slot.id, value: value) }
+                    if let value = feedback[slot.id] {
+                        self.session.setIndicatorFeedback(AgentBindingTranslation.indicator(for: slot.id), value: value)
+                    }
                 }
             }
             if automaticallyAdvancesMock { host.startDriving() }
@@ -612,7 +619,10 @@ final class ConsoleViewModel: ObservableObject {
         let previous = Dictionary(uniqueKeysWithValues: slots.map { ($0.id, $0.state) })
         slots = newSlots
         for slot in newSlots where previous[slot.id] != slot.state {
-            session.setAgentFeedback(slot.id, value: slot.state.feedbackValue)
+            session.setIndicatorFeedback(
+                AgentBindingTranslation.indicator(for: slot.id),
+                value: slot.state.feedbackValue
+            )
         }
     }
 

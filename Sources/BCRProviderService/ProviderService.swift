@@ -219,6 +219,7 @@ private struct BCRProviderService {
             } else { hardware = MockSurfaceDevice() }
             let session: SurfaceSession? = options.console ? SurfaceSession(
                 hardwareDevice: hardware, hardwareMap: map, configuration: profile,
+                pluginBindings: AgentBindingTranslation.bindings,
                 saveHardwareMap: { value in
                     if let mapURL { try ProtectedJSONFile.hardware(JSONFileStore(fileURL: mapURL)).save(value) }
                 },

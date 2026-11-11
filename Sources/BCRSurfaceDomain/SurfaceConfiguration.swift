@@ -199,7 +199,8 @@ public enum ButtonBehavior: String, Codable, Sendable, CaseIterable {
 /// What a physical control does in the software.
 public enum ControlTarget: Codable, Hashable, Sendable {
     case parameter(ParameterID)
-    /// Starts / interrupts / approves a mock agent slot, depending on its state.
+    /// Legacy disk/source representation only (workspace D8). Host configuration adapters
+    /// interpret it as a generic plugin action/indicator binding; no state policy lives here.
     case agentPrimaryAction(AgentSlotID)
     /// Returns every parameter of a group to its default value (e.g. robot arm "home").
     case resetGroup(String)
