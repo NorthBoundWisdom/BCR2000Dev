@@ -77,7 +77,7 @@ final class ConsoleViewModel: ObservableObject {
          mockClock: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
          automaticallyAdvancesMock: Bool = true)
     {
-        provider = ProviderApplication(configuration: providerConfiguration)
+        provider = ProviderApplication(configuration: providerConfiguration, monotonic: mockClock)
         codex = CodexAgentController(
             directory: stores.configuration.fileURL.deletingLastPathComponent(),
             factory: codexFactory
@@ -132,7 +132,7 @@ final class ConsoleViewModel: ObservableObject {
         integrationTest: integrationTest, provider: provider)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
-        adapter: outputTransport ?? OutputTransportRouter())
+        adapter: outputTransport ?? OutputTransportRouter(), runtime: provider.runtime)
         do { try ProviderMCPModule.install(on: mcp.service, application: provider) }
         catch { preconditionFailure("Invalid built-in provider module registration") }
         provider.start()
@@ -172,7 +172,7 @@ final class ConsoleViewModel: ObservableObject {
         }
         codex.onStopMock = { [weak self] in
             guard let self else { return }
-            do { try self.requireMockHost().reset() } catch { self.report(error) }
+            do { try self.requireMockHost().reset(started: self.codex.backend == .mock) } catch { self.report(error) }
         }
         codex.onSlots = { [weak self] slots in
             guard let self else { return }
@@ -206,7 +206,11 @@ final class ConsoleViewModel: ObservableObject {
             notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
         }
         do {
-            let host = try BCRMockAgentHost(clock: mockClock)
+            let host = try BCRMockAgentHost(
+                clock: mockClock,
+                runtime: provider.runtime,
+                started: codex.backend == .mock
+            )
             mockAgents = host
             if codex.backend == .mock { slots = try host.slots }
             host.onError = { [weak self] in self?.report($0) }
@@ -222,6 +226,8 @@ final class ConsoleViewModel: ObservableObject {
             }
             if automaticallyAdvancesMock { host.startDriving() }
         } catch { report(error) }
+        do { try ProviderMCPModule.installShared(on: mcp.service, application: provider) }
+        catch { report(error) }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
         Task { @MainActor [weak output] in output?.restore() }

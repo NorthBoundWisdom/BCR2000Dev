@@ -32,13 +32,20 @@ flowchart BT
   Config[BCRConfigurationAdapter 绑定翻译与设备呈现] --> Surface
   Config --> Compat
   Config --> Contracts
-  Host[BCRPluginHost 事务组合与MainActor时钟] --> SharedAgent
+  Remote[RemoteToolContracts]
+  Runtime[BCRPluginRuntime 唯一registry/epoch/单调clock] --> Remote
+  Runtime --> Contracts
+  Host[BCRPluginHost Agent adapter/driver] --> Runtime
+  Host --> SharedAgent
   Host --> Config
   Codex[BCRCodexAdapter 真实进程与审批] --> Compat
-  Application[ProviderApplication 显式装配] --> Surface
+  Application[ProviderApplication 显式装配/注册路由] --> Runtime
+  Application --> Surface
   Application --> Robot[机器人模拟领域]
   Application --> Chassis[底盘模拟领域]
+  Output[OutputController 可信观察/传输] --> Runtime
   GUI[GUI组合根] --> Host
+  GUI --> Output
   GUI --> Application
   Service[无界面组合根] --> Config
   Service --> Application
@@ -53,6 +60,11 @@ flowchart BT
 新增 `triggerAction` 后，外部无default穷举旧 `SurfaceEffect` 的switch需增加case；旧成员构造、pattern、方法行为保持，
 不声称所有消费者源码零修改。此窄例外避免复制整个配置/引擎/会话。
 `BCRAgentCore` 继续作为兼容导出入口，新领域不得依赖它。完整依赖/兼容与验证边界见 [共享插件接入](../SHARED_PLUGINS.md)。
+
+每宿主共用一份runtime：Agent/旧Provider模拟器/Output/新surface工具修改同一binding value；typed state与事件原子replace。
+旧data结果包裹和Provider1.0 Schema保留，新raw对象直接采用共享schema并按原角色/模拟管理权限和manual模式授权。
+clock坏值只允许可信安全撤权/fault使用最后可信时刻；普通写拒绝，不全局悄悄clamp。输出Date观察保age映射到共同单调域，
+OSC Float32 seed严格而JSON Double不受无关精度限制。详见 [共享远程工具](../SHARED_REMOTE_TOOLS.md)。
 
 共享包是授权的独立仓库，不是额外宿主clone；JSON锁固定remote/完整commit，Git管理器物化到build依赖目录，清单只读验证固定路径。
 SOURCE环境仅供获取已提交对象，不直接编译本地工作树；manager/default build不依赖FreeCM。

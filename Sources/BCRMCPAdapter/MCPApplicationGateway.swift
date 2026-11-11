@@ -35,6 +35,16 @@ public final class MCPApplicationGateway {
     private var toolOrder: [String] = []
     private var moduleIDs: Set<String> = []
     private var handlers: [String: @MainActor ([String: JSONValue]) throws -> JSONValue] = [:]
+    private var rawTools: Set<String> = []
+    private var handlerValidation: Set<String> = []
+    private var failureEncoders: [String: @MainActor (any Error) -> JSONValue] = [:]
+    private var moduleCleanup: [@MainActor @Sendable () -> Void] = []
+    func retainModuleCleanup(_ cleanup: @escaping @MainActor @Sendable () -> Void) { moduleCleanup.append(cleanup) }
+    deinit {
+        let cleanup = moduleCleanup
+        Task { @MainActor in for action in cleanup { action() } }
+    }
+
     public var toolDefinitions: [JSONValue] { toolOrder.compactMap { definitions[$0] } }
 
     public init(session: SurfaceSession? = nil, permissions: MCPPermissions = MCPPermissions(),
@@ -55,6 +65,9 @@ public final class MCPApplicationGateway {
     public func registerModule(
         id: String,
         tools: [JSONValue],
+        rawResults: Bool = false,
+        validatesInHandler: Bool = false,
+        failureEncoder: (@MainActor (any Error) -> JSONValue)? = nil,
         handler: @escaping @MainActor (String, [String: JSONValue]) throws -> JSONValue
     ) throws {
         guard !moduleIDs.contains(id),
@@ -70,6 +83,9 @@ public final class MCPApplicationGateway {
             let name = tool.objectValue!["name"]!.stringValue!
             definitions[name] = tool; toolOrder.append(name)
             handlers[name] = { args in try handler(name, args) }
+            if rawResults { rawTools.insert(name) }
+            if validatesInHandler { handlerValidation.insert(name) }
+            failureEncoders[name] = failureEncoder
         }
     }
 
@@ -87,19 +103,24 @@ public final class MCPApplicationGateway {
             ) }
             guard let args = arguments.objectValue else { throw MCPToolFailure(L10n.text("arguments 必须是对象")) }
             if name == "start_agent" || name == "interrupt_agent" { _ = try agentSlot(args) }
-            try MCPInputValidation.validate(.object(args), schema: definition.objectValue!["inputSchema"]!)
+            if !handlerValidation.contains(name) {
+                try MCPInputValidation.validate(.object(args), schema: definition.objectValue!["inputSchema"]!)
+            }
             let result: JSONValue
             if let handler = handlers[name] {
-                if definition.objectValue?["annotations"]?
+                if !handlerValidation.contains(name), definition.objectValue?["annotations"]?
                     .objectValue?["readOnlyHint"] != .bool(true) { try consumeWrites(1) }
                 result = try handler(args)
             } else if AgentMCPModule.names.contains(name) { result = try executeAgent(name, args) }
             else { result = try executeSurface(name, args) }
             record(name, succeeded: true, detail: L10n.text("完成"))
-            return MCPToolResult(value: result, isError: false)
+            return MCPToolResult(value: result, isError: false, rawObject: rawTools.contains(name))
         } catch {
             // Error messages only include domain validation details, never HTTP headers or tokens.
             record(name, succeeded: false, detail: error.localizedDescription)
+            if let encode = failureEncoders[name] {
+                return MCPToolResult(value: encode(error), isError: true, rawObject: rawTools.contains(name))
+            }
             if let error = error as? ProviderDomainError {
                 return MCPToolResult(
                     value: .object(["error": .object([

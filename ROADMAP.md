@@ -10,8 +10,9 @@
 只开放回环 MCP/HTTP/SSE。代码、合同与黑盒交付按 [领域 TODO](TODO_DOMAIN_INTERFACES.md) 和
 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md) 验证；未测实体行为与既有 R1 待办保持分开。
 
-BCR 已接入 `SurfacePlugins` Agent：共享七态/注入时间，控制台引擎与硬件适配留本仓库。
-BCR 旧配置和 Provider 1.0 保持兼容，XTouch 接入与跨宿主 M1 验收尚待完成。
+BCR/XTouch已以同一固定commit装配Agent/参考模拟器/输出安全门/示例数据及统一surface_工具；
+共享七态/注入时间/注册表，控制台引擎与硬件适配各自保留。跨宿主M1同参考序列和M2/M3软件验收通过，
+BCR旧配置与Provider1.0保持兼容；正式发布/硬件仍按独立边界处理。
 当前远端版本未发布，仅本地提交；详见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 
 ## 当前基线

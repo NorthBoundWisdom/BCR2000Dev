@@ -1,6 +1,7 @@
 # 共享插件与 BCR 兼容边界
 
-更新：2026-11-12。BCR 已接入共享 Agent；跨宿主 M1 尚待 XTouch 接入同一版本。机器人/底盘已通过旧API薄包装使用共享核心；输出/安全门/示例参数也已委托共享核心；统一runtime/远程工具接线仍在进行，M2/M3尚未全部验收。
+更新：2026-11-12。BCR 与 XTouch 已接入同一共享固定提交，Agent 参考序列与独立共享注册表相符；
+机器人、底盘、输出、安全门与示例数据均使用共享核心，新 `surface_` 合同已装配。正式推送/发布与实机验收仍独立。
 
 ## 依赖与本地构建
 
@@ -39,7 +40,8 @@ Package执行只读verify，因此直跑Swift也不能绕过缓存检查，且�
 | `SurfacePluginContracts` | Foundation-only 的参数/动作/指示合同、命名空间、来源、注入时间及结构化错误 |
 | `AgentPlugin` | 唯一的七态转换规则与 Mock 时间线，`Sendable` 值类型、同步确定输入 |
 | `SimulationContracts` / `RobotPlugin` / `ChassisPlugin` | 唯一控制权/机器人积分/Ackermann核心；旧BCR领域仅typed facade与错误文案映射 |
-| `BCRPluginHost` | 事务注册与显式选择插件；MainActor 持有实例、单调时钟驱动、逐事件发布旧宿主快照 |
+| `BCRPluginRuntime` | 每宿主唯一RemoteRegistry/epoch/单调clock；事务安装、typed value+event原子提交；无domain switch |
+| `BCRPluginHost` | Mock Agent adapter/驱动，GUI注入共同owner；逐事件发布旧快照，不持第二份插件 |
 | `BCRConfigurationAdapter` | 旧 target 到中性动作/指示 ID 的翻译、设备七位值映射、旧反馈 API 兼容扩展 |
 | `BCRSurfaceDomain` | 控制台引擎、MIDI/学习/反馈管线；按 `IndicatorID` 存反馈，不解释 Agent 命名空间/状态 |
 | `ParameterOutputPlugin` / `ExampleParameterSets` | 唯一安全门、OSC/JSON链路核心及示例参数数据；旧Date/默认地址/本地化/布局留宿主薄适配 |
@@ -92,4 +94,14 @@ B2 与 B3 的自包含 Provider 产物分别通过原样 14 组黑盒验收，�
 逐任务实际测试数量及日志由工作区 `reports/B.md` 追加记录。
 
 这些均是软件/Mock 证据。硬件没有连接；C03、C05、真实控件/断插/灯环和人工 GUI 布局未验证。
-远端版本解析、Linux/CI 执行与 XTouch 的同源快照对比尚未验收。真实执行器从未连接。
+两宿主JSON锁和实际物化缓存同为 `649a7066d372c6f2a978f9126f3ed175858bf3f7`。
+BCR 最终396个Swift测试、66个工作流测试、6个客户端测试；既有Provider14组黑盒以及新工具现代/2025协议HTTP验收通过。
+Root独立Linux对共享最终87测试、XTouch Core/L10n 81测试及共同Gitmanager11测试验证通过，证据在工作区reports/REVIEW。
+GitHub远端CI/尚未推送SHA获取与真实硬件未验，不把本地Docker结果称为远端CI。真实执行器从未连接。
+
+统一工具、权限、游标与时间域详见 [共享远程工具](SHARED_REMOTE_TOOLS.md)。
+
+
+输出精度：仅OSC使用float32。首次/重武装actual必须精确Float可表示，否则invalidActual+参数诊断，禁止epsilon放宽或改写actual；
+JSON/WebSocket/rosbridge保留Double。旧Date观察时间经保守anchor映射到共同runtime单调域，保持排队age；
+transport RTT仍沿原Date API，未把两种时间直接混进同一安全门。坏clock下普通写失败，安全撤权/fault使用最后可信时间并记录诊断。

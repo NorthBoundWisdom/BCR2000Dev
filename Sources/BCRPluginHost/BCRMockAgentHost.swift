@@ -1,4 +1,6 @@
 import AgentPlugin
+import AgentRemoteBinding
+import BCRPluginRuntime
 import BCRAgentDomain
 import BCRConfigurationAdapter
 import BCRFoundation
@@ -9,8 +11,9 @@ import SurfacePluginContracts
 /// Explicit composition of the Mock plugin. Codex processes and approvals remain in the App.
 @MainActor
 public final class BCRMockAgentHost {
-    private var registry = PluginRegistry()
-    private let clock: @MainActor () -> PluginTime
+    public let runtime: BCRPluginRuntime
+    public static let instanceID = "agent.mock"
+    private var observer: UUID?
     private let epoch: TimeInterval
     private var driver: Task<Void, Never>?
     private var lastPublished: [BCRAgentDomain.AgentSlot]?
@@ -18,17 +21,29 @@ public final class BCRMockAgentHost {
     public var onError: (@MainActor (any Error) -> Void)?
 
     public init(clock: @escaping @MainActor () -> PluginTime = { ProcessInfo.processInfo.systemUptime },
-                epoch: Date = .now) throws
+                epoch: Date = .now, runtime: BCRPluginRuntime? = nil, started: Bool = true) throws
     {
-        self.clock = clock
-        let now = clock()
+        let owner = try runtime ?? BCRPluginRuntime(clock: clock)
+        self.runtime = owner
+        let now = owner.now
         self.epoch = epoch.timeIntervalSince1970 - now
-        // All built-in plugins are listed here, with no discovery or dynamic loading.
-        try registry.register([AgentPlugin(slotCount: 8, at: now)], at: now)
+        try owner.install([AgentRemoteBinding(
+            instanceID: Self.instanceID,
+            plugin: AgentPlugin(slotCount: 8, approvalPolicy: .localOrigins, at: now)
+        )], start: started)
         lastPublished = try slots
+        observer = owner.observe { [weak self] change in
+            guard let self, change.instanceID == Self.instanceID else { return }
+            do { self.publish(try change.update ?? .init(indicators: self.snapshot().indicators)) }
+            catch { self.onError?(error) }
+        }
     }
 
-    deinit { driver?.cancel() }
+    deinit {
+        driver?.cancel()
+        let owner = runtime, token = observer
+        Task { @MainActor in if let token { owner.removeObserver(token) } }
+    }
 
     public var slots: [BCRAgentDomain.AgentSlot] {
         get throws {
@@ -44,34 +59,32 @@ public final class BCRMockAgentHost {
     }
 
     public func plugin() throws -> AgentPlugin {
-        try registry.plugin(AgentPlugin.pluginID, as: AgentPlugin.self)
+        try runtime.binding(Self.instanceID, as: AgentRemoteBinding.self).plugin
     }
 
-    public func snapshot() throws -> PluginSnapshot { try registry.snapshot(AgentPlugin.pluginID) }
+    public func snapshot() throws -> PluginSnapshot { try plugin().snapshot() }
 
     public func invoke(_ slot: AgentSlotID, origin: InputOrigin) throws {
-        publish(try registry.handle(.invoke(AgentBindingTranslation.action(for: slot), origin: origin),
-                                    for: AgentPlugin.pluginID, at: clock()))
+        _ = try runtime.handle(
+            Self.instanceID,
+            input: .invoke(AgentBindingTranslation.action(for: slot), origin: origin)
+        )
     }
 
     public func interrupt(_ slot: AgentSlotID) throws {
-        let time = clock()
-        publish(try registry.update(AgentPlugin.pluginID, as: AgentPlugin.self) {
-            try $0.interrupt(slot.rawValue, at: time)
-        })
+        var binding = try runtime.binding(Self.instanceID, as: AgentRemoteBinding.self)
+        let update = try binding.plugin.interrupt(slot.rawValue, at: runtime.now)
+        try runtime.replace(binding, event: .init(code: "host.agent.interrupt"), update: update)
     }
 
-    public func advance() throws {
-        publish(try registry.handle(.advance, for: AgentPlugin.pluginID, at: clock()))
-    }
+    public func advance() throws { _ = try runtime.handle(Self.instanceID, input: .advance) }
 
-    public func reset() throws {
-        var candidate = PluginRegistry()
-        let time = clock()
-        try candidate.register([AgentPlugin(slotCount: 8, at: time)], at: time)
-        registry = candidate
+    public func reset(started: Bool = true) throws {
+        var binding = try runtime.binding(Self.instanceID, as: AgentRemoteBinding.self)
+        binding.plugin = try AgentPlugin(slotCount: 8, approvalPolicy: .localOrigins, at: runtime.now)
+        if started { _ = try binding.plugin.handle(.start, at: runtime.now) }
         lastPublished = nil
-        publish(.init(indicators: try snapshot().indicators))
+        try runtime.replace(binding, event: .init(code: "host.agent.reset"))
     }
 
     /// The MainActor host drives time even when no window is being redrawn.

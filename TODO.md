@@ -8,7 +8,7 @@
 
 状态（截至 2026-11-12）：
 
-- BCR 共享 Agent 接入已实现；跨宿主 M1、远端版本与后续 M2/M3 仍待完成，见 [共享插件接入](docs/SHARED_PLUGINS.md)。
+- BCR/XTouch同SHA的M1/M2/M3软件接入与新旧接口验证已完成；远端发布/CI和实机仍待处理，见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 - 仓库整理 Z2–Z6 已完成；六项隔离 Mock UI 验收均通过，入口见 [原生 UI 验收](docs/UI_ACCEPTANCE.md)。
 - 中英双语与语言设置完成：默认跟随系统，可选择简体中文 / English，重启生效。
 

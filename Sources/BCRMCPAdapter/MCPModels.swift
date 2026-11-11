@@ -76,15 +76,20 @@ public struct MCPToolFailure: Error, LocalizedError, Equatable, Sendable {
 public struct MCPToolResult: Equatable, Sendable {
     public let value: JSONValue
     public let isError: Bool
+    public let rawObject: Bool
+    public init(value: JSONValue, isError: Bool, rawObject: Bool = false) {
+        self.value = value; self.isError = isError; self.rawObject = rawObject
+    }
 
     public var rpcValue: JSONValue {
         get throws {
-            .object([
+            let content = rawObject ? value : .object(["data": value])
+            return .object([
                 "content": .array([.object([
                     "type": .string("text"),
-                    "text": .string(try JSONValue.object(["data": value]).jsonText)
+                    "text": .string(try content.jsonText)
                 ])]),
-                "structuredContent": .object(["data": value]),
+                "structuredContent": content,
                 "isError": .bool(isError)
             ])
         }

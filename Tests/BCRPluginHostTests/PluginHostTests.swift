@@ -3,11 +3,18 @@ import BCRAgentDomain
 import BCRConfigurationAdapter
 import BCRFoundation
 import BCRPluginHost
+import BCRPluginRuntime
+import AgentRemoteBinding
+import RemoteToolContracts
 import Foundation
 import SurfacePluginContracts
 import XCTest
 
-private struct FixturePlugin: ControlPlugin {
+private struct FixturePlugin: ControlPlugin, RemoteBinding {
+    var instanceID: String { manifest.id.rawValue }
+    var tools: [RemoteToolDescriptor] { [] }
+    mutating func call(_ name: String, arguments: JSONValue,
+                       context: RemoteCallContext) throws -> JSONValue { throw PluginError(code: .unsupported) }
     let manifest: PluginManifest
     let surface: SurfaceDescriptor
     var failsStart = false
@@ -23,7 +30,19 @@ private struct FixturePlugin: ControlPlugin {
     func snapshot() -> PluginSnapshot { .init(isStarted: started) }
 }
 
+@MainActor
 final class PluginRegistrationTests: XCTestCase {
+    private func instanceIDs(_ registry: BCRPluginRuntime) throws -> [String] {
+        let data = try registry.call("surface_capabilities", arguments: .object([:]))
+        return try XCTUnwrap(data.objectValue?["instances"]?.arrayValue)
+            .compactMap { $0.objectValue?["instance_id"]?.stringValue }
+    }
+
+    private func snapshot(_ registry: BCRPluginRuntime, _ id: String) throws -> PluginSnapshot {
+        guard let value = registry.snapshot(id) else { throw PluginError(code: .unsupported) }
+        return value
+    }
+
     private func fixture(id: PluginID = "fixture", contract: String = "1.0",
                          actions: [ActionDescriptor] = [], failsStart: Bool = false) -> FixturePlugin
     {
@@ -32,20 +51,20 @@ final class PluginRegistrationTests: XCTestCase {
     }
 
     func testDuplicateRegistrationAndStartupFailureLeaveNoPartialRegistration() throws {
-        var registry = PluginRegistry()
-        XCTAssertThrowsError(try registry.register([fixture(), fixture()], at: 0))
-        XCTAssertTrue(registry.pluginIDs.isEmpty)
-        XCTAssertThrowsError(try registry.snapshot("fixture"))
-        XCTAssertThrowsError(try registry.register([fixture(), fixture(id: "second", failsStart: true)], at: 0))
-        XCTAssertTrue(registry.pluginIDs.isEmpty)
-        try registry.register([fixture()], at: 0)
-        XCTAssertTrue(try registry.snapshot("fixture").isStarted)
-        XCTAssertThrowsError(try registry.register([fixture(id: "second"), fixture()], at: 0))
-        XCTAssertEqual(registry.pluginIDs, ["fixture"])
-        XCTAssertTrue(try registry.snapshot("fixture").isStarted)
+        let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
+        XCTAssertThrowsError(try registry.install([fixture(), fixture()]))
+        XCTAssertTrue(try instanceIDs(registry).isEmpty)
+        XCTAssertThrowsError(try snapshot(registry, "fixture"))
+        XCTAssertThrowsError(try registry.install([fixture(), fixture(id: "second", failsStart: true)]))
+        XCTAssertTrue(try instanceIDs(registry).isEmpty)
+        try registry.install([fixture()])
+        XCTAssertTrue(try snapshot(registry, "fixture").isStarted)
+        XCTAssertThrowsError(try registry.install([fixture(id: "second"), fixture()]))
+        XCTAssertEqual(try instanceIDs(registry), ["fixture"])
+        XCTAssertTrue(try snapshot(registry, "fixture").isStarted)
     }
 
-    func testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup() {
+    func testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup() throws {
         let invalid = [
             fixture(contract: "2.0"), fixture(id: "bad name"),
             fixture(actions: [.init(id: "other.action", nameKey: "name")]),
@@ -55,34 +74,66 @@ final class PluginRegistrationTests: XCTestCase {
                               .init(id: "fixture.action", nameKey: "b")])
         ]
         for plugin in invalid {
-            var registry = PluginRegistry()
-            XCTAssertThrowsError(try registry.register([fixture(id: "valid"), plugin], at: 0))
-            XCTAssertTrue(registry.pluginIDs.isEmpty)
+            let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
+            XCTAssertThrowsError(try registry.install([fixture(id: "valid"), plugin]))
+            XCTAssertTrue(try instanceIDs(registry).isEmpty)
         }
     }
 
     func testResetOrStopOfOnePluginDoesNotChangeAnother() throws {
-        var registry = PluginRegistry()
-        try registry.register([AgentPlugin(), fixture()], at: 0)
-        let other = try registry.snapshot("fixture")
-        try registry.handle(.stop, for: "agent", at: 1)
-        XCTAssertEqual(try registry.snapshot("fixture"), other)
-        XCTAssertFalse(try registry.snapshot("agent").isStarted)
+        let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
+        try registry.install([AgentRemoteBinding(instanceID: "agent", plugin: try AgentPlugin()), fixture()])
+        let other = try snapshot(registry, "fixture")
+        try registry.handle("agent", input: .stop)
+        XCTAssertEqual(try snapshot(registry, "fixture"), other)
+        XCTAssertFalse(try snapshot(registry, "agent").isStarted)
     }
 
     func testSurfaceIDsCannotCollideAcrossNestedPluginNamespaces() throws {
-        var registry = PluginRegistry()
-        try registry.register([fixture(actions: [.init(id: "fixture.child.action", nameKey: "name")])], at: 0)
-        XCTAssertThrowsError(try registry.register([
+        let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
+        try registry.install([fixture(actions: [.init(id: "fixture.child.action", nameKey: "name")])])
+        XCTAssertThrowsError(try registry.install([
             fixture(id: "fixture.child", actions: [.init(id: "fixture.child.action", nameKey: "name")])
-        ], at: 0))
-        XCTAssertEqual(registry.pluginIDs, ["fixture"])
+        ]))
+        XCTAssertEqual(try instanceIDs(registry), ["fixture"])
     }
 }
 
 @MainActor
 final class MockAgentHostTests: XCTestCase {
     private final class Clock { var time: Double = 0 }
+
+    func testSameReferenceSequenceAsTheOtherHostMatchesSharedRegistryAndRemoteApprovalRejection() throws {
+        let clock = Clock()
+        let owner = try BCRPluginRuntime(clock: { clock.time }, epoch: "fixture")
+        let host = try BCRMockAgentHost(clock: { clock.time }, runtime: owner)
+        var reference = try RemoteRegistry(epoch: "fixture")
+        try reference.install(AgentRemoteBinding(instanceID: BCRMockAgentHost.instanceID,
+                                                 plugin: AgentPlugin(
+                                                     slotCount: 8,
+                                                     approvalPolicy: .localOrigins,
+                                                     at: 0
+                                                 )))
+        _ = try reference.handle(instanceID: BCRMockAgentHost.instanceID, input: .start, at: 0)
+        let arguments: JSONValue = .object(["instance_id": .string(BCRMockAgentHost.instanceID), "slot": .number(1)])
+        clock.time = 1
+        XCTAssertEqual(try owner.call("surface_agent_primary", arguments: arguments),
+                       try reference.call("surface_agent_primary", arguments: arguments, context: .init(time: 1)))
+        for time in [1.45, 2, 3.7] {
+            clock.time = time
+            try host.advance()
+            _ = try reference.handle(instanceID: BCRMockAgentHost.instanceID, input: .advance, at: time)
+            XCTAssertEqual(try host.snapshot(), reference.snapshot(instanceID: BCRMockAgentHost.instanceID))
+        }
+        clock.time = 4
+        let before = try host.snapshot()
+        XCTAssertThrowsError(try owner.call("surface_agent_primary", arguments: arguments))
+        XCTAssertThrowsError(try reference.call("surface_agent_primary", arguments: arguments, context: .init(time: 4)))
+        XCTAssertEqual(try host.snapshot(), before)
+        let cursor: JSONValue = .object(["epoch": .string("fixture"), "after": .string("0"), "limit": .number(256)])
+        XCTAssertEqual(try owner.call("surface_events", arguments: cursor),
+                       try reference.call("surface_events", arguments: cursor, context: .init(time: 4)))
+    }
 
     func testEveryInjectedTimelineStageMatchesSharedPluginSnapshotAndLegacyProgress() throws {
         let clock = Clock()

@@ -1,4 +1,7 @@
 import BCRAgentCore
+import BCRPluginRuntime
+import BCRProviderApplication
+import OutputRemoteBinding
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -30,7 +33,25 @@ private final class OutputFakeTransport: OutputTransport {
 }
 
 @MainActor
+private final class PrecisionOutputTransport: OutputTransport {
+    var isConnected = false
+    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onHeartbeat: (@MainActor (Date) -> Void)?
+    var onConnection: (@MainActor (Bool, String?) -> Void)?
+    var onFailure: (@MainActor (String) -> Void)?
+    var onPeerReset: (@MainActor (Date) -> Void)?
+    var onDroppedPacket: (@MainActor () -> Void)?
+    var frames: [ParameterOutputFrame] = []
+    func select(_ kind: OutputTransportKind) throws {}
+    func start(host: String, port: UInt16) throws { isConnected = true; onConnection?(true, nil) }
+    func ping(at now: Date) throws {}
+    func send(_ frame: ParameterOutputFrame) throws { frames.append(frame) }
+    func stop() { isConnected = false }
+}
+
+@MainActor
 private final class OutputTestClock {
+    var monotonic = 10.0
     var now = Date(timeIntervalSinceReferenceDate: 10_000)
 }
 
@@ -272,5 +293,167 @@ final class OutputControllerTests: XCTestCase {
         session.setParameter("arm.enabled", to: 1); controller.tick()
         XCTAssertEqual(controller.status, .ready)
         XCTAssertEqual(transport.frames.last?.values.count, saved.limits.count)
+    }
+
+    func testSharedRuntimeDisableUsesOneMonotonicDomainAndRequiresRealEnableOffOn() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let wall = OutputTestClock()
+        let owner = try BCRPluginRuntime(clock: { wall.monotonic }, epoch: "fixture")
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: .robotArmDemo(),
+                                     now: { wall.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let adapter = OutputFakeTransport()
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                          adapter: adapter,
+                                          automaticallyTicks: false, now: { wall.now }, runtime: owner)
+        controller.start()
+        adapter.onHeartbeat?(wall.now)
+        adapter.onSamples?(controller.settings.limits.map { .init(id: $0.id, value: 0, receivedAt: wall.now) })
+        controller.tick() // real host enable parameter is off
+        session.setParameter("arm.enabled", to: 1)
+        controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+        wall.monotonic += 0.05; wall.now.addTimeInterval(0.05)
+        _ = try owner.call(
+            "surface_output_disable",
+            arguments: .object(["instance_id": .string(OutputController.instanceID)])
+        )
+        XCTAssertEqual(controller.status, .disabled)
+        XCTAssertNotEqual(controller.status, .clockError)
+        XCTAssertEqual(adapter.frames.last?.enabled, false)
+        XCTAssertEqual(
+            try owner.binding(OutputController.instanceID, as: OutputRemoteBinding.self).plugin.gate.status.rawValue,
+            "disabled"
+        )
+        controller.tick()
+        XCTAssertEqual(controller.status, .disabled, "Polling an unchanged enable parameter cannot undo remote disable")
+        session.setParameter("arm.enabled", to: 0); controller.tick()
+        session.setParameter("arm.enabled", to: 1); controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+        controller.stop()
+    }
+
+    func testDelayedTrustedObservationKeepsItsOriginalAgeAcrossTheTimeBridge() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let wall = OutputTestClock()
+        let owner = try BCRPluginRuntime(clock: { wall.monotonic })
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: .robotArmDemo(),
+                                     now: { wall.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let adapter = OutputFakeTransport()
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                          adapter: adapter,
+                                          automaticallyTicks: false, now: { wall.now }, runtime: owner)
+        controller.start()
+        let captured = wall.now
+        wall.monotonic += 1; wall.now.addTimeInterval(1)
+        adapter.onHeartbeat?(captured)
+        controller.tick()
+        XCTAssertEqual(controller.status, .heartbeatExpired)
+        XCTAssertNotEqual(controller.status, .ready)
+        controller.stop()
+    }
+
+    func testGUICompositionInjectsTheSameOwnerIntoAgentSimulatorsAndOutput() throws {
+        let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false,
+                                     providerConfiguration: .init(robot: true, chassis: true, clock: .manual),
+                                     mockClock: { 0 }, automaticallyAdvancesMock: false)
+        XCTAssertTrue(try XCTUnwrap(model.mockAgents).runtime === model.provider.runtime)
+        XCTAssertTrue(model.output.runtime === model.provider.runtime)
+        let data = try model.provider.runtime.call("surface_capabilities", arguments: .object([:]))
+        let instances = try XCTUnwrap(data.objectValue?["instances"]?.arrayValue)
+        XCTAssertEqual(instances.compactMap { $0.objectValue?["instance_id"]?.stringValue },
+                       ["agent.mock", "chassis.reference", "output.parameters", "robot.reference"])
+        model.mcp.service.permissions.agentControl = true
+        let result = model.mcp.service.call(
+            "surface_agent_primary",
+            arguments: .object(["instance_id": .string("agent.mock"), "slot": .number(1)])
+        )
+        XCTAssertFalse(result.isError)
+        XCTAssertEqual(model.slots[0].state, .queued)
+        XCTAssertEqual(model.mock.value(of: .button(row: 1, 1)), 40)
+        model.performPrimaryAction(AgentSlotID(1))
+        let state = try model.provider.runtime.call(
+            "surface_agent_snapshot",
+            arguments: .object(["instance_id": .string("agent.mock")])
+        )
+        XCTAssertEqual(state.objectValue?["slots"]?.arrayValue?[0].objectValue?["state"], .string("interrupted"))
+        XCTAssertEqual(model.slots[0].state, .interrupted)
+    }
+
+    private func precisionController(_ transport: OutputTransportKind,
+                                     actual: Double) throws -> (
+        OutputController,
+        PrecisionOutputTransport,
+        OutputTestClock
+    ) {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        let clock = OutputTestClock(), adapter = PrecisionOutputTransport()
+        let configuration = SurfaceConfiguration(name: "precision", parameters: [
+            .init(id: "axis", name: "Axis", minimum: 0, maximum: 0.1, defaultValue: 0.1),
+            .init(id: "enable", name: "Enable", minimum: 0, maximum: 1, kind: .toggle)
+        ])
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration,
+                                     now: { clock.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                          adapter: adapter,
+                                          automaticallyTicks: false, now: { clock.now })
+        var settings = controller.settings; settings.transport = transport; controller.apply(settings)
+        controller.start()
+        adapter.onHeartbeat?(clock.now)
+        adapter.onSamples?([.init(id: "axis", value: actual, receivedAt: clock.now)])
+        controller.tick()
+        session.setParameter("enable", to: 1); controller.tick()
+        return (controller, adapter, clock)
+    }
+
+    func testOSCRejectsUnrepresentableInitialActualWithoutChangingTheObservation() throws {
+        let (controller, adapter, _) = try precisionController(.osc, actual: 0.1)
+        defer { controller.stop() }
+        XCTAssertEqual(controller.status, .invalidActual)
+        XCTAssertTrue(controller.reason.contains("Float32"))
+        XCTAssertTrue(controller.reason.contains("axis"))
+        XCTAssertEqual(controller.actual["axis"], 0.1)
+        XCTAssertFalse(adapter.frames.contains { $0.enabled })
+    }
+
+    func testJSONTransportKeepsDoublePointOneAndProducesSafeJSONWireValue() throws {
+        let (controller, adapter, clock) = try precisionController(.webSocket, actual: 0.1)
+        defer { controller.stop() }
+        XCTAssertEqual(controller.status, .ready)
+        let frame = try XCTUnwrap(adapter.frames.last { $0.enabled })
+        XCTAssertEqual(frame.values["axis"], 0.1)
+        var link = JSONParameterLink(session: "fixture")
+        let ping = link.ping(at: clock.now)
+        _ = try link.receive(.object([
+            "type": .string("pong"),
+            "session": .string("fixture"),
+            "epoch": .string("peer"),
+            "sequence": try XCTUnwrap(ping.objectValue?["sequence"])
+        ]), at: clock.now)
+        let wire = try link.command(frame)
+        let encoded = try wire.jsonText
+        let decoded = try JSONDecoder().decode(JSONValue.self, from: Data(encoded.utf8))
+        let value = try XCTUnwrap(decoded.objectValue?["values"]?.objectValue?["axis"]?.finiteNumber)
+        XCTAssertEqual(value, 0.1)
+        XCTAssertLessThanOrEqual(value, 0.1)
+    }
+
+    func testRealFloat32ActualStillProducesAnOSCValueWithinTheSoftLimit() throws {
+        let (controller, adapter, _) = try precisionController(.osc, actual: Double(Float(0.05)))
+        defer { controller.stop() }
+        XCTAssertEqual(controller.status, .ready)
+        let frame = try XCTUnwrap(adapter.frames.last { $0.enabled })
+        let value = try XCTUnwrap(frame.values["axis"])
+        let bytes = try OSCCodec.encode(.message(.init("/bcr/param/axis", [.float(Float(value))])))
+        guard case let .message(message) = try OSCCodec.decode(bytes),
+              case let .float(wire) = message.arguments[0] else { return XCTFail("Expected OSC float") }
+        XCTAssertLessThanOrEqual(Double(wire), 0.1)
+        XCTAssertGreaterThanOrEqual(Double(wire), 0)
+        XCTAssertEqual(Double(wire), value)
     }
 }

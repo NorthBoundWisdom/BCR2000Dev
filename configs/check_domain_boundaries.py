@@ -18,6 +18,7 @@ from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 
 ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
+    "BCRPluginRuntime": {"SurfacePluginContracts", "RemoteToolContracts"},
     "BCRFoundation": {"SimulationContracts", "SurfacePluginContracts"},
     "BCRAgentDomain": {"BCRFoundation", "AgentPlugin"},
     "BCRPluginHost": {
@@ -25,8 +26,10 @@ ALLOWED = {
         "BCRAgentDomain",
         "BCRSurfaceDomain",
         "BCRConfigurationAdapter",
+        "BCRPluginRuntime",
         "SurfacePluginContracts",
         "AgentPlugin",
+        "AgentRemoteBinding",
     },
     "BCRCodexAdapter": {"BCRFoundation", "BCRAgentDomain"},
     "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts"},
@@ -34,7 +37,16 @@ ALLOWED = {
     "BCRSimulationKernel": {"BCRFoundation", "SimulationContracts"},
     "BCRRobotDomain": {"BCRFoundation", "BCRSimulationKernel", "RobotPlugin"},
     "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel", "ChassisPlugin"},
-    "BCRProviderApplication": {"BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"},
+    "BCRProviderApplication": {
+        "BCRFoundation",
+        "BCRSurfaceDomain",
+        "BCRRobotDomain",
+        "BCRChassisDomain",
+        "BCRPluginRuntime",
+        "RobotRemoteBinding",
+        "ChassisRemoteBinding",
+        "RemoteToolContracts",
+    },
     "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain", "ExampleParameterSets"},
     "BCRConfigurationAdapter": {
         "BCRFoundation",
@@ -44,7 +56,13 @@ ALLOWED = {
         "SurfacePluginContracts",
     },
     "BCRPersistenceAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRConfigurationAdapter"},
-    "BCRMCPAdapter": {"BCRFoundation", "BCRSurfaceDomain", "SurfacePluginContracts"},
+    "BCRMCPAdapter": {
+        "BCRFoundation",
+        "BCRSurfaceDomain",
+        "BCRPluginRuntime",
+        "SurfacePluginContracts",
+        "RemoteToolContracts",
+    },
     "BCRProviderMCPAdapter": {
         "BCRFoundation",
         "BCRSurfaceDomain",
@@ -68,6 +86,7 @@ ALLOWED = {
     },
 }
 PURE = {
+    "BCRPluginRuntime",
     "BCRFoundation",
     "BCRAgentDomain",
     "BCRSurfaceDomain",
@@ -109,6 +128,11 @@ def check():
                 if value.startswith("BCR")
                 or value
                 in {
+                    "RemoteToolContracts",
+                    "AgentRemoteBinding",
+                    "RobotRemoteBinding",
+                    "ChassisRemoteBinding",
+                    "OutputRemoteBinding",
                     "SurfacePluginContracts",
                     "AgentPlugin",
                     "SimulationContracts",

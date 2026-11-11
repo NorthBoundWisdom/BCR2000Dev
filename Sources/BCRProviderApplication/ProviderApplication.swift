@@ -3,6 +3,10 @@ import BCRRobotDomain
 import BCRChassisDomain
 import BCRSurfaceDomain
 import Foundation
+import BCRPluginRuntime
+import RobotRemoteBinding
+import ChassisRemoteBinding
+import RemoteToolContracts
 
 public enum ProviderClock: String, Codable, Sendable { case realtime, manual }
 public struct ProviderConfiguration: Codable, Sendable {
@@ -57,23 +61,98 @@ public final class ProviderApplication {
     public let providerID = UUID().uuidString
     public let configuration: ProviderConfiguration
     public let events = ProviderEventJournal(source: .simulation)
-    private var robot: RobotSimulator?
-    private var chassis: ChassisSimulator?
+    public let runtime: BCRPluginRuntime
+    public static let robotInstanceID = "robot.reference"
+    public static let chassisInstanceID = "chassis.reference"
+    private var robot: RobotSimulator? { configuration.robot ? runtime.optionalBinding(
+        Self.robotInstanceID,
+        as: RobotRemoteBinding.self
+    ).map { .init(plugin: $0.plugin) } : nil }
+    private var chassis: ChassisSimulator? { configuration.chassis ? runtime.optionalBinding(
+        Self.chassisInstanceID,
+        as: ChassisRemoteBinding.self
+    ).map { .init(plugin: $0.plugin) } : nil }
+    private struct SimulationRoute {
+        let enabled: Bool
+        let advance: @MainActor (Double) throws -> Void
+        let revoke: @MainActor () throws -> Void
+        let fault: @MainActor (String) throws -> Void
+    }
+
+    private var routes: [String: SimulationRoute] = [:]
+    private let routeOrder: [String] = ["robot", "chassis"]
+    private var observer: UUID?
+    public private(set) var lastSafetyFailure: String?
+    private var clockDiagnostic = "gap"
+
     private var timer: Task<Void, Never>?
     private let monotonic: @MainActor () -> Double
     private var lastMonotonic: Double
 
     public init(
         configuration: ProviderConfiguration = .init(),
-        monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime }
+        monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+        runtime: BCRPluginRuntime? = nil
     ) {
-        self.configuration = configuration; self.monotonic = monotonic; lastMonotonic = monotonic()
-        // Only these immutable, validated reference profiles are enabled in API 1.0.
-        robot = configuration.robot ? try! RobotSimulator() : nil
-        chassis = configuration.chassis ? try! ChassisSimulator() : nil
+        self.configuration = configuration
+        do { self.runtime = try runtime ?? BCRPluginRuntime(clock: monotonic) }
+        catch { preconditionFailure("Invalid built-in plugin runtime: \(error)") }
+        let owner = self.runtime
+        self.monotonic = { owner.now }; lastMonotonic = owner.now
+        do {
+            var bindings: [any RemoteBinding] = []
+            if configuration.robot { bindings.append(RobotRemoteBinding(
+                instanceID: Self.robotInstanceID,
+                plugin: try RobotSimulator().plugin
+            )) }
+            if configuration.chassis { bindings.append(ChassisRemoteBinding(
+                instanceID: Self.chassisInstanceID,
+                plugin: try ChassisSimulator().plugin
+            )) }
+            try self.runtime.install(bindings)
+        } catch { preconditionFailure("Invalid built-in simulation composition: \(error)") }
+        routes["robot"] = .init(enabled: configuration.robot, advance: { [unowned self] dt in
+            guard var value = self.robot else { throw ProviderDomainError(
+                "unsupported",
+                "The robot module is not enabled"
+            ) }
+            try value.advance(dt); try self.storeRobot(value, operation: "advance")
+        }, revoke: { [unowned self] in
+            guard var value = self.robot else { return }
+            value.revokeControl(); try self.storeRobot(value, operation: "revoke", safety: true)
+        }, fault: { [unowned self] code in
+            guard var value = self.robot else { return }
+            try value.plugin.simulator.fault(code, generation: value.control.generation)
+            try self.storeRobot(value, operation: "fault", safety: true)
+        })
+        routes["chassis"] = .init(enabled: configuration.chassis, advance: { [unowned self] dt in
+            guard var value = self.chassis else { throw ProviderDomainError(
+                "unsupported",
+                "The chassis module is not enabled"
+            ) }
+            try value.advance(dt); try self.storeChassis(value, operation: "advance")
+        }, revoke: { [unowned self] in
+            guard var value = self.chassis else { return }
+            value.revokeControl(); try self.storeChassis(value, operation: "revoke", safety: true)
+        }, fault: { [unowned self] code in
+            guard var value = self.chassis else { return }
+            try value.plugin.simulator.fault(code, generation: value.control.generation)
+            try self.storeChassis(value, operation: "fault", safety: true)
+        })
+        observer = self.runtime.observe { [weak self] change in
+            guard let self, change.isRemote,
+                  change.instanceID == Self.robotInstanceID || change.instanceID == Self.chassisInstanceID
+            else { return }
+            self.publish()
+        }
     }
 
-    deinit { timer?.cancel() }
+    deinit {
+        timer?.cancel()
+        let owner = runtime, token = observer
+        Task { @MainActor in if let token { owner.removeObserver(token) } }
+    }
+
     public func start() {
         guard configuration.clock == .realtime, robot != nil || chassis != nil, timer == nil else { return }
         lastMonotonic = monotonic()
@@ -87,33 +166,55 @@ public final class ProviderApplication {
 
     public func stopClock() { timer?.cancel(); timer = nil }
     public func revokeControl(domain: String) {
-        switch domain {
-        case "robot": robot?.revokeControl()
-        case "chassis": chassis?.revokeControl()
-        default: return
-        }
+        guard let route = routes[domain] else { return }
+        do { try route.revoke() } catch { lastSafetyFailure = error.localizedDescription }
         publish()
     }
 
     public func tick() {
         guard configuration.clock == .realtime else { return }
-        let now = monotonic(), elapsed = now - lastMonotonic; lastMonotonic = now
-        guard elapsed >= 0 && elapsed <= 2 else {
-            if var robot { try? robot.fault("host_clock_gap", generation: robot.control.generation); self.robot = robot
-            }
-            if var chassis {
-                try? chassis.fault("host_clock_gap", generation: chassis.control.generation); self.chassis = chassis
+        let now = monotonic(), elapsed = now - lastMonotonic
+        guard elapsed >= 0 && elapsed <= 2 && runtime.isTrustedTime(now) else {
+            clockDiagnostic = !now
+                .isFinite ? "nonfinite" : (elapsed < 0 || !runtime.isTrustedTime(now) ? "regressed" : "gap")
+            // Keep the previous trusted anchor through regressions/NaN. A valid forward
+            // gap faults motion but establishes a new clock anchor for later ticks.
+            if now.isFinite && runtime.isTrustedTime(now) && elapsed > 2 { lastMonotonic = now }
+            for name in routeOrder {
+                do { try routes[name]?.fault("host_clock_gap") }
+                catch { lastSafetyFailure = error.localizedDescription }
             }
             publish(); return
         }
+        lastMonotonic = now
         var remaining = elapsed
         while remaining > 1e-9 {
             let step = min(0.02, remaining)
-            do { try robot?.advance(step); try chassis?.advance(step) }
-            catch { assertionFailure("Invalid internal simulation step") }
+            do { for name in routeOrder { if let route = routes[name], route.enabled { try route.advance(step) } } }
+            catch { assertionFailure("Invalid internal simulation step: \(error)") }
             remaining -= step
         }
         if elapsed > 0 { publish() }
+    }
+
+    private func storeRobot(_ value: RobotSimulator, operation: String, safety: Bool = false) throws {
+        var binding = try runtime.binding(Self.robotInstanceID, as: RobotRemoteBinding.self)
+        binding.plugin = value.plugin
+        if safety {
+            try runtime.replaceForSafety(binding, event: .init(code: "host.safety.robot." + operation,
+                                                               fields: ["clock": .string(operation == "fault" ?
+                                                                       clockDiagnostic : "authorityRevoked")]))
+        } else { try runtime.replace(binding, event: .init(code: "host.robot." + operation)) }
+    }
+
+    private func storeChassis(_ value: ChassisSimulator, operation: String, safety: Bool = false) throws {
+        var binding = try runtime.binding(Self.chassisInstanceID, as: ChassisRemoteBinding.self)
+        binding.plugin = value.plugin
+        if safety {
+            try runtime.replaceForSafety(binding, event: .init(code: "host.safety.chassis." + operation,
+                                                               fields: ["clock": .string(operation == "fault" ?
+                                                                       clockDiagnostic : "authorityRevoked")]))
+        } else { try runtime.replace(binding, event: .init(code: "host.chassis." + operation)) }
     }
 
     public func robotState() throws -> RobotSnapshot {
@@ -177,7 +278,7 @@ public final class ProviderApplication {
             )
             try robot.fault(code, generation: generation)
         }
-        self.robot = robot; publish()
+        try storeRobot(robot, operation: "command"); publish()
         return RobotCommandReply(accepted: true, control: grant, state: robot.snapshot())
     }
 
@@ -222,7 +323,7 @@ public final class ProviderApplication {
             )
             try chassis.fault(code, generation: generation)
         }
-        self.chassis = chassis; publish()
+        try storeChassis(chassis, operation: "command"); publish()
         return ChassisCommandReply(accepted: true, control: grant, state: chassis.snapshot())
     }
 
@@ -237,15 +338,8 @@ public final class ProviderApplication {
             "permission_denied",
             "Simulation clock permission is required"
         )
-        switch domain {
-        case "robot":
-            guard var robot else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }
-            try robot.advance(dt); self.robot = robot
-        case "chassis":
-            guard var chassis else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }
-            try chassis.advance(dt); self.chassis = chassis
-        default: throw ProviderDomainError("unsupported", "Unknown simulation domain")
-        }
+        guard let route = routes[domain] else { throw ProviderDomainError("unsupported", "Unknown simulation domain") }
+        try route.advance(dt)
         publish()
     }
 

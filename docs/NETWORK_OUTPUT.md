@@ -59,7 +59,12 @@ state 使用独立单调递增序号。旧 session、epoch、重复/乱序状态
 失效清理不依赖上层回调：非法 JSON、发送失败或队列溢出都会立即取消 socket、收发任务与 session，
 上层安全门同时停止输出。主动停止仍尝试有界停止幀。路由选择通过 OutputTransport 协议执行，
 注入不支持所选协议的适配器时明确报错；切换/停止后旧回调失效，重新启动重新挂接。
-心跳期限目前使用墙钟 Date，系统向前/向后校时可能导致偏安全的超时或拒绝，必须重新确认使能。
+GUI安全门与新远程工具使用同一runtime单调时域。旧transport Date时间戳按连接anchor保守映射、保留排队age；
+网络ping/pong RTT仍沿Date接口，系统校时可能导致偏安全的超时/拒绝，需重连并重新确认使能。
 
 共享核心迁移后，心跳间隔达到超时期限即撤销武装，即使新心跳先于下一次评估到达也须关闭/开启使能；
 回退/非有限心跳时间会锁定clockError。旧Date API只在宿主投影为注入秒数，网络包、session/epoch/序号与地址格式不变。
+
+OSC使用Float32 wire：初始/重武装实际值必须精确可表示，否则停帧并提示参数，不做epsilon或偷偷改实际值。
+WebSocket/rosbridge JSON使用Double，不因非Float32实际值（例如0.1）无故拒绝。远程disable与GUI参数共用同一policy值，
+关闭后轮询不会重新开启；须实际观察到使能off/on。新远程enable默认拒绝授权，详见 [共享远程工具](SHARED_REMOTE_TOOLS.md)。

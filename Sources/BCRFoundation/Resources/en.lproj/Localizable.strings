@@ -710,9 +710,7 @@
 "允许机器人模拟控制" = "Allow simulated robot control";
 "允许底盘模拟控制" = "Allow simulated chassis control";
 "允许仿真重置、故障和时钟推进" = "Allow simulation reset, faults and clock advancement";
-"插件标识无效：{0}" = "Invalid plugin identifier: {0}";
-"插件标识重复：{0}" = "Duplicate plugin identifier: {0}";
-"不支持的插件合同版本：{0}" = "Unsupported plugin contract version: {0}";
-"未知插件：{0}" = "Unknown plugin: {0}";
 "时间不是有限数值，需重新连接安全门" = "Time is not finite; reconnect the safety gate";
 "心跳时间倒退，需重新连接安全门" = "Heartbeat time moved backwards; reconnect the safety gate";
+"安全门尚未初始化" = "The safety gate is not initialized";
+"OSC 实际值不能精确表示为 Float32，请确认实际值并关闭再开启使能：{0}" = "OSC actual value is not exactly Float32; confirm actual data and switch enable off/on: {0}";

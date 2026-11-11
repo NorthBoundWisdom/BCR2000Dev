@@ -8,6 +8,27 @@ import Foundation
 
 @MainActor
 public enum ProviderMCPModule {
+    /// Explicit transport authorization at the composition boundary, never inside a plugin.
+    public static func installShared(on service: AgentControlService, application: ProviderApplication) throws {
+        let manual = application.configuration.clock == .manual
+        try SharedPluginMCPModule.install(on: service, runtime: application.runtime, policies: [
+            "agent": { permission, _ in permission.parameterWrite && permission.agentControl },
+            "robot": { permission, name in
+                guard permission.parameterWrite else { return false }
+                if name == "surface_robot_advance" { return manual && permission.simulationControl }
+                if name == "surface_robot_reset" { return permission.robotControl && permission.simulationControl }
+                return permission.robotControl
+            },
+            "chassis": { permission, name in
+                guard permission.parameterWrite else { return false }
+                if name == "surface_chassis_advance" { return manual && permission.simulationControl }
+                if name == "surface_chassis_reset" { return permission.chassisControl && permission.simulationControl }
+                return permission.chassisControl
+            },
+            "output": { permission, _ in permission.parameterWrite }
+        ])
+    }
+
     private static func object(_ properties: [String: JSONValue] = [:], required: [String] = []) -> JSONValue {
         .object(["type": .string("object"), "properties": .object(properties),
                  "required": .array(required.map(JSONValue.string)), "additionalProperties": .bool(false)])

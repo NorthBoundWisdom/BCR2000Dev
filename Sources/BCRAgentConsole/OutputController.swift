@@ -1,6 +1,8 @@
 import BCRAgentCore
 import Combine
 import Foundation
+import BCRPluginRuntime
+import OutputRemoteBinding
 
 struct OutputSettings: Codable, Equatable, Sendable {
     var version = 1
@@ -47,7 +49,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
             try limit.validate()
             guard let definition = configuration.parameter(limit.id), definition.kind == .continuous,
                   limit.minimum >= definition.minimum, limit.maximum <= definition.maximum,
-                  Float(limit.minimum).isFinite, Float(limit.maximum).isFinite
+                  (transport != .osc || (Float(limit.minimum).isFinite && Float(limit.maximum).isFinite))
             else {
                 throw MotionSafetyError(L10n.text("输出限位必须属于现有连续参数的范围并可用 float32 表示"))
             }
@@ -69,7 +71,16 @@ final class OutputController: ObservableObject {
     let session: SurfaceSession
     private let adapter: any OutputTransport
     private let store: JSONFileStore<OutputSettings>
-    private var gate: MotionSafetyGate?
+    let runtime: BCRPluginRuntime
+    static let instanceID = "output.parameters"
+    private var observer: UUID?
+    private var wallAnchor: Date
+    private var policyAnchor: Double
+    private var observedEnable: Bool?
+    private var gate: MotionSafetyGate? {
+        runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self).map { .init(plugin: $0.plugin) }
+    }
+
     private var configuration: SurfaceConfiguration
     private var configurationRevision: UInt64
     private var lastPing: Date?
@@ -83,9 +94,13 @@ final class OutputController: ObservableObject {
         store: JSONFileStore<OutputSettings>,
         adapter: any OutputTransport = OutputTransportRouter(),
         automaticallyTicks: Bool = true,
-        now: @escaping @MainActor () -> Date = { .now }
+        now: @escaping @MainActor () -> Date = { .now },
+        runtime: BCRPluginRuntime? = nil
     ) {
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
+        do { self.runtime = try runtime ?? BCRPluginRuntime(clock: { now().timeIntervalSinceReferenceDate }) }
+        catch { preconditionFailure("Invalid built-in output runtime: \(error)") }
+        policyAnchor = self.runtime.now; wallAnchor = now()
         self.automaticallyTicks = automaticallyTicks
         configuration = session.engine.configuration
         configurationRevision = session.configurationRevision
@@ -93,26 +108,49 @@ final class OutputController: ObservableObject {
         do { if let stored = try store.load() { settings = stored } }
         catch { self.error = L10n.text("输出设置读取失败：\(error.localizedDescription)") }
         session.setOutputEnableParameter(settings.enableParameter)
+        do { try storeGate(
+            MotionSafetyGate(limits: settings.limits, precision: settings.transport == .osc ? .float32 : .double),
+            operation: "configure"
+        ) } catch { self.error = error.localizedDescription }
+        observer = self.runtime.observe { [weak self] change in
+            guard let self, change.instanceID == Self.instanceID, change.isRemote else { return }
+            self.applyRemoteDecision()
+        }
         adapter.onConnection = { [weak self] connected, failure in
             guard let self, !self.isStopping else { return }
             if let failure { self.stop(failure: failure); return }
-            self.gate?.setConnected(connected, at: self.now())
+            if connected {
+                self.policyAnchor = self.runtime.now; self.wallAnchor = self.now(); self.observedEnable = nil
+            }
+            do { try self.mutateGate("connection") { $0.setConnected(connected, at: self.policyNow) } }
+            catch { self.stop(failure: error.localizedDescription); return }
             self.tick()
         }
-        adapter.onHeartbeat = { [weak self] received in self?.gate?.receiveHeartbeat(at: received) }
+        adapter.onHeartbeat = { [weak self] received in
+            guard let self, self.settings.enabled, !self.isStopping else { return }
+            do { try self.mutateGate("heartbeat") { $0.receiveHeartbeat(at: self.policyTime(received)) } }
+            catch { self.stop(failure: error.localizedDescription) }
+        }
         adapter.onSamples = { [weak self] in self?.receive($0) }
         adapter.onDroppedPacket = { [weak self] in self?.droppedPackets += 1 }
         adapter.onPeerReset = { [weak self] received in
             guard let self else { return }
-            self.gate?.setConnected(false, at: received)
-            self.tick()
-            self.gate?.setConnected(true, at: received)
+            do {
+                try self.mutateGate("peer.disconnect") { $0.setConnected(false, at: self.policyNow) }
+                self.tick()
+                self.policyAnchor = self.runtime.now; self.wallAnchor = self.now(); self.observedEnable = nil
+                try self.mutateGate("peer.connect") { $0.setConnected(true, at: self.policyNow) }
+            } catch { self.stop(failure: error.localizedDescription) }
         }
         adapter.onFailure = { [weak self] in self?.stop(failure: $0) }
         publishSnapshot()
     }
 
-    deinit { task?.cancel() }
+    deinit {
+        task?.cancel()
+        let owner = runtime, token = observer
+        Task { @MainActor in if let token { owner.removeObserver(token) } }
+    }
 
     func restore() {
         // Restoring saved settings never reconnects an actuator or resumes motion.
@@ -127,12 +165,16 @@ final class OutputController: ObservableObject {
     func start() {
         do {
             try settings.validate(configuration: session.engine.configuration)
-            let gate = try MotionSafetyGate(limits: settings.limits, precision: .float32)
+            let gate = try MotionSafetyGate(
+                limits: settings.limits,
+                precision: settings.transport == .osc ? .float32 : .double
+            )
             var candidate = settings
             candidate.enabled = true
             try store.save(candidate)
             settings = candidate
-            self.gate = gate
+            policyAnchor = runtime.now; wallAnchor = now(); observedEnable = nil
+            try storeGate(gate, operation: "configure")
             configuration = session.engine.configuration
             configurationRevision = session.configurationRevision
             session.setOutputEnableParameter(settings.enableParameter)
@@ -154,14 +196,25 @@ final class OutputController: ObservableObject {
         guard !isStopping else { return }
         isStopping = true
         task?.cancel(); task = nil
+        var closingFailure = failure
         settings.enabled = false
         settings.ledSource = .target
         adapter.stop()
-        gate?.setConnected(false, at: now())
+        if var gate {
+            do {
+                _ = try runtime.handle(Self.instanceID, input: .stop)
+                gate = self.gate ?? gate
+                let safetyTime = Date(timeIntervalSinceReferenceDate: runtime.safetyTimestamp)
+                gate.setConnected(false, at: safetyTime)
+                _ = gate.evaluateRequested(targets: [:], at: safetyTime)
+                try storeGate(gate, operation: "disconnect", safety: true)
+            } catch { closingFailure = error.localizedDescription }
+        }
+        observedEnable = nil
         status = .disconnected
         limited = false
-        reason = failure.map { $0 + L10n.text("；输出已停止，LED 恢复目标值") } ?? L10n.text("输出已停止，LED 恢复目标值")
-        error = failure
+        reason = closingFailure.map { $0 + L10n.text("；输出已停止，LED 恢复目标值") } ?? L10n.text("输出已停止，LED 恢复目标值")
+        error = closingFailure
         session.setLEDFeedbackSource(.target)
         do { try store.save(settings) }
         catch { self.error = reason + L10n.text("；设置保存失败：\(error.localizedDescription)") }
@@ -218,7 +271,12 @@ final class OutputController: ObservableObject {
                 }
                 values[sample.id] = sample.value
             }
-            gate?.receiveActual(samples)
+            let policySamples = samples.map { ParameterSample(
+                id: $0.id,
+                value: $0.value,
+                receivedAt: policyTime($0.receivedAt)
+            ) }
+            try mutateGate("actual") { $0.receiveActual(policySamples) }
             if values.contains(where: { actual[$0.key] != $0.value }) {
                 actual.merge(values) { _, new in new }
                 try session.setActualFeedback(values)
@@ -230,7 +288,8 @@ final class OutputController: ObservableObject {
     }
 
     func tick() {
-        guard settings.enabled, var gate else { return }
+        guard settings.enabled else { return }
+        guard var gate else { stop(failure: L10n.text("安全门尚未初始化")); return }
         let time = now()
         guard session.configurationRevision == configurationRevision,
               session.engine.configuration == configuration
@@ -252,13 +311,51 @@ final class OutputController: ObservableObject {
             let targets = Dictionary(uniqueKeysWithValues: settings.limits.compactMap { limit in
                 session.engine.value(of: limit.id).map { (limit.id, $0) }
             })
-            let decision = gate.evaluate(targets: targets, enabled: enabled, at: time)
-            self.gate = gate
+            // Only a real host enable-parameter edge changes the requested flag. A remote
+            // disable therefore persists until an actual off/on; polling cannot undo it.
+            if observedEnable != enabled { try gate.setRequestedEnabled(enabled); observedEnable = enabled }
+            let decision = gate.evaluateRequested(targets: targets, at: policyNow)
+            try storeGate(gate, operation: "evaluate")
             if let command = decision.command, adapter.isConnected { try adapter.send(command) }
             if status != decision.status { status = decision.status }
-            if reason != decision.reason { reason = decision.reason }
+            let displayReason = decision.status == .disabled && enabled && !gate.plugin.requestedEnabled
+                ? L10n.text("请先关闭再开启使能，禁止自动恢复运动") : decision.reason
+            if reason != displayReason { reason = displayReason }
             if outputs != gate.outputs { outputs = gate.outputs }
             if limited != decision.limited { limited = decision.limited }
+            publishSnapshot()
+        } catch { stop(failure: error.localizedDescription) }
+    }
+
+    private var policyNow: Date { Date(timeIntervalSinceReferenceDate: runtime.now) }
+    private func policyTime(_ date: Date) -> Date {
+        // Preserve the original trusted timestamp/queue age, rather than marking delayed
+        // callbacks fresh. Rebase only on a new connection or explicit configuration.
+        Date(timeIntervalSinceReferenceDate: policyAnchor + date.timeIntervalSince(wallAnchor))
+    }
+
+    private func storeGate(_ gate: MotionSafetyGate, operation: String, safety: Bool = false) throws {
+        let binding = OutputRemoteBinding(instanceID: Self.instanceID, plugin: gate.plugin)
+        if runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self) == nil {
+            try runtime.install([binding])
+        } else if safety {
+            try runtime.replaceForSafety(binding, event: .init(code: "host.safety.output." + operation))
+        } else {
+            try runtime.replace(binding, event: .init(code: "host.output." + operation))
+        }
+    }
+
+    private func mutateGate(_ operation: String, _ body: (inout MotionSafetyGate) throws -> Void) throws {
+        guard var gate else { throw MotionSafetyError(L10n.text("安全门尚未初始化")) }
+        try body(&gate); try storeGate(gate, operation: operation)
+    }
+
+    private func applyRemoteDecision() {
+        guard let gate, let core = gate.plugin.decision else { return }
+        let decision = MotionSafetyDecision(shared: core)
+        do {
+            if let command = decision.command, adapter.isConnected { try adapter.send(command) }
+            status = decision.status; reason = decision.reason; outputs = gate.outputs; limited = decision.limited
             publishSnapshot()
         } catch { stop(failure: error.localizedDescription) }
     }

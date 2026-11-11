@@ -53,6 +53,9 @@ public func legacyOutputReason(_ key: String, parameterID: ParameterID? = nil) -
     case "output.reason.037": return L10n.text(.init(stringLiteral: "禁止在停止帧中发送运动值"))
     case "output.reason.038": return L10n.text(.init(stringLiteral: "参数值必须是有限数值"))
     case "output.reason.039": return L10n.text(.init(stringLiteral: "实际回传包含未知参数或非法数值"))
+    case "output.actual_not_float32_representable":
+        guard let parameterID else { return key }
+        return L10n.text("OSC 实际值不能精确表示为 Float32，请确认实际值并关闭再开启使能：\(parameterID)")
     case "output.clock.nonfinite": return L10n.text("时间不是有限数值，需重新连接安全门")
     case "output.clock.regressed": return L10n.text("心跳时间倒退，需重新连接安全门")
     default: return key

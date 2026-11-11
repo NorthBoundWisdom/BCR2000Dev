@@ -97,6 +97,8 @@ open build/app/BCRAgentConsole.app
 已有配置、参数和分组名称保留原文；新建参数和载入内置预置时使用当前语言。
 语言设置不修改 MIDI 身份、Quick Learn 映射或参数 ID。
 
+共享业务现已装配统一的 `surface_` 远程工具，旧Provider1.0不变，见 [新工具与权限](docs/SHARED_REMOTE_TOOLS.md)。
+OSC输出采用严格Float32基线，JSON传输保留Double；不兼容的实际值会关闭输出并提示，不改写观测值。
 输出安全门在心跳中断后要求关闭再开启使能；即使新的心跳已在下一次检测前到达，也不会自动恢复。
 
 ## 界面结构

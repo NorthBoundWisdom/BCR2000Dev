@@ -4,8 +4,8 @@
 （`DRAFT_SHARED_DOMAIN_PLATFORM.md`，已被本文取代）。
 
 - **第一部分（已交付）**：本仓库的供应方接口与领域隔离。43 项中 41 项完成，C03、C05 等待实体 BCR 复验。
-- **第二部分（BCR Agent 已接入）**：共享包合同和 Agent 已实现，BCR B0–B2 已审查通过；B3 为兼容与文档收敛。
-  XTouch 接入本轮暂停，跨宿主 M1、远端版本发布和 M2/M3 未完成。工作区总指导是决定与排期的权威。
+- **第二部分（BCR Agent 已接入）**：共享包合同和 Agent 已实现，BCR B0–B6 已审查通过，B7完成单runtime与新远程工具接线。
+  XTouch已接入，跨宿主M1参考序列/同SHA软件验证通过，M2/M3软件实现完成，远端发布与实机仍未完成。工作区总指导是决定与排期的权威。
 
 范围决定见 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md)，能力盘点见
 [供应方能力盘点](docs/provider-capability-inventory.md)，既有待办与实机记录见 [TODO.md](TODO.md)、
@@ -104,23 +104,23 @@
 | --- | --- | --- | --- |
 | 参数 ID | `ParameterID` 结构体，JSON 为单个字符串 | `String` | 类型化 ID，JSON 仍为单个字符串，两端旧文件可读 |
 | 参数种类 | `kind: continuous / toggle` | `isSwitch: Bool` | `kind` 枚举 |
-| 步长 | `step: Double?`，网格以 0 为锚点，平分时取较小值 | `step: Double`（0 表示无），网格以 `minimum` 为锚点，`.rounded()` | 见 D3 |
+| 步长 | `step: Double?`，0锚点/较低平分 | 旧step=0保shape，取值已对齐0锚点/较低平分 | 见 D3 |
 | 默认值 | 缺省为 `minimum` | 缺省为 0 | 描述中必须显式给出 |
-| 写入保护 | `agentWritable` + `externallyProtected` | 仅 `agentWritable` | 两个字段都保留 |
-| Agent 状态 | 7 种（含 queued、error），状态机校验转换 | 5 种，另有 `approved` 标志 | 采用 7 种状态机 |
+| 写入保护 | `agentWritable` + `externallyProtected` | 两字段独立，新字段仅v2；普通旧v1原shape | 两个字段都保留 |
+| Agent 状态 | 共享7态，旧Date/name/Codable投影 | 共享7态，legacy API薄投影 | 采用 7 种状态机 |
 | Agent 指示 | 同值兼容属性已移设备适配扩展，状态alias共享 | `ButtonLight` off/on/blink | 插件给语义状态，设备适配器决定呈现 |
 | 槽位 | `AgentSlotID` legacy类型留基础层；checked构造/插件边界抛错，无precondition | 配置校验限定 1…8 | 数量由插件配置给出，越界返回错误而不是崩溃 |
-| Mock 时间线 | 已迁共享 `AgentPlugin.advance`；MainActor宿主单调时钟驱动 | `advance(to:)` 注入时间，位于 Core | 注入时间 |
-| 触发方式 | 生产通用 `triggerAction`；旧case按D8仅兼容 | `ParameterAction.agent(Int)`，`receive` 返回槽位号 | 统一为带命名空间的动作引用 |
+| Mock 时间线 | 共享advance；MainActor单调owner驱动 | 共享advance；独立host单调owner驱动 | 注入时间 |
+| 触发方式 | 生产通用 `triggerAction`；旧case按D8仅兼容 | 旧 `ParameterAction.agent(Int)` 仅兼容；生产触发通用 `ActionReference` | 统一为带命名空间的动作引用 |
 | 本地化 | 领域模型直接调用 `L10n.text`，资源在 `BCRFoundation` | 独立本地化模块，Core 不含文案 | 共享包只给稳定键与代码，文案由宿主提供 |
 | 错误 | `ProviderDomainError(code, message)` 与本地化枚举并存 | 枚举 | 稳定代码加结构化字段 |
 | 并发模型 | `@MainActor final class` 加观察者 | `Sendable` 值类型 | 值类型 |
 | 平台 | macOS 14+ | Core 必须可在 Linux 测试 | 纯逻辑可在 Linux 构建测试 |
-| 远程接口 | Provider 1.0（MCP + SSE，Schema 随发布件） | 3 个 MCP 工具，`[String: Any]` | S5 处理，M1 之前不动 |
-| 输出与安全门 | `BCROutputDomain`：OSC、JSON 链路、`MotionSafetyGate` | `OSC.swift` 内的 `OSCCodec`、`MotionSafetyGate` | S4 对照后合并为一个插件核心 |
-| 装配 | `ProviderApplication` 按 `domain: String` 硬编码机器人与底盘 | `ConsoleModel` 直接持有 `MockAgents` | 组合根注册，运行器不写 `switch domain` |
+| 远程接口 | 旧Provider1.0不变 +共享surface_ | 旧3工具不变 +同schema的surface_ | 共用显式typed绑定/有界journal |
+| 输出与安全门 | 共享核心+Date/地址/文案薄投影 | 共享完整gate，缺可信遥测明确拒发 | 独立heartbeat/actual/off-on，OSC float32，JSON double |
+| 装配 | 唯一runtime，注册路由驱动旧Provider/GUI/新tools | 唯一registry，UI/时钟/remote同值 | 组合根注册，运行器不写 `switch domain` |
 
-当前协作边界：XTouch 因用户待处理的旧检出改动而暂停，本仓库不读写旧检出；是否带入由用户决定。
+当前协作边界：用户已恢复XTouch并行接入；两个宿主各自只改当前授权检出，不读写旧检出。
 两个宿主不依赖彼此源码。共享包是独立仓库；已授权的本地路径覆盖不属于额外宿主 clone。
 BCR 本阶段每任务本地提交，不推送/标签/远端创建，覆盖原默认提交后推送规则。
 
@@ -239,22 +239,25 @@ public struct PluginUpdate: Sendable {
 | D6 | 每任务仅本地Conventional Commit，不push/tag/创建远端 |
 | D7 | 各仓测试记录数量；硬件未连接，不能宣称实机已验证 |
 | D8 | BCR旧枚举case/callback和无注入fallback仅为兼容；生产注入配置适配的通用动作/指示绑定，storage只IndicatorID；不复制整个引擎。新增triggerAction要求旧穷举switch补case，保留旧case构造/pattern/方法行为 |
+| D9 | build受管输入不是额外开发克隆；stdlib/Git管理器检查归属/dirty/SHA/symlink，原子物化，不reset外部source；B/C helper逐字相同、无FreeCM依赖 |
+| D10 | 本轮完成两宿主M1/M2/M3软件与S6收敛/发布准备；不连接真实执行器，不push/tag |
+| D11 | 独立心跳/新鲜实际值/off-on完整共享gate；无可信遥测拒发，不用last-sent或request伪造actual |
+| D12 | XTouch独立externallyProtected仅新v2防旧App忽略；旧v1原shape，BCR格式不变 |
+| D13 | 仅OSC Float32初始/重seed必须actual精确可表示；失败invalidActual+ID停帧，不epsilon/改actual；JSON类按Double |
 
-U1：远端已有初始main，共享实现尚未推送；当前锁定commit从本地Git获取，不依赖0.1.0标签，推送/发布等用户决定；U2：XTouch旧检出改动归属尚待用户处理，当前暂停该宿主；
-U3：M2在XTouch装配哪些可选模拟器尚待决定；U4：三个仓库统一MIT/NorthBoundWisdom，已确定。
+U1：远端已有初始main，共享实现尚未推送；当前锁定commit从本地Git获取，不依赖0.1.0标签，推送/发布等用户决定；U2：用户已恢复本工作区XTouch接入，旧检出不读写；
+U3：按本轮完成全部计划，XTouch机器人/底盘/输出均可显式装配，默认关闭可选模拟器；U4：三个仓库统一MIT/NorthBoundWisdom，已确定。
 
 ## 6. 阶段任务
 
 每个任务一个提交（Conventional Commits），提交正文写明跑过的检查和没有验证的部分。
 “软件检查通过”和“实体设备验证通过”分开记录，后者未做就保持未勾选。
 
-### S0 盘点（不改源码）
+### S0 盘点（历史证据已收敛）
 
-- [ ] S0-1 把第 3 节的对照表补全为逐项清单，写入共享包仓库的 `docs/`：每一项标明共同语义、设备差异、
-  兼容承诺。重点核对参数量化、Agent 转换表、安全门的心跳与限幅规则。
-- [ ] S0-2 列出两个宿主中引用 `AgentSlotID`、`triggerAgent`、`agentPrimaryAction`、`.agent(`、
-  `MockAgents`、`updateAgentLights`、`setAgentFeedback` 的位置，作为 S2、S3 的改动范围。
-- [ ] S0-3 记录两个宿主当前的测试数量与结果作为回归基线。
+- [x] S0-1 差异/共同语义与兼容基线已落实于本第3节及共享docs/output-differences.md、simulation-error-mapping.md、consolidation.md；参数D3与Agent转换矩阵由共享单测锁定。
+- [x] S0-2 两宿主逐符号/层引用盘点已写工作区reports/B.md的B0及reports/C.md的C0，作为后续改动范围。
+- [x] S0-3 两宿主原始测试数量已记录：BCR356，XTouch130（含9 XCTest，不仅SwiftTesting121）；后续完整检查均不减少。
 
 ### S1 合同包
 
@@ -266,8 +269,8 @@ U3：M2在XTouch装配哪些可选模拟器尚待决定；U4：三个仓库统�
   未知动作与越界索引返回错误、`stop` 之后拒绝写入、声明的参数与指示灯 ID 唯一且带命名空间。
 - [x] S1-4 用两个虚构布局的测试宿主（一个只有按键和 7 位灯环，一个有层和三态灯）驱动同一个测试插件，
   证明合同不含布局假设。
-- [ ] S1-5 边界检查脚本：禁止导入 AppKit、SwiftUI、CoreMIDI、Network、Combine、Security；
-  禁止出现宿主名、设备名和具体下游业务名。边界检查已实现；双平台CI已配置，实际Linux/CI执行待远端发布，不把本机macOS结果视为Linux验证。
+- [x] S1-5 边界检查脚本：禁止导入 AppKit、SwiftUI、CoreMIDI、Network、Combine、Security；
+  禁止出现宿主名、设备名和具体下游业务名。边界检查已实现；macOS本机与Root独立官方Swift6.0.3 Linux/aarch64验证通过（共享最终87测试），双平台CI已配置但远端未执行。
 
 完成标准：包可独立构建测试；没有宿主导入；没有固定控件数量、槽位数量或 7 位值域。
 
@@ -283,19 +286,19 @@ U3：M2在XTouch装配哪些可选模拟器尚待决定；U4：三个仓库统�
   `BCRAgentCore`旧成员调用与pattern保留（穷举switch例外见D8）。Codex路径及设备禁止真实审批的断言保持。
 - [x] S2-5 更新 `configs/check_domain_boundaries.py`、ADR、`AGENTS.md`。
 
-BCR证据：原始356、B0锁定359、B1为369、B2为374、B3为376；B2/B3自包含产物各14组Provider黑盒通过。
-B3最终检查与审查见工作区 `reports/B.md` / `reports/REVIEW.md`；共享包合同可用，跨宿主M1尚未通过。
+BCR证据：原始356、B0锁定359、B1为369、B2为374、B3/B4为376、B5为380、B6为384、B7为396；最终自包含产物原样14组Provider黑盒通过，新工具现代/2025 HTTP协议也通过。
+B0–B7最终检查与审查见工作区 `reports/B.md` / `reports/REVIEW.md`；共享包合同可用，跨宿主M1同SHA/同参考序列软件验证通过。
 
 完成标准：BCR 既有测试数量不减少且全部通过；Provider 1.0 的工具名、错误语义和事件顺序不变；
 C03、C05 涉及的反馈路径没有行为变化。
 
 ### S3 XTouch 接入同一版本（M1）
 
-- [ ] S3-1 XTouch 插件宿主适配：注册、`.agent(Int)` 的翻译、指示灯到 `ButtonLight` 的映射。
-- [ ] S3-2 用 `AgentPlugin` 取代 `MockAgents`；`CompactSession.updateAgentLights` 改为接收指示灯状态。
-  磁盘上的配置格式不变，仍然拒绝载入 BCR 的配置。
-- [ ] S3-3 按 D3 对齐参数取值规则，列出行为变化并补测试。
-- [ ] S3-4 Core 测试保持可在 Linux 运行；更新 XTouch 的 `AGENTS.md` 中关于外部依赖的规则。
+- [x] S3-1 XTouch 插件宿主适配：注册、`.agent(Int)` 的翻译、指示灯到 `ButtonLight` 的映射。
+- [x] S3-2 用 `AgentPlugin` 取代 `MockAgents`；`CompactSession.updateAgentLights` 改为接收指示灯状态。
+  旧v1配置原shape保留；新独立保护字段按D12使用v2，仍拒绝载入BCR配置。
+- [x] S3-3 按 D3 对齐参数取值规则，列出行为变化并补测试。
+- [x] S3-4 Core 测试保持可在 Linux 运行；更新 XTouch 的 `AGENTS.md` 中关于外部依赖的规则。
 
 完成标准：两个宿主依赖共享包的同一个精确版本；各自独立检出即可构建，不需要对方的源码；
 XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改动断言。
@@ -305,34 +308,36 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 - [x] S4-1 `RobotPlugin`：迁移 `BCRRobotDomain` 和 `BCRSimulationKernel` 的 `DeviceControl`。
   控制权、代次、序号、TTL、过期拒绝、目标值与实际值分离的行为保持不变，明确标记 simulation。
 - [x] S4-2 `ChassisPlugin`：迁移 `BCRChassisDomain`。与机器人不共享可变状态，只共用控制权工具。
-- [ ] S4-3 BCR 的 `ProviderApplication` 改为经注册表驱动，去掉 `domain: String` 分支；Provider 1.0 黑盒场景原样通过。
+- [x] S4-3 BCR 的 `ProviderApplication` 改为经注册表驱动，去掉 `domain: String` 分支；Provider 1.0 黑盒场景原样通过。
 - [x] S4-4 `ParameterOutputPlugin`：先写两份 `MotionSafetyGate` 与 OSC 编码的差异表，再合并为一个纯核心；
   套接字与凭据留在宿主。不一致之处取更保守的行为，并列出每个宿主的变化。
 - [x] S4-5 示例参数集：机械臂示例和它的受保护参数声明作为可显式载入的数据插件；默认配置保持领域中性，
   旧配置迁移后仍受保护。
-- [ ] S4-6 XTouch 按 U3 的结论装配。
+- [x] S4-6 XTouch 按 U3 的结论装配。
 
 完成标准：任一插件可单独引入，不会带入其他插件；撤销或重置一个实例不影响其他实例的状态、控制权和订阅。
 
 ### S5 远程合同共用（M3）
 
-- [ ] S5-1 每个插件提供自己的远程绑定 target：工具名、输入输出 Schema、错误映射显式声明，不靠反射生成。
-- [ ] S5-2 抽取 MCP 工具注册与有界事件日志中确实相同的部分；HTTP 监听、令牌、权限界面留在宿主。
-- [ ] S5-3 BCR 经兼容适配保持 Provider 1.0 不变；XTouch 现有的 3 个工具保留，新增能力经能力发现开放。
-- [ ] S5-4 响应丢失、事件缺口、慢读者、过期控制权都有可观察结果；重连不重放有副作用的命令，
+- [x] S5-1 每个插件提供自己的远程绑定 target：工具名、输入输出 Schema、错误映射显式声明，不靠反射生成。
+- [x] S5-2 抽取 MCP 工具注册与有界事件日志中确实相同的部分；HTTP 监听、令牌、权限界面留在宿主。
+- [x] S5-3 BCR 经兼容适配保持 Provider 1.0 不变；XTouch 现有的 3 个工具保留，新增能力经能力发现开放。
+- [x] S5-4 响应丢失、事件缺口、慢读者、过期控制权都有可观察结果；重连不重放有副作用的命令，
   重新取快照不产生输入事件。
 
 ### S6 收敛
 
-- [ ] S6-1 删除已被替换的重复实现和临时桥接，发布共享包的正式版本。
-- [ ] S6-2 评估是否值得共享控制台引擎的更多部分（绑定模型、反馈意图）。只有在两个宿主出现
-  可以逐项对照的重复逻辑时才做，并且另开计划。
+- [x] S6-1 删除已替换的重复实现和本轮临时桥（含独立PluginRegistry）；保留明确legacy facade。
+- [ ] 共享包推送/正式版本发布：按D6等待用户决定，本轮不推送/打标签；固定commit构建不依赖tag。
+- [x] S6-2 已评估：本轮不再共享控制台引擎。参数规则/业务核心/remote registry已消除可验证重复；
+  BCR的Quick Learn、echo/NRPN/反馈调度与XTouch触摸/召回/层/电机代次具有不同硬件保护，不应为少量兼容绑定代码合并。
+  未来出现可逐项对照的新重复再另开计划，不在本任务扩大引擎范围。
 
 ## 7. 验收矩阵
 
 - **X1 依赖边界**：只引入 `SurfacePluginContracts` 不会编译任何插件；只引入一个插件不会编译其他插件、
   GUI、CoreMIDI 或网络代码。
-- **X2 同源同版本**：两个宿主的JSON锁指向共享包的同一个完整commit；任一宿主在没有另一个宿主源码的机器上可以构建和测试。
+- **X2 同源同版本**：两个宿主的JSON锁/实际build物化均为649a7066d372c6f2a978f9126f3ed175858bf3f7；任一宿主在没有另一个宿主源码的机器上可以构建和测试。
 - **X3 行为一致**：同一段插件输入序列在两个宿主的适配测试里得到相同的插件快照；
   呈现差异只来自设备适配器的映射表。
 - **X4 设备事实**：反馈发送不伪造物理观测；XTouch 触摸时不驱动电机，启动、切层、重连、载入配置不自动召回；
@@ -351,6 +356,6 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 5. 既有行为有意改变时，提交说明列出变化和受影响的配置；没有列出的行为变化视为缺陷。
 6. 旧配置的兼容翻译在宿主的配置适配器里，不在共享包里。
 7. 失败可见，没有静默回退；没有实机验证的内容不写成已验证。
-8. 提交不包含绝对路径、凭据、MIDI 抓包或本地映射；宿主的 `Package.swift` 不含相对路径依赖。
+8. 提交不包含绝对路径、凭据、MIDI 抓包或本地映射；宿主清单仅用固定build/dependencies物化路径，不含本地源码override或绝对路径；manifest只读verify、不获取/联网。
 9. XTouch：触摸期间不发电机指令，输入地址与反馈地址、TX 通道与 RX 通道保持分离。
 10. BCR：`BCRAgentCore` 的兼容导出仍可用，边界检查脚本通过，C03、C05 的状态没有被改动。

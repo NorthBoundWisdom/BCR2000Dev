@@ -239,6 +239,7 @@ private struct BCRProviderService {
             gateway.onRestrictConfigurationWrite = {}
             let application = ProviderApplication(configuration: configuration)
             try ProviderMCPModule.install(on: gateway, application: application)
+            try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),
                 providerID: application.providerID,

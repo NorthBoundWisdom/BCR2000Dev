@@ -51,6 +51,10 @@ let package = Package(
     ],
     dependencies: [surfacePlugins],
     targets: [
+        .target(name: "BCRPluginRuntime", dependencies: [
+            .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
+            .product(name: "RemoteToolContracts", package: "SurfacePlugins")
+        ]),
         .target(name: "BCRFoundation", dependencies: [
             .product(name: "SimulationContracts", package: "SurfacePlugins"),
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
@@ -59,9 +63,10 @@ let package = Package(
             "BCRFoundation", .product(name: "AgentPlugin", package: "SurfacePlugins")
         ]),
         .target(name: "BCRPluginHost", dependencies: [
-            "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "BCRConfigurationAdapter",
+            "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "BCRConfigurationAdapter", "BCRPluginRuntime",
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
-            .product(name: "AgentPlugin", package: "SurfacePlugins")
+            .product(name: "AgentPlugin", package: "SurfacePlugins"),
+            .product(name: "AgentRemoteBinding", package: "SurfacePlugins")
         ]),
         .target(name: "BCRSimulationKernel", dependencies: [
             "BCRFoundation", .product(name: "SimulationContracts", package: "SurfacePlugins")
@@ -74,7 +79,16 @@ let package = Package(
         ]),
         .target(
             name: "BCRProviderApplication",
-            dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"]
+            dependencies: [
+                "BCRFoundation",
+                "BCRSurfaceDomain",
+                "BCRRobotDomain",
+                "BCRChassisDomain",
+                "BCRPluginRuntime",
+                .product(name: "RobotRemoteBinding", package: "SurfacePlugins"),
+                .product(name: "ChassisRemoteBinding", package: "SurfacePlugins")
+            ]
+                + [.product(name: "RemoteToolContracts", package: "SurfacePlugins")]
         ),
         .target(
             name: "BCRProviderMCPAdapter",
@@ -106,7 +120,9 @@ let package = Package(
             dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRConfigurationAdapter", "BCRExamples"]
         ),
         .target(name: "BCRMCPAdapter", dependencies: [
-            "BCRFoundation", "BCRSurfaceDomain", .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
+            "BCRFoundation", "BCRSurfaceDomain", "BCRPluginRuntime",
+            .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
+            .product(name: "RemoteToolContracts", package: "SurfacePlugins")
         ]),
         .target(name: "BCRHTTPTransport", dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRMCPAdapter"]),
         .target(
@@ -153,6 +169,8 @@ let package = Package(
                 "BCRAgentDomain",
                 "BCRCodexAdapter",
                 "BCRPluginHost",
+                "BCRPluginRuntime",
+                .product(name: "OutputRemoteBinding", package: "SurfacePlugins"),
                 .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
                 "BCRProviderApplication",
                 "BCRProviderMCPAdapter"
@@ -165,6 +183,9 @@ let package = Package(
             name: "BCRPluginHostTests",
             dependencies: [
                 "BCRPluginHost",
+                "BCRPluginRuntime",
+                .product(name: "AgentRemoteBinding", package: "SurfacePlugins"),
+                .product(name: "RemoteToolContracts", package: "SurfacePlugins"),
                 "BCRConfigurationAdapter",
                 .product(name: "AgentPlugin", package: "SurfacePlugins")
             ]
@@ -193,7 +214,13 @@ let package = Package(
         .testTarget(
             name: "BCRProviderAdapterTests",
             dependencies: [
+                "BCRPluginRuntime",
+                .product(name: "AgentPlugin", package: "SurfacePlugins"),
+                .product(name: "AgentRemoteBinding", package: "SurfacePlugins"),
+                .product(name: "RemoteToolContracts", package: "SurfacePlugins"),
                 "BCRFoundation",
+                .product(name: "OutputRemoteBinding", package: "SurfacePlugins"),
+                .product(name: "ParameterOutputPlugin", package: "SurfacePlugins"),
                 "BCRSurfaceDomain",
                 "BCRProviderApplication",
                 "BCRMCPAdapter",
