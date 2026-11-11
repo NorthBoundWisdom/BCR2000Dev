@@ -112,3 +112,10 @@ stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {
 创建/修改定义或写值，即使操作员曾在本地把其 agentWritable 设为 true。
 get_parameter 的 writable 反映此约束。reset_group 跳过这些参数并明确返回 skipped；
 其余可写参数仍在全部验证、限速通过后统一复位。参数写权限关闭时复位仍被拒绝。
+
+## stdio 桥接
+
+客户端启动 `python3 tools/mcp_stdio.py --url http://127.0.0.1:8787/mcp`，将 Token 放在子进程环境的
+`BCR_MCP_TOKEN`。桥接器仅允许本机 IPv4 HTTP，禁止代理与重定向；不打印凭据。
+stdin/stdout 使用一行一个 JSON-RPC 对象，通知不返回响应，EOF 时删除 HTTP 会话。
+运行 `python3 tools/mcp_integration.py --script tools/verify_stdio_bridge.py` 可验收握手、工具探索与状态调用。

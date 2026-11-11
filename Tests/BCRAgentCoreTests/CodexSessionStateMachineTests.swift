@@ -52,4 +52,22 @@ final class CodexSessionStateMachineTests: XCTestCase {
         let snapshot = await machine.snapshot(slotID: slotID)
         XCTAssertEqual(snapshot?.phase, .awaitingApproval)
     }
+
+    func testDuplicateStartAndLateCompletionAfterInterruptAreHarmless() async throws {
+        let machine = CodexSessionStateMachine()
+        let slot = AgentSlotID(1)
+        try await machine.bindThread(slotID: slot, threadID: "thread")
+        try await machine.onTurnStart(slotID: slot, threadID: "thread", turnID: "turn")
+        try await machine.onTurnStart(slotID: slot, threadID: "thread", turnID: "turn")
+        try await machine.onInterrupt(slotID: slot)
+        try await machine.onTurnCompleted(threadID: "thread", turnID: "turn")
+        let state = await machine.snapshot(slotID: slot)
+        XCTAssertEqual(state?.phase, .interrupted)
+        try await machine.bindThread(slotID: slot, threadID: "thread")
+        try await machine.onTurnStart(slotID: slot, threadID: "thread", turnID: "next")
+        try await machine.onTurnCompleted(threadID: "thread", turnID: "turn")
+        let next = await machine.snapshot(slotID: slot)
+        XCTAssertEqual(next?.phase, .running)
+        XCTAssertEqual(next?.turnID, "next")
+    }
 }

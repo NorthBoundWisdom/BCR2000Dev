@@ -74,7 +74,6 @@ public actor CodexSessionCoordinator {
         connectionPhase = .launching
         onStateChange?(.launching)
 
-        await rpc.start()
         await rpc.setEventHandlers(
             onServerRequest: { [weak self] envelope in
                 await self?.onServerEnvelope(envelope)
@@ -83,6 +82,7 @@ public actor CodexSessionCoordinator {
                 await self?.onServerEnvelope(envelope)
             }
         )
+        await rpc.start()
         await loadCachedModelCatalog()
 
         do {
@@ -104,6 +104,9 @@ public actor CodexSessionCoordinator {
         threadBySlot.removeAll()
         slotByThread.removeAll()
         await approvalGate.clearAll()
+        account = nil
+        availableModels = []
+        for slot in (1 ... 8).map({ AgentSlotID($0) }) { try? await stateMachine.reset(slotID: slot) }
         await rpc.stop()
     }
 
@@ -129,6 +132,7 @@ public actor CodexSessionCoordinator {
                 .threadResume,
                 params: .object(["threadId": .string(existing)])
             )
+            try await stateMachine.bindThread(slotID: slotID, threadID: existing)
             threadID = existing
         } else {
             let response = try await rpc.sendRequest(

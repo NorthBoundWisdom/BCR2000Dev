@@ -111,4 +111,22 @@ final class CodexApprovalGateTests: XCTestCase {
             XCTAssertTrue(error is CodexApprovalGateError)
         }
     }
+
+    func testDuplicateRequestCannotRenewAnExpiredApprovalWindow() async throws {
+        let gate = CodexApprovalGate()
+        let slot = AgentSlotID(1)
+        let began = Date(timeIntervalSince1970: 1000)
+        await gate.registerRequest("same", kind: .commandExecutionRequestApproval, for: slot,
+                                   visibleSlotID: slot, requestedAt: began, visibleWindowSeconds: 1)
+        await gate.clearExpiredRequests(now: began.addingTimeInterval(2))
+        await gate.registerRequest("same", kind: .commandExecutionRequestApproval, for: slot,
+                                   visibleSlotID: slot, requestedAt: began.addingTimeInterval(2))
+        let pending = await gate.pendingRequestCount()
+        XCTAssertEqual(pending, 0)
+        do {
+            _ = try await gate.resolveAgain(requestID: "same", by: slot, visibleSlotID: slot,
+                                            at: began.addingTimeInterval(2), decision: .approve)
+            XCTFail("Expired requests cannot be revived by replay")
+        } catch CodexApprovalGateError.requestMissing {}
+    }
 }

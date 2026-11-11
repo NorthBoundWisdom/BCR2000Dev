@@ -90,8 +90,12 @@ struct BCRAgentConsoleApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Settings {
-            LanguageSettingsView()
-                .environment(\.locale, Locale(identifier: L10n.language.rawValue))
+            TabView {
+                LanguageSettingsView().tabItem { Label(L10n.text("语言"), systemImage: "globe") }
+                ConfigurationLibraryView(model: model, library: model.library)
+                    .tabItem { Label(L10n.text("配置库"), systemImage: "folder") }
+            }
+            .environment(\.locale, Locale(identifier: L10n.language.rawValue))
         }
     }
 }

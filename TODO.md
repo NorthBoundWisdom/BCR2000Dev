@@ -74,10 +74,11 @@ App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在
 `CodexProcessSupervisor` 已补启动失败、标准输入输出回路、重复启动、停止和重启测试。剩余：
 
 - [ ] P0-S5 把 Codex 会话接入 App：依赖注入、Mock / Codex 切换与可见的失败状态；
-  继续补异常退出、自动重启与超时强制停止测试。
+  进程异常退出、自动重启上限、退避中停止、忽略终止信号后的强制停止测试已完成。
 - [ ] P0-S4 基础集成与稳定性
   - [ ] 关键集成测试：`mock app-server` + 真实 `swift test` 的 protocol/integration 覆盖
-  - [ ] App Server 异常路径：提前退出、乱序响应、重复请求、错误响应、Malformed JSONL
+  - [x] JSONL 子进程异常路径：提前退出、乱序响应、重复响应、错误响应、Malformed JSONL
+  - [ ] App Server 业务层重复审批、Thread/Turn 完整集成（重复审批窗口与迟到完成事件已有回归）
   - [ ] `Stop All` 与重连场景下状态一致性回归
   - [ ] protocol/状态机在 30 分钟 soak 下无分叉
 
@@ -97,7 +98,9 @@ App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在
 
 ## 6. 远期
 
-- [ ] 页面/层、宏（R4 剩余）；多套配置的命名库管理
+- [ ] 页面/层、宏（R4 剩余）
+- [x] 多套配置的命名库管理：设置页保存、确认载入/删除，损坏文件拒绝覆盖
 - [ ] WebSocket / ROS 2 适配器（R5 剩余）
-- [ ] MCP 更多工具（触发 Agent 槽位、切换设备源）与 stdio 桥接（R8 后续）
+- [ ] MCP 更多工具（触发 Agent 槽位、切换设备源）
+- [x] MCP stdio 桥接：本机 HTTP、环境变量凭据、会话清理，真实隔离 App 验收通过
 - [ ] 真实机械臂接入前的独立停机方案评审（硬件急停、执行端看门狗），未评审不得连接

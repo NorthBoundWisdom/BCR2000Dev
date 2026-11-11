@@ -252,3 +252,9 @@ git diff --check
 
 Codex 进程管理已补基础生命週期回归：未启动及启动失败后的读取返回 EOF，失败后可重试；
 标准输入输出、重复启动拒绝、停止释放等待读取与重新启动均有测试。App 当前仍使用 Mock Agent。
+
+设置页的“配置库”可命名保存当前参数与分配，确认后载入或删除；文件存放在应用支持目录的
+`configuration-library.json`，不含硬件映射。损坏库文件保持原样并显示错误。
+
+仅支持 stdio 的 MCP 客户端可运行 `python3 tools/mcp_stdio.py`，通过环境变量 `BCR_MCP_TOKEN`
+提供凭据，默认连接 `http://127.0.0.1:8787/mcp`；标准输出只包含协议响应。

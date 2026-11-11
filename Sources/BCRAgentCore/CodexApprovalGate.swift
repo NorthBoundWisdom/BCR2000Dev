@@ -49,6 +49,7 @@ public struct CodexApprovalRequestRecord: Sendable {
 }
 
 public actor CodexApprovalGate {
+    private var seenRequests: Set<String> = []
     private var pendingRequests: [String: CodexApprovalRequestRecord] = [:]
     private var resolvedRequests: [String: CodexApprovalDecision] = [:]
 
@@ -60,6 +61,7 @@ public actor CodexApprovalGate {
         requestedAt: Date = .now,
         visibleWindowSeconds: TimeInterval = 8
     ) {
+        guard seenRequests.insert(requestID).inserted else { return }
         let expiresAt = requestedAt.addingTimeInterval(visibleWindowSeconds)
         pendingRequests[requestID] = CodexApprovalRequestRecord(
             requestID: requestID,
@@ -112,6 +114,7 @@ public actor CodexApprovalGate {
     }
 
     public func clearAll() {
+        seenRequests.removeAll(keepingCapacity: true)
         pendingRequests.removeAll(keepingCapacity: true)
         resolvedRequests.removeAll(keepingCapacity: true)
     }

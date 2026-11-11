@@ -604,3 +604,10 @@
 "（未分组）" = "(Ungrouped)";
 "；设置保存失败：{0}" = "; could not save settings: {0}";
 "；输出已停止，LED 恢复目标值" = "; output stopped, LEDs show target values";
+"Codex 输出队列已满，连接必须重新启动" = "Codex output queue is full; restart the connection";
+"配置名称已存在" = "A configuration with this name already exists";
+"配置名称" = "Configuration Name";
+"保存当前配置" = "Save Current Configuration";
+"载入" = "Load";
+"删除保存的配置？" = "Delete the saved configuration?";
+"配置库" = "Configuration Library";

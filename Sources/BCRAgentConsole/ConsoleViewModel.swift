@@ -42,6 +42,7 @@ final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
+    let library: ConfigurationLibrary
     let output: OutputController
     var source: DeviceSource { session.source }
     var engine: SurfaceEngine { session.engine }
@@ -65,6 +66,8 @@ final class ConsoleViewModel: ObservableObject {
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter)
     {
+        library = ConfigurationLibrary(url: stores.configuration.fileURL.deletingLastPathComponent()
+            .appending(path: "configuration-library.json"))
         slots = AgentStateMachine().slots
 
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)

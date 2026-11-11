@@ -88,6 +88,7 @@ public actor CodexSessionStateMachine {
         }
 
         state.phase = .activeThread
+        state.turnID = nil
         state.threadID = threadID
         state.lastError = nil
         state.lastEventAt = at
@@ -98,6 +99,7 @@ public actor CodexSessionStateMachine {
         guard var state = slots[slotID] else {
             throw CodexSessionStateMachineError.slotMissing(slotID)
         }
+        if state.phase == .running, state.threadID == threadID, state.turnID == turnID { return }
         guard state.phase == .activeThread || state.phase == .turnStarting || state.phase == .idle else {
             throw CodexSessionStateMachineError.invalidTransition(
                 slot: slotID,
@@ -156,9 +158,7 @@ public actor CodexSessionStateMachine {
             throw CodexSessionStateMachineError.slotMissing(slotID)
         }
 
-        if let existingTurnID = state.turnID, existingTurnID != turnID {
-            return
-        }
+        guard state.turnID == turnID, state.phase == .running || state.phase == .awaitingApproval else { return }
 
         state.phase = .completed
         state.turnID = nil

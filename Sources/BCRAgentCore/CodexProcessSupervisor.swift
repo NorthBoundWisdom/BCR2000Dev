@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public enum CodexProcessSupervisorError: Error, LocalizedError, Sendable {
     case alreadyRunning
@@ -99,10 +100,14 @@ public actor CodexProcessSupervisor {
     private var stdoutHandle: FileHandle?
     private var stderrHandle: FileHandle?
 
-    private var stdoutBuffer = ""
-    private var stderrBuffer = ""
+    private var stdoutBuffer = Data()
+    private var stderrBuffer = Data()
 
     private var stdoutLines: [String] = []
+    private var protocolLines: [String] = []
+    private var outputOverflow = false
+    private var stdoutEOF = false
+    private var stderrEOF = false
     private var stdoutWaiting: [CheckedContinuation<String?, Error>] = []
     private var stderrLines: [String] = []
     private var stderrWaiting: [CheckedContinuation<String?, Error>] = []
@@ -114,6 +119,16 @@ public actor CodexProcessSupervisor {
         self.stdoutLineLimit = max(1, maxQueuedLines)
         self.stderrLineLimit = max(1, maxQueuedLines)
         self.maxLineLength = max(1, maxLineLength)
+    }
+
+    public func setEventHandlers(
+        onStdout: LogLineHandler? = nil,
+        onStderr: LogLineHandler? = nil,
+        onExit: ExitHandler? = nil
+    ) {
+        self.onStdout = onStdout
+        self.onStderr = onStderr
+        self.onExit = onExit
     }
 
     public func start(
@@ -135,7 +150,7 @@ public actor CodexProcessSupervisor {
     }
 
     public func start(config: CodexProcessSupervisorConfig) async throws {
-        guard !isRunning() else {
+        guard !isRunning(), isClosed else {
             throw CodexProcessSupervisorError.alreadyRunning
         }
 
@@ -172,7 +187,7 @@ public actor CodexProcessSupervisor {
     }
 
     public func write(_ line: String) throws {
-        guard let input = standardInput else {
+        guard process?.isRunning == true, let input = standardInput else {
             throw CodexProcessSupervisorError.alreadyStopped
         }
 
@@ -223,15 +238,17 @@ public actor CodexProcessSupervisor {
 
         stdoutReader.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil }
             Task {
-                await self?.consumeDataChunk(data, isStdout: true)
+                await self?.consumeDataChunk(data, isStdout: true, generation: generation)
             }
         }
 
         stderrReader.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil }
             Task {
-                await self?.consumeDataChunk(data, isStdout: false)
+                await self?.consumeDataChunk(data, isStdout: false, generation: generation)
             }
         }
 
@@ -250,8 +267,14 @@ public actor CodexProcessSupervisor {
 
         self.process = process
         self.standardInput = stdinPipe.fileHandleForWriting
+        stdoutEOF = false
+        stderrEOF = false
         stdoutBuffer.removeAll(keepingCapacity: true)
         stderrBuffer.removeAll(keepingCapacity: true)
+        outputOverflow = false
+        protocolLines.removeAll(keepingCapacity: true)
+        stdoutLines.removeAll(keepingCapacity: true)
+        stderrLines.removeAll(keepingCapacity: true)
         isClosed = false
     }
 
@@ -278,70 +301,46 @@ public actor CodexProcessSupervisor {
         }
 
         if process.isRunning {
-            process.terminate()
+            kill(process.processIdentifier, SIGKILL)
+            while process.isRunning {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
         }
     }
 
-    private func consumeDataChunk(_ data: Data, isStdout: Bool) async {
-        if isStdout {
-            guard !data.isEmpty else {
-                flushStreamLine(isStdout: true)
-                return
-            }
-
-            let text = String(data: data, encoding: .utf8) ?? ""
-            stdoutBuffer.append(text)
-            processBuffer(isStdout: true)
-            return
+    private func consumeDataChunk(_ data: Data, isStdout: Bool, generation: Int) {
+        guard generation == currentGeneration else { return }
+        if data.isEmpty {
+            if isStdout { stdoutEOF = true } else { stderrEOF = true }
         }
-
-        guard !data.isEmpty else {
-            flushStreamLine(isStdout: false)
-            return
-        }
-
-        let text = String(data: data, encoding: .utf8) ?? ""
-        stderrBuffer.append(text)
-        processBuffer(isStdout: false)
+        if isStdout { stdoutBuffer.append(data) } else { stderrBuffer.append(data) }
+        processBuffer(isStdout: isStdout, atEOF: data.isEmpty)
     }
 
-    private func processBuffer(isStdout: Bool) {
-        if isStdout {
-            while let newlineIndex = stdoutBuffer.firstIndex(of: "\n") {
-                let line = String(stdoutBuffer[..<newlineIndex])
-                stdoutBuffer.removeSubrange(stdoutBuffer.startIndex ... newlineIndex)
-                emitStdout(line.trimmingCharacters(in: .newlines))
-            }
-            if stdoutBuffer.count > maxLineLength {
-                let truncated = String(stdoutBuffer.prefix(maxLineLength))
-                stdoutBuffer.removeFirst(truncated.count)
-                emitStdout(truncated)
-            }
-            return
+    private func processBuffer(isStdout: Bool, atEOF: Bool = false) {
+        var buffer = isStdout ? stdoutBuffer : stderrBuffer
+        while let newline = buffer.firstIndex(of: 10) {
+            let line = String(decoding: buffer[..<newline], as: UTF8.self)
+                .trimmingCharacters(in: .newlines)
+            buffer.removeSubrange(...newline)
+            if isStdout { emitStdout(line) } else { emitStderr(line) }
         }
-
-        while let newlineIndex = stderrBuffer.firstIndex(of: "\n") {
-            let line = String(stderrBuffer[..<newlineIndex])
-            stderrBuffer.removeSubrange(stderrBuffer.startIndex ... newlineIndex)
-            emitStderr(line.trimmingCharacters(in: .newlines))
+        if atEOF, !buffer.isEmpty {
+            let line = String(decoding: buffer, as: UTF8.self)
+            if isStdout { emitStdout(line) } else { emitStderr(line) }
+            buffer.removeAll()
+        } else if buffer.count > maxLineLength {
+            // Preserve the oversized line for the RPC decoder to reject, rather than silently
+            // turning a partial JSON frame into a different valid message.
+            let line = String(decoding: buffer, as: UTF8.self)
+            if isStdout { emitStdout(line) } else { emitStderr(line) }
+            buffer.removeAll()
         }
-        if stderrBuffer.count > maxLineLength {
-            let truncated = String(stderrBuffer.prefix(maxLineLength))
-            stderrBuffer.removeFirst(truncated.count)
-            emitStderr(truncated)
-        }
+        if isStdout { stdoutBuffer = buffer } else { stderrBuffer = buffer }
     }
 
     private func flushStreamLine(isStdout: Bool) {
-        if isStdout {
-            if !stdoutBuffer.isEmpty {
-                emitStdout(stdoutBuffer.trimmingCharacters(in: .newlines))
-                stdoutBuffer.removeAll(keepingCapacity: true)
-            }
-        } else if !stderrBuffer.isEmpty {
-            emitStderr(stderrBuffer.trimmingCharacters(in: .newlines))
-            stderrBuffer.removeAll(keepingCapacity: true)
-        }
+        processBuffer(isStdout: isStdout, atEOF: true)
     }
 
     private func emitStdout(_ line: String) {
@@ -356,10 +355,15 @@ public actor CodexProcessSupervisor {
 
         if let waiter = stdoutWaiting.first {
             stdoutWaiting.removeFirst()
-            waiter.resume(returning: safe)
+            waiter.resume(returning: line)
             return
         }
 
+        if protocolLines.count >= stdoutLineLimit {
+            outputOverflow = true
+            return
+        }
+        protocolLines.append(line)
         stdoutLines.append(safe)
         if stdoutLines.count > stdoutLineLimit {
             stdoutLines.removeFirst(stdoutLines.count - stdoutLineLimit)
@@ -386,6 +390,14 @@ public actor CodexProcessSupervisor {
         guard generation == currentGeneration else {
             return
         }
+
+        // Process exit can arrive before the final pipe callbacks. Let those callbacks finish
+        // before closing streams and failing pending RPC requests.
+        let drainDeadline = ContinuousClock.now.advanced(by: .seconds(1))
+        while !(stdoutEOF && stderrEOF), ContinuousClock.now < drainDeadline, generation == currentGeneration {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        guard generation == currentGeneration else { return }
 
         let exitCode = process.terminationStatus
         let reason: CodexProcessExitReason
@@ -442,13 +454,14 @@ public actor CodexProcessSupervisor {
         }
 
         restartCount += 1
-        let delayMs = min(
-            config.autoRestartMaxDelayMs,
-            config.autoRestartInitialDelayMs * (1 << (restartCount - 1))
-        )
+        var delayMs = max(0, min(config.autoRestartInitialDelayMs, config.autoRestartMaxDelayMs))
+        for _ in 1 ..< restartCount {
+            let cap = max(0, config.autoRestartMaxDelayMs)
+            delayMs = delayMs >= cap / 2 ? cap : delayMs * 2
+        }
         try? await Task.sleep(for: .milliseconds(delayMs))
 
-        guard !isStopping && !isClosed else {
+        guard !isStopping && !isClosed, generation == currentGeneration else {
             return
         }
 
@@ -532,15 +545,15 @@ extension CodexProcessSupervisor: CodexLineTransport {
     }
 
     public func readLine() async throws -> String? {
-        if isClosed {
-            return nil
+        guard !outputOverflow else {
+            throw CodexProcessSupervisorError.launchFailed(L10n.text("Codex 输出队列已满，连接必须重新启动"))
         }
-
-        if let line = stdoutLines.first {
-            stdoutLines.removeFirst()
+        if let line = protocolLines.first {
+            protocolLines.removeFirst()
             return line
         }
 
+        if isClosed { return nil }
         return try await withCheckedThrowingContinuation { continuation in
             stdoutWaiting.append(continuation)
         }
@@ -556,6 +569,7 @@ extension CodexProcessSupervisor: CodexLineTransport {
 
     public func clearLineBufferForTest() {
         stdoutLines.removeAll(keepingCapacity: true)
+        protocolLines.removeAll(keepingCapacity: true)
         stdoutWaiting.removeAll(keepingCapacity: true)
         stderrLines.removeAll(keepingCapacity: true)
         stderrWaiting.removeAll(keepingCapacity: true)
