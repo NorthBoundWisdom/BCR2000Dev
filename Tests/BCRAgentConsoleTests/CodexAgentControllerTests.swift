@@ -44,6 +44,104 @@ final class CodexAgentControllerTests: XCTestCase {
         XCTAssertEqual(controller.backend, .mock)
     }
 
+    private func waitFor(_ controller: CodexAgentController, phase: AgentRunState) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller.slots[0].state != phase,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(controller.slots[0].state, phase)
+    }
+
+    func testPrimaryAndSlotApproveIntentsOnlyOpenReviewAndCannotAuthorize() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = controller(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        await controller.connect()
+        controller.prompt = "approval"
+        let slot = AgentSlotID(1)
+        controller.start(slot)
+        try await waitFor(controller, phase: .waitingApproval)
+        let request = try XCTUnwrap(controller.approvals.first)
+        controller.approveReviewedRequest(request)
+        XCTAssertNotNil(controller.error)
+        XCTAssertTrue(controller.respondingApprovals.isEmpty)
+        controller.perform(slot)
+        XCTAssertEqual(controller.reviewingApproval?.id, request.id)
+        controller.approveReviewedRequest(request)
+        XCTAssertTrue(controller.respondingApprovals.isEmpty)
+        controller.markApprovalPresented(request)
+        controller.perform(slot)
+        controller.decide(slot, approve: true)
+        XCTAssertTrue(controller.respondingApprovals.isEmpty)
+        XCTAssertEqual(controller.slots[0].state, .waitingApproval)
+        controller.approveReviewedRequest(request)
+        try await waitFor(controller, phase: .completed)
+        XCTAssertTrue(controller.approvals.isEmpty)
+        XCTAssertNil(controller.reviewingApproval)
+        await controller.stopAll()
+    }
+
+    func testReviewChoosesExactRequestAndRejectNeedsNoPresentation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = controller(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        await controller.connect()
+        controller.prompt = "parallel_approval"
+        controller.start(AgentSlotID(1))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller.approvals.count < 2,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(controller.approvals.count, 2)
+        let second = try XCTUnwrap(controller.approvals.last)
+        controller.reviewApproval(second.id)
+        controller.markApprovalPresented(second)
+        controller.approveReviewedRequest(second)
+        while controller.approvals.count == 2,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(controller.approvals.count, 1)
+        XCTAssertEqual(controller.slots[0].state, .waitingApproval)
+        let first = try XCTUnwrap(controller.approvals.first)
+        XCTAssertNotEqual(first.id, second.id)
+        controller.rejectApproval(first.id)
+        try await waitFor(controller, phase: .interrupted)
+        XCTAssertTrue(controller.approvals.isEmpty)
+        await controller.stopAll()
+    }
+
+    func testOldReviewCannotAuthorizeReusedRPCIDAfterReconnect() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = controller(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        await controller.connect()
+        controller.prompt = "approval"
+        controller.start(AgentSlotID(1))
+        try await waitFor(controller, phase: .waitingApproval)
+        let old = try XCTUnwrap(controller.approvals.first)
+        controller.reviewApproval(old.id)
+        controller.markApprovalPresented(old)
+        await controller.stopAll()
+        await controller.connect()
+        controller.start(AgentSlotID(1))
+        try await waitFor(controller, phase: .waitingApproval)
+        let current = try XCTUnwrap(controller.approvals.first)
+        XCTAssertEqual(current.id, old.id)
+        XCTAssertNotEqual(current.reviewToken, old.reviewToken)
+        controller.reviewApproval(current.id)
+        controller.markApprovalPresented(old)
+        controller.approveReviewedRequest(old)
+        XCTAssertTrue(controller.respondingApprovals.isEmpty)
+        XCTAssertEqual(controller.slots[0].state, .waitingApproval)
+        controller.markApprovalPresented(current)
+        controller.approveReviewedRequest(current)
+        try await waitFor(controller, phase: .completed)
+        await controller.stopAll()
+    }
+
     func testConnectionFailureIsVisibleAndDoesNotFallBackToMock() async throws {
         let controller = CodexAgentController(directory: FileManager.default.temporaryDirectory)
         controller.workspace = FileManager.default.temporaryDirectory.path

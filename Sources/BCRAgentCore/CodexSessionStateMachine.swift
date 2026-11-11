@@ -133,7 +133,7 @@ public actor CodexSessionStateMachine {
         guard state.turnID == turnID else {
             throw CodexSessionStateMachineError.unexpectedEvent
         }
-        guard state.phase == .running else {
+        guard state.phase == .running || state.phase == .awaitingApproval else {
             throw CodexSessionStateMachineError.invalidTransition(
                 slot: slotID,
                 from: state.phase,
@@ -195,11 +195,10 @@ public actor CodexSessionStateMachine {
         slots[slot] = state
     }
 
-    public func resumeAfterApproval(slotID: AgentSlotID) throws {
-        guard var state = slots[slotID], state.phase == .awaitingApproval else {
-            throw CodexSessionStateMachineError.unexpectedEvent
-        }
-        state.phase = .running
+    public func updateApprovalWait(slotID: AgentSlotID, threadID: String, turnID: String, waiting: Bool) {
+        guard var state = slots[slotID], state.threadID == threadID, state.turnID == turnID,
+              state.phase == .running || state.phase == .awaitingApproval else { return }
+        state.phase = waiting ? .awaitingApproval : .running
         slots[slotID] = state
     }
 

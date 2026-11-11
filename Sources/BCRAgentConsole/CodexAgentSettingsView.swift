@@ -62,11 +62,62 @@ struct AgentBackendStatusView: View {
             }
             if let error = controller.error { Text(error).font(.caption).foregroundStyle(.red) }
             ForEach(controller.approvals) { approval in
-                Text("Agent \(approval.slotID.rawValue): \(approval.detail)")
-                    .font(.caption.monospaced()).textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top) {
+                    Text("Agent \(approval.slotID.rawValue): \(approval.detail)")
+                        .font(.caption.monospaced()).textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(L10n.text("查看审批")) { controller.reviewApproval(approval.id) }
+                    Button(L10n.text("拒绝")) { controller.rejectApproval(approval.id) }
+                        .disabled(controller.respondingApprovals.contains(approval.id))
+                }
             }
         }
+    }
+}
+
+/// Mounted in the main window so a physical review intent works from every workspace tab.
+struct CodexApprovalPresentation: View {
+    @ObservedObject var controller: CodexAgentController
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .sheet(item: Binding(
+                get: { controller.reviewingApproval },
+                set: { if $0 == nil { controller.dismissApprovalReview() } }
+            )) { approval in
+                CodexApprovalReviewView(controller: controller, approval: approval)
+            }
+    }
+}
+
+struct CodexApprovalReviewView: View {
+    @ObservedObject var controller: CodexAgentController
+    let approval: CodexPendingApproval
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L10n.text("Codex 审批详情")).font(.title2.bold())
+            Text("Agent \(approval.slotID.rawValue) · \(approval.id.stringValue)").font(.caption.monospaced())
+            Text(L10n.text("请求不会自动过期。请阅读操作详情，再明确批准或拒绝。"))
+                .font(.callout).foregroundStyle(.secondary)
+            ScrollView {
+                Text(approval.detail).font(.body.monospaced()).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            HStack {
+                Button(L10n.text("关闭")) { controller.dismissApprovalReview() }
+                Button(L10n.text("中断")) { controller.interrupt(approval.slotID) }
+                Spacer()
+                Button(L10n.text("拒绝")) { controller.rejectApproval(approval.id) }
+                    .disabled(controller.respondingApprovals.contains(approval.id))
+                Button(L10n.text("批准此请求")) { controller.approveReviewedRequest(approval) }
+                    .disabled(controller.respondingApprovals.contains(approval.id))
+            }
+        }
+        .padding(24).frame(width: 660, height: 460)
+        .background(Theme.background)
+        .preferredColorScheme(.dark)
+        .onAppear { controller.markApprovalPresented(approval) }
     }
 }
 

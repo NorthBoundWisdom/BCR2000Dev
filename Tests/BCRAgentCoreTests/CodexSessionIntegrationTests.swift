@@ -4,13 +4,19 @@ import XCTest
 
 @MainActor
 final class CodexSessionIntegrationTests: XCTestCase {
-    private func makeSession() async throws -> CodexSessionCoordinator {
+    private func makeSession(approvalWindow: TimeInterval? = nil,
+                             failApprovalResponses: Int = 0) async throws -> CodexSessionCoordinator
+    {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appending(path: "Fixtures/mock_app_server.py")
         let process = CodexProcessSupervisor()
         try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
         let cache = FileManager.default.temporaryDirectory.appending(path: "bcr-catalog-\(UUID().uuidString).json")
-        return CodexSessionCoordinator(transport: process, modelCatalogStore: CodexModelCatalogStore(fileURL: cache))
+        return CodexSessionCoordinator(
+            transport: ApprovalFaultTransport(base: process, failures: failApprovalResponses),
+            modelCatalogStore: CodexModelCatalogStore(fileURL: cache),
+            approvalWindow: approvalWindow
+        )
     }
 
     private func wait(_ session: CodexSessionCoordinator, slot: AgentSlotID, phase: CodexTurnPhase) async throws {
@@ -86,6 +92,192 @@ final class CodexSessionIntegrationTests: XCTestCase {
         await reconnected.stop()
     }
 
+    func testTwoApprovalsForOneTurnBothReceiveReplies() async throws {
+        let session = try await makeSession()
+        try await session.start()
+        let slot = AgentSlotID(1)
+        try await session.startTurn(
+            slotID: slot,
+            userPrompt: "parallel_approval",
+            modelID: "fixture",
+            permission: .init(type: .safeRead)
+        )
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while await session.snapshot().approvals.count < 2, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let requests = await session.snapshot().approvals
+        XCTAssertEqual(requests.count, 2)
+        for (index, request) in requests.enumerated() {
+            try await session.sendApproval(
+                requestID: request.id.stringValue,
+                slotID: slot,
+                visibleSlotID: slot,
+                decision: .approve
+            )
+            if index == 0 {
+                let state = await session.snapshot()
+                XCTAssertEqual(state.states[slot]?.phase, .awaitingApproval)
+                XCTAssertEqual(state.approvals.count, 1)
+            }
+        }
+        try await wait(session, slot: slot, phase: .completed)
+        await session.stop()
+    }
+
+    func testExpiredApprovalIsDeclinedAndSlotCanStartAgain() async throws {
+        for decision in [CodexApprovalDecision.approve, .decline] {
+            let session = try await makeSession(approvalWindow: 0)
+            try await session.start()
+            let slot = AgentSlotID(1)
+            try await session.startTurn(
+                slotID: slot,
+                userPrompt: "approval",
+                modelID: "fixture",
+                permission: .init(type: .safeRead)
+            )
+            try await wait(session, slot: slot, phase: .awaitingApproval)
+            let pending = await session.snapshot().approvals
+            let request = try XCTUnwrap(pending.first)
+            try await session.sendApproval(id: request.id, slotID: slot, visibleSlotID: slot, decision: decision)
+            try await wait(session, slot: slot, phase: .interrupted)
+            let resolved = await session.snapshot()
+            XCTAssertTrue(resolved.approvals.isEmpty)
+            XCTAssertEqual(resolved.phase, .ready)
+            try await session.startTurn(
+                slotID: slot,
+                userPrompt: "complete",
+                modelID: "fixture",
+                permission: .init(type: .safeRead)
+            )
+            try await wait(session, slot: slot, phase: .completed)
+            await session.stop()
+        }
+    }
+
+    func testFailedApprovalSendIsRetryableWithConcurrentRequestStillWaiting() async throws {
+        let session = try await makeSession(failApprovalResponses: 1)
+        try await session.start()
+        let slot = AgentSlotID(1)
+        try await session.startTurn(
+            slotID: slot,
+            userPrompt: "parallel_approval",
+            modelID: "fixture",
+            permission: .init(type: .safeRead)
+        )
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while await session.snapshot().approvals.count < 2,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        let requests = await session.snapshot().approvals
+        XCTAssertEqual(requests.count, 2)
+        let first = try XCTUnwrap(requests.first)
+        do {
+            try await session.sendApproval(id: first.id, slotID: slot, visibleSlotID: slot, decision: .approve)
+            XCTFail("The injected transport failure must be visible")
+        } catch ApprovalFaultTransport.Failure.unavailable {}
+        let failed = await session.snapshot()
+        XCTAssertEqual(failed.approvals.count, 2)
+        XCTAssertEqual(failed.states[slot]?.phase, .awaitingApproval)
+        XCTAssertNotNil(failed.error)
+        for request in requests {
+            try await session.sendApproval(id: request.id, slotID: slot, visibleSlotID: slot, decision: .approve)
+        }
+        try await wait(session, slot: slot, phase: .completed)
+        let completed = await session.snapshot()
+        XCTAssertTrue(completed.approvals.isEmpty)
+        XCTAssertNil(completed.error)
+        await session.stop()
+    }
+
+    func testNumericAndStringApprovalIDsDoNotCollide() async throws {
+        let session = try await makeSession()
+        try await session.start()
+        let slot = AgentSlotID(1)
+        try await session.startTurn(
+            slotID: slot,
+            userPrompt: "mixed_id_approval",
+            modelID: "fixture",
+            permission: .init(type: .safeRead)
+        )
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while await session.snapshot().approvals.count < 2,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        let requests = await session.snapshot().approvals
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(Set(requests.map(\.id)).count, 2)
+        let first = try XCTUnwrap(requests.first)
+        do {
+            try await session.sendApproval(
+                requestID: first.id.stringValue,
+                slotID: slot,
+                visibleSlotID: slot,
+                decision: .approve
+            )
+            XCTFail("An ambiguous text ID must never select a request")
+        } catch CodexApprovalGateError.requestMissing {}
+        for request in requests { try await session.sendApproval(
+            id: request.id,
+            slotID: slot,
+            visibleSlotID: slot,
+            decision: .approve
+        ) }
+        try await wait(session, slot: slot, phase: .completed)
+        await session.stop()
+    }
+
+    func testCancelledApprovalIntentDoesNotConsumeOrSendRequest() async throws {
+        let session = try await makeSession()
+        try await session.start()
+        let slot = AgentSlotID(1)
+        try await session.startTurn(
+            slotID: slot,
+            userPrompt: "approval",
+            modelID: "fixture",
+            permission: .init(type: .safeRead)
+        )
+        try await wait(session, slot: slot, phase: .awaitingApproval)
+        let pending = await session.snapshot().approvals
+        let request = try XCTUnwrap(pending.first)
+        let response = Task { try await session.sendApproval(
+            id: request.id,
+            slotID: slot,
+            visibleSlotID: slot,
+            decision: .approve
+        ) }
+        response.cancel()
+        do { try await response.value; XCTFail("Cancelled intent must not send") } catch is CancellationError {}
+        let unchanged = await session.snapshot()
+        XCTAssertEqual(unchanged.approvals.count, 1)
+        XCTAssertEqual(unchanged.states[slot]?.phase, .awaitingApproval)
+        try await session.sendApproval(id: request.id, slotID: slot, visibleSlotID: slot, decision: .decline)
+        try await wait(session, slot: slot, phase: .interrupted)
+        await session.stop()
+    }
+
+    func testFailedApproveCanBeChangedToDecline() async throws {
+        let session = try await makeSession(failApprovalResponses: 1)
+        try await session.start()
+        let slot = AgentSlotID(1)
+        try await session.startTurn(
+            slotID: slot,
+            userPrompt: "approval",
+            modelID: "fixture",
+            permission: .init(type: .safeRead)
+        )
+        try await wait(session, slot: slot, phase: .awaitingApproval)
+        let pending = await session.snapshot().approvals
+        let request = try XCTUnwrap(pending.first)
+        do {
+            try await session.sendApproval(id: request.id, slotID: slot, visibleSlotID: slot, decision: .approve)
+            XCTFail("Expected transport failure")
+        } catch ApprovalFaultTransport.Failure.unavailable {}
+        try await session.sendApproval(id: request.id, slotID: slot, visibleSlotID: slot, decision: .decline)
+        try await wait(session, slot: slot, phase: .interrupted)
+        let resolved = await session.snapshot()
+        XCTAssertTrue(resolved.approvals.isEmpty)
+        await session.stop()
+    }
+
     func testFailedTurnIsNotReportedAsCompleted() async throws {
         let session = try await makeSession()
         try await session.start()
@@ -140,4 +332,22 @@ final class CodexSessionIntegrationTests: XCTestCase {
         print("Codex JSONL soak completed: \(seconds) seconds, \(cycles) turns, eight slots")
         XCTAssertGreaterThan(cycles, 0)
     }
+}
+
+private actor ApprovalFaultTransport: CodexLineTransport {
+    enum Failure: Error { case unavailable }
+    let base: CodexProcessSupervisor
+    var failures: Int
+    init(base: CodexProcessSupervisor, failures: Int) { self.base = base; self.failures = failures }
+    func readLine() async throws -> String? { try await base.readLine() }
+    func sendLine(_ line: String) async throws {
+        let envelope = try CodexEnvelope.decodeJSON(line)
+        if envelope.method == nil, envelope.result?.objectValue?["decision"] != nil, failures > 0 {
+            failures -= 1
+            throw Failure.unavailable
+        }
+        try await base.sendLine(line)
+    }
+
+    func close() async { await base.close() }
 }

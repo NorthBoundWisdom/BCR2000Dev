@@ -51,7 +51,7 @@ public struct CodexApprovalRequestRecord: Sendable {
 public actor CodexApprovalGate {
     private var seenRequests: Set<String> = []
     private var pendingRequests: [String: CodexApprovalRequestRecord] = [:]
-    private var resolvedRequests: [String: CodexApprovalDecision] = [:]
+    private var resolvedRequests: [String: (record: CodexApprovalRequestRecord, decision: CodexApprovalDecision)] = [:]
 
     public func registerRequest(
         _ requestID: String,
@@ -59,10 +59,11 @@ public actor CodexApprovalGate {
         for slotID: AgentSlotID,
         visibleSlotID: AgentSlotID,
         requestedAt: Date = .now,
-        visibleWindowSeconds: TimeInterval = 8
+        visibleWindowSeconds: TimeInterval? = nil
     ) {
         guard seenRequests.insert(requestID).inserted else { return }
-        let expiresAt = requestedAt.addingTimeInterval(visibleWindowSeconds)
+        let expiresAt = visibleWindowSeconds
+            .map { requestedAt.addingTimeInterval($0.isFinite ? max(0, $0) : 0) } ?? .distantFuture
         pendingRequests[requestID] = CodexApprovalRequestRecord(
             requestID: requestID,
             requestKind: kind,
@@ -73,34 +74,55 @@ public actor CodexApprovalGate {
         )
     }
 
-    public func resolve(
-        requestID: String,
-        by slotID: AgentSlotID,
-        visibleSlotID: AgentSlotID,
-        at: Date = .now,
-        decision: CodexApprovalDecision
-    ) throws -> CodexApprovalDecision {
+    /// Validate intent without consuming it. The caller must commit only after transport delivery.
+    public func prepare(
+        requestID: String, by slotID: AgentSlotID, visibleSlotID: AgentSlotID,
+        at: Date = .now, decision: CodexApprovalDecision
+    ) throws -> Bool {
         if let previous = resolvedRequests[requestID] {
-            return previous
+            try validateOwner(previous.record, slotID: slotID, visibleSlotID: visibleSlotID)
+            guard previous.decision == decision else { throw CodexApprovalGateError.requestReplayed(requestID) }
+            return false
         }
+        guard let request = pendingRequests[requestID] else { throw CodexApprovalGateError.requestMissing(requestID) }
+        try validateOwner(request, slotID: slotID, visibleSlotID: visibleSlotID)
+        // A denial must remain reachable even after an explicit approval deadline.
+        if decision == .approve, at > request.expiresAt { throw CodexApprovalGateError.requestExpired(requestID) }
+        return true
+    }
 
-        guard let request = pendingRequests.removeValue(forKey: requestID) else {
-            throw CodexApprovalGateError.requestMissing(requestID)
+    public func commit(
+        requestID: String, by slotID: AgentSlotID, visibleSlotID: AgentSlotID,
+        decision: CodexApprovalDecision
+    ) throws {
+        if let previous = resolvedRequests[requestID] {
+            try validateOwner(previous.record, slotID: slotID, visibleSlotID: visibleSlotID)
+            guard previous.decision == decision else { throw CodexApprovalGateError.requestReplayed(requestID) }
+            return
         }
+        guard let record = pendingRequests[requestID] else { throw CodexApprovalGateError.requestMissing(requestID) }
+        try validateOwner(record, slotID: slotID, visibleSlotID: visibleSlotID)
+        pendingRequests[requestID] = nil
+        resolvedRequests[requestID] = (record, decision)
+    }
 
-        if at > request.expiresAt {
-            throw CodexApprovalGateError.requestExpired(requestID)
-        }
-        guard request.slotID == slotID else {
-            pendingRequests[requestID] = request
-            throw CodexApprovalGateError.slotMismatch(expected: request.slotID, actual: slotID)
-        }
-        guard request.visibleSlotID == visibleSlotID else {
-            pendingRequests[requestID] = request
-            throw CodexApprovalGateError.visibilityMismatch
-        }
+    private func validateOwner(
+        _ record: CodexApprovalRequestRecord,
+        slotID: AgentSlotID,
+        visibleSlotID: AgentSlotID
+    ) throws {
+        guard record.slotID == slotID else { throw CodexApprovalGateError.slotMismatch(
+            expected: record.slotID,
+            actual: slotID
+        ) }
+        guard record.visibleSlotID == visibleSlotID else { throw CodexApprovalGateError.visibilityMismatch }
+    }
 
-        resolvedRequests[requestID] = decision
+    public func resolve(
+        requestID: String, by slotID: AgentSlotID, visibleSlotID: AgentSlotID,
+        at: Date = .now, decision: CodexApprovalDecision
+    ) throws -> CodexApprovalDecision {
+        _ = try resolveAgain(requestID: requestID, by: slotID, visibleSlotID: visibleSlotID, at: at, decision: decision)
         return decision
     }
 
@@ -130,20 +152,15 @@ public actor CodexApprovalGate {
         at: Date = .now,
         decision: CodexApprovalDecision
     ) throws -> Bool {
-        if let previous = resolvedRequests[requestID] {
-            if previous != decision {
-                throw CodexApprovalGateError.requestReplayed(requestID)
-            }
-            return false
-        }
-
-        _ = try resolve(
+        let shouldCommit = try prepare(
             requestID: requestID,
             by: slotID,
             visibleSlotID: visibleSlotID,
             at: at,
             decision: decision
         )
+        guard shouldCommit else { return false }
+        try commit(requestID: requestID, by: slotID, visibleSlotID: visibleSlotID, decision: decision)
         return true
     }
 }

@@ -129,4 +129,36 @@ final class CodexApprovalGateTests: XCTestCase {
             XCTFail("Expired requests cannot be revived by replay")
         } catch CodexApprovalGateError.requestMissing {}
     }
+
+    func testDefaultRequestRemainsActionableAfterReadingDetails() async throws {
+        let gate = CodexApprovalGate()
+        let now = Date(timeIntervalSince1970: 100)
+        let slot = AgentSlotID(1)
+        await gate.registerRequest(
+            "read",
+            kind: .commandExecutionRequestApproval,
+            for: slot,
+            visibleSlotID: slot,
+            requestedAt: now
+        )
+        let sent = try await gate.resolveAgain(requestID: "read", by: slot, visibleSlotID: slot,
+                                               at: now.addingTimeInterval(600), decision: .approve)
+        XCTAssertTrue(sent)
+    }
+
+    func testExpiredRequestCanStillBeDeclinedAfterFailedApprove() async throws {
+        let gate = CodexApprovalGate()
+        let now = Date(timeIntervalSince1970: 100)
+        let slot = AgentSlotID(1)
+        await gate.registerRequest("expire", kind: .commandExecutionRequestApproval, for: slot,
+                                   visibleSlotID: slot, requestedAt: now, visibleWindowSeconds: 1)
+        do {
+            _ = try await gate.resolveAgain(requestID: "expire", by: slot, visibleSlotID: slot,
+                                            at: now.addingTimeInterval(2), decision: .approve)
+            XCTFail("An explicitly expired approval cannot execute")
+        } catch CodexApprovalGateError.requestExpired {}
+        let sent = try await gate.resolveAgain(requestID: "expire", by: slot, visibleSlotID: slot,
+                                               at: now.addingTimeInterval(3), decision: .decline)
+        XCTAssertTrue(sent)
+    }
 }

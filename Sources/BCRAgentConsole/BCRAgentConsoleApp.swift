@@ -133,6 +133,11 @@ struct BCRAgentConsoleApp: App {
     func renderNativeUISnapshots(model: ConsoleViewModel, directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let previews: [(String, AnyView, CGSize)] = [
+            ("approval", AnyView(CodexApprovalReviewView(controller: model.codex, approval: .init(
+                id: .number(101), slotID: AgentSlotID(1),
+                detail: "swift test --build-path build/swiftpm\n/offline-fixture/workspace\nReview the requested test execution before deciding.",
+                threadID: "preview-thread", turnID: "preview-turn"
+            ))), CGSize(width: 660, height: 460)),
             ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 680)),
             ("output", AnyView(OutputSettingsView(controller: model.output)), CGSize(width: 880, height: 720)),
             ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
@@ -161,6 +166,7 @@ struct BCRAgentConsoleApp: App {
                 backing: .buffered,
                 defer: false
             )
+            window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = hosting
             window.setContentSize(size)
             window.orderFront(nil)

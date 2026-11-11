@@ -671,3 +671,10 @@
 "页面编辑不能修改参数定义" = "Page editing cannot change parameter definitions";
 "初始化" = "Initializing";
 "已就绪" = "Ready";
+"请先在审批详情页查看该请求" = "Review this request in its approval details first";
+"查看审批" = "Review Approval";
+"Codex 审批详情" = "Codex Approval Details";
+"请求不会自动过期。请阅读操作详情，再明确批准或拒绝。" = "Requests do not expire automatically. Read the operation details, then explicitly approve or deny.";
+"关闭" = "Close";
+"批准此请求" = "Approve This Request";
+"审批已过期，已向 Codex 拒绝该请求" = "The approval expired; the request was declined to Codex";

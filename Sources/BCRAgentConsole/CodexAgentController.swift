@@ -11,6 +11,10 @@ final class CodexAgentController: ObservableObject {
     @Published private(set) var phase: CodexConnectionPhase = .stopped
     @Published private(set) var models: [CodexModelCapability] = []
     @Published private(set) var approvals: [CodexPendingApproval] = []
+    @Published private(set) var reviewingApproval: CodexPendingApproval?
+    @Published private(set) var respondingApprovals: Set<CodexRequestID> = []
+    private var presentedApprovalID: UUID?
+    private var approvalTasks: [CodexRequestID: Task<Void, Never>] = [:]
     @Published private(set) var error: String?
     @Published private(set) var slots = AgentSlot.mockSlots()
     @Published var executable = "codex"
@@ -86,6 +90,10 @@ final class CodexAgentController: ObservableObject {
         generation += 1
         snapshots?.finish(); snapshots = nil
         snapshotTask?.cancel(); snapshotTask = nil
+        approvalTasks.values.forEach { $0.cancel() }
+        approvalTasks.removeAll()
+        respondingApprovals.removeAll()
+        dismissApprovalReview()
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
         let session = coordinator
@@ -103,7 +111,7 @@ final class CodexAgentController: ObservableObject {
 
     func perform(_ id: AgentSlotID) {
         guard backend == .codex, let slot = slots.first(where: { $0.id == id }) else { return }
-        if slot.state == .waitingApproval { decide(id, approve: true) }
+        if slot.state == .waitingApproval { requestApprovalReview(for: id) }
         else if slot.state.isActive { interrupt(id) }
         else { start(id) }
     }
@@ -155,13 +163,61 @@ final class CodexAgentController: ObservableObject {
         }
     }
 
+    /// Slot/physical intents never grant approval. Only the presented per-request review can grant it.
     func decide(_ id: AgentSlotID, approve: Bool) {
-        guard let coordinator, let request = approvals.first(where: { $0.slotID == id }) else { return }
+        if approve { requestApprovalReview(for: id) }
+        else if let request = approvals.first(where: { $0.slotID == id }) { rejectApproval(request.id) }
+    }
+
+    func requestApprovalReview(for slot: AgentSlotID) {
+        guard let request = approvals.first(where: { $0.slotID == slot }) else { return }
+        reviewApproval(request.id)
+    }
+
+    func reviewApproval(_ id: CodexRequestID) {
+        guard let request = approvals.first(where: { $0.id == id }) else { return }
+        // Repeated physical presses cannot acknowledge the presentation or approve it.
+        guard reviewingApproval?.id != id else { return }
+        presentedApprovalID = nil
+        reviewingApproval = request
+    }
+
+    func markApprovalPresented(_ request: CodexPendingApproval) {
+        guard reviewingApproval == request, approvals.contains(request) else { return }
+        presentedApprovalID = request.reviewToken
+    }
+
+    func dismissApprovalReview() {
+        presentedApprovalID = nil
+        reviewingApproval = nil
+    }
+
+    func approveReviewedRequest(_ request: CodexPendingApproval) {
+        guard reviewingApproval == request, presentedApprovalID == request.reviewToken,
+              approvals.contains(request)
+        else {
+            error = L10n.text("请先在审批详情页查看该请求"); return
+        }
+        sendDecision(request.id, decision: .approve)
+    }
+
+    func rejectApproval(_ id: CodexRequestID) { sendDecision(id, decision: .decline) }
+    private func sendDecision(_ id: CodexRequestID, decision: CodexApprovalDecision) {
+        guard let coordinator, let request = approvals.first(where: { $0.id == id }),
+              !respondingApprovals.contains(id) else { return }
         let revision = generation
-        tasks[id] = Task { [weak self] in
+        error = nil
+        respondingApprovals.insert(id)
+        approvalTasks[id] = Task { [weak self] in
+            defer {
+                if let self, self.generation == revision {
+                    self.respondingApprovals.remove(id)
+                    self.approvalTasks[id] = nil
+                }
+            }
             do {
-                try await coordinator.sendApproval(requestID: request.id.stringValue, slotID: id,
-                                                   visibleSlotID: id, decision: approve ? .approve : .decline)
+                try await coordinator.sendApproval(id: id, slotID: request.slotID,
+                                                   visibleSlotID: request.slotID, decision: decision)
             } catch { if let self, self.generation == revision { self.error = error.localizedDescription } }
         }
     }
@@ -170,6 +226,8 @@ final class CodexAgentController: ObservableObject {
         phase = snapshot.phase
         models = snapshot.models
         approvals = snapshot.approvals
+        if let review = reviewingApproval,
+           !approvals.contains(where: { $0.id == review.id }) { dismissApprovalReview() }
         if !models
             .contains(where: { $0.id == modelID })
         {

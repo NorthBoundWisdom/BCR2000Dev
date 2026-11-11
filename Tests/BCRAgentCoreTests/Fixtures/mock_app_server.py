@@ -30,7 +30,8 @@ for line in sys.stdin:
     if method is None:
         thread, turn = approvals.pop(identifier)
         assert request["result"]["decision"] in ("accept", "decline")
-        finish(thread, turn, "completed" if request["result"]["decision"] == "accept" else "interrupted")
+        if not any(value == (thread, turn) for value in approvals.values()):
+            finish(thread, turn, "completed" if request["result"]["decision"] == "accept" else "interrupted")
         continue
     if identifier is None:
         assert method == "initialized"
@@ -73,7 +74,7 @@ for line in sys.stdin:
         emit({"id": identifier, "result": {"turn": {"id": turn, "status": "inProgress"}}})
         emit({"method": "turn/started", "params": {"threadId": thread, "turn": {"id": turn}}})
         text = args["input"][0]["text"]
-        if text == "approval":
+        if text in ("approval", "parallel_approval", "mixed_id_approval"):
             next_approval += 1
             approvals[next_approval] = (thread, turn)
             emit(
@@ -83,6 +84,22 @@ for line in sys.stdin:
                     "params": {"threadId": thread, "turnId": turn, "command": "offline fixture validation"},
                 }
             )
+            if text in ("parallel_approval", "mixed_id_approval"):
+                second_id = str(next_approval) if text == "mixed_id_approval" else next_approval + 1
+                next_approval += 1
+                approvals[second_id] = (thread, turn)
+                emit(
+                    {
+                        "id": second_id,
+                        "method": "item/fileChange/requestApproval",
+                        "params": {
+                            "threadId": thread,
+                            "turnId": turn,
+                            "grantRoot": "/offline-fixture",
+                            "reason": "second request",
+                        },
+                    }
+                )
         elif text == "complete":
             finish(thread, turn, "completed")
         elif text == "fail":

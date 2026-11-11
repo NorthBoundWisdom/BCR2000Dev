@@ -32,9 +32,20 @@ public enum CodexConnectionPhase: String, Codable, Sendable {
 }
 
 public struct CodexPendingApproval: Equatable, Sendable, Identifiable {
+    public let reviewToken = UUID()
     public let id: CodexRequestID
     public let slotID: AgentSlotID
     public let detail: String
+    public let threadID: String
+    public let turnID: String
+
+    public init(id: CodexRequestID, slotID: AgentSlotID, detail: String, threadID: String, turnID: String) {
+        self.id = id
+        self.slotID = slotID
+        self.detail = detail
+        self.threadID = threadID
+        self.turnID = turnID
+    }
 }
 
 public struct CodexSessionSnapshot: Sendable {
@@ -54,33 +65,56 @@ public actor CodexSessionCoordinator {
     public private(set) var account: String?
     public private(set) var availableModels: [CodexModelCapability] = []
     private let stateMachine = CodexSessionStateMachine()
+    private let approvalWindow: TimeInterval?
+    private var responding: Set<CodexRequestID> = []
     private let approvalGate = CodexApprovalGate()
     private var threadBySlot: [AgentSlotID: String] = [:]
     private var slotByThread: [String: AgentSlotID] = [:]
     private var seenApprovalIDs: Set<CodexRequestID> = []
-    private var approvals: [String: CodexPendingApproval] = [:]
+    private var approvals: [CodexRequestID: CodexPendingApproval] = [:]
     private var starting: Set<AgentSlotID> = []
     private var generation = 0
     private var lastError: String?
 
-    public init(rpc: CodexRPCClient, modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore()) {
+    public init(
+        rpc: CodexRPCClient,
+        modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore(),
+        approvalWindow: TimeInterval? = nil
+    ) {
         self.rpc = rpc
+        self.approvalWindow = approvalWindow
         self.modelCatalogStore = modelCatalogStore
     }
 
     public init(
         transport: any CodexLineTransport,
-        modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore()
+        modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore(),
+        approvalWindow: TimeInterval? = nil
     ) {
         self.rpc = CodexRPCClient(transport: transport)
+        self.approvalWindow = approvalWindow
         self.modelCatalogStore = modelCatalogStore
     }
 
     public func setSnapshotHandler(_ handler: (@Sendable (CodexSessionSnapshot) -> Void)?) { onSnapshot = handler }
     public func snapshot() async -> CodexSessionSnapshot {
-        CodexSessionSnapshot(phase: connectionPhase, states: await stateMachine.allStates(),
-                             approvals: approvals.values.sorted { $0.id.stringValue < $1.id.stringValue },
-                             models: availableModels, error: lastError)
+        var states = await stateMachine.allStates()
+        let pending = approvals.values.filter { request in
+            guard let state = states[request.slotID] else { return false }
+            return state.threadID == request.threadID && state.turnID == request.turnID
+                && (state.phase == .running || state.phase == .awaitingApproval)
+        }
+        // The request set is authoritative: asynchronous state-machine hops must never show
+        // a slot as running while another request for that same turn still needs a decision.
+        for slot in states.keys {
+            if var state = states[slot], state.phase == .running || state.phase == .awaitingApproval {
+                state.phase = pending.contains(where: { $0.slotID == slot }) ? .awaitingApproval : .running
+                states[slot] = state
+            }
+        }
+        return CodexSessionSnapshot(phase: connectionPhase, states: states,
+                                    approvals: pending.sorted { $0.id.stringValue < $1.id.stringValue },
+                                    models: availableModels, error: lastError)
     }
 
     private func publish() async {
@@ -161,6 +195,7 @@ public actor CodexSessionCoordinator {
         lastError = error
         starting.removeAll()
         approvals.removeAll()
+        responding.removeAll()
         for (slot, state) in await stateMachine.allStates() {
             if let thread = state.threadID, let turn = state.turnID {
                 try? await stateMachine.finish(threadID: thread, turnID: turn, phase: .failed, error: error)
@@ -174,6 +209,7 @@ public actor CodexSessionCoordinator {
         connectionPhase = .stopped
         starting.removeAll()
         approvals.removeAll()
+        responding.removeAll()
         seenApprovalIDs.removeAll()
         threadBySlot.removeAll()
         slotByThread.removeAll()
@@ -283,8 +319,8 @@ public actor CodexSessionCoordinator {
                 let states = await stateMachine.allStates()
                 approvals = approvals
                     .filter { [.running, .awaitingApproval].contains(states[$0.value.slotID]?.phase ?? .idle) }
-            case let .commandExecutionRequestApproval(request, _, thread, command),
-                 let .fileChangeRequestApproval(request, _, thread, command):
+            case let .commandExecutionRequestApproval(_, turn, thread, command),
+                 let .fileChangeRequestApproval(_, turn, thread, command):
                 guard let slot = slotByThread[thread], let original = envelope.id else {
                     if let id = envelope.id { try await rpc.sendEnvelope(CodexEnvelope(
                         id: id,
@@ -297,8 +333,9 @@ public actor CodexSessionCoordinator {
                 let kind: CodexServerRequestKind = envelope.method == CodexMethod.commandExecutionRequestApproval
                     .rawValue
                     ? .commandExecutionRequestApproval : .fileChangeRequestApproval
-                await approvalGate.registerRequest(request, kind: kind, for: slot, visibleSlotID: slot)
-                if approvals[request] == nil { approvals[request] = .init(
+                await approvalGate.registerRequest(approvalKey(original), kind: kind, for: slot, visibleSlotID: slot,
+                                                   visibleWindowSeconds: approvalWindow)
+                if approvals[original] == nil { approvals[original] = .init(
                     id: original,
                     slotID: slot,
                     detail: [command, envelope.params?.objectValue?["cwd"]?.stringValue,
@@ -306,7 +343,7 @@ public actor CodexSessionCoordinator {
                              envelope.params?.objectValue?["reason"]?.stringValue,
                              envelope.params?.objectValue?["itemId"]?.stringValue].compactMap { $0 }.joined(
                         separator: "\n"
-                    )
+                    ), threadID: thread, turnID: turn
                 ) }
             case .serverRequest, .notification:
                 // Unknown server requests require an explicit rejection; unknown notifications are forward compatible.
@@ -322,18 +359,73 @@ public actor CodexSessionCoordinator {
         }
     }
 
+    private func approvalKey(_ id: CodexRequestID) -> String {
+        switch id { case let .number(value): "number:\(value)"; case let .string(value): "string:\(value)" }
+    }
+
+    /// Compatibility entry point: ambiguous numeric/string IDs are never resolved by guessing.
     public func sendApproval(requestID: String, slotID: AgentSlotID, visibleSlotID: AgentSlotID,
                              decision: CodexApprovalDecision) async throws
     {
-        guard let pending = approvals[requestID] else { throw CodexApprovalGateError.requestMissing(requestID) }
-        let shouldSend = try await approvalGate.resolveAgain(requestID: requestID, by: slotID,
-                                                             visibleSlotID: visibleSlotID, decision: decision)
-        guard shouldSend else { return }
-        try await stateMachine.resumeAfterApproval(slotID: slotID)
-        approvals.removeValue(forKey: requestID)
-        try await rpc.sendEnvelope(CodexEnvelope(id: pending.id,
-                                                 result: .object(["decision": .string(decision == .approve ? "accept" :
-                                                         "decline")])))
-        await publish()
+        let matches = approvals.values.filter { $0.id.stringValue == requestID }
+        guard matches.count == 1,
+              let request = matches.first else { throw CodexApprovalGateError.requestMissing(requestID) }
+        try await sendApproval(id: request.id, slotID: slotID, visibleSlotID: visibleSlotID, decision: decision)
+    }
+
+    public func sendApproval(id: CodexRequestID, slotID: AgentSlotID, visibleSlotID: AgentSlotID,
+                             decision: CodexApprovalDecision) async throws
+    {
+        guard connectionPhase == .ready, let pending = approvals[id] else {
+            throw CodexApprovalGateError.requestMissing(id.stringValue)
+        }
+        guard responding.insert(id).inserted
+        else { throw CodexSessionCoordinatorError.invalidState("approval response in flight") }
+        let revision = generation
+        defer { if revision == generation { responding.remove(id) } }
+        let key = approvalKey(id)
+        var effectiveDecision = decision
+        do {
+            let shouldSend: Bool
+            do {
+                shouldSend = try await approvalGate.prepare(requestID: key, by: slotID,
+                                                            visibleSlotID: visibleSlotID, decision: decision)
+            } catch CodexApprovalGateError.requestExpired {
+                effectiveDecision = .decline
+                shouldSend = try await approvalGate.prepare(requestID: key, by: slotID,
+                                                            visibleSlotID: visibleSlotID, decision: .decline)
+            }
+            guard shouldSend else { return }
+            try check(revision)
+            try Task.checkCancellation()
+            try await rpc.sendEnvelope(CodexEnvelope(id: id,
+                                                     result: .object(
+                                                         ["decision": .string(effectiveDecision == .approve ?
+                                                                 "accept" : "decline")]
+                                                     )))
+            try check(revision)
+            try await approvalGate.commit(
+                requestID: key,
+                by: slotID,
+                visibleSlotID: visibleSlotID,
+                decision: effectiveDecision
+            )
+            try check(revision)
+            approvals.removeValue(forKey: id)
+            let waiting = approvals.values
+                .contains { $0.slotID == slotID && $0.threadID == pending.threadID && $0.turnID == pending.turnID }
+            await stateMachine.updateApprovalWait(
+                slotID: slotID,
+                threadID: pending.threadID,
+                turnID: pending.turnID,
+                waiting: waiting
+            )
+            lastError = effectiveDecision != decision ? L10n.text("审批已过期，已向 Codex 拒绝该请求") : nil
+            await publish()
+        } catch {
+            if revision == generation,
+               connectionPhase == .ready { lastError = error.localizedDescription; await publish() }
+            throw error
+        }
     }
 }

@@ -274,11 +274,15 @@ private struct AgentGridView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         HStack {
-                            Button(primaryActionTitle(slot.state)) { model.performPrimaryAction(slot.id) }
+                            Button(slot.state == .waitingApproval && model.codex.backend == .codex ? L10n
+                                .text("查看审批") : primaryActionTitle(slot.state)) { model.performPrimaryAction(slot.id) }
                                 .buttonStyle(.borderedProminent)
                                 .tint(stateColor(slot.state))
                             if slot.state == .waitingApproval {
                                 Button(L10n.text("拒绝")) { model.decline(slot.id) }
+                                if model.codex.backend == .codex {
+                                    Button(L10n.text("中断")) { model.interrupt(slot.id) }
+                                }
                             }
                             Spacer()
                             Text(controls.isEmpty ? L10n.text("未绑定") : controls.map(\.shortName).joined(separator: " "))

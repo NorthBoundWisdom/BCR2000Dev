@@ -28,6 +28,7 @@ struct ContentView: View {
                 }
             }
         }
+        .background(CodexApprovalPresentation(controller: model.codex))
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }
