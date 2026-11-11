@@ -82,16 +82,10 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 
 ### P2
 
-- [ ] RV11 参数 SSE。每个引擎变化都单独推送，没有按帧合并，快速转动时慢客户端很快触发 64 KB 上限被断开；
-  首帧完整快照若超过 64 KB 则该配置永远无法订阅；`MCPHTTPServer.init` 丢弃了 `observeParameters`
-  返回的令牌，服务器释放后观察者仍留在会话里。建议与 UI 一样按 16 ms 合并，快照不受队列上限约束，
-  保存并移除观察者。
 - [ ] RV16 文档与常量。ROADMAP 的 R4（“页面/层/宏待后续”）、R5（“WebSocket JSON、ROS 2 桥留待后续”）、
   R8 第 6 点和“当前执行顺序”一行与已完成状态矛盾；`CodexSchema.stableSchemaDirectory` 指向的
   `Schemas/Codex/0.167.1` 在资源目录中不存在（核实是否仍被使用，未使用则删除）；
   `initialize` 的客户端版本写死为 `0.1.0`，应取自 `configs/app_build.json` 的版本来源。
-- [ ] RV17 测试缺口：`OutputTransportRouter` 切换传输时旧适配器停止并重新挂接回调；
-  UI 16 ms 合并与“跟随触摸”延后选择；SSE 背压断开与会话删除关闭流；以上 RV1、RV2、RV4、RV7 的回归。
 
 ## 5. 发布与 DriverKit 分发（R7）
 

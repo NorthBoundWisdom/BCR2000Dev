@@ -128,7 +128,7 @@ stdin/stdout 使用一行一个 JSON-RPC 对象，通知不返回响应，EOF �
 通知是 `notifications/bcr/parametersChanged`，params 含 revision（十进制字符串）、values、removed、reset。
 新流先发送 reset=true 的完整参数快照，后续只发送变更；重新连接重新取快照，不重放运动命令。
 这是 BCR 扩展通知，不冒充通用 MCP resources 订阅。客户端应检查能力并识别此通知。
-每流待发送上限 64 KiB，最多 16 条流；慢客户端断线，10 秒心跳维持活跃连接。停止服务/删除旧版会话会关闭流。
+事件按 16 ms 合并最新值；每流增量待发送上限 64 KiB，完整快照独立上限 8 MiB，最多 16 条流；慢客户端断线，10 秒心跳维持活跃连接。停止服务/删除旧版会话会关闭流。
 运行 `python3 tools/mcp_integration.py --script tools/verify_parameter_events.py` 验收现代/旧版鉴权、快照和变更回读。
 
 ## Agent 与设备控制权限
@@ -143,3 +143,6 @@ MCP 不提供审批通过接口。Codex 启动可能使用本机登录账号；�
 start_agent 仅接受 slot，不接受 prompt，使用本机 Agent 设置的当前任务内容；缺失、非整数或超出 1–8 的槽位明确拒绝。
 list_controls 与 assign_control 作用于当前会话页面；get_status 的 activePage 标明该页 ID（基础页为 __base__）。
 页面选择只在本次会话中有效，配置文件与导出不携带当前页面。
+
+大于增量上限的有效变更会转换为当前完整快照，避免永久无法订阅；初始快照不占增量额度。
+断线、服务停止会取消待刷新事件；服务器释放时移除参数观察者并关闭连接。

@@ -85,22 +85,46 @@ final class MCPHTTPServer {
 
     private struct EventStream {
         let sessionID: String?
-        var queue: [Data] = []
-        var bytes = 0
-        var sending = false
+        var buffer = SSEOutboundBuffer()
+        var revision: UInt64?
     }
 
     private var eventStreams: [UUID: EventStream] = [:]
+    private let parameterSession: SurfaceSession
+    private var parameterObserver: UUID?
+    private var pendingChanges = ParameterChangeAccumulator()
+    private var eventTask: Task<Void, Never>?
+    private let eventWriter: @MainActor (NWConnection, Data, @escaping @Sendable (NWError?) -> Void) -> Void
+    var activeStreamCount: Int { eventStreams.count }
     private var heartbeatTask: Task<Void, Never>?
 
-    init(router: MCPRouter) {
+    init(
+        router: MCPRouter,
+        eventWriter: (@MainActor (NWConnection, Data, @escaping @Sendable (NWError?) -> Void) -> Void)? = nil
+    ) {
         self.router = router
-        _ = router.service.session.observeParameters { [weak self] batch in
+        parameterSession = router.service.session
+        self.eventWriter = eventWriter ?? { connection, data, completion in connection.send(
+            content: data,
+            completion: .contentProcessed(completion)
+        ) }
+        parameterObserver = router.service.session.observeParameters { [weak self] batch in
             self?.broadcast(batch)
         }
         router.onSessionClosed = { [weak self] session in
             guard let self else { return }
             for (id, stream) in self.eventStreams where stream.sessionID == session { self.close(id) }
+        }
+    }
+
+    deinit {
+        heartbeatTask?.cancel(); eventTask?.cancel(); startTimeout?.cancel()
+        startContinuation?.resume(throwing: CancellationError())
+        listener?.cancel()
+        for connection in connections.values { connection.cancel() }
+        for timeout in timeouts.values { timeout.cancel() }
+        if let parameterObserver {
+            Task { @MainActor [parameterSession] in parameterSession.removeParameterObserver(parameterObserver) }
         }
     }
 
@@ -160,6 +184,7 @@ final class MCPHTTPServer {
         heartbeatTask?.cancel()
         heartbeatTask = nil
         eventStreams.removeAll()
+        eventTask?.cancel(); eventTask = nil; pendingChanges = ParameterChangeAccumulator()
         startTimeout?.cancel()
         startTimeout = nil
         startContinuation?.resume(throwing: CancellationError())
@@ -306,47 +331,61 @@ final class MCPHTTPServer {
     }
 
     private func broadcast(_ batch: ParameterChangeBatch) {
-        for id in Array(eventStreams.keys) { sendBatch(batch, to: id) }
+        guard !eventStreams.isEmpty else { return }
+        pendingChanges.append(batch)
+        guard eventTask == nil else { return }
+        let revision = generation
+        eventTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+            guard let self, self.generation == revision, !Task.isCancelled else { return }
+            self.eventTask = nil
+            guard let batch = self.pendingChanges.take() else { return }
+            for id in Array(self.eventStreams.keys) { self.sendBatch(batch, to: id) }
+        }
     }
 
     private func sendBatch(_ batch: ParameterChangeBatch, to id: UUID) {
+        guard let stream = eventStreams[id], stream.revision.map({ batch.revision > $0 }) ?? true else { return }
         let message = JSONValue.object(["jsonrpc": .string("2.0"),
                                         "method": .string("notifications/bcr/parametersChanged"),
                                         "params": batch.jsonValue])
         do {
             let data = Data("id: \(batch.revision)\nevent: message\ndata: \(try message.jsonText)\n\n".utf8)
-            enqueueEvent(data, to: id)
+            if !batch.reset, data.count > 65_536 {
+                // A valid large change is a fresh authoritative snapshot, not a slow-client error.
+                sendBatch(router.service.session.parameterSnapshot(), to: id)
+                return
+            }
+            eventStreams[id]?.revision = batch.revision
+            enqueueEvent(data, to: id, snapshot: batch.reset)
         } catch { close(id) }
     }
 
-    private func enqueueEvent(_ data: Data, to id: UUID) {
+    private func enqueueEvent(_ data: Data, to id: UUID, snapshot: Bool = false) {
         guard var stream = eventStreams[id] else { return }
-        guard stream.bytes + data.count <= 65_536 else {
-            router.service.record("sse", succeeded: false, detail: L10n.text("参数推送客户端读取过慢，连接已关闭"))
+        do { try stream.buffer.enqueue(data, snapshot: snapshot) }
+        catch {
+            router.service.record("sse", succeeded: false, detail: error as? SSEOutboundBuffer.Limit == .snapshot
+                ? L10n.text("参数推送快照超过大小上限") : L10n.text("参数推送客户端读取过慢，连接已关闭"))
             close(id); return
         }
-        stream.queue.append(data)
-        stream.bytes += data.count
         eventStreams[id] = stream
         drainEvent(id)
     }
 
     private func drainEvent(_ id: UUID) {
-        guard var stream = eventStreams[id], !stream.sending, !stream.queue.isEmpty,
-              let connection = connections[id] else { return }
-        let data = stream.queue.removeFirst()
-        stream.sending = true
+        guard var stream = eventStreams[id], let connection = connections[id],
+              let data = stream.buffer.next() else { return }
         eventStreams[id] = stream
-        connection.send(content: data, completion: .contentProcessed { [weak self] error in
+        eventWriter(connection, data) { [weak self] error in
             Task { @MainActor [weak self] in
                 guard let self, var stream = self.eventStreams[id] else { return }
                 if error != nil { self.close(id); return }
-                stream.bytes -= data.count
-                stream.sending = false
+                stream.buffer.complete()
                 self.eventStreams[id] = stream
                 self.drainEvent(id)
             }
-        })
+        }
     }
 
     private func reject(_ id: UUID, status: Int, detail: String) {
@@ -389,7 +428,10 @@ final class MCPHTTPServer {
 
     private func close(_ id: UUID) {
         eventStreams[id] = nil
-        if eventStreams.isEmpty { heartbeatTask?.cancel(); heartbeatTask = nil }
+        if eventStreams.isEmpty {
+            heartbeatTask?.cancel(); heartbeatTask = nil
+            eventTask?.cancel(); eventTask = nil; pendingChanges = ParameterChangeAccumulator()
+        }
         timeouts.removeValue(forKey: id)?.cancel()
         connections.removeValue(forKey: id)?.cancel()
     }

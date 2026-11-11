@@ -67,6 +67,7 @@ public final class SurfaceSession {
         return id
     }
 
+    var parameterObserverCount: Int { parameterObservers.count }
     public func removeParameterObserver(_ id: UUID) { parameterObservers[id] = nil }
     public func parameterSnapshot() -> ParameterChangeBatch {
         ParameterChangeBatch(revision: parameterRevision,
