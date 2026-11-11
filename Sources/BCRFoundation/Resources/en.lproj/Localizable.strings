@@ -710,3 +710,7 @@
 "允许机器人模拟控制" = "Allow simulated robot control";
 "允许底盘模拟控制" = "Allow simulated chassis control";
 "允许仿真重置、故障和时钟推进" = "Allow simulation reset, faults and clock advancement";
+"插件标识无效：{0}" = "Invalid plugin identifier: {0}";
+"插件标识重复：{0}" = "Duplicate plugin identifier: {0}";
+"不支持的插件合同版本：{0}" = "Unsupported plugin contract version: {0}";
+"未知插件：{0}" = "Unknown plugin: {0}";

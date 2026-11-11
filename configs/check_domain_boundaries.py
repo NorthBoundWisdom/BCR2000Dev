@@ -13,6 +13,7 @@ ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
     "BCRFoundation": set(),
     "BCRAgentDomain": {"BCRFoundation"},
+    "BCRPluginHost": {"BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain", "SurfacePluginContracts", "AgentPlugin"},
     "BCRCodexAdapter": {"BCRFoundation", "BCRAgentDomain"},
     "BCRSurfaceDomain": {"BCRFoundation"},
     "BCROutputDomain": {"BCRFoundation"},
@@ -66,13 +67,20 @@ def check():
         if name not in targets:
             errors.append("Missing module: " + name)
             continue
-        dependencies = {entry.get("byName", entry.get("target", [""]))[0] for entry in targets[name]["dependencies"]}
+        dependencies = {
+            entry.get("byName", entry.get("target", entry.get("product", [""])))[0]
+            for entry in targets[name]["dependencies"]
+        }
         if not dependencies <= allowed:
             errors.append(f"{name} has forbidden dependencies: {sorted(dependencies - allowed)}")
         for path in (ROOT / "Sources" / name).glob("*.swift"):
             text = path.read_text()
             imports = set(re.findall(r"^import (\w+)", text, re.MULTILINE))
-            internal = {value for value in imports if value.startswith("BCR")}
+            internal = {
+                value
+                for value in imports
+                if value.startswith("BCR") or value in {"SurfacePluginContracts", "AgentPlugin"}
+            }
             if not internal <= allowed:
                 errors.append(f"{path.relative_to(ROOT)} imports a forbidden module")
             if name in PURE and imports & {"AppKit", "SwiftUI", "CoreMIDI", "Network", "Combine", "Security"}:

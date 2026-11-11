@@ -7,6 +7,7 @@ import XCTest
 
 @MainActor
 final class SurfaceAgentIntentTests: XCTestCase {
+    private var mockTime = 0.0
     private func model() -> ConsoleViewModel {
         let stores = ConsoleStores.temporary()
         return ConsoleViewModel(stores: stores, startsMIDI: false, codexFactory: {
@@ -17,7 +18,12 @@ final class SurfaceAgentIntentTests: XCTestCase {
             return CodexSessionCoordinator(transport: process, modelCatalogStore: CodexModelCatalogStore(
                 fileURL: stores.configuration.fileURL.deletingLastPathComponent().appending(path: "catalog.json")
             ))
-        })
+        }, mockClock: { self.mockTime }, automaticallyAdvancesMock: false)
+    }
+
+    private func advance(_ model: ConsoleViewModel, to time: Double) throws {
+        mockTime = time
+        try XCTUnwrap(model.mockAgents).advance()
     }
 
     private func wait(_ model: ConsoleViewModel, state: AgentRunState) async throws {
@@ -71,16 +77,14 @@ final class SurfaceAgentIntentTests: XCTestCase {
     func testSurfacePressStillApprovesMock() throws {
         let model = model()
         let id = AgentSlotID(1)
-        try model.agentMachine.transition(id, to: .queued)
-        try model.agentMachine.transition(id, to: .running)
-        try model.agentMachine.transition(id, to: .waitingApproval)
-        model.applyAgentSlots(model.agentMachine.slots, changed: id)
+        model.start(id)
+        try advance(model, to: 2.65)
         model.press(.button(row: 1, 1))
         XCTAssertEqual(model.slots[0].state, .running)
-        model.mockTasks.values.forEach { $0.cancel() }
+        model.mockAgents?.stopDriving()
     }
 
-    func testMockPrimaryActionBranchesForEveryState() {
+    func testMockPrimaryActionBranchesForEveryState() throws {
         let id = AgentSlotID(1)
         let expected: [(AgentRunState, AgentRunState)] = [
             (.idle, .queued), (.completed, .queued), (.interrupted, .queued), (.error, .queued),
@@ -88,16 +92,49 @@ final class SurfaceAgentIntentTests: XCTestCase {
         ]
         XCTAssertEqual(Set(expected.map(\.0)), Set(AgentRunState.allCases))
         for (initial, next) in expected {
+            mockTime = 0
             let model = model()
-            var slots = AgentSlot.mockSlots()
-            slots[0].state = initial
-            model.agentMachine = AgentStateMachine(slots: slots)
-            model.applyAgentSlots(slots, changed: id)
+            switch initial {
+            case .idle: break
+            case .queued: model.start(id)
+            case .running:
+                model.start(id)
+                try advance(model, to: 0.45)
+            case .waitingApproval:
+                model.start(id)
+                try advance(model, to: 2.65)
+            case .completed:
+                model.start(id)
+                try advance(model, to: 2.65)
+                model.approve(id)
+                try advance(model, to: 2.65 + 2.25)
+            case .interrupted:
+                model.start(id)
+                model.interrupt(id)
+            case .error:
+                // Error is a published backend snapshot; the Mock has no failing task stage.
+                var slots = AgentSlot.mockSlots()
+                slots[0].state = .error
+                model.applyAgentSlots(slots, changed: id)
+            }
             model.performPrimaryAction(id)
             XCTAssertEqual(model.slots[0].state, next, initial.rawValue)
             if initial == .waitingApproval { XCTAssertEqual(model.slots[0].progress, 0.64) }
             if next == .queued { XCTAssertEqual(model.slots[0].progress, 0) }
-            model.mockTasks.values.forEach { $0.cancel() }
+            model.mockAgents?.stopDriving()
+        }
+    }
+
+    func testFailedPluginInitializationRejectsActionsVisiblyAndFailsMCPCommand() throws {
+        let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false,
+                                     mockClock: { .nan }, automaticallyAdvancesMock: false)
+        XCTAssertNil(model.mockAgents)
+        XCTAssertNotNil(model.notice)
+        model.performPrimaryAction(AgentSlotID(1))
+        XCTAssertEqual(model.notice?.text, L10n.text("Agent 服务不可用"))
+        let action = try XCTUnwrap(model.mcp.service.onAgentAction)
+        for name in ["start_agent", "interrupt_agent", "stop_all_agents"] {
+            XCTAssertThrowsError(try action(name, AgentSlotID(1)))
         }
     }
 }

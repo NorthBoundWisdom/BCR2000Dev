@@ -98,6 +98,36 @@ class BuildConfigurationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     load_build_environment(self.root, environ={})
 
+    def test_macos_build_and_test_receive_the_local_surface_plugins_override(self):
+        (self.root / "build.local.json").write_text(
+            json.dumps({"environment": {"SURFACE_PLUGINS_PATH": "../SurfacePlugins"}})
+        )
+        observed = []
+
+        def build(*args):
+            observed.append(("build", os.environ["SURFACE_PLUGINS_PATH"]))
+            return self.root / "Console.app"
+
+        def run(command):
+            self.assertEqual(command[:2], ["swift", "test"])
+            observed.append(("test", os.environ["SURFACE_PLUGINS_PATH"]))
+
+        for inherited in ({}, {"SURFACE_PLUGINS_PATH": "/shell/plugins"}):
+            with (
+                self.subTest(inherited=inherited),
+                patch.dict(os.environ, inherited),
+                patch.object(macos_workflow, "REPO_ROOT", self.root),
+                patch.object(macos_workflow, "build", side_effect=build),
+                patch.object(macos_workflow, "_run", side_effect=run),
+            ):
+                before = dict(os.environ)
+                self.assertEqual(macos_workflow.main(["build"]), 0)
+                self.assertEqual(dict(os.environ), before)
+                self.assertEqual(macos_workflow.main(["test"]), 0)
+                self.assertEqual(dict(os.environ), before)
+                expected = inherited.get("SURFACE_PLUGINS_PATH", "../SurfacePlugins")
+                self.assertEqual(observed[-2:], [("build", expected), ("test", expected)])
+
 
 class LocalizationPackagingTests(unittest.TestCase):
     def test_smoke_launches_each_language_via_launch_services_and_requires_app_marker(self):

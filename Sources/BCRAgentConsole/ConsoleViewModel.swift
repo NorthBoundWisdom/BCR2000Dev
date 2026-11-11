@@ -1,5 +1,6 @@
 import AppKit
 import BCRAgentCore
+import BCRPluginHost
 import BCRProviderApplication
 import BCRProviderMCPAdapter
 import UniformTypeIdentifiers
@@ -65,15 +66,16 @@ final class ConsoleViewModel: ObservableObject {
     /// Select whichever control was last touched on the device.
     @Published var followsTouch = true
 
-    var agentMachine = AgentStateMachine()
-    var mockTasks: [AgentSlotID: Task<Void, Never>] = [:]
+    private(set) var mockAgents: BCRMockAgentHost?
 
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter,
          codexFactory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil,
-         providerConfiguration: ProviderConfiguration = .init())
+         providerConfiguration: ProviderConfiguration = .init(),
+         mockClock: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+         automaticallyAdvancesMock: Bool = true)
     {
         provider = ProviderApplication(configuration: providerConfiguration)
         codex = CodexAgentController(
@@ -139,10 +141,11 @@ final class ConsoleViewModel: ObservableObject {
         }
         mcp.service.onAgentAction = { [weak self] action, slot in
             guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
+            if self.codex.backend == .mock { _ = try self.requireMockHost() }
             if action == "stop_all_agents" {
-                self.mockTasks.values.forEach { $0.cancel() }
-                self.mockTasks.removeAll()
-                for slot in self.agentMachine.slots where slot.state.isActive { self.interrupt(slot.id) }
+                if self.codex.backend == .mock {
+                    for slot in self.slots where slot.state.isActive { self.interrupt(slot.id) }
+                }
                 Task { await self.codex.stopAll() }
                 return
             }
@@ -158,7 +161,7 @@ final class ConsoleViewModel: ObservableObject {
                 guard !current.state.isActive else {
                     throw MCPToolFailure(L10n.text("Agent 正忙"))
                 }
-                self.start(slot)
+                self.start(slot, origin: .remote)
             } else { self.interrupt(slot) }
         }
         mcp.service.onSelectSource = { [weak self] source in
@@ -168,10 +171,7 @@ final class ConsoleViewModel: ObservableObject {
         }
         codex.onStopMock = { [weak self] in
             guard let self else { return }
-            self.mockTasks.values.forEach { $0.cancel() }
-            self.mockTasks.removeAll()
-            self.agentMachine = AgentStateMachine()
-            for slot in self.agentMachine.slots { self.applyAgentSlots(self.agentMachine.slots, changed: slot.id) }
+            do { try self.requireMockHost().reset() } catch { self.report(error) }
         }
         codex.onSlots = { [weak self] slots in
             guard let self else { return }
@@ -200,6 +200,21 @@ final class ConsoleViewModel: ObservableObject {
         if integrationTest {
             notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
         }
+        do {
+            let host = try BCRMockAgentHost(clock: mockClock)
+            mockAgents = host
+            if codex.backend == .mock { slots = try host.slots }
+            host.onError = { [weak self] in self?.report($0) }
+            host.onUpdate = { [weak self] slots, feedback in
+                guard let self, self.codex.backend == .mock else { return }
+                let previous = Dictionary(uniqueKeysWithValues: self.slots.map { ($0.id, $0.state) })
+                self.slots = slots
+                for slot in slots where previous[slot.id] != slot.state {
+                    if let value = feedback[slot.id] { self.session.setAgentFeedback(slot.id, value: value) }
+                }
+            }
+            if automaticallyAdvancesMock { host.startDriving() }
+        } catch { report(error) }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
         Task { @MainActor [weak output] in output?.restore() }

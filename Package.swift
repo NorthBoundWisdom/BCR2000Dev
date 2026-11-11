@@ -1,6 +1,11 @@
 // swift-tools-version: 6.0
 
+import Foundation
 import PackageDescription
+
+let surfacePlugins: Package.Dependency = ProcessInfo.processInfo.environment["SURFACE_PLUGINS_PATH"]
+    .map { .package(path: $0) }
+    ?? .package(url: "https://github.com/NorthBoundWisdom/SurfacePlugins.git", exact: "0.1.0")
 
 let package = Package(
     name: "BCRAgentConsole",
@@ -24,9 +29,15 @@ let package = Package(
         .executable(name: "BCRProviderService", targets: ["BCRProviderService"]),
         .executable(name: "BCRProfileTool", targets: ["BCRProfileTool"])
     ],
+    dependencies: [surfacePlugins],
     targets: [
         .target(name: "BCRFoundation", resources: [.process("Resources")]),
         .target(name: "BCRAgentDomain", dependencies: ["BCRFoundation"]),
+        .target(name: "BCRPluginHost", dependencies: [
+            "BCRFoundation", "BCRAgentDomain", "BCRSurfaceDomain",
+            .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
+            .product(name: "AgentPlugin", package: "SurfacePlugins")
+        ]),
         .target(name: "BCRSimulationKernel", dependencies: ["BCRFoundation"]),
         .target(name: "BCRRobotDomain", dependencies: ["BCRFoundation", "BCRSimulationKernel"]),
         .target(name: "BCRChassisDomain", dependencies: ["BCRFoundation", "BCRSimulationKernel"]),
@@ -99,12 +110,18 @@ let package = Package(
                 "BCRFoundation",
                 "BCRAgentDomain",
                 "BCRCodexAdapter",
+                "BCRPluginHost",
+                .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
                 "BCRProviderApplication",
                 "BCRProviderMCPAdapter"
             ],
             linkerSettings: [
                 .linkedFramework("CoreMIDI")
             ]
+        ),
+        .testTarget(
+            name: "BCRPluginHostTests",
+            dependencies: ["BCRPluginHost", .product(name: "AgentPlugin", package: "SurfacePlugins")]
         ),
         .testTarget(
             name: "BCRAgentCoreTests",
