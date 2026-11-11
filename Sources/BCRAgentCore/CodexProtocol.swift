@@ -2,7 +2,6 @@ import Foundation
 
 public enum CodexSchema {
     public static let cliVersion = "0.167.1"
-    public static let stableSchemaDirectory = "Schemas/Codex/\(cliVersion)/stable"
 }
 
 public enum CodexProtocolError: Error, LocalizedError, Sendable {

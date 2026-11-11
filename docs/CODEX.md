@@ -55,3 +55,7 @@ BCR_CODEX_SOAK_SECONDS=1800 swift test --build-path build/swiftpm --filter Codex
 排队槽位的中断绑定其启动意图：尚未开始时取消，Thread/Turn 回应在途时收到 ID 后只中断该 Turn；
 不会断开后端或影响其他槽位。启动任务、审批回应与中断任务分别管理，旧任务结束不会清除新任务句柄。
 同一协调器重连会清除旧 Thread、审批及启动意图；调用方提供的工作目录在只读和写入模式下都要求绝对且存在。
+
+initialize 的 clientInfo.version 由 App 的 CFBundleShortVersionString 注入；打包流程从 configs/app_build.json
+及明确的本机/CI 覆盖生成该元数据，原生 smoke 同时验证两者一致。独立 SwiftPM/测试进程明确标记 development，
+不伪装为发行版本；不存在的 Schemas/Codex 路径常量已移除。

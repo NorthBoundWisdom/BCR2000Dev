@@ -58,6 +58,7 @@ public struct CodexSessionSnapshot: Sendable {
 
 public actor CodexSessionCoordinator {
     public let rpc: CodexRPCClient
+    private let clientVersion: String
     private let modelCatalogStore: CodexModelCatalogStore
     public var onStateChange: (@Sendable (CodexConnectionPhase) -> Void)?
     private var onSnapshot: (@Sendable (CodexSessionSnapshot) -> Void)?
@@ -82,20 +83,24 @@ public actor CodexSessionCoordinator {
     public init(
         rpc: CodexRPCClient,
         modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore(),
-        approvalWindow: TimeInterval? = nil
+        approvalWindow: TimeInterval? = nil,
+        clientVersion: String = "development"
     ) {
         self.rpc = rpc
         self.approvalWindow = approvalWindow
+        self.clientVersion = clientVersion
         self.modelCatalogStore = modelCatalogStore
     }
 
     public init(
         transport: any CodexLineTransport,
         modelCatalogStore: CodexModelCatalogStore = CodexModelCatalogStore(),
-        approvalWindow: TimeInterval? = nil
+        approvalWindow: TimeInterval? = nil,
+        clientVersion: String = "development"
     ) {
         self.rpc = CodexRPCClient(transport: transport)
         self.approvalWindow = approvalWindow
+        self.clientVersion = clientVersion
         self.modelCatalogStore = modelCatalogStore
     }
 
@@ -157,7 +162,7 @@ public actor CodexSessionCoordinator {
         do {
             _ = try await rpc.sendRequest(.initialize, params: .object([
                 "clientInfo": .object(["name": .string("BCRAgentConsole"), "title": .string("BCR Agent Console"),
-                                       "version": .string("0.1.0")])
+                                       "version": .string(clientVersion)])
             ]))
             try check(revision)
             try await rpc.sendNotification(.initialized)

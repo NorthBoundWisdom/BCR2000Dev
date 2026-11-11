@@ -141,7 +141,7 @@ MCP 不提供审批通过接口。Codex 启动可能使用本机登录账号；�
 隔离测试禁止通过 MCP 切换至实体设备。所有设备切换仍经过 App 的停机/映射路径。
 
 start_agent 仅接受 slot，不接受 prompt，使用本机 Agent 设置的当前任务内容；缺失、非整数或超出 1–8 的槽位明确拒绝。
-list_controls 与 assign_control 作用于当前会话页面；get_status 的 activePage 标明该页 ID（基础页为 __base__）。
+list_controls 与 assign_control 作用于当前会话页面；get_status 的 activePage 标明该页 ID（基础页为 `__base__`）。
 页面选择只在本次会话中有效，配置文件与导出不携带当前页面。
 
 大于增量上限的有效变更会转换为当前完整快照，避免永久无法订阅；初始快照不占增量额度。

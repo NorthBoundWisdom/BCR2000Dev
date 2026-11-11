@@ -262,7 +262,7 @@ Codex 进程管理已补基础生命週期回归：未启动及启动失败后�
 
 设置页现在提供 Agent（Mock / Codex）、反馈调度、页面与宏、语言、配置库。
 页面/层共享参数状态，切换时整体回写 LED；宏按顺序执行最多 64 个参数操作。
-配置 v1–v4 显式迁移为 v5，保留旧文件备份与已学 MIDI 身份。
+配置 v1–v5 显式迁移为 v6，保留旧文件备份与已学 MIDI 身份。
 
 更多说明：[Codex 后端](docs/CODEX.md)、[WebSocket / ROS 2 输出](docs/NETWORK_OUTPUT.md)、
 [MCP 权限及 SSE](docs/MCP.md)。开发版可用 `--startup-smoke --render-ui` 和

@@ -207,7 +207,7 @@ def verify_bundle(bundle: Path) -> dict:
 
 
 def smoke(bundle: Path) -> None:
-    verify_bundle(bundle)
+    info = verify_bundle(bundle)
     executable = (bundle / "Contents/MacOS" / PRODUCT).resolve()
     for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置")):
         with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
@@ -222,6 +222,8 @@ def smoke(bundle: Path) -> None:
         if result.returncode or SMOKE_MARKER not in result.stdout:
             raise RuntimeError(f"Native window startup failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
         marker = next(json.loads(line) for line in result.stdout.splitlines() if SMOKE_MARKER in line)
+        if marker.get("clientVersion") != info["CFBundleShortVersionString"]:
+            raise RuntimeError("Native client version does not match the packaged app metadata.")
         if marker.get("language") != language or marker.get("settings") != settings_title:
             raise RuntimeError(f"Bundled {language} localization did not resolve correctly: {marker}")
     print("Verified English and Chinese native startup at 1200 × 760 with bundled icon and translations.")

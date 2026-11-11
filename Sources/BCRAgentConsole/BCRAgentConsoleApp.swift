@@ -43,7 +43,7 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                             }
                         }
                     #endif
-                    let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true,\"language\":\"\(L10n.language.rawValue)\",\"settings\":\"\(L10n.text("设置"))\"}\n"
+                    let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true,\"clientVersion\":\"\(AppBuildVersion.current)\",\"language\":\"\(L10n.language.rawValue)\",\"settings\":\"\(L10n.text("设置"))\"}\n"
                     FileHandle.standardOutput.write(Data(marker.utf8))
                     Darwin.exit(0)
                 }

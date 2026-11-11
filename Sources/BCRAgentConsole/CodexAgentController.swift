@@ -110,7 +110,8 @@ final class CodexAgentController: ObservableObject {
                                            arguments: ["app-server", "--listen", "stdio://"])
                 session = CodexSessionCoordinator(transport: supervisor,
                                                   modelCatalogStore: CodexModelCatalogStore(fileURL: directory
-                                                      .appending(path: "codex-models.json")))
+                                                      .appending(path: "codex-models.json")),
+                                                  clientVersion: AppBuildVersion.current)
             }
             guard revision == generation else { await session.stop(); return }
             coordinator = session

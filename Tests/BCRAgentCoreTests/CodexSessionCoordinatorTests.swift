@@ -11,13 +11,18 @@ final class CodexSessionCoordinatorTests: XCTestCase {
             try? FileManager.default.removeItem(at: catalogURL)
         }
         let catalogStore = CodexModelCatalogStore(fileURL: catalogURL)
-        let coordinator = CodexSessionCoordinator(transport: transport, modelCatalogStore: catalogStore)
+        let coordinator = CodexSessionCoordinator(
+            transport: transport,
+            modelCatalogStore: catalogStore,
+            clientVersion: "9.8.7"
+        )
 
         let startTask = Task {
             try await coordinator.start()
         }
 
         let initializeEnvelope = try await firstSentEnvelope(from: transport)
+        XCTAssertEqual(initializeEnvelope.params?.objectValue?["clientInfo"]?.objectValue?["version"], .string("9.8.7"))
         let initializeID = try XCTUnwrap(initializeEnvelope.id)
         await transport.enqueueIncoming(
             try CodexEnvelope(
