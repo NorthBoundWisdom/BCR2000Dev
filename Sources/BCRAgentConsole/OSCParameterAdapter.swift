@@ -8,9 +8,17 @@ protocol OutputTransport: ParameterSink, ParameterSource {
     var onFailure: (@MainActor (String) -> Void)? { get set }
     var onPeerReset: (@MainActor (Date) -> Void)? { get set }
     var onDroppedPacket: (@MainActor () -> Void)? { get set }
+    func select(_ kind: OutputTransportKind) throws
     func start(host: String, port: UInt16) throws
     func ping(at now: Date) throws
     func stop()
+}
+
+extension OutputTransport {
+    /// Existing injected transports are explicitly OSC-only unless they declare otherwise.
+    func select(_ kind: OutputTransportKind) throws {
+        guard kind == .osc else { throw MotionSafetyError(L10n.text("当前适配器不支持所选输出协议")) }
+    }
 }
 
 /// The connected UDP socket only accepts replies from the configured peer. Decoding and receipt

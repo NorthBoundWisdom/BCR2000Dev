@@ -57,6 +57,7 @@ def event(value, topic):
 
 
 sequence = 0
+epoch = "fixture-peer"
 try:
     while True:
         first, second = exact(2)
@@ -86,15 +87,20 @@ try:
             assert value["op"] == "publish"
             value = json.loads(value["msg"]["data"])
         if value["type"] == "ping":
+            if "--malformed" in sys.argv:
+                send(b"{invalid-json", opcode=2)
+                continue
+            if "--restart" in sys.argv and sequence > 0:
+                epoch = "fixture-peer-2"
             event(
-                {"type": "pong", "epoch": "fixture-peer", "session": value["session"], "sequence": value["sequence"]},
+                {"type": "pong", "epoch": epoch, "session": value["session"], "sequence": value["sequence"]},
                 "/bcr/heartbeat",
             )
             sequence += 1
             event(
                 {
                     "type": "state",
-                    "epoch": "fixture-peer",
+                    "epoch": epoch,
                     "session": value["session"],
                     "sequence": str(sequence),
                     "values": {"arm.j1": 0},
@@ -102,7 +108,7 @@ try:
                 "/bcr/state",
             )
         elif value["type"] == "command":
-            assert value["epoch"] == "fixture-peer"
+            assert value["epoch"] == epoch
             assert value["enabled"] or not value["values"]
             print(json.dumps(value), flush=True)
 except (EOFError, ConnectionResetError, BrokenPipeError):

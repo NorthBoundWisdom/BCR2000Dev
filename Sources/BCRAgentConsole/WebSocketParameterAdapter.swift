@@ -12,6 +12,8 @@ final class WebSocketParameterAdapter: OutputTransport {
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
     private let rosbridge: Bool
+    private let queueLimit: Int
+    private let writeMessage: @MainActor (URLSessionWebSocketTask, String) async throws -> Void
     private var link = JSONParameterLink()
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
@@ -20,7 +22,19 @@ final class WebSocketParameterAdapter: OutputTransport {
     private var outgoing: AsyncStream<String>.Continuation?
     private var queued = 0
     private var generation = UUID()
-    init(rosbridge: Bool = false) { self.rosbridge = rosbridge }
+    init(rosbridge: Bool = false, queueLimit: Int = 64,
+         writeMessage: (@MainActor (URLSessionWebSocketTask, String) async throws -> Void)? = nil)
+    {
+        self.rosbridge = rosbridge
+        self.queueLimit = queueLimit
+        self.writeMessage = writeMessage ?? { socket, message in try await socket.send(.string(message)) }
+    }
+
+    func select(_ kind: OutputTransportKind) throws {
+        guard kind == (rosbridge ? .rosbridge : .webSocket)
+        else { throw MotionSafetyError(L10n.text("当前适配器不支持所选输出协议")) }
+    }
+
     deinit {
         receiver?.cancel(); sender?.cancel(); socket?.cancel(with: .goingAway, reason: nil); session?
             .invalidateAndCancel()
@@ -28,6 +42,7 @@ final class WebSocketParameterAdapter: OutputTransport {
 
     func start(host: String, port: UInt16) throws {
         stop()
+        guard (1 ... 1024).contains(queueLimit) else { throw MotionSafetyError(L10n.text("外部输出队列已满")) }
         var components = URLComponents()
         components.scheme = "ws"; components.host = host; components.port = Int(port); components.path = "/"
         guard port > 0, let url = components.url, !host.isEmpty else {
@@ -42,13 +57,14 @@ final class WebSocketParameterAdapter: OutputTransport {
         self.socket = socket
         link = JSONParameterLink()
         let revision = generation
-        let stream = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingOldest(64))
+        let stream = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingOldest(queueLimit))
         outgoing = stream.continuation
+        let writeMessage = writeMessage
         sender = Task { [weak self] in
             do {
                 for await message in stream.stream {
                     try Task.checkCancellation()
-                    try await socket.send(.string(message))
+                    try await writeMessage(socket, message)
                     guard let self, self.generation == revision else { return }
                     self.queued -= 1
                 }
@@ -138,7 +154,11 @@ final class WebSocketParameterAdapter: OutputTransport {
     }
 
     private func enqueue(_ value: JSONValue, raw: Bool = false) throws {
-        guard queued < 64, let outgoing else { throw MotionSafetyError(L10n.text("外部输出队列已满")) }
+        guard queued < queueLimit, let outgoing else {
+            let error = MotionSafetyError(L10n.text("外部输出队列已满"))
+            fail(error)
+            throw error
+        }
         let payload: JSONValue
         if rosbridge && !raw {
             let topic = value.objectValue?["type"] == .string("ping") ? "/bcr/heartbeat/request" : "/bcr/command"
@@ -150,15 +170,20 @@ final class WebSocketParameterAdapter: OutputTransport {
         } else { payload = value }
         let result = outgoing.yield(try payload.jsonText)
         if case .enqueued = result { queued += 1 }
-        else { throw MotionSafetyError(L10n.text("外部输出队列已满")) }
+        else {
+            let error = MotionSafetyError(L10n.text("外部输出队列已满"))
+            fail(error)
+            throw error
+        }
     }
 
     private func fail(_ error: any Error) {
-        isConnected = false
+        tearDown(graceful: false)
         onFailure?(error.localizedDescription)
     }
 
-    func stop() {
+    func stop() { tearDown(graceful: true) }
+    private func tearDown(graceful: Bool) {
         let socket = socket
         let session = session
         let stopFrame = try? link.command(.init(enabled: false, values: [:]))
@@ -169,6 +194,11 @@ final class WebSocketParameterAdapter: OutputTransport {
         receiver?.cancel(); receiver = nil
         self.socket = nil; self.session = nil; queued = 0
         guard let socket else { session?.invalidateAndCancel(); return }
+        guard graceful else {
+            socket.cancel(with: .goingAway, reason: nil)
+            session?.invalidateAndCancel()
+            return
+        }
         let rosbridge = rosbridge
         Task {
             let timeout = Task {

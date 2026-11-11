@@ -137,7 +137,7 @@ final class OutputController: ObservableObject {
             configurationRevision = session.configurationRevision
             session.setOutputEnableParameter(settings.enableParameter)
             outputs = [:]; actual = [:]; error = nil; lastPing = nil
-            (adapter as? OutputTransportRouter)?.select(settings.transport)
+            try adapter.select(settings.transport)
             try adapter.start(host: settings.host, port: UInt16(settings.port))
             task?.cancel()
             if automaticallyTicks { task = Task { @MainActor [weak self] in

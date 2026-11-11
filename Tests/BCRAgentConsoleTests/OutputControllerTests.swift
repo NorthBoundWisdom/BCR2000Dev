@@ -34,6 +34,55 @@ private final class OutputTestClock {
 
 @MainActor
 final class OutputControllerTests: XCTestCase {
+    func testTransportFailureAlwaysStopsOutput() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let adapter = OutputFakeTransport()
+        let controller = OutputController(
+            session: session,
+            store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+            adapter: adapter,
+            automaticallyTicks: false
+        )
+        controller.start()
+        XCTAssertTrue(controller.settings.enabled)
+        adapter.onFailure?("injected failure")
+        XCTAssertFalse(controller.settings.enabled)
+        XCTAssertFalse(adapter.isConnected)
+        XCTAssertEqual(controller.status, .disconnected)
+        XCTAssertEqual(controller.error, "injected failure")
+        XCTAssertEqual(adapter.frames.last, .init(enabled: false, values: [:]))
+    }
+
+    func testInjectedAdapterCannotSilentlyIgnoreSelectedTransport() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let transport = OutputFakeTransport()
+        let controller = OutputController(
+            session: session,
+            store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+            adapter: transport,
+            automaticallyTicks: false
+        )
+        var settings = controller.settings
+        settings.transport = .webSocket
+        controller.apply(settings)
+        controller.start()
+        XCTAssertFalse(controller.settings.enabled)
+        XCTAssertNotNil(controller.error)
+        XCTAssertFalse(transport.isConnected)
+    }
+
     func testHardwareMockSoftwareAndMCPUseTheSameGateAndDisableStops() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

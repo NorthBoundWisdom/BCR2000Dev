@@ -688,3 +688,4 @@
 "选择文件…" = "Choose File…";
 "保存设置" = "Save Settings";
 "设置不保存任务内容，重新打开后不会自动连接或启动任务。" = "Task contents are not saved. Reopening the app never connects or starts a task automatically.";
+"当前适配器不支持所选输出协议" = "The current adapter does not support the selected output protocol";

@@ -13,31 +13,77 @@ final class OutputTransportRouter: OutputTransport {
     var onDroppedPacket: (@MainActor () -> Void)?
     var isConnected: Bool { active.isConnected }
     private var active: any OutputTransport
+    private let factory: @MainActor (OutputTransportKind) -> any OutputTransport
     private var kind: OutputTransportKind = .osc
-    init() { active = OSCParameterAdapter(); attach() }
-    func select(_ kind: OutputTransportKind) {
-        guard self.kind != kind else { return }
-        active.stop()
-        self.kind = kind
-        switch kind {
-        case .osc: active = OSCParameterAdapter()
-        case .webSocket: active = WebSocketParameterAdapter()
-        case .rosbridge: active = WebSocketParameterAdapter(rosbridge: true)
+    private var generation = UUID()
+    init(factory: (@MainActor (OutputTransportKind) -> any OutputTransport)? = nil) {
+        let make: @MainActor (OutputTransportKind) -> any OutputTransport = factory ?? { kind in
+            switch kind {
+            case .osc: OSCParameterAdapter()
+            case .webSocket: WebSocketParameterAdapter()
+            case .rosbridge: WebSocketParameterAdapter(rosbridge: true)
+            }
         }
+        self.factory = make
+        active = make(.osc)
         attach()
     }
 
-    private func attach() {
-        active.onSamples = { [weak self] in self?.onSamples?($0) }
-        active.onHeartbeat = { [weak self] in self?.onHeartbeat?($0) }
-        active.onConnection = { [weak self] in self?.onConnection?($0, $1) }
-        active.onFailure = { [weak self] in self?.onFailure?($0) }
-        active.onPeerReset = { [weak self] in self?.onPeerReset?($0) }
-        active.onDroppedPacket = { [weak self] in self?.onDroppedPacket?() }
+    func select(_ kind: OutputTransportKind) throws {
+        if self.kind == kind { try active.select(kind); return }
+        let next = factory(kind)
+        try next.select(kind)
+        generation = UUID()
+        detach()
+        active.stop()
+        self.kind = kind
+        active = next
+        attach()
     }
 
-    func start(host: String, port: UInt16) throws { try active.start(host: host, port: port) }
+    private func detach() {
+        active.onSamples = nil; active.onHeartbeat = nil; active.onConnection = nil
+        active.onFailure = nil; active.onPeerReset = nil; active.onDroppedPacket = nil
+    }
+
+    private func attach() {
+        let revision = generation
+        active
+            .onSamples = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onSamples?($0)
+            }
+        active
+            .onHeartbeat = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onHeartbeat?($0)
+            }
+        active
+            .onConnection = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onConnection?(
+                    $0,
+                    $1
+                )
+            }
+        active
+            .onFailure = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onFailure?($0)
+            }
+        active
+            .onPeerReset = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onPeerReset?($0)
+            }
+        active
+            .onDroppedPacket = { [weak self] in
+                guard let self, self.generation == revision else { return }; self.onDroppedPacket?()
+            }
+    }
+
+    func start(host: String, port: UInt16) throws {
+        try active.select(kind)
+        generation = UUID(); attach()
+        try active.start(host: host, port: port)
+    }
+
     func ping(at now: Date) throws { try active.ping(at: now) }
     func send(_ frame: ParameterOutputFrame) throws { try active.send(frame) }
-    func stop() { active.stop() }
+    func stop() { generation = UUID(); detach(); active.stop() }
 }

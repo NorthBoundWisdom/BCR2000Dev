@@ -80,12 +80,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 
 ### P1
 
-- [ ] RV7（核实）WebSocket 适配器失败后的清理。`WebSocketParameterAdapter.fail` 只置 `isConnected = false`
-  并回调，不取消 socket、收发任务和 URLSession；确认 `OutputController` 收到 `onFailure` 后一定调用
-  `stop()`，否则发送任务失败后接收任务仍在运行。另外心跳用墙钟 `Date` 判定 0.3 秒窗口，系统校时会造成
-  误判（偏安全方向，记录即可）。补测试：非法 JSON、队列满、对端 epoch 变化、发送失败后的状态。
-  目前只有一个 happy-path 测试。
-
 ### P2
 
 - [ ] RV8 MCP Agent 工具细节。`start_agent` 在 Codex 后端下使用设置页里当前的任务内容，工具没有 prompt
@@ -100,8 +94,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
   首帧完整快照若超过 64 KB 则该配置永远无法订阅；`MCPHTTPServer.init` 丢弃了 `observeParameters`
   返回的令牌，服务器释放后观察者仍留在会话里。建议与 UI 一样按 16 ms 合并，快照不受队列上限约束，
   保存并移除观察者。
-- [ ] RV12 `OutputController.start` 用 `adapter as? OutputTransportRouter` 选择传输，注入其他适配器时
-  传输设置被静默忽略，违反“不加静默回退”。把 `select` 放进协议或在构造时注入。
 - [ ] RV16 文档与常量。ROADMAP 的 R4（“页面/层/宏待后续”）、R5（“WebSocket JSON、ROS 2 桥留待后续”）、
   R8 第 6 点和“当前执行顺序”一行与已完成状态矛盾；`CodexSchema.stableSchemaDirectory` 指向的
   `Schemas/Codex/0.167.1` 在资源目录中不存在（核实是否仍被使用，未使用则删除）；
