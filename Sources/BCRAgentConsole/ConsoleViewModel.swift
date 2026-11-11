@@ -533,7 +533,7 @@ final class ConsoleViewModel: ObservableObject {
     private func handleSessionEvent(_ event: SurfaceSessionEvent) {
         switch event {
         case .pageChanged:
-            if let warning = configuration
+            if notice?.level != .error, let warning = configuration
                 .pageNavigationWarning { notice = ConsoleNotice(level: .warning, text: warning) }
         case let .sourceChanged(source):
             switch source {

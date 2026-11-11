@@ -16,6 +16,19 @@ final class ConfigurationPersistenceTests: XCTestCase {
                       configuration: JSONFileStore(fileURL: directory.appending(path: "surface-configuration.json")))
     }
 
+    func testPageWarningDoesNotHideProgramSaveFailure() throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = stores(directory)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        try FileManager.default.createDirectory(at: stores.configuration.fileURL, withIntermediateDirectories: false)
+        var candidate = model.configuration
+        try candidate.addPage(.init(id: "p", name: "Page", assignments: []))
+        try model.updatePrograms(candidate)
+        XCTAssertNotNil(model.configuration.pageNavigationWarning)
+        XCTAssertEqual(model.notice?.level, .error)
+    }
+
     func testInvalidLoadPreservesOriginalAndBacksUpExactBytesBeforeLaterSave() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
