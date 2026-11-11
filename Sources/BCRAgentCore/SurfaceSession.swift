@@ -15,6 +15,7 @@ public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let control: BCRControlID?
     public let ignored: Bool
     public let origin: SurfaceWriteOrigin
+    public let delivery: FeedbackDelivery?
 }
 
 /// Semantic notifications let the app own wording, selection and follow-touch policy.
@@ -54,6 +55,47 @@ public final class SurfaceSession {
     public private(set) var motionSafety: MotionSafetySnapshot?
     public private(set) var lastConfigurationPersistenceError: String?
 
+    private var parameterRevision: UInt64 = 0
+    private var publishedValues: [ParameterID: Double] = [:]
+    private var publishedConfigurationRevision: UInt64 = 0
+    private var parameterObservers: [UUID: @MainActor (ParameterChangeBatch) -> Void] = [:]
+
+    public func observeParameters(_ observer: @escaping @MainActor (ParameterChangeBatch) -> Void) -> UUID {
+        let id = UUID()
+        parameterObservers[id] = observer
+        return id
+    }
+
+    public func removeParameterObserver(_ id: UUID) { parameterObservers[id] = nil }
+    public func parameterSnapshot() -> ParameterChangeBatch {
+        ParameterChangeBatch(revision: parameterRevision,
+                             values: Dictionary(uniqueKeysWithValues: engine.parameterValues.map { (
+                                 $0.key.rawValue,
+                                 $0.value
+                             ) }),
+                             removed: [], reset: true)
+    }
+
+    private func publishChange() {
+        let values = engine.parameterValues
+        let reset = publishedConfigurationRevision != configurationRevision
+        let changed = values.filter { publishedValues[$0.key] != $0.value }
+        let removed = publishedValues.keys.filter { values[$0] == nil }.map(\.rawValue).sorted()
+        publishedValues = values
+        publishedConfigurationRevision = configurationRevision
+        if reset || !changed.isEmpty || !removed.isEmpty {
+            parameterRevision &+= 1
+            let batch = ParameterChangeBatch(revision: parameterRevision,
+                                             values: Dictionary(uniqueKeysWithValues: (reset ? values : changed).map { (
+                                                 $0.key.rawValue,
+                                                 $0.value
+                                             ) }),
+                                             removed: removed, reset: reset)
+            for observer in Array(parameterObservers.values) { observer(batch) }
+        }
+        onChange?()
+    }
+
     public var onChange: (@MainActor () -> Void)?
     public var onEvent: (@MainActor (SurfaceSessionEvent) -> Void)?
     public var onTriggerAgent: (@MainActor (AgentSlotID) -> Void)?
@@ -67,6 +109,9 @@ public final class SurfaceSession {
     private var nextEventID = 0
     public private(set) var learnFormat: MIDILearnFormat = .voice
     private var nrpnAssembler = NRPNAssembler()
+    public private(set) var feedbackPolicy = FeedbackPolicy()
+    private var scheduler: FeedbackScheduler?
+    public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
     private var writeOrigin: SurfaceWriteOrigin = .software
 
     public init(
@@ -86,6 +131,7 @@ public final class SurfaceSession {
         self.saveConfiguration = saveConfiguration
         connection = hardwareDevice.connection
         engine = SurfaceEngine(hardwareMap: mockDevice.model.preset, configuration: configuration)
+        publishedValues = engine.parameterValues
         mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
         hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
@@ -101,13 +147,36 @@ public final class SurfaceSession {
         return try operation()
     }
 
+    public func configureFeedback(_ policy: FeedbackPolicy) throws {
+        let updated = try FeedbackScheduler(policy: policy)
+        engine.recordFeedbackWhenGenerated = !policy.enabled
+        feedbackPolicy = policy
+        scheduler = updated
+        if source == .hardware { perform(engine.fullFeedback(at: now())) }
+        publishChange()
+    }
+
+    public func flushFeedback() {
+        guard source == .hardware, feedbackPolicy.enabled else { return }
+        let batch = scheduler?.drain(at: now()) ?? []
+        for (index, value) in batch.enumerated() {
+            let result = withWriteOrigin(value.origin) { transmitNow(value.message) }
+            if result == .failed {
+                for remaining in batch[index...] { scheduler?.enqueue(remaining.message, origin: remaining.origin) }
+                break
+            }
+        }
+        if !batch.isEmpty { publishChange() }
+    }
+
     public func synchronize() {
         perform(engine.fullFeedback(at: now()))
-        onChange?()
+        publishChange()
     }
 
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
+        scheduler?.clear()
         source = newSource
         nrpnAssembler.reset()
         engine.echoWindow = newSource == .mock ? 0 : 0.18
@@ -115,45 +184,55 @@ public final class SurfaceSession {
         droppedFeedbackCount = 0
         onEvent?(.sourceChanged(newSource))
         perform(engine.fullFeedback(at: now()))
-        onChange?()
+        publishChange()
+    }
+
+    public func updatePrograms(_ candidate: SurfaceConfiguration) throws {
+        perform(try engine.updatePrograms(candidate, at: now()))
+        publishChange()
+    }
+
+    public func selectPage(_ id: String?) throws {
+        perform(try engine.selectPage(id, at: now()))
+        publishChange()
     }
 
     public func selectGroup(_ group: Int) {
         mockDevice.selectGroup(group)
-        onChange?()
+        publishChange()
     }
 
     public func turn(_ control: BCRControlID, by delta: Int) {
         if source == .mock { mockDevice.turn(control, by: delta) }
         else { perform(engine.adjust(control, by: delta, at: now())) }
-        onChange?()
+        publishChange()
     }
 
     public func press(_ control: BCRControlID) {
         if source == .mock { mockDevice.press(control) }
         else { perform(engine.press(control, isDown: true, at: now())) }
-        onChange?()
+        publishChange()
     }
 
     public func release(_ control: BCRControlID) {
         if source == .mock { mockDevice.release(control) }
         else { perform(engine.press(control, isDown: false, at: now())) }
-        onChange?()
+        publishChange()
     }
 
     public func setParameter(_ id: ParameterID, to value: Double) {
         perform(engine.setParameter(id, to: value, at: now()))
-        onChange?()
+        publishChange()
     }
 
     public func resetGroup(_ group: String) {
         perform(engine.resetGroup(group, at: now()))
-        onChange?()
+        publishChange()
     }
 
     public func setAgentFeedback(_ slot: AgentSlotID, value: UInt8) {
         perform(engine.setAgentFeedback(slot, value: value, at: now()))
-        onChange?()
+        publishChange()
     }
 
     @discardableResult
@@ -189,25 +268,26 @@ public final class SurfaceSession {
             ))
         }
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     public func updateParameter(_ definition: ParameterDefinition) throws {
         perform(try engine.updateParameter(definition, at: now()))
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     public func removeParameter(_ id: ParameterID) {
         engine.removeParameter(id)
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     public func replaceConfiguration(_ configuration: SurfaceConfiguration, persist: Bool = true) throws {
         let configuration = try configuration.migrated()
         let learning = engine.learnTarget
         let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
+        scheduler?.clear()
         configurationRevision &+= 1
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
@@ -215,7 +295,7 @@ public final class SurfaceSession {
         perform(clearedFeedback + engine.fullFeedback(at: now()))
         if persist { persistConfiguration() }
         else { lastConfigurationPersistenceError = nil }
-        onChange?()
+        publishChange()
     }
 
     public func setActualFeedback(_ values: [ParameterID: Double]) throws {
@@ -226,7 +306,7 @@ public final class SurfaceSession {
 
     public func setLEDFeedbackSource(_ source: LEDFeedbackSource) {
         perform(engine.setLEDFeedbackSource(source, at: now()))
-        onChange?()
+        publishChange()
     }
 
     public func setMotionSafety(_ snapshot: MotionSafetySnapshot) {
@@ -235,7 +315,7 @@ public final class SurfaceSession {
 
     public func retryConfigurationPersistence() {
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     public func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) throws {
@@ -243,14 +323,14 @@ public final class SurfaceSession {
         else { engine.clearAssignment(for: control) }
         mockDevice.configureModes(engine.configuration)
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     public func applyBulkAssignment(_ plan: BulkAssignmentPlan) throws {
         perform(try engine.apply(plan, at: now()))
         mockDevice.configureModes(engine.configuration)
         persistConfiguration()
-        onChange?()
+        publishChange()
     }
 
     @discardableResult
@@ -259,28 +339,28 @@ public final class SurfaceSession {
         learnFormat = format
         nrpnAssembler.reset()
         engine.beginLearning(control)
-        onChange?()
+        publishChange()
         return true
     }
 
     public func stopLearning() {
         engine.stopLearning()
         nrpnAssembler.reset()
-        onChange?()
+        publishChange()
     }
 
     public func unbind(_ control: BCRControlID) {
         guard source == .hardware else { return }
         engine.unbind(control)
         persistHardwareMap()
-        onChange?()
+        publishChange()
     }
 
     public func resetHardwareMap() {
         guard source == .hardware else { return }
         engine.resetHardwareMap()
         persistHardwareMap()
-        onChange?()
+        publishChange()
     }
 
     public func setMockNRPN(_ enabled: Bool, for control: BCRControlID) throws {
@@ -289,12 +369,12 @@ public final class SurfaceSession {
         engine.replaceHardwareMap(mock.preset)
         nrpnAssembler.reset()
         perform(engine.fullFeedback(at: now()))
-        onChange?()
+        publishChange()
     }
 
     public func clearMonitor() {
         events.removeAll()
-        onChange?()
+        publishChange()
     }
 
     private func receive(_ messages: [MIDIVoiceMessage], from inputSource: DeviceSource) {
@@ -324,12 +404,16 @@ public final class SurfaceSession {
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
             perform(engine.handleInput(message, at: now()))
         }
-        onChange?()
+        publishChange()
     }
 
     private func perform(_ effects: [SurfaceEffect]) {
         for effect in effects {
             switch effect {
+            case .pageChanged:
+                scheduler?.clear()
+                mockDevice.configureModes(engine.configuration)
+                persistConfiguration()
             case let .send(message): transmit(message)
             case let .triggerAgent(slot): onTriggerAgent?(slot)
             case let .learned(control, midi):
@@ -342,24 +426,34 @@ public final class SurfaceSession {
     }
 
     private func transmit(_ message: MIDIVoiceMessage) {
-        log(
-            .output,
-            message,
-            source: source,
-            control: engine.hardwareMap.control(for: message.controlID),
-            ignored: false
-        )
+        if source == .hardware, feedbackPolicy.enabled, connection.connectedDestination != nil {
+            scheduler?.enqueue(message, origin: writeOrigin)
+        } else { transmitNow(message) }
+    }
+
+    @discardableResult
+    private func transmitNow(_ message: MIDIVoiceMessage) -> FeedbackDelivery {
         let device: any SurfaceDevice = source == .mock ? mockDevice : hardwareDevice
-        guard device.connection.connectedDestination != nil else {
+        let delivery: FeedbackDelivery
+        if device.connection.connectedDestination == nil {
             droppedFeedbackCount += 1
-            return
+            delivery = .disconnected
+        } else {
+            do {
+                try device.send(message)
+                engine.noteFeedbackSent(message, at: now())
+                delivery = .sent
+            } catch {
+                droppedFeedbackCount += 1
+                connection.lastError = error.localizedDescription
+                scheduler?.noteFailure(at: now())
+                onEvent?(.failed(.feedback, error.localizedDescription))
+                delivery = .failed
+            }
         }
-        do { try device.send(message) }
-        catch {
-            droppedFeedbackCount += 1
-            connection.lastError = error.localizedDescription
-            onEvent?(.failed(.feedback, error.localizedDescription))
-        }
+        log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
+            ignored: false, delivery: delivery)
+        return delivery
     }
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
@@ -369,6 +463,7 @@ public final class SurfaceSession {
             || connection.connectedSource != snapshot.connectedSource
             || connection.connectedDestination != snapshot.connectedDestination
         if snapshot.isConnected != wasConnected || routeChanged { nrpnAssembler.reset() }
+        if routeChanged || !snapshot.isConnected { scheduler?.clear() }
         connection = snapshot
         if snapshot.isConnected, !wasConnected || routeChanged {
             onEvent?(.connected(snapshot))
@@ -377,17 +472,17 @@ public final class SurfaceSession {
                 perform(engine.fullFeedback(at: now()))
             }
         }
-        onChange?()
+        publishChange()
     }
 
     private func log(
         _ direction: MIDIObservationDirection, _ message: MIDIVoiceMessage,
-        source: DeviceSource, control: BCRControlID?, ignored: Bool
+        source: DeviceSource, control: BCRControlID?, ignored: Bool, delivery: FeedbackDelivery? = nil
     ) {
         nextEventID += 1
         events.append(MonitorEvent(id: nextEventID, time: now(), direction: direction,
                                    source: source, message: message, control: control, ignored: ignored,
-                                   origin: writeOrigin))
+                                   origin: writeOrigin, delivery: delivery))
         if events.count > 300 { events.removeFirst(events.count - 300) }
     }
 

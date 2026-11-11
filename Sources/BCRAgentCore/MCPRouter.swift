@@ -18,6 +18,7 @@ public struct MCPReply: Sendable {
 public final class MCPRouter {
     public let service: AgentControlService
     public var onChange: (@MainActor () -> Void)?
+    public var onSessionClosed: (@MainActor (String) -> Void)?
     public var sessionCount: Int { sessions.count }
     private struct LegacySession {
         var initialized: Bool
@@ -34,14 +35,26 @@ public final class MCPRouter {
     }
 
     public func stop() {
+        for id in sessions.keys { onSessionClosed?(id) }
         sessions.removeAll()
         onChange?()
     }
 
     public func deleteSession(_ id: String?) -> MCPReply {
         guard let id, sessions.removeValue(forKey: id) != nil else { return MCPReply(status: 404) }
+        onSessionClosed?(id)
         onChange?()
         return MCPReply()
+    }
+
+    public func permitsEventStream(sessionID: String?, version: String?) -> Bool {
+        guard let version, MCPVersions.supported.contains(version) else { return false }
+        if version == MCPVersions.current { return true }
+        expireSessions()
+        guard let sessionID, var session = sessions[sessionID], session.initialized else { return false }
+        session.seen = now()
+        sessions[sessionID] = session
+        return true
     }
 
     public func handle(_ data: Data, headers: [String: String]) -> MCPReply {
@@ -106,7 +119,10 @@ public final class MCPRouter {
             return MCPReply(body: response(id: id, result: .object([
                 "protocolVersion": .string(MCPVersions.legacy),
                 "serverInfo": serverInfo,
-                "capabilities": .object(["tools": .object(["listChanged": .bool(false)])])
+                "capabilities": .object([
+                    "tools": .object(["listChanged": .bool(false)]),
+                    "experimental": .object(["bcr/parameterChanges": .object(["transport": .string("sse")])])
+                ])
             ])), sessionID: sessionID)
         } else {
             expireSessions()
@@ -139,7 +155,10 @@ public final class MCPRouter {
         case "server/discover" where modern:
             result = .object([
                 "supportedVersions": .array(MCPVersions.supported.map(JSONValue.string)),
-                "capabilities": .object(["tools": .object([:])]),
+                "capabilities": .object([
+                    "tools": .object([:]),
+                    "experimental": .object(["bcr/parameterChanges": .object(["transport": .string("sse")])])
+                ]),
                 "instructions": .string("Local BCR parameters; writes obey permissions, agentWritable and rate limits.")
             ])
         case "ping": result = .object([:])
@@ -192,6 +211,7 @@ public final class MCPRouter {
 
     private func expireSessions() {
         let time = now()
-        sessions = sessions.filter { time.timeIntervalSince($0.value.seen) < 1_800 }
+        let expired = sessions.filter { time.timeIntervalSince($0.value.seen) >= 1_800 }.map(\.key)
+        for id in expired { sessions[id] = nil; onSessionClosed?(id) }
     }
 }

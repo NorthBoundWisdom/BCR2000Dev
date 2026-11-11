@@ -4,12 +4,28 @@ import Foundation
 
 struct OutputSettings: Codable, Equatable, Sendable {
     var version = 1
+    var transport: OutputTransportKind = .osc
     var enabled = false
     var host = "127.0.0.1"
     var port = 9000
     var enableParameter: ParameterID = "arm.enabled"
     var ledSource: LEDFeedbackSource = .target
     var limits: [MotionLimit] = []
+
+    init() {}
+    private enum CodingKeys: String,
+        CodingKey { case version, enabled, host, port, enableParameter, ledSource, limits, transport }
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        enabled = try c.decode(Bool.self, forKey: .enabled)
+        host = try c.decode(String.self, forKey: .host)
+        port = try c.decode(Int.self, forKey: .port)
+        enableParameter = try c.decode(ParameterID.self, forKey: .enableParameter)
+        ledSource = try c.decode(LEDFeedbackSource.self, forKey: .ledSource)
+        limits = try c.decode([MotionLimit].self, forKey: .limits)
+        transport = c.contains(.transport) ? try c.decode(OutputTransportKind.self, forKey: .transport) : .osc
+    }
 
     static func defaults(for configuration: SurfaceConfiguration) -> OutputSettings {
         var settings = OutputSettings()
@@ -65,7 +81,7 @@ final class OutputController: ObservableObject {
     init(
         session: SurfaceSession,
         store: JSONFileStore<OutputSettings>,
-        adapter: any OutputTransport = OSCParameterAdapter(),
+        adapter: any OutputTransport = OutputTransportRouter(),
         automaticallyTicks: Bool = true,
         now: @escaping @MainActor () -> Date = { .now }
     ) {
@@ -121,6 +137,7 @@ final class OutputController: ObservableObject {
             configurationRevision = session.configurationRevision
             session.setOutputEnableParameter(settings.enableParameter)
             outputs = [:]; actual = [:]; error = nil; lastPing = nil
+            (adapter as? OutputTransportRouter)?.select(settings.transport)
             try adapter.start(host: settings.host, port: UInt16(settings.port))
             task?.cancel()
             if automaticallyTicks { task = Task { @MainActor [weak self] in

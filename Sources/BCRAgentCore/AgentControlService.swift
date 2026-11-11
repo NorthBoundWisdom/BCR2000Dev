@@ -7,6 +7,9 @@ public final class AgentControlService {
     public var permissions: MCPPermissions
     public private(set) var audit: [MCPAuditEntry] = []
     public var onChange: (@MainActor () -> Void)?
+    public var onReadAgents: (@MainActor () throws -> JSONValue)?
+    public var onAgentAction: (@MainActor (String, AgentSlotID?) throws -> Void)?
+    public var onSelectSource: (@MainActor (DeviceSource) throws -> Void)?
     private let now: @MainActor () -> Date
     private var rateWindow: Date?
     private var usedWrites = 0
@@ -42,6 +45,26 @@ public final class AgentControlService {
 
     private func execute(_ name: String, _ args: [String: JSONValue]) throws -> JSONValue {
         switch name {
+        case "get_agents":
+            guard let onReadAgents else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
+            return try onReadAgents()
+        case "start_agent", "interrupt_agent", "stop_all_agents":
+            guard permissions.parameterWrite,
+                  permissions.agentControl else { throw MCPToolFailure(L10n.text("未开启 Agent 控制权限")) }
+            guard let onAgentAction else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
+            let slot = args["slot"]?.intValue.map(AgentSlotID.init)
+            try consumeWrites(1)
+            try onAgentAction(name, slot)
+            return .object(["accepted": .bool(true)])
+        case "set_device_source":
+            guard permissions.parameterWrite,
+                  permissions.deviceControl else { throw MCPToolFailure(L10n.text("未开启设备切换权限")) }
+            guard let source = DeviceSource(rawValue: try string(args, "source")), let onSelectSource else {
+                throw MCPToolFailure(L10n.text("设备切换服务不可用"))
+            }
+            try consumeWrites(1)
+            try onSelectSource(source)
+            return .object(["source": .string(session.source.rawValue)])
         case "get_status":
             return .object([
                 "source": .string(session.source.rawValue),

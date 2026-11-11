@@ -74,6 +74,49 @@ final class SurfaceSessionTests: XCTestCase {
     private let a = BCRControlID.pushEncoder(group: 1, 1)
     private let b = BCRControlID.encoder(row: 1, 1)
 
+    func testParameterObserversSeeBatchesAndCanUnsubscribe() {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        var batches: [ParameterChangeBatch] = []
+        let token = f.session.observeParameters { batches.append($0) }
+        f.session.setParameter("j", to: 50)
+        XCTAssertEqual(batches.last?.values["j"], 50)
+        let revision = batches.last?.revision
+        f.session.setParameter("j", to: 50)
+        XCTAssertEqual(batches.last?.revision, revision)
+        f.session.removeParameterObserver(token)
+        f.session.setParameter("j", to: 60)
+        XCTAssertEqual(batches.count, 1)
+    }
+
+    func testMonitorRecordsActualFeedbackDelivery() {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        f.session.selectSource(.hardware)
+        XCTAssertEqual(f.session.events.last?.delivery, .disconnected)
+        f.device.connect(true)
+        f.session.setParameter("j", to: 50)
+        XCTAssertEqual(f.session.events.last?.delivery, .sent)
+        f.device.failsSend = true
+        f.session.setParameter("j", to: 60)
+        XCTAssertEqual(f.session.events.last?.delivery, .failed)
+    }
+
+    func testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect() throws {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        f.device.sent.removeAll()
+        try f.session.configureFeedback(.init(enabled: true, messagesPerSecond: 100, burst: 128))
+        f.session.setParameter("j", to: 40)
+        f.session.setParameter("j", to: 70)
+        XCTAssertTrue(f.device.sent.isEmpty)
+        f.session.flushFeedback()
+        XCTAssertEqual(f.device.sent.filter { $0.controlID == HardwareMap.mockPreset().midi(for: a) }.last,
+                       message(a, 70))
+        f.session.setParameter("j", to: 90)
+        f.device.connect(false)
+        XCTAssertEqual(f.session.pendingFeedbackCount, 0)
+    }
+
     private func mirroredConfiguration() -> SurfaceConfiguration {
         SurfaceConfiguration(name: "Mirror", parameters: [
             ParameterDefinition(id: "j", name: "Joint", minimum: 0, maximum: 127, defaultValue: 30)

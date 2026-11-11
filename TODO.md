@@ -16,8 +16,8 @@
   经 MCP 的 280/280 设备回读一致。按键、旋钮按下、人工转动与视觉验收尚未进行，
   见 [实机记录](docs/HARDWARE_VALIDATION.md)。
 
-执行顺序：1 实机验证 → 2 按实测修正 → 3 反馈调度与 MCP 推送 → 4 Codex 接入 → 5 发布 → 6 远期。
-第 4 项不依赖真机，可在等待现场操作时推进。
+执行顺序：1 实机验证 → 2 按实测修正 → 3 真机反馈参数校准 → 发布/真实执行端评审。
+非硬件软件实现已完成；正式分发仍按既有决定暂停。
 
 ## 1. 实机验证（R1，进行中）
 
@@ -58,29 +58,16 @@ App 与工具只发送只读查询 SysEx，不改写设备 Preset，不回放备
   App 只给出冲突报告，不自动改设备。
 - [ ] C4 按 HW4 结果落实重连策略：只恢复软件快照，清空旧输入，不重放旧队列；补回归测试。
 
-## 3. 反馈调度与 MCP 推送（R2 / R8 剩余）
+## 3. 非硬件开发验收
 
-- [ ] D3 WP2：反馈调度与 UI 刷新性能（以 HW6 实测为基线）
-  - [ ] 同控件反馈合并、全局限速与错误抑制，策略可配置
-  - [ ] `MonitorEvent` 标明反馈是否送达（成功发送 / 未连接丢弃 / 发送失败）
-  - [ ] MIDI 输入批量进入引擎，UI 每帧最多发布一次
-- [ ] D4 MCP 参数变化推送（SSE 或通知），让 Agent 实时感知真机操作。
-  需先确认协议方案，以及是否引入官方 Swift MCP SDK（新增第三方依赖，需批准）。
+D3 软件部分、D4、P0-S4/P0-S5、页面/层/宏、配置库、WebSocket/ROS 2 rosbridge、
+MCP Agent/设备控制工具与 stdio 桥接均已实现并通过非硬件回归。
+详细范围、测试入口与限制见 [非硬件验收](docs/OFFLINE_ACCEPTANCE.md)、[Codex](docs/CODEX.md)、
+[网络输出](docs/NETWORK_OUTPUT.md)、[MCP](docs/MCP.md)。
+30 分钟 JSONL soak 已通过：墙钟 1800.091 秒、264,873 个 Turn、八个槽位，无分叉/失败。
 
-## 4. Codex 接入（R6，不依赖真机）
-
-App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在 `BCRAgentCore` 完成，
-但 `BCRAgentConsole` 尚未引用任何 Codex 类型（App 仍只跑 Mock Agent），
-`CodexProcessSupervisor` 已补启动失败、标准输入输出回路、重复启动、停止和重启测试。剩余：
-
-- [ ] P0-S5 把 Codex 会话接入 App：依赖注入、Mock / Codex 切换与可见的失败状态；
-  进程异常退出、自动重启上限、退避中停止、忽略终止信号后的强制停止测试已完成。
-- [ ] P0-S4 基础集成与稳定性
-  - [ ] 关键集成测试：`mock app-server` + 真实 `swift test` 的 protocol/integration 覆盖
-  - [x] JSONL 子进程异常路径：提前退出、乱序响应、重复响应、错误响应、Malformed JSONL
-  - [ ] App Server 业务层重复审批、Thread/Turn 完整集成（重复审批窗口与迟到完成事件已有回归）
-  - [ ] `Stop All` 与重连场景下状态一致性回归
-  - [ ] protocol/状态机在 30 分钟 soak 下无分叉
+- [ ] D3 真机调度参数校准：按 HW6 的输出速率、丢弃数、CPU/UI 帧率确定实体设备默认策略；
+  软件限速/合并/错误冷却已经完成，当前默认关闭，不能把模拟结果当作真机基线。
 
 ## 5. 发布与 DriverKit 分发（R7）
 
@@ -88,19 +75,16 @@ App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在
 正式 DriverKit 分发申请与凭证配置**暂停**，待用户明确需要公开完整版时再推进。
 流程见 [PACKAGING.md](docs/PACKAGING.md)、[TAG_RELEASE_SETUP.md](docs/TAG_RELEASE_SETUP.md)。
 
-- [ ] 本机 dext 维护：记录开发 profile 到期日，以及 macOS 升级或重装后的重新验证步骤
-  （身份、快照、五值回读、灯环）；失效时实机验证随之阻塞。
+开发 profile 已按用户授权取得并完成签署验证；到期日及升级/重装后的身份、快照、五值回读和灯环
+复核步骤见 [DriverKit 维护](docs/DRIVERKIT_USB_PROOF.md#开发签署维护2026-11-11-更新)。实际 USB 重验仍属 R1。
+
 - [ ] macOS 14 真机安装验收（ad-hoc 主程序包）。
 - 以下项在恢复正式分发后进行：
   - [ ] Apple 正式 entitlement 审核及两个 Developer ID profiles（申请草稿已备，尚未提交）。
   - [ ] 账号持有人批准凭证用途并安全配置 CI Secrets。
   - [ ] 使用正式授权运行签署/公证，并在未注册的干净 Mac 验证安装、卸载、升级与 USB。
 
-## 6. 远期
+## 6. 真实执行端评审
 
-- [ ] 页面/层、宏（R4 剩余）
-- [x] 多套配置的命名库管理：设置页保存、确认载入/删除，损坏文件拒绝覆盖
-- [ ] WebSocket / ROS 2 适配器（R5 剩余）
-- [ ] MCP 更多工具（触发 Agent 槽位、切换设备源）
-- [x] MCP stdio 桥接：本机 HTTP、环境变量凭据、会话清理，真实隔离 App 验收通过
-- [ ] 真实机械臂接入前的独立停机方案评审（硬件急停、执行端看门狗），未评审不得连接
+- [ ] 真实机械臂接入前的独立停机方案评审（硬件急停、执行端看门狗），未评审不得连接。
+  该项必须结合具体执行端与独立硬件保护，不能用已完成的软件模拟测试替代。

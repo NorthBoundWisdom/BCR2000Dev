@@ -97,6 +97,9 @@ public actor CodexProcessSupervisor {
     private var currentGeneration = 0
     private var restartCount = 0
 
+    private struct PipeChunk: Sendable { let data: Data; let stdout: Bool; let generation: Int }
+    private var pipeTask: Task<Void, Never>?
+    private var pipeContinuation: AsyncStream<PipeChunk>.Continuation?
     private var stdoutHandle: FileHandle?
     private var stderrHandle: FileHandle?
 
@@ -236,19 +239,28 @@ public actor CodexProcessSupervisor {
         stdoutHandle = stdoutReader
         stderrHandle = stderrReader
 
+        let stream = AsyncStream<PipeChunk>.makeStream(bufferingPolicy: .bufferingOldest(64))
+        pipeContinuation = stream.continuation
+        pipeTask = Task { [weak self] in
+            for await chunk in stream.stream {
+                guard !Task.isCancelled else { break }
+                await self?.consumeDataChunk(chunk.data, isStdout: chunk.stdout, generation: chunk.generation)
+            }
+        }
         stdoutReader.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil }
-            Task {
-                await self?.consumeDataChunk(data, isStdout: true, generation: generation)
+            if case .dropped = stream.continuation.yield(PipeChunk(data: data, stdout: true, generation: generation)) {
+                stream.continuation.finish()
+                Task { await self?.pipeOverflow(generation: generation) }
             }
         }
-
         stderrReader.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil }
-            Task {
-                await self?.consumeDataChunk(data, isStdout: false, generation: generation)
+            if case .dropped = stream.continuation.yield(PipeChunk(data: data, stdout: false, generation: generation)) {
+                stream.continuation.finish()
+                Task { await self?.pipeOverflow(generation: generation) }
             }
         }
 
@@ -306,6 +318,14 @@ public actor CodexProcessSupervisor {
                 try? await Task.sleep(for: .milliseconds(10))
             }
         }
+    }
+
+    private func pipeOverflow(generation: Int) {
+        guard generation == currentGeneration else { return }
+        outputOverflow = true
+        let error = CodexProcessSupervisorError.launchFailed(L10n.text("Codex 输出队列已满，连接必须重新启动"))
+        while let waiter = stdoutWaiting.popLast() { waiter.resume(throwing: error) }
+        process?.terminate()
     }
 
     private func consumeDataChunk(_ data: Data, isStdout: Bool, generation: Int) {
@@ -483,6 +503,10 @@ public actor CodexProcessSupervisor {
     }
 
     private func cleanup() {
+        pipeContinuation?.finish()
+        pipeContinuation = nil
+        pipeTask?.cancel()
+        pipeTask = nil
         if let stdoutHandle {
             stdoutHandle.readabilityHandler = nil
             self.stdoutHandle = nil
@@ -506,6 +530,10 @@ public actor CodexProcessSupervisor {
     }
 
     private func cleanupPipes() {
+        pipeContinuation?.finish()
+        pipeContinuation = nil
+        pipeTask?.cancel()
+        pipeTask = nil
         if let stdoutHandle {
             stdoutHandle.readabilityHandler = nil
             self.stdoutHandle = nil

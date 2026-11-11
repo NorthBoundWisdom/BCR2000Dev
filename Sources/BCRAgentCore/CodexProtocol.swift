@@ -1,7 +1,7 @@
 import Foundation
 
 public enum CodexSchema {
-    public static let cliVersion = "0.145.0"
+    public static let cliVersion = "0.167.1"
     public static let stableSchemaDirectory = "Schemas/Codex/\(cliVersion)/stable"
 }
 
@@ -32,6 +32,20 @@ public enum CodexRequestID: Codable, Hashable, Sendable {
     public init(_ value: Int) { self = .number(value) }
 
     public init(_ value: String) { self = .string(value) }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(Int.self) { self = .number(value) }
+        else { self = .string(try container.decode(String.self)) }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case let .number(value): try container.encode(value)
+        case let .string(value): try container.encode(value)
+        }
+    }
 
     public var stringValue: String {
         switch self {
@@ -378,7 +392,7 @@ public struct CodexModelCapability: Equatable, Codable, Sendable {
         let isDefault = object["isDefault"]?.boolValue ?? false
         let defaultReasoningEffort = object["defaultReasoningEffort"]?.stringValue
         let supportedReasoningEfforts = object["supportedReasoningEfforts"]?.arrayValue?
-            .compactMap(\.stringValue) ?? []
+            .compactMap { $0.stringValue ?? $0.objectValue?["reasoningEffort"]?.stringValue } ?? []
 
         let hidden = object["hidden"]?.boolValue ?? false
         var metadata = object["metadata"]?.objectValue ?? [:]
@@ -420,7 +434,7 @@ public struct CodexModelListPage: Equatable, Sendable {
         guard let object = payload.objectValue else {
             throw CodexProtocolError.nonObjectPayload(method: "model/list")
         }
-        let list = object["models"]?.arrayValue ?? []
+        let list = object["data"]?.arrayValue ?? object["models"]?.arrayValue ?? []
         self.models = try list.compactMap { model in
             guard let values = model.objectValue else {
                 return nil
@@ -434,6 +448,8 @@ public struct CodexModelListPage: Equatable, Sendable {
 public enum CodexServerEvent: Equatable, Sendable {
     case turnStarted(threadID: String, turnID: String)
     case turnCompleted(threadID: String, turnID: String)
+    case turnFailed(threadID: String, turnID: String, message: String)
+    case turnInterrupted(threadID: String, turnID: String)
     case commandExecutionRequestApproval(
         requestID: String,
         turnID: String,
@@ -464,7 +480,7 @@ public extension CodexEnvelope {
             guard let threadID = obj["threadId"]?.stringValue else {
                 throw CodexProtocolError.missingPayloadField("threadId")
             }
-            guard let turnID = obj["turnId"]?.stringValue else {
+            guard let turnID = obj["turn"]?.objectValue?["id"]?.stringValue ?? obj["turnId"]?.stringValue else {
                 throw CodexProtocolError.missingPayloadField("turnId")
             }
             return .turnStarted(threadID: threadID, turnID: turnID)
@@ -473,8 +489,18 @@ public extension CodexEnvelope {
             guard let threadID = obj["threadId"]?.stringValue else {
                 throw CodexProtocolError.missingPayloadField("threadId")
             }
-            guard let turnID = obj["turnId"]?.stringValue else {
+            guard let turnID = obj["turn"]?.objectValue?["id"]?.stringValue ?? obj["turnId"]?.stringValue else {
                 throw CodexProtocolError.missingPayloadField("turnId")
+            }
+            if let turn = obj["turn"]?.objectValue {
+                switch turn["status"]?.stringValue {
+                case "completed": break
+                case "interrupted": return .turnInterrupted(threadID: threadID, turnID: turnID)
+                case "failed": return .turnFailed(threadID: threadID, turnID: turnID,
+                                                  message: turn["error"]?.objectValue?["message"]?
+                                                      .stringValue ?? "Codex turn failed")
+                default: throw CodexProtocolError.invalidPayloadField("turn.status")
+                }
             }
             return .turnCompleted(threadID: threadID, turnID: turnID)
 
@@ -521,6 +547,11 @@ public enum CodexLogSanitizer {
     public static let replacement = "[REDACTED]"
 
     public static func sanitize(_ text: String) -> String {
+        // Raw protocol frames can contain prompts, environment values and credentials. Diagnostics
+        // record only their size; the transport still receives the original bytes unchanged.
+        if let data = text.data(using: .utf8), (try? JSONSerialization.jsonObject(with: data)) != nil {
+            return "Codex JSONL frame (\(data.count) bytes)"
+        }
         var output = text
 
         output = redact(

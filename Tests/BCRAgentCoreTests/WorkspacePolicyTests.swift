@@ -3,6 +3,11 @@ import XCTest
 @testable import BCRAgentCore
 
 final class WorkspacePolicyTests: XCTestCase {
+    func testRelativeWorkspaceIsRejectedBeforeURLResolution() {
+        XCTAssertThrowsError(try WorkspacePolicy.canonicalWorkspaceRoot("."))
+        XCTAssertThrowsError(try WorkspacePolicy.canonicalWorkspaceRoot("relative/path"))
+    }
+
     func testCanonicalWorkspaceRootForExistingDirectory() throws {
         let temp = FileManager.default.temporaryDirectory
         let root = temp.appendingPathComponent("bcragent_workspace_policy")

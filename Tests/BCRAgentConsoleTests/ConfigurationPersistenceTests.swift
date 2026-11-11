@@ -122,7 +122,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         try model.exportConfiguration(to: url)
         let data = try Data(contentsOf: url)
         let raw = try JSONDecoder().decode(JSONValue.self, from: data).objectValue!
-        XCTAssertEqual(Set(raw.keys), Set(["version", "name", "parameters", "assignments"]))
+        XCTAssertEqual(Set(raw.keys), Set(["version", "name", "parameters", "assignments", "pages", "macros"]))
         XCTAssertNil(raw["hardwareMap"])
         XCTAssertNil(raw["token"])
         XCTAssertNil(raw["parameterValues"])

@@ -5,6 +5,7 @@ import Foundation
 /// assigned to the slot through `SurfaceEngine.setAgentFeedback`.
 extension ConsoleViewModel {
     func performPrimaryAction(_ slotID: AgentSlotID) {
+        if codex.backend == .codex { codex.perform(slotID); return }
         guard let slot = agentMachine.slot(slotID) else { return }
         switch slot.state {
         case .waitingApproval: approve(slotID)
@@ -14,6 +15,7 @@ extension ConsoleViewModel {
     }
 
     func start(_ slotID: AgentSlotID) {
+        if codex.backend == .codex { codex.start(slotID); return }
         guard let slot = agentMachine.slot(slotID), !slot.state.isActive else { return }
         mockTasks[slotID]?.cancel()
         do {
@@ -54,6 +56,7 @@ extension ConsoleViewModel {
     }
 
     func interrupt(_ slotID: AgentSlotID) {
+        if codex.backend == .codex { codex.interrupt(slotID); return }
         guard let slot = agentMachine.slot(slotID), slot.state.isActive else { return }
         mockTasks[slotID]?.cancel()
         mockTasks[slotID] = nil
@@ -65,6 +68,7 @@ extension ConsoleViewModel {
     }
 
     func approve(_ slotID: AgentSlotID) {
+        if codex.backend == .codex { codex.decide(slotID, approve: true); return }
         guard agentMachine.slot(slotID)?.state == .waitingApproval else { return }
         do {
             try transition(slotID, to: .running, progress: 0.64, statusText: L10n.text("批准通过，继续验证"))
@@ -97,6 +101,7 @@ extension ConsoleViewModel {
     }
 
     func decline(_ slotID: AgentSlotID) {
+        if codex.backend == .codex { codex.decide(slotID, approve: false); return }
         guard agentMachine.slot(slotID)?.state == .waitingApproval else { return }
         interrupt(slotID)
     }

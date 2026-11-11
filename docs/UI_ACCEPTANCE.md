@@ -32,7 +32,8 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 此语言覆盖只作用于测试进程，不修改用户偏好。
 
 双语改动已通过两种语言的 1200 × 760 原生启动与 MCP 冒烟；下表记录的是双语改动前的完整交互验收。
-本次目视和设置页交互未完成：AppleScript 操作超时，Computer Use 未获准访问测试 App。
+本次新增中英文原生视图渲染快照检查（主窗口最小 1200 × 760 以及各设置页）；
+设置意图由聚焦测试验证。完整辅助功能点击脚本仍保留为人工发布验收入口，未冒充本轮已执行。
 
 脚本将窗口设为 1200 × 760，并通过辅助功能执行交互；界面结构或语义 help 变化后需同步维护选择器。
 失败返回非零状态，不应记作通过。日志、导出配置、辅助功能树与部分截图保存在
@@ -51,3 +52,8 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 
 本轮 OSC 接收端丢失后 309 ms 内告警；它是本机仿真结果，不代表真实机械臂的停机保证。
 端点脚本仅验证隔离界面与默认选择；实际设备枚举、手动路由和 USB 重连仍按 R1 验收。
+
+新增非硬件验收入口：CodexSessionIntegrationTests、CodexAgentControllerTests、SurfaceProgramsTests、
+FeedbackSchedulerTests、JSONParameterLinkTests、WebSocketParameterAdapterTests，以及
+`tools/verify_parameter_events.py` / `tools/verify_stdio_bridge.py`。
+原生 Debug 视图快照输出到忽略的 build/ui-validation，不替换 README 的已有截图。

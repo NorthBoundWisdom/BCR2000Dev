@@ -34,12 +34,29 @@ public extension JSONValue {
 public struct MCPPermissions: Codable, Equatable, Sendable {
     public var parameterWrite: Bool
     public var configurationWrite: Bool
+    public var agentControl: Bool
+    public var deviceControl: Bool
     public var writesPerSecond: Int
 
-    public init(parameterWrite: Bool = true, configurationWrite: Bool = false, writesPerSecond: Int = 60) {
+    public init(parameterWrite: Bool = true, configurationWrite: Bool = false, writesPerSecond: Int = 60,
+                agentControl: Bool = false, deviceControl: Bool = false)
+    {
         self.parameterWrite = parameterWrite
         self.configurationWrite = configurationWrite
         self.writesPerSecond = writesPerSecond
+        self.agentControl = agentControl
+        self.deviceControl = deviceControl
+    }
+
+    private enum CodingKeys: String,
+        CodingKey { case parameterWrite, configurationWrite, writesPerSecond, agentControl, deviceControl }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        parameterWrite = try c.decode(Bool.self, forKey: .parameterWrite)
+        configurationWrite = try c.decode(Bool.self, forKey: .configurationWrite)
+        writesPerSecond = try c.decode(Int.self, forKey: .writesPerSecond)
+        agentControl = c.contains(.agentControl) ? try c.decode(Bool.self, forKey: .agentControl) : false
+        deviceControl = c.contains(.deviceControl) ? try c.decode(Bool.self, forKey: .deviceControl) : false
     }
 }
 
@@ -120,6 +137,8 @@ public enum MCPToolCatalog {
             schema(["agentPrimaryAction": schema(["_0": schema(["rawValue": .object([
                 "type": .string("integer"), "minimum": .number(1), "maximum": .number(8)
             ])], required: ["rawValue"])], required: ["_0"])], required: ["agentPrimaryAction"]),
+            schema(["switchPage": schema(["_0": string], required: ["_0"])], required: ["switchPage"]),
+            schema(["runMacro": schema(["_0": string], required: ["_0"])], required: ["runMacro"]),
             schema(["resetGroup": schema(["_0": string], required: ["_0"])], required: ["resetGroup"]),
             schema(
                 ["stepParameter": schema(
@@ -155,12 +174,24 @@ public enum MCPToolCatalog {
 
     public static let names = [
         "get_status", "list_parameters", "get_parameter", "set_parameter", "set_parameters",
-        "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter"
+        "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter",
+        "get_agents", "start_agent", "interrupt_agent", "stop_all_agents", "set_device_source"
     ]
 
     public static func inputSchema(for name: String) -> JSONValue {
         switch name {
-        case "get_status", "list_parameters", "list_controls": schema([:])
+        case "get_status", "list_parameters", "list_controls", "get_agents", "stop_all_agents": schema([:])
+        case "start_agent", "interrupt_agent": schema(
+                ["slot": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(8)])],
+                required: ["slot"]
+            )
+        case "set_device_source": schema(
+                ["source": .object([
+                    "type": .string("string"),
+                    "enum": .array([.string("mock"), .string("hardware")])
+                ])],
+                required: ["source"]
+            )
         case "get_parameter": schema(["id": string], required: ["id"])
         case "set_parameter": schema(["id": string, "value": number], required: ["id", "value"])
         case "set_parameters":
@@ -187,7 +218,7 @@ public enum MCPToolCatalog {
                 "outputSchema": .object(["type": .string("object"), "properties": .object(["data": .object([:])]),
                                          "required": .array([.string("data")])]),
                 "annotations": .object(["readOnlyHint": .bool(name.hasPrefix("get_") || name.hasPrefix("list_")),
-                                        "openWorldHint": .bool(false)])
+                                        "openWorldHint": .bool(name == "start_agent")])
             ])
         }
     }

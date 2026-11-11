@@ -5,6 +5,9 @@ import SwiftUI
 
 @MainActor
 final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
+    #if DEBUG
+        var snapshotModel: ConsoleViewModel?
+    #endif
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
@@ -26,6 +29,20 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                         FileHandle.standardError.write(Data("Bundled application icon is missing.\n".utf8))
                         Darwin.exit(2)
                     }
+                    #if DEBUG
+                        if CommandLine.arguments.contains("--render-ui") {
+                            do {
+                                guard let path = ProcessInfo.processInfo.environment["BCR_UI_SNAPSHOT_DIRECTORY"],
+                                      path.hasPrefix("/"),
+                                      let model = self.snapshotModel
+                                else { throw CocoaError(.fileWriteInvalidFileName) }
+                                try await renderNativeUISnapshots(model: model, directory: URL(fileURLWithPath: path))
+                            } catch {
+                                FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+                                Darwin.exit(2)
+                            }
+                        }
+                    #endif
                     let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true,\"language\":\"\(L10n.language.rawValue)\",\"settings\":\"\(L10n.text("设置"))\"}\n"
                     FileHandle.standardOutput.write(Data(marker.utf8))
                     Darwin.exit(0)
@@ -82,6 +99,11 @@ struct BCRAgentConsoleApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(model: model)
+                .onAppear {
+                    #if DEBUG
+                        appDelegate.snapshotModel = model
+                    #endif
+                }
                 .environment(\.locale, Locale(identifier: L10n.language.rawValue))
                 .frame(minWidth: 1_200, minHeight: 760)
                 .background(WindowTitlebar().frame(width: 0, height: 0))
@@ -91,6 +113,12 @@ struct BCRAgentConsoleApp: App {
 
         Settings {
             TabView {
+                SurfaceProgramsView(model: model).tabItem { Label(L10n.text("页面与宏"), systemImage: "square.stack") }
+                FeedbackSettingsView(controller: model.feedbackSettings).tabItem { Label(
+                    L10n.text("反馈调度"),
+                    systemImage: "speedometer"
+                ) }
+                CodexAgentSettingsView(controller: model.codex).tabItem { Label("Agent", systemImage: "cpu") }
                 LanguageSettingsView().tabItem { Label(L10n.text("语言"), systemImage: "globe") }
                 ConfigurationLibraryView(model: model, library: model.library)
                     .tabItem { Label(L10n.text("配置库"), systemImage: "folder") }
@@ -99,3 +127,54 @@ struct BCRAgentConsoleApp: App {
         }
     }
 }
+
+#if DEBUG
+    @MainActor
+    func renderNativeUISnapshots(model: ConsoleViewModel, directory: URL) async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let previews: [(String, AnyView, CGSize)] = [
+            ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 680)),
+            ("output", AnyView(OutputSettingsView(controller: model.output)), CGSize(width: 880, height: 720)),
+            ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
+            ("agents", AnyView(CodexAgentSettingsView(controller: model.codex)), CGSize(width: 620, height: 580)),
+            ("programs", AnyView(SurfaceProgramsView(model: model)), CGSize(width: 700, height: 580)),
+            (
+                "feedback",
+                AnyView(FeedbackSettingsView(controller: model.feedbackSettings)),
+                CGSize(width: 560, height: 350)
+            ),
+            ("language", AnyView(LanguageSettingsView()), CGSize(width: 480, height: 240)),
+            (
+                "library",
+                AnyView(ConfigurationLibraryView(model: model, library: model.library)),
+                CGSize(width: 560, height: 360)
+            )
+        ]
+        for (name, content, size) in previews {
+            let hosting = NSHostingView(rootView: content.environment(
+                \.locale,
+                Locale(identifier: L10n.language.rawValue)
+            ))
+            let window = NSWindow(
+                contentRect: NSRect(origin: .zero, size: size),
+                styleMask: [.titled],
+                backing: .buffered,
+                defer: false
+            )
+            window.contentView = hosting
+            window.setContentSize(size)
+            window.orderFront(nil)
+            try await Task.sleep(for: .milliseconds(120))
+            hosting.layoutSubtreeIfNeeded()
+            hosting.displayIfNeeded()
+            guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            guard let data = bitmap.representation(using: .png, properties: [:])
+            else { throw CocoaError(.fileWriteUnknown) }
+            try data.write(to: directory.appending(path: "\(name).png"))
+            window.orderOut(nil)
+        }
+    }
+#endif

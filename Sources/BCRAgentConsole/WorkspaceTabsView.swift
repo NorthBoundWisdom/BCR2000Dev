@@ -251,42 +251,45 @@ private struct AgentGridView: View {
     @ObservedObject var model: ConsoleViewModel
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
-            ForEach(model.slots) { slot in
-                let controls = model.configuration.controls(targeting: .agentPrimaryAction(slot.id))
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(slot.name).font(.headline)
-                        Spacer()
-                        Circle()
-                            .fill(stateColor(slot.state))
-                            .frame(width: 9, height: 9)
-                            .shadow(color: stateColor(slot.state), radius: 4)
-                    }
-                    Text(slot.state.displayName)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(stateColor(slot.state))
-                    ProgressView(value: slot.progress).tint(stateColor(slot.state))
-                    Text(slot.statusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    HStack {
-                        Button(primaryActionTitle(slot.state)) { model.performPrimaryAction(slot.id) }
-                            .buttonStyle(.borderedProminent)
-                            .tint(stateColor(slot.state))
-                        if slot.state == .waitingApproval {
-                            Button(L10n.text("拒绝")) { model.decline(slot.id) }
+        VStack(alignment: .leading, spacing: 10) {
+            AgentBackendStatusView(controller: model.codex)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
+                ForEach(model.slots) { slot in
+                    let controls = model.configuration.controls(targeting: .agentPrimaryAction(slot.id))
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(slot.name).font(.headline)
+                            Spacer()
+                            Circle()
+                                .fill(stateColor(slot.state))
+                                .frame(width: 9, height: 9)
+                                .shadow(color: stateColor(slot.state), radius: 4)
                         }
-                        Spacer()
-                        Text(controls.isEmpty ? L10n.text("未绑定") : controls.map(\.shortName).joined(separator: " "))
-                            .font(.caption2.monospaced())
+                        Text(slot.state.displayName)
+                            .font(.subheadline.bold())
+                            .foregroundStyle(stateColor(slot.state))
+                        ProgressView(value: slot.progress).tint(stateColor(slot.state))
+                        Text(slot.statusText)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        HStack {
+                            Button(primaryActionTitle(slot.state)) { model.performPrimaryAction(slot.id) }
+                                .buttonStyle(.borderedProminent)
+                                .tint(stateColor(slot.state))
+                            if slot.state == .waitingApproval {
+                                Button(L10n.text("拒绝")) { model.decline(slot.id) }
+                            }
+                            Spacer()
+                            Text(controls.isEmpty ? L10n.text("未绑定") : controls.map(\.shortName).joined(separator: " "))
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+                        .controlSize(.small)
                     }
-                    .controlSize(.small)
+                    .padding(11)
+                    .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 9))
                 }
-                .padding(11)
-                .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 9))
             }
         }
     }
@@ -330,6 +333,11 @@ private struct MIDIMonitorView: View {
                                 .origin == .agent ? "AGENT" :
                                 (event.origin == .external ? "STATE" : (event.source == .mock ? "MOCK" : "HW  ")))
                                 .foregroundStyle(.secondary)
+                            if let delivery = event.delivery {
+                                Text(delivery == .sent ? L10n
+                                    .text("已送达") : (delivery == .failed ? L10n.text("发送失败") : L10n.text("未连接丢弃")))
+                                    .foregroundStyle(delivery == .sent ? Color.secondary : Color.orange)
+                            }
                             Text(event.message.diagnosticDescription)
                                 .lineLimit(1)
                                 .layoutPriority(1)

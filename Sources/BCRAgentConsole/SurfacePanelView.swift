@@ -20,6 +20,12 @@ extension ConsoleViewModel {
         var detail: String?
         var accent = Color.secondary
         switch assignment?.target {
+        case let .switchPage(id)?:
+            label = configuration.pages.first(where: { $0.id == id })?.name ?? L10n.text("基础页面")
+            accent = Theme.trigger
+        case let .runMacro(id)?:
+            label = configuration.macros.first(where: { $0.id == id })?.name ?? L10n.text("宏")
+            accent = Theme.trigger
         case let .parameter(id)?:
             if let definition = configuration.parameter(id), let value = engine.value(of: id) {
                 label = definition.name
@@ -153,6 +159,8 @@ struct SurfacePanelView: View {
                 .tracking(2 * m.scale)
             Text(model.source == .mock ? "MOCK DEVICE" : "HARDWARE MIRROR")
                 .font(m.font(9.5, weight: .bold, design: .monospaced))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
                 .padding(.horizontal, m(7))
                 .padding(.vertical, m(3))
                 .foregroundStyle(model.source == .mock ? Theme.parameter : Theme.selection)

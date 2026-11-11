@@ -41,6 +41,7 @@ public actor CodexRPCClient {
 
     private let transport: CodexLineTransport
     private var running = false
+    private var onDisconnect: (@Sendable (String) -> Void)?
     private var nextRequestIDValue = 1
     private var readTask: Task<Void, Never>?
     private var pending: [CodexRequestID: PendingRequest] = [:]
@@ -60,6 +61,8 @@ public actor CodexRPCClient {
     deinit {
         readTask?.cancel()
     }
+
+    public func setDisconnectHandler(_ handler: (@Sendable (String) -> Void)?) { onDisconnect = handler }
 
     public func start() async {
         guard !running else {
@@ -152,6 +155,7 @@ public actor CodexRPCClient {
         while !Task.isCancelled, running {
             do {
                 guard let line = try await transport.readLine() else {
+                    onDisconnect?(CodexRPCError.disconnected.localizedDescription)
                     await stop()
                     break
                 }
@@ -193,6 +197,7 @@ public actor CodexRPCClient {
     }
 
     private func stopWithError(_ error: CodexRPCError) async {
+        onDisconnect?(error.localizedDescription)
         for request in pending.values {
             request.complete(error: error)
         }

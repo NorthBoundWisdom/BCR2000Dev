@@ -43,9 +43,31 @@ final class MCPTests: XCTestCase {
         return headers
     }
 
+    func testNewControlPermissionsDefaultOffAndAreEnforced() throws {
+        let old = Data(#"{"parameterWrite":true,"configurationWrite":false,"writesPerSecond":60}"#.utf8)
+        let permissions = try JSONDecoder().decode(MCPPermissions.self, from: old)
+        XCTAssertFalse(permissions.agentControl)
+        XCTAssertFalse(permissions.deviceControl)
+        let session = SurfaceSession(
+            hardwareDevice: MCPFakeDevice(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let service = AgentControlService(session: session)
+        var calls = 0
+        service.onAgentAction = { _, _ in calls += 1 }
+        XCTAssertTrue(service.call("start_agent", arguments: .object(["slot": .number(1)])).isError)
+        XCTAssertEqual(calls, 0)
+        service.permissions.agentControl = true
+        XCTAssertFalse(service.call("start_agent", arguments: .object(["slot": .number(1)])).isError)
+        XCTAssertEqual(calls, 1)
+        XCTAssertTrue(service.call("start_agent", arguments: .object(["slot": .number(9)])).isError)
+        XCTAssertTrue(service.call("set_device_source", arguments: .object(["source": .string("hardware")])).isError)
+    }
+
     func testToolSchemasAndReadToolsAreClientNeutral() async throws {
         let service = makeService()
-        XCTAssertEqual(MCPToolCatalog.tools.count, 11)
+        XCTAssertEqual(MCPToolCatalog.tools.count, MCPToolCatalog.names.count)
         for tool in MCPToolCatalog.tools {
             let object = try XCTUnwrap(tool.objectValue)
             XCTAssertNotNil(object["inputSchema"]?.objectValue?["properties"])
@@ -196,7 +218,10 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(discovery.body?.objectValue?["result"]?.objectValue?["resultType"], .string("complete"))
         XCTAssertEqual(router.sessionCount, 0)
         let tools = router.handle(try modern("tools/list"), headers: headers("tools/list"))
-        XCTAssertEqual(tools.body?.objectValue?["result"]?.objectValue?["tools"]?.arrayValue?.count, 11)
+        XCTAssertEqual(
+            tools.body?.objectValue?["result"]?.objectValue?["tools"]?.arrayValue?.count,
+            MCPToolCatalog.names.count
+        )
         let call = router.handle(try modern("tools/call", params: [
             "name": .string("set_parameter"), "arguments": .object(["id": .string("arm.j1"), "value": .number(90)])
         ]), headers: headers("tools/call", name: "set_parameter"))

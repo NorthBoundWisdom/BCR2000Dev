@@ -28,6 +28,7 @@ public enum WorkspacePolicyError: Error, LocalizedError, Sendable {
 
 public enum WorkspacePolicy {
     public static func canonicalWorkspaceRoot(_ path: String) throws -> URL {
+        guard path.hasPrefix("/") else { throw WorkspacePolicyError.pathNotAbsolute(path) }
         let url = URL(fileURLWithPath: path)
         guard url.isFileURL else {
             throw WorkspacePolicyError.pathNotAbsolute(path)

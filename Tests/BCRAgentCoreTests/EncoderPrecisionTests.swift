@@ -217,7 +217,7 @@ final class EncoderPrecisionTests: XCTestCase {
         })
         old = .object(raw)
         let migrated = try old.decoded(SurfaceConfiguration.self).migrated()
-        XCTAssertEqual(migrated.version, 4)
+        XCTAssertEqual(migrated.version, SurfaceConfiguration.currentVersion)
         XCTAssertEqual(migrated.assignment(for: encoder)?.encoderMode, .absolute)
         for bad in [0.0, -1, .infinity, .nan] {
             var c = configuration()

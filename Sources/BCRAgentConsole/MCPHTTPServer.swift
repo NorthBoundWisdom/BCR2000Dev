@@ -83,7 +83,26 @@ final class MCPHTTPServer {
     private var token = ""
     private var port: UInt16 = 0
 
-    init(router: MCPRouter) { self.router = router }
+    private struct EventStream {
+        let sessionID: String?
+        var queue: [Data] = []
+        var bytes = 0
+        var sending = false
+    }
+
+    private var eventStreams: [UUID: EventStream] = [:]
+    private var heartbeatTask: Task<Void, Never>?
+
+    init(router: MCPRouter) {
+        self.router = router
+        _ = router.service.session.observeParameters { [weak self] batch in
+            self?.broadcast(batch)
+        }
+        router.onSessionClosed = { [weak self] session in
+            guard let self else { return }
+            for (id, stream) in self.eventStreams where stream.sessionID == session { self.close(id) }
+        }
+    }
 
     /// Port zero is only used by isolated loopback tests. The settings controller rejects it.
     func start(port: UInt16, token: String) async throws -> UInt16 {
@@ -138,6 +157,9 @@ final class MCPHTTPServer {
 
     func stop() {
         generation = UUID()
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        eventStreams.removeAll()
         startTimeout?.cancel()
         startTimeout = nil
         startContinuation?.resume(throwing: CancellationError())
@@ -223,6 +245,18 @@ final class MCPHTTPServer {
             reject(id, status: 401, detail: L10n.text("Bearer 鉴权失败"))
             return
         }
+        if request.method == "GET" {
+            guard request.headers["accept"]?.lowercased().contains("text/event-stream") == true else {
+                send(id, reply: MCPReply(status: 406)); return
+            }
+            guard router.permitsEventStream(sessionID: request.headers["mcp-session-id"],
+                                            version: request.headers["mcp-protocol-version"])
+            else {
+                send(id, reply: MCPReply(status: 400)); return
+            }
+            openEventStream(id, sessionID: request.headers["mcp-session-id"])
+            return
+        }
         if request.method == "DELETE" {
             guard request.headers["mcp-protocol-version"] == MCPVersions.legacy else {
                 send(id, reply: MCPReply(status: 405)); return
@@ -243,6 +277,76 @@ final class MCPHTTPServer {
         let reply = router.handle(request.body, headers: request.headers)
         send(id, reply: reply)
         onChange?()
+    }
+
+    private func openEventStream(_ id: UUID, sessionID: String?) {
+        guard eventStreams.count < 16, let connection = connections[id] else {
+            send(id, reply: MCPReply(status: 429)); return
+        }
+        eventStreams[id] = EventStream(sessionID: sessionID)
+        let header = Data("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\n\r\n"
+            .utf8)
+        connection.send(content: header, completion: .contentProcessed { [weak self] error in
+            Task { @MainActor [weak self] in if error != nil { self?.close(id) } }
+        })
+        // Every new stream receives a complete snapshot; reconnect never replays stale motion commands.
+        sendBatch(router.service.session.parameterSnapshot(), to: id)
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] _, _, _, _ in
+            Task { @MainActor [weak self] in self?.close(id) }
+        }
+        if heartbeatTask == nil {
+            heartbeatTask = Task { @MainActor [weak self] in
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(10)) } catch { return }
+                    guard let self else { return }
+                    for id in Array(self.eventStreams.keys) { self.enqueueEvent(Data(": heartbeat\n\n".utf8), to: id) }
+                }
+            }
+        }
+    }
+
+    private func broadcast(_ batch: ParameterChangeBatch) {
+        for id in Array(eventStreams.keys) { sendBatch(batch, to: id) }
+    }
+
+    private func sendBatch(_ batch: ParameterChangeBatch, to id: UUID) {
+        let message = JSONValue.object(["jsonrpc": .string("2.0"),
+                                        "method": .string("notifications/bcr/parametersChanged"),
+                                        "params": batch.jsonValue])
+        do {
+            let data = Data("id: \(batch.revision)\nevent: message\ndata: \(try message.jsonText)\n\n".utf8)
+            enqueueEvent(data, to: id)
+        } catch { close(id) }
+    }
+
+    private func enqueueEvent(_ data: Data, to id: UUID) {
+        guard var stream = eventStreams[id] else { return }
+        guard stream.bytes + data.count <= 65_536 else {
+            router.service.record("sse", succeeded: false, detail: L10n.text("参数推送客户端读取过慢，连接已关闭"))
+            close(id); return
+        }
+        stream.queue.append(data)
+        stream.bytes += data.count
+        eventStreams[id] = stream
+        drainEvent(id)
+    }
+
+    private func drainEvent(_ id: UUID) {
+        guard var stream = eventStreams[id], !stream.sending, !stream.queue.isEmpty,
+              let connection = connections[id] else { return }
+        let data = stream.queue.removeFirst()
+        stream.sending = true
+        eventStreams[id] = stream
+        connection.send(content: data, completion: .contentProcessed { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self, var stream = self.eventStreams[id] else { return }
+                if error != nil { self.close(id); return }
+                stream.bytes -= data.count
+                stream.sending = false
+                self.eventStreams[id] = stream
+                self.drainEvent(id)
+            }
+        })
     }
 
     private func reject(_ id: UUID, status: Int, detail: String) {
@@ -270,7 +374,7 @@ final class MCPHTTPServer {
                       415: "Unsupported Media Type", 429: "Too Many Requests"][reply.status] ?? "Error"
         var header = "HTTP/1.1 \(reply.status) \(reason)\r\nContent-Length: \(body.count)\r\nContent-Type: application/json\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
         if reply.status == 401 { header += "WWW-Authenticate: Bearer\r\n" }
-        if reply.status == 405 { header += "Allow: POST, DELETE\r\n" }
+        if reply.status == 405 { header += "Allow: GET, POST, DELETE\r\n" }
         if let sessionID = reply.sessionID { header += "Mcp-Session-Id: \(sessionID)\r\n" }
         var response = Data((header + "\r\n").utf8)
         response.append(body)
@@ -284,6 +388,8 @@ final class MCPHTTPServer {
     }
 
     private func close(_ id: UUID) {
+        eventStreams[id] = nil
+        if eventStreams.isEmpty { heartbeatTask?.cancel(); heartbeatTask = nil }
         timeouts.removeValue(forKey: id)?.cancel()
         connections.removeValue(forKey: id)?.cancel()
     }

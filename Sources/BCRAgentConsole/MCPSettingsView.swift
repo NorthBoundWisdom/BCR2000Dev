@@ -21,7 +21,7 @@ struct MCPStatusButton: View {
     }
 }
 
-private struct MCPSettingsView: View {
+struct MCPSettingsView: View {
     @ObservedObject var controller: MCPController
     @State private var draft: MCPSettings
     @Environment(\.dismiss) private var dismiss
@@ -60,6 +60,8 @@ private struct MCPSettingsView: View {
                 TextField(L10n.text("端口"), value: $draft.port, format: .number)
                 Toggle(L10n.text("参数写入（关闭时只读）"), isOn: $draft.permissions.parameterWrite)
                 Toggle(L10n.text("配置写入（修改分配和定义）"), isOn: $draft.permissions.configurationWrite)
+                Toggle(L10n.text("允许 Agent 启动和中断任务"), isOn: $draft.permissions.agentControl)
+                Toggle(L10n.text("允许切换设备源"), isOn: $draft.permissions.deviceControl)
                 TextField(L10n.text("每秒最多写入参数数"), value: $draft.permissions.writesPerSecond, format: .number)
             }
             .formStyle(.columns)
@@ -88,7 +90,7 @@ private struct MCPSettingsView: View {
             .frame(minHeight: 120)
         }
         .padding(24)
-        .frame(width: 660, height: 600)
+        .frame(width: 700, height: 680)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }

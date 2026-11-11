@@ -183,6 +183,26 @@ public actor CodexSessionStateMachine {
         }
     }
 
+    public func finish(threadID: String, turnID: String, phase: CodexTurnPhase, error: String? = nil) throws {
+        guard let slot = findSlotID(for: threadID), var state = slots[slot] else {
+            throw CodexSessionStateMachineError.threadMissing(threadID)
+        }
+        guard state.turnID == turnID else { return }
+        state.phase = phase
+        state.turnID = nil
+        state.lastError = error
+        state.lastEventAt = .now
+        slots[slot] = state
+    }
+
+    public func resumeAfterApproval(slotID: AgentSlotID) throws {
+        guard var state = slots[slotID], state.phase == .awaitingApproval else {
+            throw CodexSessionStateMachineError.unexpectedEvent
+        }
+        state.phase = .running
+        slots[slotID] = state
+    }
+
     public func handle(event: CodexServerEvent) throws {
         switch event {
         case let .turnStarted(threadID: threadID, turnID: turnID):
@@ -191,6 +211,10 @@ public actor CodexSessionStateMachine {
             }
             try onTurnStart(slotID: slotID, threadID: threadID, turnID: turnID)
 
+        case let .turnFailed(threadID, turnID, message):
+            try finish(threadID: threadID, turnID: turnID, phase: .failed, error: message)
+        case let .turnInterrupted(threadID, turnID):
+            try finish(threadID: threadID, turnID: turnID, phase: .interrupted)
         case let .turnCompleted(threadID: threadID, turnID: turnID):
             try onTurnCompleted(threadID: threadID, turnID: turnID)
 

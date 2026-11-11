@@ -25,6 +25,7 @@ public enum SurfaceEffect: Equatable, Sendable {
     /// Feedback to write to the device (LED ring / button LED).
     case send(MIDIVoiceMessage)
     case triggerAgent(AgentSlotID)
+    case pageChanged
     case learned(BCRControlID, MIDIControlID)
     case learnRejected(BCRControlID, HardwareBindingError)
     /// Input from a MIDI identity that no physical control is bound to.
@@ -47,6 +48,7 @@ public struct SurfaceEngine: Sendable {
     public private(set) var ledFeedbackSource: LEDFeedbackSource = .target
     public private(set) var agentFeedback: [AgentSlotID: UInt8] = [:]
 
+    public var recordFeedbackWhenGenerated = true
     public var echoWindow: TimeInterval = 0.18
     public var triggerDebounce: TimeInterval = 0.25
 
@@ -61,6 +63,10 @@ public struct SurfaceEngine: Sendable {
         parameterValues = Dictionary(
             uniqueKeysWithValues: configuration.parameters.map { ($0.id, $0.clamp($0.defaultValue)) }
         )
+    }
+
+    public mutating func noteFeedbackSent(_ message: MIDIVoiceMessage, at now: Date) {
+        recentFeedback[message.controlID] = (message.dataValue, now)
     }
 
     // MARK: Queries
@@ -261,13 +267,55 @@ public struct SurfaceEngine: Sendable {
         let feedback = agentFeedback
         let echoWindow = echoWindow
         let triggerDebounce = triggerDebounce
+        let recordFeedbackWhenGenerated = recordFeedbackWhenGenerated
         let removed = self.configuration.assignments.map(\.control).filter { configuration.assignment(for: $0) == nil }
         self = SurfaceEngine(hardwareMap: hardwareMap, configuration: configuration)
         agentFeedback = feedback
         self.echoWindow = echoWindow
         self.triggerDebounce = triggerDebounce
+        self.recordFeedbackWhenGenerated = recordFeedbackWhenGenerated
         for control in removed { record(control, value: 0, direction: .output) }
         return self.feedback(to: removed, at: now)
+    }
+
+    public mutating func updatePrograms(_ candidate: SurfaceConfiguration,
+                                        at now: Date = .now) throws -> [SurfaceEffect]
+    {
+        try candidate.validate()
+        guard candidate.parameters == configuration.parameters
+        else { throw MotionSafetyError(L10n.text("页面编辑不能修改参数定义")) }
+        let old = configuration.assignments.map(\.control)
+        configuration = candidate
+        incrementRemainders.removeAll()
+        let removed = old.filter { configuration.assignment(for: $0) == nil }
+        for control in removed { record(control, value: 0, direction: .output) }
+        return [.pageChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
+    }
+
+    public mutating func selectPage(_ id: String?, at now: Date = .now) throws -> [SurfaceEffect] {
+        let oldControls = configuration.assignments.map(\.control)
+        try configuration.selectPage(id)
+        incrementRemainders.removeAll()
+        recentFeedback.removeAll()
+        let removed = oldControls.filter { configuration.assignment(for: $0) == nil }
+        for control in removed { record(control, value: 0, direction: .output) }
+        return [.pageChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
+    }
+
+    public mutating func runMacro(_ id: String, at now: Date = .now) -> [SurfaceEffect] {
+        guard let macro = configuration.macros.first(where: { $0.id == id }) else { return [] }
+        var effects: [SurfaceEffect] = []
+        for action in macro.actions {
+            switch action {
+            case let .set(parameter, value): effects += setParameter(parameter, to: value, at: now)
+            case let .step(parameter, delta):
+                if let current = value(of: parameter), (current + delta).isFinite {
+                    effects += setParameter(parameter, to: current + delta, at: now)
+                }
+            case let .resetGroup(group): effects += resetGroup(group, at: now)
+            }
+        }
+        return effects
     }
 
     // MARK: Hardware map / learning
@@ -342,6 +390,12 @@ public struct SurfaceEngine: Sendable {
         }
 
         switch assignment.target {
+        case let .switchPage(id):
+            guard isPositive, acceptTrigger(control, at: now) else { return [] }
+            return (try? selectPage(id, at: now)) ?? []
+        case let .runMacro(id):
+            guard isPositive, acceptTrigger(control, at: now) else { return [] }
+            return runMacro(id, at: now)
         case let .parameter(id):
             guard let definition = configuration.parameter(id) else {
                 return []
@@ -462,6 +516,8 @@ public struct SurfaceEngine: Sendable {
             return controls[control]?.value
         }
         switch assignment.target {
+        case let .switchPage(id): return (configuration.activePageID ?? SurfaceConfiguration.basePageID) == id ? 127 : 0
+        case .runMacro: return 0
         case let .parameter(id):
             guard let definition = configuration.parameter(id) else { return nil }
             let useActual = control.isContinuous && definition.kind == .continuous && ledFeedbackSource == .actual
@@ -517,7 +573,7 @@ public struct SurfaceEngine: Sendable {
             guard let midi = hardwareMap.midi(for: control) else {
                 return nil
             }
-            recentFeedback[midi] = (raw, now)
+            if recordFeedbackWhenGenerated { recentFeedback[midi] = (raw, now) }
             return .send(midi.kind == .nrpn ? MIDI1UMPCodec.feedback14(control: midi, value: raw) : MIDI1UMPCodec
                 .feedback(
                     control: midi,

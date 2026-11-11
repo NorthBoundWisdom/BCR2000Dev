@@ -122,6 +122,17 @@ final class CodexProtocolTests: XCTestCase {
         XCTAssertEqual(turnID, "u1")
     }
 
+    func testNumericRequestIDsAreJSONScalarsAndProtocolLogsHidePayloads() throws {
+        let envelope = CodexEnvelope(id: .number(7), method: "initialize")
+        let raw = try envelope.encodeJSON()
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data(raw.utf8))
+        XCTAssertEqual(value.objectValue?["id"], .number(7))
+        let sensitive = #"{"id":7,"result":{"api_key":"fixture-secret","prompt":"private-task"}}"#
+        let log = CodexLogSanitizer.sanitize(sensitive)
+        XCTAssertFalse(log.contains("fixture-secret"))
+        XCTAssertFalse(log.contains("private-task"))
+    }
+
     func testSanitizeSensitiveLog() {
         let input = "AUTHORIZATION=token-abc123 API_KEY=super-secret"
         let scrubbed = CodexLogSanitizer.sanitize(input)

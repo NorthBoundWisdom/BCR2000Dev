@@ -119,3 +119,23 @@ get_parameter 的 writable 反映此约束。reset_group 跳过这些参数并�
 `BCR_MCP_TOKEN`。桥接器仅允许本机 IPv4 HTTP，禁止代理与重定向；不打印凭据。
 stdin/stdout 使用一行一个 JSON-RPC 对象，通知不返回响应，EOF 时删除 HTTP 会话。
 运行 `python3 tools/mcp_integration.py --script tools/verify_stdio_bridge.py` 可验收握手、工具探索与状态调用。
+
+## 参数事件推送
+
+经相同 Bearer、Host、Origin 校验后，客户端可 `GET /mcp`，指定 `Accept: text/event-stream` 和
+`MCP-Protocol-Version`。2025-11-25 客户端还需已 initialized 的 Mcp-Session-Id。
+服务器通过 experimental 能力 `bcr/parameterChanges` 公布扩展；不引入第三方 SDK。
+通知是 `notifications/bcr/parametersChanged`，params 含 revision（十进制字符串）、values、removed、reset。
+新流先发送 reset=true 的完整参数快照，后续只发送变更；重新连接重新取快照，不重放运动命令。
+这是 BCR 扩展通知，不冒充通用 MCP resources 订阅。客户端应检查能力并识别此通知。
+每流待发送上限 64 KiB，最多 16 条流；慢客户端断线，10 秒心跳维持活跃连接。停止服务/删除旧版会话会关闭流。
+运行 `python3 tools/mcp_integration.py --script tools/verify_parameter_events.py` 验收现代/旧版鉴权、快照和变更回读。
+
+## Agent 与设备控制权限
+
+`get_agents` 只读返回后端及槽位状态。`start_agent(slot)`、`interrupt_agent(slot)`、`stop_all_agents` 需要
+parameterWrite 和新增的 agentControl 权限；`set_device_source(source)` 还需要 deviceControl 权限。
+两项新增权限默认关闭，旧设置迁移时也保持关闭；可在 MCP 设置页明确开启，所有写入共用速率限制与审计。
+启动使用本机 Agent 设置中已配置的任务，返回 accepted 表示请求已接收，执行结果从 get_agents 查询。
+MCP 不提供审批通过接口。Codex 启动可能使用本机登录账号；仅向受信任的客户端授予此权限。
+隔离测试禁止通过 MCP 切换至实体设备。所有设备切换仍经过 App 的停机/映射路径。

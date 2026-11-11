@@ -42,6 +42,10 @@ final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
+    let feedbackSettings: FeedbackSettingsController
+    private var pendingTouchedControl: BCRControlID?
+    private var uiPublishTask: Task<Void, Never>?
+    let codex: CodexAgentController
     let library: ConfigurationLibrary
     let output: OutputController
     var source: DeviceSource { session.source }
@@ -66,6 +70,7 @@ final class ConsoleViewModel: ObservableObject {
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter)
     {
+        codex = CodexAgentController(directory: stores.configuration.fileURL.deletingLastPathComponent())
         library = ConfigurationLibrary(url: stores.configuration.fileURL.deletingLastPathComponent()
             .appending(path: "configuration-library.json"))
         slots = AgentStateMachine().slots
@@ -106,14 +111,76 @@ final class ConsoleViewModel: ObservableObject {
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
         )
+        feedbackSettings = FeedbackSettingsController(session: session,
+                                                      url: stores.configuration.fileURL.deletingLastPathComponent()
+                                                          .appending(path: "feedback-policy.json"))
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
         credentials: mcpCredentials ?? KeychainMCPCredentialStore(),
         integrationTest: integrationTest)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
-        adapter: outputTransport ?? OSCParameterAdapter())
-        session.onChange = { [weak self] in self?.objectWillChange.send() }
+        adapter: outputTransport ?? OutputTransportRouter())
+        mcp.service.onReadAgents = { [weak self] in
+            guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
+            return .object(["backend": .string(self.codex.backend.rawValue), "slots": try .encoded(self.slots)])
+        }
+        mcp.service.onAgentAction = { [weak self] action, slot in
+            guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
+            if action == "stop_all_agents" {
+                self.mockTasks.values.forEach { $0.cancel() }
+                self.mockTasks.removeAll()
+                for slot in self.agentMachine.slots where slot.state.isActive { self.interrupt(slot.id) }
+                Task { await self.codex.stopAll() }
+                return
+            }
+            guard let slot else { throw MCPToolFailure(L10n.text("未知槽位 \(0)")) }
+            if action == "start_agent" {
+                if self.codex.backend == .codex {
+                    guard self.codex.phase == .ready,
+                          !self.codex.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    else { throw MCPToolFailure(L10n.text("Codex 连接未建立")) }
+                }
+                guard self.slots.first(where: { $0.id == slot })?.state.isActive == false else {
+                    throw MCPToolFailure(L10n.text("Agent 正忙"))
+                }
+                self.start(slot)
+            } else { self.interrupt(slot) }
+        }
+        mcp.service.onSelectSource = { [weak self] source in
+            guard let self else { throw MCPToolFailure(L10n.text("设备切换服务不可用")) }
+            if source == .hardware, !self.canConfigureMIDI { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
+            self.selectSource(source)
+        }
+        codex.onStopMock = { [weak self] in
+            guard let self else { return }
+            self.mockTasks.values.forEach { $0.cancel() }
+            self.mockTasks.removeAll()
+            self.agentMachine = AgentStateMachine()
+            for slot in self.agentMachine.slots { self.applyAgentSlots(self.agentMachine.slots, changed: slot.id) }
+        }
+        codex.onSlots = { [weak self] slots in
+            guard let self else { return }
+            for slot in slots { self.applyAgentSlots(slots, changed: slot.id) }
+        }
+        session.onChange = { [weak self] in
+            guard let self, self.uiPublishTask == nil else { return }
+            self.uiPublishTask = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+                guard let self else { return }
+                if self.followsTouch, let control = self.pendingTouchedControl {
+                    if self.selectedControl != control { self.selectedControl = control }
+                    if (control.section == .pushEncoder || control.section == .pushEncoderButton),
+                       self.visibleGroup != control.row
+                    {
+                        self.selectGroup(control.row)
+                    }
+                }
+                self.pendingTouchedControl = nil
+                self.objectWillChange.send()
+                self.uiPublishTask = nil
+            }
+        }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
         session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
         if integrationTest {
@@ -380,6 +447,9 @@ final class ConsoleViewModel: ObservableObject {
 
     // MARK: Configuration transfer
 
+    func selectPage(_ id: String) throws { try session.selectPage(id) }
+    func updatePrograms(_ candidate: SurfaceConfiguration) throws { try session.updatePrograms(candidate) }
+
     func readConfiguration(from url: URL) throws -> SurfaceConfiguration {
         try ConfigurationTransfer.decode(Data(contentsOf: url, options: .mappedIfSafe))
     }
@@ -480,10 +550,7 @@ final class ConsoleViewModel: ObservableObject {
             }
         case let .touched(control):
             guard followsTouch else { return }
-            selectedControl = control
-            if control.section == .pushEncoder || control.section == .pushEncoderButton {
-                selectGroup(control.row)
-            }
+            pendingTouchedControl = control
         case let .learningInterruptedByConfiguration(control):
             let previous = notice?.text ?? ""
             notice = ConsoleNotice(level: notice?.level ?? .info,
@@ -510,10 +577,11 @@ final class ConsoleViewModel: ObservableObject {
 
     /// Publishes agent slots and writes a changed state to the slot's LEDs.
     func applyAgentSlots(_ newSlots: [AgentSlot], changed slotID: AgentSlotID) {
-        let previous = slot(slotID)?.state
+        let previous = Dictionary(uniqueKeysWithValues: slots.map { ($0.id, $0.state) })
         slots = newSlots
-        guard let state = slot(slotID)?.state, state != previous else { return }
-        session.setAgentFeedback(slotID, value: state.feedbackValue)
+        for slot in newSlots where previous[slot.id] != slot.state {
+            session.setAgentFeedback(slot.id, value: slot.state.feedbackValue)
+        }
     }
 
     func report(_ error: Error) {

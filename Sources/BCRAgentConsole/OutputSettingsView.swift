@@ -59,7 +59,7 @@ struct OutputReadoutView: View {
     }
 }
 
-private struct OutputSettingsView: View {
+struct OutputSettingsView: View {
     @ObservedObject var controller: OutputController
     @State private var draft: OutputSettings
     @State private var confirmsLimits = false
@@ -79,6 +79,11 @@ private struct OutputSettingsView: View {
             }
             Text(controller.reason).foregroundStyle(controller.status == .ready ? .green : .orange)
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            Picker(L10n.text("输出协议"), selection: $draft.transport) {
+                Text("OSC UDP").tag(OutputTransportKind.osc)
+                Text("WebSocket JSON").tag(OutputTransportKind.webSocket)
+                Text("ROS 2 · rosbridge").tag(OutputTransportKind.rosbridge)
+            }
             Form {
                 TextField(L10n.text("目标地址"), text: $draft.host)
                 TextField(L10n.text("端口"), value: $draft.port, format: .number)
@@ -138,7 +143,7 @@ private struct OutputSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
-        .frame(width: 850, height: 650)
+        .frame(width: 880, height: 720)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }

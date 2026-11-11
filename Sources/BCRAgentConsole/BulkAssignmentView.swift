@@ -104,6 +104,8 @@ private struct BulkAssignmentPreview: View {
         let configuration = plan.base
         let title: String
         switch assignment.target {
+        case let .switchPage(id): title = configuration.pages.first(where: { $0.id == id })?.name ?? L10n.text("基础页面")
+        case let .runMacro(id): title = configuration.macros.first(where: { $0.id == id })?.name ?? L10n.text("宏")
         case let .parameter(id): title = configuration.parameter(id)?.name ?? id.rawValue
         case let .agentPrimaryAction(slot): title = "Agent \(slot.rawValue)"
         case let .resetGroup(group): title = L10n.text("复位 \(group)")

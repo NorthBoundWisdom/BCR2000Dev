@@ -228,11 +228,13 @@ public enum ControlTarget: Codable, Hashable, Sendable {
     case stepParameter(id: ParameterID, step: Double, wraps: Bool)
     case setParameter(id: ParameterID, value: Double)
     case cycleParameter(id: ParameterID, values: [Double])
+    case switchPage(String)
+    case runMacro(String)
 
     public var parameterID: ParameterID? {
         switch self {
         case let .parameter(id), let .stepParameter(id, _, _), let .setParameter(id, _), let .cycleParameter(id, _): id
-        case .agentPrimaryAction, .resetGroup: nil
+        case .agentPrimaryAction, .resetGroup, .switchPage, .runMacro: nil
         }
     }
 
@@ -240,7 +242,8 @@ public enum ControlTarget: Codable, Hashable, Sendable {
     public var isTrigger: Bool {
         switch self {
         case .parameter: false
-        case .agentPrimaryAction, .resetGroup, .stepParameter, .setParameter, .cycleParameter: true
+        case .agentPrimaryAction, .resetGroup, .stepParameter, .setParameter, .cycleParameter, .switchPage,
+             .runMacro: true
         }
     }
 }
@@ -328,36 +331,107 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 4
+    public static let currentVersion = 5
+    public static let basePageID = "__base__"
 
     public var version: Int
     public var name: String
     public private(set) var parameters: [ParameterDefinition]
-    public private(set) var assignments: [ControlAssignment]
+    private var baseAssignments: [ControlAssignment]
+    public private(set) var pages: [AssignmentPage]
+    public private(set) var macros: [SurfaceMacro]
+    public private(set) var activePageID: String?
+    public var allAssignmentSets: [[ControlAssignment]] { [baseAssignments] + pages.map(\.assignments) }
+    public private(set) var assignments: [ControlAssignment] {
+        get { activePageID.flatMap { id in pages.first { $0.id == id }?.assignments } ?? baseAssignments }
+        set {
+            if let id = activePageID,
+               let index = pages.firstIndex(where: { $0.id == id }) { pages[index].assignments = newValue }
+            else { baseAssignments = newValue }
+        }
+    }
 
     public init(
         version: Int = SurfaceConfiguration.currentVersion,
         name: String,
         parameters: [ParameterDefinition] = [],
-        assignments: [ControlAssignment] = []
+        assignments: [ControlAssignment] = [],
+        pages: [AssignmentPage] = [], macros: [SurfaceMacro] = [], activePageID: String? = nil
     ) {
         self.version = version
         self.name = name
         self.parameters = parameters
-        self.assignments = assignments.sorted { $0.control < $1.control }
+        self.baseAssignments = assignments.sorted { $0.control < $1.control }
+        self.pages = pages
+        self.macros = macros
+        self.activePageID = activePageID
     }
 
-    private enum CodingKeys: String, CodingKey { case version, name, parameters, assignments }
+    private enum CodingKeys: String,
+        CodingKey { case version, name, parameters, assignments, pages, macros, activePageID }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try container.decode(Int.self, forKey: .version)
+        if version >= 5, !container.contains(.pages) || !container.contains(.macros) {
+            throw MotionSafetyError(L10n.text("页面定义无效"))
+        }
         self.init(
-            version: try container.decode(Int.self, forKey: .version),
+            version: version,
             name: try container.decode(String.self, forKey: .name),
             parameters: try container.decode([ParameterDefinition].self, forKey: .parameters),
-            assignments: try container.decode([ControlAssignment].self, forKey: .assignments)
+            assignments: try container.decode([ControlAssignment].self, forKey: .assignments),
+            pages: container.contains(.pages) ? try container.decode([AssignmentPage].self, forKey: .pages) : [],
+            macros: container.contains(.macros) ? try container.decode([SurfaceMacro].self, forKey: .macros) : [],
+            activePageID: try container.decodeIfPresent(String.self, forKey: .activePageID)
         )
         try validate()
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(version, forKey: .version)
+        try c.encode(name, forKey: .name)
+        try c.encode(parameters, forKey: .parameters)
+        try c.encode(baseAssignments, forKey: .assignments)
+        try c.encode(pages, forKey: .pages)
+        try c.encode(macros, forKey: .macros)
+        try c.encodeIfPresent(activePageID, forKey: .activePageID)
+    }
+
+    public mutating func addPage(_ page: AssignmentPage) throws {
+        var candidate = self
+        candidate.pages.append(page)
+        try candidate.validate()
+        self = candidate
+    }
+
+    public mutating func selectPage(_ id: String?) throws {
+        let id = id == Self.basePageID ? nil : id
+        guard id == nil || pages.contains(where: { $0.id == id }) else {
+            throw MotionSafetyError(L10n.text("未知页面"))
+        }
+        activePageID = id
+    }
+
+    public mutating func addMacro(_ macro: SurfaceMacro) throws {
+        var candidate = self
+        candidate.macros.append(macro)
+        try candidate.validate()
+        self = candidate
+    }
+
+    public mutating func deletePage(_ id: String) {
+        pages.removeAll { $0.id == id }
+        if activePageID == id { activePageID = nil }
+        baseAssignments.removeAll { $0.target == .switchPage(id) }
+        for index in pages.indices { pages[index].assignments.removeAll { $0.target == .switchPage(id) } }
+    }
+
+    public mutating func deleteMacro(_ id: String) {
+        macros.removeAll { $0.id == id }
+        baseAssignments.removeAll { $0.target == .runMacro(id) }
+        for index in pages.indices { pages[index].assignments.removeAll { $0.target == .runMacro(id) } }
     }
 
     public var parameterGroups: [String] {
@@ -428,9 +502,25 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     public mutating func removeParameter(_ id: ParameterID) {
         let previousGroup = parameter(id)?.group
         parameters.removeAll { $0.id == id }
-        assignments.removeAll { $0.target.parameterID == id }
+        baseAssignments.removeAll { $0.target.parameterID == id }
+        for index in pages.indices { pages[index].assignments.removeAll { $0.target.parameterID == id } }
+        macros = macros.filter { macro in !macro.actions.contains { action in
+            switch action { case let .set(parameter, _),
+                 let .step(parameter, _): parameter == id; case .resetGroup: false }
+        } }
+        let macroIDs = Set(macros.map(\.id))
+        baseAssignments
+            .removeAll { if case let .runMacro(id) = $0.target { return !macroIDs.contains(id) }; return false }
+        for index in pages.indices {
+            pages[index].assignments
+                .removeAll { if case let .runMacro(id) = $0.target { return !macroIDs.contains(id) }; return false }
+        }
         if let previousGroup, !parameterGroups.contains(previousGroup) {
-            assignments.removeAll { $0.target == .resetGroup(previousGroup) }
+            baseAssignments.removeAll { $0.target == .resetGroup(previousGroup) }
+            for index in pages
+                .indices { pages[index].assignments.removeAll { $0.target == .resetGroup(previousGroup) } }
+            let removed = macros.filter { $0.actions.contains(.resetGroup(previousGroup)) }.map(\.id)
+            for id in removed { deleteMacro(id) }
         }
     }
 

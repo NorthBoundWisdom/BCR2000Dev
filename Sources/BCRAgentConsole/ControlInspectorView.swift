@@ -130,7 +130,7 @@ struct ControlInspectorView: View {
 // MARK: - Function
 
 private enum TargetKind: String, CaseIterable, Identifiable {
-    case none, parameter, agent, reset, step, preset, cycle
+    case none, parameter, agent, reset, step, preset, cycle, page, macro
 
     var id: String { rawValue }
 
@@ -143,6 +143,8 @@ private enum TargetKind: String, CaseIterable, Identifiable {
         case .step: L10n.text("参数步进")
         case .preset: L10n.text("设为指定值")
         case .cycle: L10n.text("循环预设值")
+        case .page: L10n.text("切换页面")
+        case .macro: L10n.text("执行宏")
         }
     }
 
@@ -155,6 +157,8 @@ private enum TargetKind: String, CaseIterable, Identifiable {
         case .stepParameter?: self = .step
         case .setParameter?: self = .preset
         case .cycleParameter?: self = .cycle
+        case .switchPage?: self = .page
+        case .runMacro?: self = .macro
         }
     }
 }
@@ -180,6 +184,16 @@ private struct FunctionSection: View {
             }
 
             switch assignment?.target {
+            case let .switchPage(id)?:
+                Picker(L10n.text("页面"), selection: Binding(get: { id }, set: { update(target: .switchPage($0)) })) {
+                    Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
+                    ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
+                }
+            case let .runMacro(id)?:
+                Picker(L10n.text("宏"), selection: Binding(get: { id }, set: { update(target: .runMacro($0)) })) {
+                    ForEach(model.configuration.macros) { Text($0.name).tag($0.id) }
+                }
+
             case let .parameter(id)?:
                 HStack {
                     Picker(L10n.text("参数"), selection: Binding(
@@ -307,6 +321,9 @@ private struct FunctionSection: View {
                         update(target: .cycleParameter(id: id, values: values))
                     default: break
                     }
+                case .page: update(target: .switchPage(SurfaceConfiguration.basePageID))
+                case .macro:
+                    if let macro = model.configuration.macros.first { update(target: .runMacro(macro.id)) }
                 case .agent:
                     update(target: .agentPrimaryAction(AgentSlotID(1)))
                 case .reset:

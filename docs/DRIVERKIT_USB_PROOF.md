@@ -68,3 +68,31 @@
 已验证当前 Mac 的基础纯 USB 反馈闭环和现场灯环；不据此勾选全部 R1。
 108 控件学习、Relative/NRPN、非当前组、休眠/重连、长期稳定性仍须逐项测试。
 后续不需要为这条实验路径修改恢复模式或 SIP。
+
+## 开发签署维护（2026-11-11 更新）
+
+按用户授权，使用 PCBAtlas 已配置的开发团队及本机有效 Apple Development 身份，
+通过 Xcode 自动签署取得并安装开发 profile。没有新建或导出私钥。
+control 变体的宿主与 dext 构建成功，`codesign --verify --deep --strict` 通过；嵌入 profile 的授权检查通过。
+这些是开发签署结果，不作为 USB 功能或扩展激活结果。
+
+| profile | UTC 到期日 | 已检查授权 |
+| --- | --- | --- |
+| 开发宿主 | 2027-11-11 07:43:21 | system-extension.install |
+| 开发 dext | 2027-05-15 08:51:06 | driverkit、USB 开发 wildcard、get-task-allow |
+
+凭据、profile 和生成的工程/签署产物只在本机 Xcode 快取与忽略的 `build/driverkit-signing/`，不提交。
+驱动到期日较早，应在该日期之前重新运行自动签署并检查新的到期日。
+
+macOS 升级、重装或换机器后的复核顺序：
+
+1. 使用 `python3 tools/driverkit_probe.py preflight` 检查开发身份、profile 授权与本机 Provisioning UDID。
+2. 按 DriverKitProbe README 重新生成本地工程并允许 Xcode 更新开发 provisioning；检查宿主与 dext 的嵌入
+   profile 到期日、bundle identity、设备覆盖及开发 USB 授权，然后运行 codesign 深度严格校验。
+3. 需要恢复已实测的描述覆盖时，必须使用该设备的原始只读 USB 报告重新构建 override 变体；
+   本轮 control 签署产物只用于签署验证，不能替代 override 功能验证。
+4. 通过正常系统扩展流程安装/授权，并核对启用状态与重新枚举后的 BCR 标记；保持 SIP 与启动安全策略。
+5. 显式选择 BCR Port 1，只读查询身份与完整快照；与原基线比较。快照缺失时停止后续写入测试。
+6. 在已学普通绝对 CC 控件上完成 0/32/64/96/127 五值回读，并按工具的恢复逻辑还原原值；
+   人工检查灯环以及重新连接后的身份/快照。仅签署通过不能勾选此步。
+7. 将结果记录为新系统/设备的一次实测；失效时标明 R1 阻塞，不沿用旧系统的通过结论。

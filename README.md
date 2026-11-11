@@ -251,10 +251,18 @@ git diff --check
 历史工作包与一次性交接见 [封存索引](docs/archive/README.md)。后续工作的顺序与状态以 [TODO](TODO.md) 为准。
 
 Codex 进程管理已补基础生命週期回归：未启动及启动失败后的读取返回 EOF，失败后可重试；
-标准输入输出、重复启动拒绝、停止释放等待读取与重新启动均有测试。App 当前仍使用 Mock Agent。
+标准输入输出、重复启动拒绝、停止释放等待读取与重新启动均有测试。App 默认使用 Mock，可在设置中明确连接 Codex；见 [Codex 后端](docs/CODEX.md)。
 
 设置页的“配置库”可命名保存当前参数与分配，确认后载入或删除；文件存放在应用支持目录的
 `configuration-library.json`，不含硬件映射。损坏库文件保持原样并显示错误。
 
 仅支持 stdio 的 MCP 客户端可运行 `python3 tools/mcp_stdio.py`，通过环境变量 `BCR_MCP_TOKEN`
 提供凭据，默认连接 `http://127.0.0.1:8787/mcp`；标准输出只包含协议响应。
+
+设置页现在提供 Agent（Mock / Codex）、反馈调度、页面与宏、语言、配置库。
+页面/层共享参数状态，切换时整体回写 LED；宏按顺序执行最多 64 个参数操作。
+配置 v1–v4 显式迁移为 v5，保留旧文件备份与已学 MIDI 身份。
+
+更多说明：[Codex 后端](docs/CODEX.md)、[WebSocket / ROS 2 输出](docs/NETWORK_OUTPUT.md)、
+[MCP 权限及 SSE](docs/MCP.md)。开发版可用 `--startup-smoke --render-ui` 和
+`BCR_UI_SNAPSHOT_DIRECTORY` 生成自身视图的隔离渲染快照，不连接实体 MIDI。
