@@ -1,6 +1,7 @@
 import BCRSurfaceDomain
 import BCRFoundation
 import Foundation
+import enum SurfacePluginContracts.JSONValue
 
 /// Client-neutral tool execution. Transport credentials never enter this service or its log.
 @MainActor

@@ -18,7 +18,7 @@ from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 
 ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
-    "BCRFoundation": {"SimulationContracts"},
+    "BCRFoundation": {"SimulationContracts", "SurfacePluginContracts"},
     "BCRAgentDomain": {"BCRFoundation", "AgentPlugin"},
     "BCRPluginHost": {
         "BCRFoundation",
@@ -30,12 +30,12 @@ ALLOWED = {
     },
     "BCRCodexAdapter": {"BCRFoundation", "BCRAgentDomain"},
     "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts"},
-    "BCROutputDomain": {"BCRFoundation"},
+    "BCROutputDomain": {"BCRFoundation", "ParameterOutputPlugin"},
     "BCRSimulationKernel": {"BCRFoundation", "SimulationContracts"},
     "BCRRobotDomain": {"BCRFoundation", "BCRSimulationKernel", "RobotPlugin"},
     "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel", "ChassisPlugin"},
     "BCRProviderApplication": {"BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"},
-    "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain"},
+    "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain", "ExampleParameterSets"},
     "BCRConfigurationAdapter": {
         "BCRFoundation",
         "BCRSurfaceDomain",
@@ -44,7 +44,7 @@ ALLOWED = {
         "SurfacePluginContracts",
     },
     "BCRPersistenceAdapter": {"BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRConfigurationAdapter"},
-    "BCRMCPAdapter": {"BCRFoundation", "BCRSurfaceDomain"},
+    "BCRMCPAdapter": {"BCRFoundation", "BCRSurfaceDomain", "SurfacePluginContracts"},
     "BCRProviderMCPAdapter": {
         "BCRFoundation",
         "BCRSurfaceDomain",
@@ -97,14 +97,26 @@ def check():
         for path in (ROOT / "Sources" / name).glob("*.swift"):
             text = path.read_text()
             imports = set(
-                re.findall(r"^import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)", text, re.MULTILINE)
+                re.findall(
+                    r"^(?:@_exported\s+)?import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)",
+                    text,
+                    re.MULTILINE,
+                )
             )
             internal = {
                 value
                 for value in imports
                 if value.startswith("BCR")
                 or value
-                in {"SurfacePluginContracts", "AgentPlugin", "SimulationContracts", "RobotPlugin", "ChassisPlugin"}
+                in {
+                    "SurfacePluginContracts",
+                    "AgentPlugin",
+                    "SimulationContracts",
+                    "RobotPlugin",
+                    "ChassisPlugin",
+                    "ParameterOutputPlugin",
+                    "ExampleParameterSets",
+                }
             }
             if not internal <= allowed:
                 errors.append(f"{path.relative_to(ROOT)} imports a forbidden module")

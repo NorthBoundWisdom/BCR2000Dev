@@ -1,0 +1,27 @@
+import struct ParameterOutputPlugin.MotionLimit
+import struct ParameterOutputPlugin.ParameterSample
+import struct ParameterOutputPlugin.ParameterOutputFrame
+import struct ParameterOutputPlugin.MotionSafetyGate
+import struct ParameterOutputPlugin.MotionSafetyDecision
+import struct ParameterOutputPlugin.MotionSafetyError
+import struct ParameterOutputPlugin.OSCMessage
+import struct ParameterOutputPlugin.JSONParameterLink
+@_exported import enum ParameterOutputPlugin.MotionOutputPrecision
+import enum ParameterOutputPlugin.MotionGateStatus
+import enum ParameterOutputPlugin.OSCArgument
+import enum ParameterOutputPlugin.OSCPacket
+import enum ParameterOutputPlugin.JSONLinkEvent
+
+public typealias SharedMotionLimit = ParameterOutputPlugin.MotionLimit
+public typealias SharedParameterSample = ParameterOutputPlugin.ParameterSample
+public typealias SharedMotionSafetyGate = ParameterOutputPlugin.MotionSafetyGate
+public typealias SharedMotionSafetyDecision = ParameterOutputPlugin.MotionSafetyDecision
+public typealias SharedMotionSafetyError = ParameterOutputPlugin.MotionSafetyError
+public typealias SharedMotionGateStatus = ParameterOutputPlugin.MotionGateStatus
+public typealias SharedJSONParameterLink = ParameterOutputPlugin.JSONParameterLink
+public typealias SharedJSONLinkEvent = ParameterOutputPlugin.JSONLinkEvent
+public typealias ParameterOutputFrame = ParameterOutputPlugin.ParameterOutputFrame
+public typealias MotionOutputPrecision = ParameterOutputPlugin.MotionOutputPrecision
+public typealias OSCMessage = ParameterOutputPlugin.OSCMessage
+public typealias OSCArgument = ParameterOutputPlugin.OSCArgument
+public typealias OSCPacket = ParameterOutputPlugin.OSCPacket

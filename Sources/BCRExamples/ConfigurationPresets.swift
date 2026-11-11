@@ -1,6 +1,7 @@
 import BCRFoundation
 import BCRSurfaceDomain
 import Foundation
+import enum ExampleParameterSets.ExampleParameterSets
 
 /// Built-in configurations a user can load. `starter` is what a fresh install opens with;
 /// domain-specific examples are loaded explicitly.
@@ -61,91 +62,32 @@ public extension SurfaceConfiguration {
     /// arm enable / home on button row 2. Users can reassign everything in the inspector.
     static func robotArmDemo() -> SurfaceConfiguration {
         let group = robotArmGroup
-        let parameters: [ParameterDefinition] = [
-            .init(
-                id: "arm.j1",
-                name: L10n.text("J1 底座旋转"),
-                group: group,
-                unit: "°",
-                minimum: -180,
-                maximum: 180,
-                defaultValue: 0
-            ),
-            .init(
-                id: "arm.j2",
-                name: L10n.text("J2 肩部"),
-                group: group,
-                unit: "°",
-                minimum: -90,
-                maximum: 90,
-                defaultValue: 30
-            ),
-            .init(
-                id: "arm.j3",
-                name: L10n.text("J3 肘部"),
-                group: group,
-                unit: "°",
-                minimum: -135,
-                maximum: 135,
-                defaultValue: -60
-            ),
-            .init(
-                id: "arm.j4",
-                name: L10n.text("J4 腕部俯仰"),
-                group: group,
-                unit: "°",
-                minimum: -120,
-                maximum: 120,
-                defaultValue: -20
-            ),
-            .init(
-                id: "arm.j5",
-                name: L10n.text("J5 腕部旋转"),
-                group: group,
-                unit: "°",
-                minimum: -180,
-                maximum: 180,
-                defaultValue: 0
-            ),
-            .init(
-                id: "arm.j6",
-                name: L10n.text("J6 末端旋转"),
-                group: group,
-                unit: "°",
-                minimum: -180,
-                maximum: 180,
-                defaultValue: 0
-            ),
-            .init(
-                id: "arm.gripper",
-                name: L10n.text("夹爪开合"),
-                group: group,
-                unit: "%",
-                minimum: 0,
-                maximum: 100,
-                defaultValue: 40
-            ),
-            .init(
-                id: "arm.speed",
-                name: L10n.text("运动速度"),
-                group: group,
-                unit: "%",
-                minimum: 0,
-                maximum: 100,
-                defaultValue: 50
-            ),
-            .init(
-                id: "arm.enabled",
-                name: L10n.text("使能"),
-                group: group,
-                minimum: 0,
-                maximum: 1,
-                defaultValue: 0,
-                kind: .toggle,
-                agentWritable: false,
-                externallyProtected: true
-            )
-        ]
+        let definitions: [ParameterDefinition]
+        do {
+            definitions = try ExampleParameterSets.referenceArm().map { definition in
+                let name: LocalizedMessage = switch definition.nameKey {
+                case "example.arm.j1": "J1 底座旋转"
+                case "example.arm.j2": "J2 肩部"
+                case "example.arm.j3": "J3 肘部"
+                case "example.arm.j4": "J4 腕部俯仰"
+                case "example.arm.j5": "J5 腕部旋转"
+                case "example.arm.j6": "J6 末端旋转"
+                case "example.arm.gripper": "夹爪开合"
+                case "example.arm.speed": "运动速度"
+                case "example.arm.enabled": "使能"
+                default: .init(stringLiteral: definition.nameKey)
+                }
+                return ParameterDefinition(id: definition.id, name: L10n.text(name), group: group,
+                                           unit: definition.unit, minimum: definition.minimum,
+                                           maximum: definition.maximum,
+                                           defaultValue: definition.defaultValue,
+                                           kind: definition.kind == .toggle ? .toggle : .continuous,
+                                           agentWritable: definition.agentWritable,
+                                           externallyProtected: definition.externallyProtected,
+                                           step: definition.step)
+            }
+        } catch { preconditionFailure("Invalid built-in shared reference-arm parameter data: \(error)") }
+        let parameters = definitions
 
         var assignments: [ControlAssignment] = []
         for (position, parameter) in parameters.prefix(8).enumerated() {
@@ -166,5 +108,5 @@ public extension SurfaceConfiguration {
 }
 
 public enum LegacyExampleProtection {
-    public static let parameterIDs: Set<ParameterID> = ["arm.enabled"]
+    public static var parameterIDs: Set<ParameterID> { ExampleParameterSets.protectedParameterIDs }
 }

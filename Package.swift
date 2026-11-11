@@ -52,7 +52,8 @@ let package = Package(
     dependencies: [surfacePlugins],
     targets: [
         .target(name: "BCRFoundation", dependencies: [
-            .product(name: "SimulationContracts", package: "SurfacePlugins")
+            .product(name: "SimulationContracts", package: "SurfacePlugins"),
+            .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
         ], resources: [.process("Resources")]),
         .target(name: "BCRAgentDomain", dependencies: [
             "BCRFoundation", .product(name: "AgentPlugin", package: "SurfacePlugins")
@@ -90,8 +91,12 @@ let package = Package(
         .target(name: "BCRSurfaceDomain", dependencies: [
             "BCRFoundation", .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
         ]),
-        .target(name: "BCROutputDomain", dependencies: ["BCRFoundation"]),
-        .target(name: "BCRExamples", dependencies: ["BCRFoundation", "BCRSurfaceDomain"]),
+        .target(name: "BCROutputDomain", dependencies: [
+            "BCRFoundation", .product(name: "ParameterOutputPlugin", package: "SurfacePlugins")
+        ]),
+        .target(name: "BCRExamples", dependencies: [
+            "BCRFoundation", "BCRSurfaceDomain", .product(name: "ExampleParameterSets", package: "SurfacePlugins")
+        ]),
         .target(name: "BCRConfigurationAdapter", dependencies: [
             "BCRFoundation", "BCRSurfaceDomain", "BCRExamples", "BCRAgentDomain",
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
@@ -100,7 +105,9 @@ let package = Package(
             name: "BCRPersistenceAdapter",
             dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRConfigurationAdapter", "BCRExamples"]
         ),
-        .target(name: "BCRMCPAdapter", dependencies: ["BCRFoundation", "BCRSurfaceDomain"]),
+        .target(name: "BCRMCPAdapter", dependencies: [
+            "BCRFoundation", "BCRSurfaceDomain", .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
+        ]),
         .target(name: "BCRHTTPTransport", dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRMCPAdapter"]),
         .target(
             name: "BCRCoreMIDIDriver",

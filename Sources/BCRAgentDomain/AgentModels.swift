@@ -1,7 +1,7 @@
 import BCRFoundation
 import Foundation
 
-import enum AgentPlugin.AgentRunState
+@_exported import enum AgentPlugin.AgentRunState
 import struct AgentPlugin.AgentStateMachine
 
 /// Source-compatible name for the shared plugin state. Presentation stays in the host.

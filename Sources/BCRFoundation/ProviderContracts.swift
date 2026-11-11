@@ -1,5 +1,6 @@
 import Foundation
 import SimulationContracts
+@_exported import enum SurfacePluginContracts.PluginSource
 
 public typealias ProviderSource = SimulationContracts.ProviderSource
 

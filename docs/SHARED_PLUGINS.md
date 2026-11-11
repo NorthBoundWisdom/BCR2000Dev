@@ -1,6 +1,6 @@
 # 共享插件与 BCR 兼容边界
 
-更新：2026-11-12。BCR 已接入共享 Agent；跨宿主 M1 尚待 XTouch 接入同一版本。机器人/底盘已通过旧API薄包装使用共享核心；输出/安全门与远程工具统一仍在进行，M2/M3尚未全部验收。
+更新：2026-11-12。BCR 已接入共享 Agent；跨宿主 M1 尚待 XTouch 接入同一版本。机器人/底盘已通过旧API薄包装使用共享核心；输出/安全门/示例参数也已委托共享核心；统一runtime/远程工具接线仍在进行，M2/M3尚未全部验收。
 
 ## 依赖与本地构建
 
@@ -42,6 +42,7 @@ Package执行只读verify，因此直跑Swift也不能绕过缓存检查，且�
 | `BCRPluginHost` | 事务注册与显式选择插件；MainActor 持有实例、单调时钟驱动、逐事件发布旧宿主快照 |
 | `BCRConfigurationAdapter` | 旧 target 到中性动作/指示 ID 的翻译、设备七位值映射、旧反馈 API 兼容扩展 |
 | `BCRSurfaceDomain` | 控制台引擎、MIDI/学习/反馈管线；按 `IndicatorID` 存反馈，不解释 Agent 命名空间/状态 |
+| `ParameterOutputPlugin` / `ExampleParameterSets` | 唯一安全门、OSC/JSON链路核心及示例参数数据；旧Date/默认地址/本地化/布局留宿主薄适配 |
 | `BCRAgentDomain` | 共享 `AgentRunState` 类型别名、宿主本地化及旧 Date/name/Codable/error 投影包装；`allows` 调用共享规则 |
 | App / Codex adapter | 后端进程、真实审批、凭据、UI 与协议生命周期 |
 
@@ -76,6 +77,12 @@ GUI 与无界面服务都注入 `AgentBindingTranslation.bindings`，生产引�
 消费方不得依赖旧UUID外形。共享reasonKey经完整映射恢复旧ProviderDomainError的code/message。
 新建旧API包装显式start；注入已有plugin时保留其生命周期。插件生命周期stop后旧typed写也被acceptsWrites门禁拒绝，
 advanceSimulation仍可完成制动且不会复活；受控motion-stop与生命周期stop保持不同语义。
+
+输出迁移保留旧Date API和包格式；共享核心只接注入秒数，不读系统时钟。JSONValue和ParameterID直接alias同形共享基础类型，
+旧单字符串ID/构造/排序/JSON helpers保持。参数失败诊断用core的parameterID还原原文，不复制校验；
+JSON session UUID与OSC默认/bcr地址仍由宿主注入。示例九个参数的范围/默认值/名称/显式保护标志保持，布局不进共享数据。
+更保守的有意变化：心跳间隔一旦越过期限，即使新心跳先于下一次evaluate到达，也必须真实关闭/开启使能后才恢复；
+回退或非有限心跳时间会给可见clockError并保持关闭。
 
 ## 验证边界
 

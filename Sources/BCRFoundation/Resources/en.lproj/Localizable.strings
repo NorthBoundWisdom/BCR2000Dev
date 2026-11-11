@@ -714,3 +714,5 @@
 "插件标识重复：{0}" = "Duplicate plugin identifier: {0}";
 "不支持的插件合同版本：{0}" = "Unsupported plugin contract version: {0}";
 "未知插件：{0}" = "Unknown plugin: {0}";
+"时间不是有限数值，需重新连接安全门" = "Time is not finite; reconnect the safety gate";
+"心跳时间倒退，需重新连接安全门" = "Heartbeat time moved backwards; reconnect the safety gate";

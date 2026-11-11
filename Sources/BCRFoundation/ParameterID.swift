@@ -1,30 +1,10 @@
-import Foundation
+@_exported import struct SurfacePluginContracts.ParameterID
 
-public struct ParameterID: Hashable, Codable, Sendable, Comparable, CustomStringConvertible,
-    ExpressibleByStringLiteral
-{
-    public let rawValue: String
+/// Preserve the old single-string Codable identity and source constructors.
+public typealias ParameterID = SurfacePluginContracts.ParameterID
 
-    public init(_ rawValue: String) {
-        self.rawValue = rawValue
-    }
-
-    public init(stringLiteral value: String) {
-        rawValue = value
-    }
-
-    public init(from decoder: any Decoder) throws {
-        rawValue = try decoder.singleValueContainer().decode(String.self)
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.singleValueContainer()
-        try container.encode(rawValue)
-    }
-
+extension SurfacePluginContracts.ParameterID: @retroactive Comparable, @retroactive CustomStringConvertible {
+    public init(_ rawValue: String) { self.init(rawValue: rawValue) }
     public var description: String { rawValue }
-
-    public static func < (lhs: ParameterID, rhs: ParameterID) -> Bool {
-        lhs.rawValue < rhs.rawValue
-    }
+    public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }

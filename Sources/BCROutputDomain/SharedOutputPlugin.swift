@@ -1,0 +1,3 @@
+import struct ParameterOutputPlugin.ParameterOutputPlugin
+
+public typealias SharedParameterOutputPlugin = ParameterOutputPlugin
