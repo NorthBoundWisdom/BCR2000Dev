@@ -112,6 +112,17 @@ public final class SurfaceSession {
     public private(set) var feedbackPolicy = FeedbackPolicy()
     private var scheduler: FeedbackScheduler?
     public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
+    private var feedbackObservers: [UUID: @MainActor (Int) -> Void] = [:]
+    public func observeFeedbackQueue(_ observer: @escaping @MainActor (Int) -> Void) -> UUID {
+        let token = UUID(); feedbackObservers[token] = observer; return token
+    }
+
+    public func removeFeedbackObserver(_ token: UUID) { feedbackObservers[token] = nil }
+    private func notifyFeedbackQueue() {
+        for observer in Array(feedbackObservers.values) { observer(pendingFeedbackCount) }
+    }
+
+    private func clearFeedbackQueue() { scheduler?.clear(); notifyFeedbackQueue() }
     private var writeOrigin: SurfaceWriteOrigin = .software
 
     public init(
@@ -152,6 +163,7 @@ public final class SurfaceSession {
         engine.recordFeedbackWhenGenerated = !policy.enabled
         feedbackPolicy = policy
         scheduler = updated
+        notifyFeedbackQueue()
         if source == .hardware { perform(engine.fullFeedback(at: now())) }
         publishChange()
     }
@@ -166,6 +178,7 @@ public final class SurfaceSession {
                 break
             }
         }
+        notifyFeedbackQueue()
         if !batch.isEmpty { publishChange() }
     }
 
@@ -176,7 +189,7 @@ public final class SurfaceSession {
 
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
-        scheduler?.clear()
+        clearFeedbackQueue()
         source = newSource
         nrpnAssembler.reset()
         engine.echoWindow = newSource == .mock ? 0 : 0.18
@@ -287,7 +300,7 @@ public final class SurfaceSession {
         let configuration = try configuration.migrated()
         let learning = engine.learnTarget
         let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
-        scheduler?.clear()
+        clearFeedbackQueue()
         configurationRevision &+= 1
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
@@ -402,7 +415,13 @@ public final class SurfaceSession {
             }
             let control = map.control(for: message.controlID)
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
-            perform(engine.handleInput(message, at: now()))
+            let previousCount = control.map { engine.state(of: $0).eventCount }
+            let effects = engine.handleInput(message, at: now())
+            if let control, previousCount != engine.state(of: control).eventCount {
+                scheduler?.cancel(message.controlID)
+                notifyFeedbackQueue()
+            }
+            perform(effects)
         }
         publishChange()
     }
@@ -411,7 +430,7 @@ public final class SurfaceSession {
         for effect in effects {
             switch effect {
             case .pageChanged:
-                scheduler?.clear()
+                clearFeedbackQueue()
                 mockDevice.configureModes(engine.configuration)
                 persistConfiguration()
             case let .send(message): transmit(message)
@@ -428,6 +447,7 @@ public final class SurfaceSession {
     private func transmit(_ message: MIDIVoiceMessage) {
         if source == .hardware, feedbackPolicy.enabled, connection.connectedDestination != nil {
             scheduler?.enqueue(message, origin: writeOrigin)
+            notifyFeedbackQueue()
         } else { transmitNow(message) }
     }
 
@@ -463,7 +483,7 @@ public final class SurfaceSession {
             || connection.connectedSource != snapshot.connectedSource
             || connection.connectedDestination != snapshot.connectedDestination
         if snapshot.isConnected != wasConnected || routeChanged { nrpnAssembler.reset() }
-        if routeChanged || !snapshot.isConnected { scheduler?.clear() }
+        if routeChanged || !snapshot.isConnected { clearFeedbackQueue() }
         connection = snapshot
         if snapshot.isConnected, !wasConnected || routeChanged {
             onEvent?(.connected(snapshot))

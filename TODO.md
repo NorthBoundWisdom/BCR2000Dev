@@ -94,12 +94,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 
 ### P1
 
-- [ ] RV4 反馈调度开启时会把陈旧值回写到正在转动的控件。`SurfaceSession.transmit` 把反馈放入
-  `FeedbackScheduler`；设备输入到达时 `SurfaceEngine.handleInput` 在 `expected == value` 时不为来源控件
-  生成新反馈，于是该控件此前排队的旧值不会被覆盖，稍后仍被发送，设备环值跳回旧值，下一格转动从旧值继续，
-  参数跳变。默认关闭所以现有回归未覆盖，但这是 D3 / HW6 校准的前提。
-  修复方向：`FeedbackScheduler` 增加按 `MIDIControlID` 取消；设备输入到达时取消该控件的待发送项。
-  补测试：软件写入排队 → 同控件设备输入 → drain 不再发出旧值。
 - [ ] RV5 中断一个排队中的槽位会停掉全部槽位并断开连接。`CodexAgentController.interrupt` 对 `.queued`
   调用 `stopAll()`；MCP `interrupt_agent` 也走这条路径，外部 Agent 可借此断开其余七个槽位。
   修复方向：只取消该槽位——记录“待中断”，拿到 turnId 后立即 `turn/interrupt`，或取消尚未发出的启动。
@@ -129,8 +123,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
   保存并移除观察者。
 - [ ] RV12 `OutputController.start` 用 `adapter as? OutputTransportRouter` 选择传输，注入其他适配器时
   传输设置被静默忽略，违反“不加静默回退”。把 `select` 放进协议或在构造时注入。
-- [ ] RV13 `FeedbackSettingsController` 的 16 ms 轮询任务在调度关闭时也一直运行。改为仅在启用且有待发送项
-  时运行。
 - [ ] RV14 `CodexAgentController` 小问题：`interrupt` / `decide` 覆盖 `tasks[id]` 而不取消原启动任务，
   原任务结束时会把新任务句柄清掉；`error` 只在重新连接时清除；槽位忙时 `start` 报“Codex 连接未建立”。
 - [ ] RV15 `CodexSessionCoordinator` 在 `disconnected` 后保留 `threadBySlot` / `seenApprovalIDs`，

@@ -117,6 +117,35 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.pendingFeedbackCount, 0)
     }
 
+    func testPhysicalInputCancelsOlderQueuedOriginFeedback() throws {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        try f.session.configureFeedback(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
+        f.session.flushFeedback()
+        f.device.sent.removeAll()
+        f.session.setParameter("j", to: 40)
+        f.device.receive([message(a, 70)])
+        XCTAssertEqual(f.session.engine.value(of: "j"), 70)
+        f.session.flushFeedback()
+        XCTAssertFalse(f.device.sent.contains { $0.controlID == message(a, 0).controlID })
+        XCTAssertTrue(f.device.sent.contains(message(b, 70)))
+    }
+
+    func testFeedbackEchoDoesNotCancelNewerQueuedSoftwareValue() throws {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        try f.session.configureFeedback(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
+        f.session.flushFeedback()
+        f.device.sent.removeAll()
+        f.session.setParameter("j", to: 70)
+        f.device.receive([message(a, 30)]) // Echo of the last successfully sent initial value.
+        XCTAssertEqual(f.session.engine.value(of: "j"), 70)
+        f.session.flushFeedback()
+        XCTAssertTrue(f.device.sent.contains(message(a, 70)))
+    }
+
     private func mirroredConfiguration() -> SurfaceConfiguration {
         SurfaceConfiguration(name: "Mirror", parameters: [
             ParameterDefinition(id: "j", name: "Joint", minimum: 0, maximum: 127, defaultValue: 30)

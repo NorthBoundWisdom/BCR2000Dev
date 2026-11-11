@@ -9,6 +9,9 @@ final class FeedbackSettingsController: ObservableObject {
     private let session: SurfaceSession
     private let store: JSONFileStore<FeedbackPolicy>
     private var task: Task<Void, Never>?
+    private var observer: UUID?
+    private var pollGeneration = UUID()
+    var isPolling: Bool { task != nil }
     init(session: SurfaceSession, url: URL) {
         self.session = session
         store = JSONFileStore(fileURL: url)
@@ -16,21 +19,42 @@ final class FeedbackSettingsController: ObservableObject {
             if let saved = try store.load() { try saved.validate(); policy = saved }
             try session.configureFeedback(policy)
         } catch { self.error = error.localizedDescription }
+        observer = session.observeFeedbackQueue { [weak self] _ in self?.updatePolling() }
+        updatePolling()
+    }
+
+    deinit {
+        task?.cancel()
+        if let observer { Task { @MainActor [session] in session.removeFeedbackObserver(observer) } }
+    }
+
+    private func updatePolling() {
+        guard policy.enabled, session.pendingFeedbackCount > 0 else {
+            pollGeneration = UUID()
+            task?.cancel(); task = nil
+            return
+        }
+        guard task == nil else { return }
+        let revision = UUID()
+        pollGeneration = revision
         task = Task { @MainActor [weak self] in
+            defer { if let self, self.pollGeneration == revision { self.task = nil } }
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
-                self?.session.flushFeedback()
+                guard let self, self.pollGeneration == revision else { return }
+                self.session.flushFeedback()
+                guard self.policy.enabled, self.session.pendingFeedbackCount > 0 else { return }
             }
         }
     }
 
-    deinit { task?.cancel() }
     func apply(_ candidate: FeedbackPolicy) {
         do {
             try candidate.validate()
             try store.save(candidate)
             try session.configureFeedback(candidate)
             policy = candidate
+            updatePolling()
             error = nil
         } catch { self.error = error.localizedDescription }
     }

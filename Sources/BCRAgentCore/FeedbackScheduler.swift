@@ -56,6 +56,11 @@ public struct FeedbackScheduler: Sendable {
         pending[message.controlID] = ScheduledFeedback(message: message, origin: origin)
     }
 
+    public mutating func cancel(_ control: MIDIControlID) {
+        pending[control] = nil
+        order.removeAll { $0 == control }
+    }
+
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
         if let previous = lastRefill {
             let elapsed = now.timeIntervalSince(previous)
