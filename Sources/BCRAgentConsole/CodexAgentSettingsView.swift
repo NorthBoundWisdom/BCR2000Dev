@@ -11,8 +11,11 @@ struct CodexAgentSettingsView: View {
                 Text("Mock").tag(AgentBackend.mock)
                 Text("Codex").tag(AgentBackend.codex)
             }
-            TextField(L10n.text("可执行文件"), text: $controller.executable)
-                .disabled(controller.phase != .stopped && controller.phase != .failed)
+            HStack {
+                TextField(L10n.text("可执行文件"), text: $controller.executable)
+                Button(L10n.text("选择文件…")) { chooseExecutable() }
+            }
+            .disabled(controller.phase != .stopped && controller.phase != .failed)
             TextField(L10n.text("工作目录"), text: $controller.workspace)
                 .disabled(controller.phase != .stopped && controller.phase != .failed)
             HStack {
@@ -39,13 +42,27 @@ struct CodexAgentSettingsView: View {
             Text(L10n.text("默认只读；写入仅限所选目录。审批前请查看 Agent 页中的操作详情。"))
                 .font(.caption).foregroundStyle(.secondary)
             TextField(L10n.text("任务内容"), text: $controller.prompt, axis: .vertical).lineLimit(3 ... 6)
+            Button(L10n.text("保存设置")) { controller.savePreferences() }
+            Text(L10n.text("设置不保存任务内容，重新打开后不会自动连接或启动任务。"))
+                .font(.caption).foregroundStyle(.secondary)
             Text(L10n.text("连接不会启动任务；从 Agent 页或绑定按键明确启动。"))
                 .font(.caption)
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 620, height: 580)
+        .frame(width: 680, height: 660)
         .preferredColorScheme(.dark)
+    }
+
+    private func chooseExecutable() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in controller.selectExecutable(url) }
+        }
     }
 }
 

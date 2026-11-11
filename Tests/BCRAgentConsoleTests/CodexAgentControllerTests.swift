@@ -184,8 +184,46 @@ final class CodexAgentControllerTests: XCTestCase {
         await controller.stopAll()
     }
 
+    func testPreferencesPersistWithoutPromptOrAutomaticConnection() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = CodexAgentController(directory: directory)
+        controller.selectExecutable(URL(fileURLWithPath: "/bin/cat"))
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        controller.modelID = "fixture-model"; controller.effort = "low"; controller.allowWorkspaceWrites = true
+        controller.prompt = "private unsaved task"
+        await controller.selectBackend(.codex)
+        XCTAssertTrue(controller.savePreferences())
+        let data = try Data(contentsOf: directory.appending(path: "codex-preferences.json"))
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("private unsaved task"))
+        let reopened = CodexAgentController(directory: directory)
+        XCTAssertEqual(reopened.backend, .codex)
+        XCTAssertEqual(reopened.executable, "/bin/cat")
+        XCTAssertEqual(reopened.workspace, controller.workspace)
+        XCTAssertEqual(reopened.modelID, "fixture-model")
+        XCTAssertEqual(reopened.effort, "low")
+        XCTAssertTrue(reopened.allowWorkspaceWrites)
+        XCTAssertEqual(reopened.prompt, "")
+        XCTAssertEqual(reopened.phase, .stopped)
+    }
+
+    func testRelativeExecutableIsRejectedInsteadOfGuessingGUIPath() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = CodexAgentController(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        controller.executable = "codex"
+        await controller.connect()
+        XCTAssertEqual(controller.phase, .failed)
+        XCTAssertNotNil(controller.error)
+        XCTAssertEqual(controller.executable, "codex")
+    }
+
     func testConnectionFailureIsVisibleAndDoesNotFallBackToMock() async throws {
-        let controller = CodexAgentController(directory: FileManager.default.temporaryDirectory)
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = CodexAgentController(directory: directory)
         controller.workspace = FileManager.default.temporaryDirectory.path
         controller.executable = "/nonexistent-bcr-codex-fixture"
         await controller.selectBackend(.codex)

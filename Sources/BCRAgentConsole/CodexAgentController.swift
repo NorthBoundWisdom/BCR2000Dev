@@ -2,7 +2,7 @@ import BCRAgentCore
 import Combine
 import Foundation
 
-enum AgentBackend: String, CaseIterable { case mock, codex }
+enum AgentBackend: String, CaseIterable, Codable, Sendable { case mock, codex }
 
 /// Main-actor bridge between value snapshots from Core and the console's existing LED pipeline.
 @MainActor
@@ -17,7 +17,7 @@ final class CodexAgentController: ObservableObject {
     private var approvalTasks: [CodexRequestID: Task<Void, Never>] = [:]
     @Published private(set) var error: String?
     @Published private(set) var slots = AgentSlot.mockSlots()
-    @Published var executable = "codex"
+    @Published var executable = ""
     @Published var workspace = ""
     @Published var prompt = ""
     @Published var modelID = ""
@@ -25,6 +25,7 @@ final class CodexAgentController: ObservableObject {
     @Published var allowWorkspaceWrites = false
     var onSlots: (([AgentSlot]) -> Void)?
     var onStopMock: (() -> Void)?
+    private let preferences: ProtectedJSONFile<CodexPreferences>
     private let directory: URL
     private let factory: (@MainActor () async throws -> CodexSessionCoordinator)?
     private var snapshotTask: Task<Void, Never>?
@@ -39,6 +40,21 @@ final class CodexAgentController: ObservableObject {
     init(directory: URL, factory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil) {
         self.directory = directory
         self.factory = factory
+        preferences = ProtectedJSONFile(
+            store: JSONFileStore(fileURL: directory.appending(path: "codex-preferences.json")),
+            title: L10n.text("Codex 设置"),
+            normalize: { value in try value.validate(); return value },
+            version: { $0.version },
+            fallback: { CodexPreferences() }
+        )
+        let read = preferences.load()
+        backend = read.value.backend
+        executable = read.value.executable
+        workspace = read.value.workspace
+        modelID = read.value.modelID
+        effort = read.value.effort
+        allowWorkspaceWrites = read.value.allowWorkspaceWrites
+        error = read.message
     }
 
     func selectBackend(_ value: AgentBackend) async {
@@ -47,6 +63,27 @@ final class CodexAgentController: ObservableObject {
         backend = value
         error = nil
         onStopMock?()
+        _ = savePreferences()
+    }
+
+    @discardableResult
+    func savePreferences() -> Bool {
+        do {
+            var value = CodexPreferences()
+            value.backend = backend; value.executable = executable; value.workspace = workspace
+            value.modelID = modelID; value.effort = effort; value.allowWorkspaceWrites = allowWorkspaceWrites
+            try preferences.save(value)
+            error = nil
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+
+    func selectExecutable(_ url: URL) {
+        guard url.isFileURL, FileManager.default.isExecutableFile(atPath: url.path) else {
+            error = L10n.text("请选择 codex 可执行文件的绝对路径"); return
+        }
+        executable = url.standardizedFileURL.path
+        error = nil
     }
 
     func connect() async {
@@ -58,6 +95,13 @@ final class CodexAgentController: ObservableObject {
         error = nil
         do {
             _ = try WorkspacePolicy.canonicalWorkspaceRoot(workspace)
+            if factory == nil {
+                guard executable.hasPrefix("/")
+                else { throw ConfigurationFileError(reason: L10n.text("请选择 codex 可执行文件的绝对路径")) }
+                guard FileManager.default.isExecutableFile(atPath: executable)
+                else { throw CodexProcessSupervisorError.executableNotFound(executable) }
+            }
+            guard savePreferences() else { throw ConfigurationFileError(reason: error ?? L10n.text("Codex 设置无效")) }
             let session: CodexSessionCoordinator
             if let factory { session = try await factory() }
             else {

@@ -141,7 +141,7 @@ struct BCRAgentConsoleApp: App {
             ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 680)),
             ("output", AnyView(OutputSettingsView(controller: model.output)), CGSize(width: 880, height: 720)),
             ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
-            ("agents", AnyView(CodexAgentSettingsView(controller: model.codex)), CGSize(width: 620, height: 580)),
+            ("agents", AnyView(CodexAgentSettingsView(controller: model.codex)), CGSize(width: 680, height: 660)),
             ("programs", AnyView(SurfaceProgramsView(model: model)), CGSize(width: 700, height: 580)),
             (
                 "feedback",

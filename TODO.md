@@ -80,10 +80,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 
 ### P1
 
-- [ ] RV6 Codex 设置不持久，且从 Finder 启动找不到 `codex`。后端、可执行文件、工作目录、模型、写入开关
-  每次启动都重置；`resolveExecutable` 只查进程 `PATH`，GUI 启动时不含用户 shell 路径，默认值 `codex`
-  会报找不到可执行文件。修复方向：持久化非敏感设置（不含任务内容），可执行文件用文件选择器取绝对路径，
-  错误文案提示需要绝对路径；不要加静默的路径猜测。
 - [ ] RV7（核实）WebSocket 适配器失败后的清理。`WebSocketParameterAdapter.fail` 只置 `isConnected = false`
   并回调，不取消 socket、收发任务和 URLSession；确认 `OutputController` 收到 `onFailure` 后一定调用
   `stop()`，否则发送任务失败后接收任务仍在运行。另外心跳用墙钟 `Date` 判定 0.3 秒窗口，系统校时会造成
