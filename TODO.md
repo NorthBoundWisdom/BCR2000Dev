@@ -69,6 +69,84 @@ MCP Agent/设备控制工具与 stdio 桥接均已实现并通过非硬件回归
 - [ ] D3 真机调度参数校准：按 HW6 的输出速率、丢弃数、CPU/UI 帧率确定实体设备默认策略；
   软件限速/合并/错误冷却已经完成，当前默认关闭，不能把模拟结果当作真机基线。
 
+## 4. 代码审查待修（2026-11-11，范围 `a3a2356`、`65f252f`）
+
+只读审查结论，未运行测试；每项修复前先用测试复现，修复后按 CONTRIBUTING 跑完整检查。
+标“核实”的项是阅读代码得出的怀疑，需先确认再改。优先级：P0 先于任何带写入权限的真实 Codex 使用；
+P1 先于 HW6 / D3 校准；P2 可随手处理。
+
+方向：离线功能面已足够宽，暂停新增功能。顺序为 P0 审批链路 → RV4 反馈调度 → 回到第 1 节实机验证；
+其余 P2 在实机等待间隙处理。
+
+### P0 Codex 审批链路
+
+- [ ] RV1 审批过期后槽位死锁。`CodexApprovalGate.registerRequest` 默认窗口 8 秒；过期后
+  `resolve` 先移除 pending 再抛 `requestExpired`，`CodexSessionCoordinator.sendApproval` 不向 Codex 回复，
+  `approvals` 中的条目也不清除，之后批准和拒绝都抛 `requestMissing`，Turn 永远停在 `awaitingApproval`，
+  界面只剩“全部停止”。8 秒也不足以阅读命令详情。
+  修复方向：过期时显式回复 decline 并清除条目、发布快照；窗口时长改为可见且足够（或改为不自动过期，
+  只防重放）；拒绝在任何时候都必须可达。补：过期、过期后拒绝、过期后槽位可重新启动的测试。
+- [ ] RV2 同一槽位并发审批会卡住第二个请求。`sendApproval` 顺序是 gate 记为已决 →
+  `resumeAfterApproval`（要求当前为 `awaitingApproval`）→ 移除条目 → 发送。第一个审批后槽位变为
+  `running`，第二个请求在 `resumeAfterApproval` 抛错，但 gate 已记为已决，重试直接返回 `false`，永不回复。
+  同理 `rpc.sendEnvelope` 失败时决定已记录但 Codex 没收到。
+  修复方向：先发送成功再记为已决；槽位仍有其他待批请求时保持 `awaitingApproval`。补并发审批与发送失败测试。
+- [ ] RV3 实体按键 / 主操作直接批准（需用户决定）。`CodexAgentController.perform` 在 `waitingApproval`
+  时调用 `decide(approve: true)`，绑定的 BCR 按键一次按下即批准命令执行或文件修改，无需看过详情；
+  Mock 时期的行为被原样沿用到真实后端。建议：Codex 后端下实体按键不批准（只在 Agent 页点击批准），
+  或增加明确的设置项并默认关闭。同时 Agent 卡片在等待审批时没有“中断”入口，建议补上。
+
+### P1
+
+- [ ] RV4 反馈调度开启时会把陈旧值回写到正在转动的控件。`SurfaceSession.transmit` 把反馈放入
+  `FeedbackScheduler`；设备输入到达时 `SurfaceEngine.handleInput` 在 `expected == value` 时不为来源控件
+  生成新反馈，于是该控件此前排队的旧值不会被覆盖，稍后仍被发送，设备环值跳回旧值，下一格转动从旧值继续，
+  参数跳变。默认关闭所以现有回归未覆盖，但这是 D3 / HW6 校准的前提。
+  修复方向：`FeedbackScheduler` 增加按 `MIDIControlID` 取消；设备输入到达时取消该控件的待发送项。
+  补测试：软件写入排队 → 同控件设备输入 → drain 不再发出旧值。
+- [ ] RV5 中断一个排队中的槽位会停掉全部槽位并断开连接。`CodexAgentController.interrupt` 对 `.queued`
+  调用 `stopAll()`；MCP `interrupt_agent` 也走这条路径，外部 Agent 可借此断开其余七个槽位。
+  修复方向：只取消该槽位——记录“待中断”，拿到 turnId 后立即 `turn/interrupt`，或取消尚未发出的启动。
+- [ ] RV6 Codex 设置不持久，且从 Finder 启动找不到 `codex`。后端、可执行文件、工作目录、模型、写入开关
+  每次启动都重置；`resolveExecutable` 只查进程 `PATH`，GUI 启动时不含用户 shell 路径，默认值 `codex`
+  会报找不到可执行文件。修复方向：持久化非敏感设置（不含任务内容），可执行文件用文件选择器取绝对路径，
+  错误文案提示需要绝对路径；不要加静默的路径猜测。
+- [ ] RV7（核实）WebSocket 适配器失败后的清理。`WebSocketParameterAdapter.fail` 只置 `isConnected = false`
+  并回调，不取消 socket、收发任务和 URLSession；确认 `OutputController` 收到 `onFailure` 后一定调用
+  `stop()`，否则发送任务失败后接收任务仍在运行。另外心跳用墙钟 `Date` 判定 0.3 秒窗口，系统校时会造成
+  误判（偏安全方向，记录即可）。补测试：非法 JSON、队列满、对端 epoch 变化、发送失败后的状态。
+  目前只有一个 happy-path 测试。
+
+### P2
+
+- [ ] RV8 MCP Agent 工具细节。`start_agent` 在 Codex 后端下使用设置页里当前的任务内容，工具没有 prompt
+  参数也未在 `docs/MCP.md` 说明这一点（核实文档）；缺少 slot 时的报错写成了 `未知槽位 \(0)`；
+  越界 slot 返回“Agent 正忙”。在服务端校验 1–8 并给出准确错误。
+- [ ] RV9 页面可能没有返回路径。页面是整套替换而非叠加；删光某页的切换按键后，实体面板无法离开该页
+  （只能在设置里切回）。建议校验或界面警告“该页没有任何切换页面的按键”。MCP 的 `list_controls` /
+  `assign_control` 隐式作用于当前页，没有 `list_pages` / `select_page`，在 `docs/MCP.md` 写明或补工具。
+- [ ] RV10 每次切页都写配置文件。`.pageChanged` → `persistConfiguration()`，实体按键每按一次在主线程写盘；
+  `activePageID` 也因此进入导出文件。建议把当前页作为会话状态单独保存，或至少不随导出。
+- [ ] RV11 参数 SSE。每个引擎变化都单独推送，没有按帧合并，快速转动时慢客户端很快触发 64 KB 上限被断开；
+  首帧完整快照若超过 64 KB 则该配置永远无法订阅；`MCPHTTPServer.init` 丢弃了 `observeParameters`
+  返回的令牌，服务器释放后观察者仍留在会话里。建议与 UI 一样按 16 ms 合并，快照不受队列上限约束，
+  保存并移除观察者。
+- [ ] RV12 `OutputController.start` 用 `adapter as? OutputTransportRouter` 选择传输，注入其他适配器时
+  传输设置被静默忽略，违反“不加静默回退”。把 `select` 放进协议或在构造时注入。
+- [ ] RV13 `FeedbackSettingsController` 的 16 ms 轮询任务在调度关闭时也一直运行。改为仅在启用且有待发送项
+  时运行。
+- [ ] RV14 `CodexAgentController` 小问题：`interrupt` / `decide` 覆盖 `tasks[id]` 而不取消原启动任务，
+  原任务结束时会把新任务句柄清掉；`error` 只在重新连接时清除；槽位忙时 `start` 报“Codex 连接未建立”。
+- [ ] RV15 `CodexSessionCoordinator` 在 `disconnected` 后保留 `threadBySlot` / `seenApprovalIDs`，
+  同一实例再次 `start()` 会对新进程复用旧 threadId。控制器目前每次新建实例所以未触发，在 `start()` 里清空即可。
+  只读模式下 `startTurn` 不校验 `cwd`，统一走 `WorkspacePolicy.canonicalWorkspaceRoot`。
+- [ ] RV16 文档与常量。ROADMAP 的 R4（“页面/层/宏待后续”）、R5（“WebSocket JSON、ROS 2 桥留待后续”）、
+  R8 第 6 点和“当前执行顺序”一行与已完成状态矛盾；`CodexSchema.stableSchemaDirectory` 指向的
+  `Schemas/Codex/0.167.1` 在资源目录中不存在（核实是否仍被使用，未使用则删除）；
+  `initialize` 的客户端版本写死为 `0.1.0`，应取自 `configs/app_build.json` 的版本来源。
+- [ ] RV17 测试缺口：`OutputTransportRouter` 切换传输时旧适配器停止并重新挂接回调；
+  UI 16 ms 合并与“跟随触摸”延后选择；SSE 背压断开与会话删除关闭流；以上 RV1、RV2、RV4、RV7 的回归。
+
 ## 5. 发布与 DriverKit 分发（R7）
 
 当前选择：自用阶段，main/PR 与 tag 的 CI 固定为无需凭证的 ad-hoc 主程序构建；
