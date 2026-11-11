@@ -86,6 +86,8 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
 struct BCRAgentConsoleApp: App {
     @NSApplicationDelegateAdaptor(ConsoleAppDelegate.self) private var appDelegate
     @StateObject private var model: ConsoleViewModel
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openWindow) private var openWindow
 
     init() {
         let smoke = CommandLine.arguments.contains("--startup-smoke")
@@ -139,7 +141,7 @@ struct BCRAgentConsoleApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "console") {
             ContentView(model: model)
                 .onAppear {
                     #if DEBUG
@@ -152,6 +154,11 @@ struct BCRAgentConsoleApp: App {
         }
         .defaultSize(width: 1_260, height: 920)
         .windowStyle(.hiddenTitleBar)
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            if phase == .active, CommandLine.arguments.contains("--startup-smoke"), NSApp.windows.isEmpty {
+                openWindow(id: "console")
+            }
+        }
 
         Settings {
             TabView {
