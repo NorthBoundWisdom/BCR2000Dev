@@ -331,7 +331,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 5
+    public static let currentVersion = 6
     public static let basePageID = "__base__"
 
     public var version: Int
@@ -376,6 +376,9 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         if version >= 5, !container.contains(.pages) || !container.contains(.macros) {
             throw MotionSafetyError(L10n.text("页面定义无效"))
         }
+        if version >= 6, container.contains(.activePageID) {
+            throw MotionSafetyError(L10n.text("当前页面属于会话状态，不能写入配置文件"))
+        }
         self.init(
             version: version,
             name: try container.decode(String.self, forKey: .name),
@@ -383,7 +386,7 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
             assignments: try container.decode([ControlAssignment].self, forKey: .assignments),
             pages: container.contains(.pages) ? try container.decode([AssignmentPage].self, forKey: .pages) : [],
             macros: container.contains(.macros) ? try container.decode([SurfaceMacro].self, forKey: .macros) : [],
-            activePageID: try container.decodeIfPresent(String.self, forKey: .activePageID)
+            activePageID: version < 6 ? try container.decodeIfPresent(String.self, forKey: .activePageID) : nil
         )
         try validate()
     }
@@ -396,7 +399,17 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         try c.encode(baseAssignments, forKey: .assignments)
         try c.encode(pages, forKey: .pages)
         try c.encode(macros, forKey: .macros)
-        try c.encodeIfPresent(activePageID, forKey: .activePageID)
+        // activePageID is session state; exported/durable configurations always open on the base page.
+    }
+
+    public var pageNavigationWarning: String? {
+        guard !pages.isEmpty else { return nil }
+        let current = activePageID ?? Self.basePageID
+        let hasExit = assignments.contains { assignment in
+            if case let .switchPage(id) = assignment.target { return id != current }
+            return false
+        }
+        return hasExit ? nil : L10n.text("当前页面没有切换到其他页面的按键，请从设置选择页面")
     }
 
     public mutating func addPage(_ page: AssignmentPage) throws {

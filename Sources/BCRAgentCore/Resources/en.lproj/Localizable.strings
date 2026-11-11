@@ -689,3 +689,5 @@
 "保存设置" = "Save Settings";
 "设置不保存任务内容，重新打开后不会自动连接或启动任务。" = "Task contents are not saved. Reopening the app never connects or starts a task automatically.";
 "当前适配器不支持所选输出协议" = "The current adapter does not support the selected output protocol";
+"当前页面没有切换到其他页面的按键，请从设置选择页面" = "This page has no button to switch to another page. Choose a page in Settings.";
+"当前页面属于会话状态，不能写入配置文件" = "The current page is session state and cannot be stored in configuration files";

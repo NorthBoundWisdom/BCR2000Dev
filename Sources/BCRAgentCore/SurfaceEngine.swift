@@ -26,6 +26,7 @@ public enum SurfaceEffect: Equatable, Sendable {
     case send(MIDIVoiceMessage)
     case triggerAgent(AgentSlotID)
     case pageChanged
+    case programsChanged
     case learned(BCRControlID, MIDIControlID)
     case learnRejected(BCRControlID, HardwareBindingError)
     /// Input from a MIDI identity that no physical control is bound to.
@@ -289,7 +290,7 @@ public struct SurfaceEngine: Sendable {
         incrementRemainders.removeAll()
         let removed = old.filter { configuration.assignment(for: $0) == nil }
         for control in removed { record(control, value: 0, direction: .output) }
-        return [.pageChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
+        return [.programsChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
     }
 
     public mutating func selectPage(_ id: String?, at now: Date = .now) throws -> [SurfaceEffect] {

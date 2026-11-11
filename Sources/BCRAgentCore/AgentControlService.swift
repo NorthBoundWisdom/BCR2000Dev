@@ -32,6 +32,7 @@ public final class AgentControlService {
         do {
             guard MCPToolCatalog.names.contains(name) else { throw MCPToolFailure(L10n.text("未知工具")) }
             guard let args = arguments.objectValue else { throw MCPToolFailure(L10n.text("arguments 必须是对象")) }
+            if name == "start_agent" || name == "interrupt_agent" { _ = try agentSlot(args) }
             try validateArguments(args, tool: name)
             let result = try execute(name, args)
             record(name, succeeded: true, detail: L10n.text("完成"))
@@ -52,7 +53,7 @@ public final class AgentControlService {
             guard permissions.parameterWrite,
                   permissions.agentControl else { throw MCPToolFailure(L10n.text("未开启 Agent 控制权限")) }
             guard let onAgentAction else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
-            let slot = args["slot"]?.intValue.map(AgentSlotID.init)
+            let slot = name == "stop_all_agents" ? nil : try agentSlot(args)
             try consumeWrites(1)
             try onAgentAction(name, slot)
             return .object(["accepted": .bool(true)])
@@ -68,6 +69,7 @@ public final class AgentControlService {
         case "get_status":
             return .object([
                 "source": .string(session.source.rawValue),
+                "activePage": .string(session.engine.configuration.activePageID ?? SurfaceConfiguration.basePageID),
                 "connected": .bool(session.source == .mock || session.connection.isConnected),
                 "droppedFeedbackCount": .number(session.droppedFeedbackCount),
                 "permissions": try .encoded(permissions),
@@ -175,6 +177,13 @@ public final class AgentControlService {
             return try parameterInfo(definition.id)
         default: throw MCPToolFailure(L10n.text("未知工具"))
         }
+    }
+
+    private func agentSlot(_ args: [String: JSONValue]) throws -> AgentSlotID {
+        guard let value = args["slot"]?.finiteNumber, value.rounded() == value, (1 ... 8).contains(value) else {
+            throw MCPToolFailure(L10n.text("Agent 槽位必须为 1–8"))
+        }
+        return AgentSlotID(Int(value))
     }
 
     private func write(_ entries: [(ParameterID, Double)]) throws -> [JSONValue] {

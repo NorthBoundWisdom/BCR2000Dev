@@ -21,6 +21,7 @@ public struct MonitorEvent: Identifiable, Equatable, Sendable {
 /// Semantic notifications let the app own wording, selection and follow-touch policy.
 public enum SurfaceSessionEvent: Equatable, Sendable {
     case sourceChanged(DeviceSource)
+    case pageChanged
     case connected(MIDIConnectionSnapshot)
     case touched(BCRControlID)
     case learningInterruptedByConfiguration(BCRControlID)
@@ -431,8 +432,15 @@ public final class SurfaceSession {
             switch effect {
             case .pageChanged:
                 clearFeedbackQueue()
+                nrpnAssembler.reset()
+                mockDevice.configureModes(engine.configuration)
+                onEvent?(.pageChanged)
+            case .programsChanged:
+                clearFeedbackQueue()
+                nrpnAssembler.reset()
                 mockDevice.configureModes(engine.configuration)
                 persistConfiguration()
+                onEvent?(.pageChanged)
             case let .send(message): transmit(message)
             case let .triggerAgent(slot): onTriggerAgent?(slot)
             case let .learned(control, midi):

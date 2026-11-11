@@ -139,3 +139,7 @@ parameterWrite 和新增的 agentControl 权限；`set_device_source(source)` �
 启动使用本机 Agent 设置中已配置的任务，返回 accepted 表示请求已接收，执行结果从 get_agents 查询。
 MCP 不提供审批通过接口。Codex 启动可能使用本机登录账号；仅向受信任的客户端授予此权限。
 隔离测试禁止通过 MCP 切换至实体设备。所有设备切换仍经过 App 的停机/映射路径。
+
+start_agent 仅接受 slot，不接受 prompt，使用本机 Agent 设置的当前任务内容；缺失、非整数或超出 1–8 的槽位明确拒绝。
+list_controls 与 assign_control 作用于当前会话页面；get_status 的 activePage 标明该页 ID（基础页为 __base__）。
+页面选择只在本次会话中有效，配置文件与导出不携带当前页面。

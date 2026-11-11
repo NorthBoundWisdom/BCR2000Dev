@@ -146,6 +146,19 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertTrue(f.device.sent.contains(message(a, 70)))
     }
 
+    func testSwitchingPagesDoesNotPersistOrExportSessionSelection() throws {
+        var config = mirroredConfiguration()
+        try config.addPage(.init(id: "second", name: "Second", assignments: config.assignments))
+        let f = SessionFixture(configuration: config)
+        try f.session.selectPage("second")
+        XCTAssertTrue(f.state.configurations.isEmpty)
+        let object = try XCTUnwrap(JSONSerialization
+            .jsonObject(with: JSONEncoder().encode(f.session.engine.configuration)) as? [String: Any])
+        XCTAssertNil(object["activePageID"])
+        try f.session.selectPage(SurfaceConfiguration.basePageID)
+        XCTAssertTrue(f.state.configurations.isEmpty)
+    }
+
     private func mirroredConfiguration() -> SurfaceConfiguration {
         SurfaceConfiguration(name: "Mirror", parameters: [
             ParameterDefinition(id: "j", name: "Joint", minimum: 0, maximum: 127, defaultValue: 30)

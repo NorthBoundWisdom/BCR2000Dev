@@ -17,14 +17,37 @@ final class SurfaceProgramsTests: XCTestCase {
         XCTAssertTrue(effects.contains(.pageChanged))
         XCTAssertEqual(engine.value(of: "general.1"), 80)
         XCTAssertEqual(engine.configuration.assignment(for: knob)?.target, .parameter("general.2"))
-        let restored = try JSONDecoder().decode(
+        var restored = try JSONDecoder().decode(
             SurfaceConfiguration.self,
             from: JSONEncoder().encode(engine.configuration)
         )
+        XCTAssertNil(restored.activePageID)
+        try restored.selectPage("second")
         XCTAssertEqual(restored, engine.configuration)
-        XCTAssertEqual(restored.activePageID, "second")
         _ = try engine.selectPage(SurfaceConfiguration.basePageID)
         XCTAssertEqual(engine.configuration.assignment(for: knob)?.target, .parameter("general.1"))
+    }
+
+    func testPageWarningExcludesSelfSwitchAndV5SelectionMigratesToBase() throws {
+        var config = SurfaceConfiguration.starter()
+        try config.addPage(.init(id: "p", name: "Page", assignments: []))
+        try config.selectPage("p")
+        XCTAssertNotNil(config.pageNavigationWarning)
+        try config.assign(.init(control: .button(row: 1, 1), target: .switchPage("p")))
+        XCTAssertNotNil(config.pageNavigationWarning)
+        try config.assign(.init(control: .button(row: 1, 1), target: .switchPage(SurfaceConfiguration.basePageID)))
+        XCTAssertNil(config.pageNavigationWarning)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(config)) as? [String: Any])
+        json["version"] = 5; json["activePageID"] = "p"
+        let old = try JSONDecoder().decode(
+            SurfaceConfiguration.self,
+            from: JSONSerialization.data(withJSONObject: json)
+        )
+        XCTAssertEqual(old.activePageID, "p")
+        let migrated = try old.migrated()
+        XCTAssertNil(migrated.activePageID)
+        XCTAssertEqual(migrated.pages, config.pages)
+        XCTAssertEqual(migrated.version, 6)
     }
 
     func testMacroOrderClampingSnappingAndSinglePressDebounce() throws {

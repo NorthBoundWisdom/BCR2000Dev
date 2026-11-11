@@ -138,14 +138,16 @@ final class ConsoleViewModel: ObservableObject {
                 Task { await self.codex.stopAll() }
                 return
             }
-            guard let slot else { throw MCPToolFailure(L10n.text("未知槽位 \(0)")) }
+            guard let slot, let current = self.slots.first(where: { $0.id == slot }) else {
+                throw MCPToolFailure(L10n.text("Agent 槽位必须为 1–8"))
+            }
             if action == "start_agent" {
                 if self.codex.backend == .codex {
                     guard self.codex.phase == .ready,
                           !self.codex.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     else { throw MCPToolFailure(L10n.text("Codex 连接未建立")) }
                 }
-                guard self.slots.first(where: { $0.id == slot })?.state.isActive == false else {
+                guard !current.state.isActive else {
                     throw MCPToolFailure(L10n.text("Agent 正忙"))
                 }
                 self.start(slot)
@@ -530,6 +532,9 @@ final class ConsoleViewModel: ObservableObject {
 
     private func handleSessionEvent(_ event: SurfaceSessionEvent) {
         switch event {
+        case .pageChanged:
+            if let warning = configuration
+                .pageNavigationWarning { notice = ConsoleNotice(level: .warning, text: warning) }
         case let .sourceChanged(source):
             switch source {
             case .mock:

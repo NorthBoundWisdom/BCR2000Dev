@@ -199,6 +199,7 @@ public extension SurfaceConfiguration {
         try validate()
         var result = self
         result.version = Self.currentVersion
+        try result.selectPage(nil)
         return result
     }
 }

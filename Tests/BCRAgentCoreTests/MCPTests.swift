@@ -43,6 +43,21 @@ final class MCPTests: XCTestCase {
         return headers
     }
 
+    func testAgentSlotErrorsAreExplicitAndDoNotInvokeHandler() {
+        let service = makeService()
+        service.permissions.agentControl = true
+        var calls = 0
+        service.onAgentAction = { _, _ in calls += 1 }
+        for args: [String: JSONValue] in [[:], ["slot": .number(0)], ["slot": .number(9)], ["slot": .double(1.5)]] {
+            let result = service.call("start_agent", arguments: .object(args))
+            XCTAssertTrue(result.isError)
+            XCTAssertEqual(result.value.objectValue?["error"], .string(L10n.text("Agent 槽位必须为 1–8")))
+        }
+        XCTAssertEqual(calls, 0)
+        XCTAssertFalse(service.call("start_agent", arguments: .object(["slot": .double(1)])).isError)
+        XCTAssertEqual(calls, 1)
+    }
+
     func testNewControlPermissionsDefaultOffAndAreEnforced() throws {
         let old = Data(#"{"parameterWrite":true,"configurationWrite":false,"writesPerSecond":60}"#.utf8)
         let permissions = try JSONDecoder().decode(MCPPermissions.self, from: old)

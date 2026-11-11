@@ -27,6 +27,9 @@ struct SurfaceProgramsView: View {
                     Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
                     ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
                 }
+                if let warning = model.configuration.pageNavigationWarning {
+                    Text(warning).font(.caption).foregroundStyle(.orange)
+                }
                 HStack {
                     TextField(L10n.text("页面名称"), text: $pageName)
                     Button(L10n.text("复制当前分配为新页面")) {

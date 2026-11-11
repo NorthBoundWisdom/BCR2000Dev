@@ -82,14 +82,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 
 ### P2
 
-- [ ] RV8 MCP Agent 工具细节。`start_agent` 在 Codex 后端下使用设置页里当前的任务内容，工具没有 prompt
-  参数也未在 `docs/MCP.md` 说明这一点（核实文档）；缺少 slot 时的报错写成了 `未知槽位 \(0)`；
-  越界 slot 返回“Agent 正忙”。在服务端校验 1–8 并给出准确错误。
-- [ ] RV9 页面可能没有返回路径。页面是整套替换而非叠加；删光某页的切换按键后，实体面板无法离开该页
-  （只能在设置里切回）。建议校验或界面警告“该页没有任何切换页面的按键”。MCP 的 `list_controls` /
-  `assign_control` 隐式作用于当前页，没有 `list_pages` / `select_page`，在 `docs/MCP.md` 写明或补工具。
-- [ ] RV10 每次切页都写配置文件。`.pageChanged` → `persistConfiguration()`，实体按键每按一次在主线程写盘；
-  `activePageID` 也因此进入导出文件。建议把当前页作为会话状态单独保存，或至少不随导出。
 - [ ] RV11 参数 SSE。每个引擎变化都单独推送，没有按帧合并，快速转动时慢客户端很快触发 64 KB 上限被断开；
   首帧完整快照若超过 64 KB 则该配置永远无法订阅；`MCPHTTPServer.init` 丢弃了 `observeParameters`
   返回的令牌，服务器释放后观察者仍留在会话里。建议与 UI 一样按 16 ms 合并，快照不受队列上限约束，
