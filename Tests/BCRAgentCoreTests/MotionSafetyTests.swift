@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class MotionSafetyTests: XCTestCase {
     private let t0 = Date(timeIntervalSinceReferenceDate: 8_000)

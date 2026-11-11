@@ -1,5 +1,7 @@
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class AgentStateMachineTests: XCTestCase {
     func testMockLifecycleRequiresApprovalBeforeCompletion() throws {

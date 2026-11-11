@@ -2,6 +2,8 @@ import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 private final class OutputFakeDevice: SurfaceDevice {
@@ -39,7 +41,7 @@ final class OutputControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let session = SurfaceSession(
             hardwareDevice: OutputFakeDevice(),
-            saveHardwareMap: { _ in },
+            configuration: .robotArmDemo(), saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
         let adapter = OutputFakeTransport()
@@ -64,7 +66,7 @@ final class OutputControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let session = SurfaceSession(
             hardwareDevice: OutputFakeDevice(),
-            saveHardwareMap: { _ in },
+            configuration: .robotArmDemo(), saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
         let transport = OutputFakeTransport()
@@ -89,7 +91,7 @@ final class OutputControllerTests: XCTestCase {
         let clock = OutputTestClock(), transport = OutputFakeTransport()
         let session = SurfaceSession(
             hardwareDevice: OutputFakeDevice(),
-            now: { clock.now },
+            configuration: .robotArmDemo(), now: { clock.now },
             saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
@@ -141,7 +143,7 @@ final class OutputControllerTests: XCTestCase {
         let clock = OutputTestClock(), transport = OutputFakeTransport()
         let session = SurfaceSession(
             hardwareDevice: OutputFakeDevice(),
-            now: { clock.now },
+            configuration: .robotArmDemo(), now: { clock.now },
             saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
@@ -196,7 +198,7 @@ final class OutputControllerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let clock = OutputTestClock(), transport = OutputFakeTransport()
         let session = SurfaceSession(
-            hardwareDevice: OutputFakeDevice(), now: { clock.now },
+            hardwareDevice: OutputFakeDevice(), configuration: .robotArmDemo(), now: { clock.now },
             saveHardwareMap: { _ in }, saveConfiguration: { _ in }
         )
         let controller = OutputController(

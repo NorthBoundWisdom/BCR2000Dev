@@ -1,6 +1,8 @@
 import AppKit
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 private final class ZoomRecordingWindow: NSWindow {

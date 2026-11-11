@@ -3,6 +3,8 @@ import Combine
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 private final class RefreshMIDI: MIDIService {

@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class FeedbackSchedulerTests: XCTestCase {
     func testCoalescesControlsAndRespectsGlobalRate() throws {

@@ -1,0 +1,11 @@
+@_exported import BCRFoundation
+@_exported import BCRAgentDomain
+@_exported import BCRCodexAdapter
+@_exported import BCRSurfaceDomain
+@_exported import BCROutputDomain
+@_exported import BCRExamples
+@_exported import BCRConfigurationAdapter
+@_exported import BCRMCPAdapter
+@_exported import BCRHTTPTransport
+@_exported import BCRCoreMIDIDriver
+@_exported import BCRPersistenceAdapter

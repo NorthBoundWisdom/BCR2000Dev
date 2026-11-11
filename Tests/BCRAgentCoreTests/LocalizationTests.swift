@@ -1,6 +1,9 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRFoundation
 
 final class LocalizationTests: XCTestCase {
     func testSystemPreferenceOrderAndFallback() {

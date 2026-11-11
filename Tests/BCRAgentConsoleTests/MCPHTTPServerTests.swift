@@ -2,6 +2,8 @@ import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 private final class HTTPFakeDevice: SurfaceDevice {
@@ -37,7 +39,7 @@ final class MCPHTTPServerTests: XCTestCase {
     private func makeServer() -> MCPHTTPServer {
         let session = SurfaceSession(
             hardwareDevice: HTTPFakeDevice(),
-            saveHardwareMap: { _ in },
+            configuration: .robotArmDemo(), saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
         return MCPHTTPServer(router: MCPRouter(service: AgentControlService(session: session)))

@@ -49,6 +49,20 @@ python3 configs/macos_workflow.py build
 python3 tools/mcp_integration.py --language zh-Hans --configuration-write --script tools/capture_readme_screenshots.py
 ```
 
+## 独立供应方接口与领域模块
+
+控制台、六关节参考机器人和 Ackermann 底盘可以经本机 MCP/HTTP/SSE 使用。两个设备模块是明确标注
+`simulation` 的最小参考实现，目标与实际状态分离；不提供 IK、工业驱动、厂家程序或碰撞资格。
+只读状态、控制权、严格序号、控制到期/停止、故障与重置分别定义；Agent 权限不授予设备控制权。
+
+独立服务不需要 GUI 或 Agent 后端，支持纯内存或显式的独立配置目录。生产方用
+`python3 configs/package_provider.py --output <新目录>` 生成可执行文件、资源、版本化 SDK、Schema、
+公开诊断 CLI 和示例。消费方只用这些产物接线，不能依赖本仓库内部 Swift 类型或开发脚本。
+GUI 通过 `--robot-sim` / `--chassis-sim` 显式启用可选模块，默认不开启。
+
+首批合同与资格边界见 [Provider API](docs/PROVIDER_API.md)、[接线说明](docs/PROVIDER_QUICKSTART.md)，
+依赖与范围决定见 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md)。
+
 ## 快速开始
 
 需要 macOS 14+ 与 Swift 6 工具链；构建不依赖第三方包。
@@ -135,7 +149,7 @@ OSC 输出运行时“输出”面板会自动出现，确保安全门的实时�
 
 参数工作区可导入 / 导出版本化 JSON，仅包含参数定义与功能分配，不含实体映射、MCP 凭据或运行值。
 导入先校验、确认后才替换；失败时保留当前配置。加载到非法的本地配置会保留原文件并另存指纹命名的备份，
-同时显示持续提示。当前功能配置与硬件映射格式均为 v4，读取旧版会显示迁移信息并在保存前备份。
+同时显示持续提示。当前功能配置为 v7、硬件映射为 v4，读取旧版会显示迁移信息并在保存前备份。
 详见 [配置恢复规则](docs/CONTROL_MAP.md) 与 [WP4 验收记录](docs/archive/WP4_HANDOFF.md)。
 
 ### Agent 槽位
@@ -149,6 +163,8 @@ OSC 输出运行时“输出”面板会自动出现，确保安全门的实时�
 
 顶栏 MCP 设置可开启仅绑定 `127.0.0.1` 的 Streamable HTTP 服务（默认端口 8787，默认关闭）。
 Token 首次启用时生成并存入 Keychain；权限、逐参数 `agentWritable`、限速和调用记录都可在应用内查看。
+设备源切换、未绑定控件 Quick Learn、停止学习和关闭配置写权限也可通过 MCP 完成。
+程序化启动的显式凭据管道与权限边界见 [MCP 文档](docs/MCP.md)，无需界面自动化。
 支持 MCP 2026-07-28 并兼容 2025-11-25 握手，不依赖特定厂商客户端。Agent 写入经过与滑块相同的会话管线，
 在 MIDI 监视中标为 `AGENT`；机械臂示例中的 `arm.enabled` 默认不可写。
 
@@ -188,8 +204,10 @@ python3 tools/arm_sim.py --port 9000
                         LED / 灯环反馈 ← SurfaceEffect ← SurfaceSession
 ```
 
-- `BCRAgentCore`：领域状态、MIDI 值类型、映射与可测试的状态转换，无 UI、无 CoreMIDI。
-- `BCRAgentConsole`：SwiftUI、CoreMIDI 生命周期、持久化与依赖装配；视图只渲染状态并发出意图。
+- `BCRSurfaceDomain`、`BCRAgentDomain`、`BCRRobotDomain`、`BCRChassisDomain` 分别拥有独立状态与测试，领域不依赖 UI、CoreMIDI 或 MCP。
+- `BCRFoundation` 提供共享值合同与本地化；具体 Agent 后端、CoreMIDI、持久化及 MCP/HTTP 分属适配模块。
+- `BCRProviderApplication` 装配可选模拟设备应用服务；GUI 和独立 `BCRProviderService` 复用同一实现。
+- `BCRAgentCore` 只保留兼容导出；新领域不能依赖它。`BCRAgentConsole` 是 GUI 装配宿主。
 - `SurfaceSession` 统一执行效果、设备路由、学习、反馈丢弃计数与 MIDI 日志；`SurfaceDevice`
   由 Mock 适配器和 CoreMIDI 适配器分别实现，会话测试使用假设备，无需真机。
 
@@ -244,7 +262,7 @@ git diff --check
 | 主题 | 文档 |
 | --- | --- |
 | 架构与设计 | [开发设计](docs/DEVELOPMENT_DESIGN.md) · [控制器映射与反馈](docs/CONTROL_MAP.md) · [选型 ADR](docs/adr/001-native-swift-mvp.md) |
-| 接口 | [MCP](docs/MCP.md) · [OSC](docs/OSC.md) |
+| 接口 | [Provider 1.0](docs/PROVIDER_API.md) · [公开接线入口](docs/PROVIDER_QUICKSTART.md) · [Schema](Schemas/Provider/1.0/provider.schema.json) · [本轮验收](docs/PROVIDER_ACCEPTANCE.md) · [MCP](docs/MCP.md) · [OSC](docs/OSC.md) |
 | 实机与诊断 | [实机验证记录](docs/HARDWARE_VALIDATION.md) · [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md) · [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md) · [窗口拖曳分析](docs/WINDOW_DRAG_ANALYSIS.md) |
 | 构建与发布 | [打包、签名与 CI 发布](docs/PACKAGING.md) · [Tag 发布](docs/TAG_RELEASE_SETUP.md) · [图标说明](assets/README.md) |
 | 协作 | [开发规范](CONTRIBUTING.md) · [路线图](ROADMAP.md) · [TODO](TODO.md) · [Agent 指南](AGENTS.md) |
@@ -262,7 +280,7 @@ Codex 进程管理已补基础生命週期回归：未启动及启动失败后�
 
 设置页现在提供 Agent（Mock / Codex）、反馈调度、页面与宏、语言、配置库。
 页面/层共享参数状态，切换时整体回写 LED；宏按顺序执行最多 64 个参数操作。
-配置 v1–v5 显式迁移为 v6，保留旧文件备份与已学 MIDI 身份。
+配置 v1–v6 显式迁移为 v7（显式外部写保护），保留旧文件备份与已学 MIDI 身份。
 
 更多说明：[Codex 后端](docs/CODEX.md)、[WebSocket / ROS 2 输出](docs/NETWORK_OUTPUT.md)、
 [MCP 权限及 SSE](docs/MCP.md)。开发版可用 `--startup-smoke --render-ui` 和

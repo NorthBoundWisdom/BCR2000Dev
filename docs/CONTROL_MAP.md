@@ -73,9 +73,7 @@ BCL 的编码器 1–32 对应顶部组 1–4，33–56 对应下方三排，编
 
 ```bash
 python3 tools/read_bcr_preset.py build/encoder-learning
-swiftc -swift-version 6 -strict-concurrency=complete \
-  -o build/prepare_encoder_profile Sources/BCRAgentCore/*.swift tools/prepare_encoder_profile.swift
-build/prepare_encoder_profile build/encoder-learning <本机配置目录>
+swift run --build-path build/swiftpm BCRProfileTool build/encoder-learning <本机配置目录>
 ```
 
 第二步只生成经过 Core 校验的 `learned-hardware-map.json`、`learned-surface-configuration.json`，
@@ -181,7 +179,7 @@ Mock 默认预设仍为通道 1 的 CC1–108；检查器可临时把所选编�
 Mock NRPN 旋转发出真实四 CC 批次，所有模式经 Session/Engine 返回反馈，没有旁路。
 
 配置 v1–v3 缺省 encoderMode=absolute、encoderStep=1；硬件映射 v3 的 CC/Note 身份原样迁移。
-硬件映射当前版本 v4，功能配置当前版本 v6（页面选择为会话状态）；加载旧版时显示迁移提示，原始字节在后续保存前备份。
+硬件映射当前版本 v4，功能配置当前版本 v7（显式外部写保护）（页面选择为会话状态）；加载旧版时显示迁移提示，原始字节在后续保存前备份。
 NRPN 目标与实际 LED 投影保留 14 位；UI 灯环仍显示 7-bit 可视化，同时检查器显示完整原始值。
 
 ### 审查修正：细调余量
@@ -228,3 +226,14 @@ Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非�
 界面和全局 notice 提示没有通向其他页面的切换按键（仅切回自身不算离开路径），可从设置返回基础页。
 
 页面导航警告不覆盖配置保存等错误级通知；错误仍保持可见。
+
+## MCP 程序化接线（2026-11-11）
+
+设备源可由 `set_device_source` 切换；`begin_control_learn` 只等待真实硬件输入学习尚未绑定的控件，
+已有映射不能经此工具覆盖。设备切换使用独立 deviceControl 权限，学习使用配置写权限；
+均要求外部输出停止及健康双向路由，无界面自动化。
+`get_status.learningControl` 可读进度；结束后 `stop_control_learn`，再用 `restrict_configuration_write`
+持久化关闭配置写权限，继续保留参数反馈。原 MIDI/配置文件格式及 Quick Learn 效果路径保持。
+
+消费方的控件业务映射、部署绑定和平台联调记录由消费方保存。通用设备接口与
+编码/回显规则见 [供应方合同](PROVIDER_API.md)；各类模拟与实机证据按范围分别记录。

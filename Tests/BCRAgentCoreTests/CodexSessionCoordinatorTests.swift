@@ -1,6 +1,9 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRCodexAdapter
 
 final class CodexSessionCoordinatorTests: XCTestCase {
     func testStartLoadsModelsThroughPaginatedModelListAndCachesCatalog() async throws {

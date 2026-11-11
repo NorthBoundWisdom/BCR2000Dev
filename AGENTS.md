@@ -2,10 +2,14 @@
 
 ## Project Contract
 
-- This is a native macOS 14+ controller app for a Behringer BCR2000.
+- This repository provides a native macOS 14+ BCR2000 console plus optional, independent reference robot and Ackermann chassis simulator modules.
+- GUI and headless hosts share versioned MCP/HTTP/SSE provider contracts on IPv4 loopback; consumer business logic remains outside this repository.
+- Scope and dependency direction are recorded in `docs/adr/0001-provider-domain-boundaries.md`; real actuator connections and public releases remain separately authorized.
 - The current product milestone is a SwiftUI/CoreMIDI MVP with a deterministic Mock Agent.
-- `BCRAgentCore` owns domain state, MIDI value types, mapping, and testable state transitions.
-- `BCRAgentConsole` owns SwiftUI, CoreMIDI object lifetimes, persistence, and dependency wiring.
+- `BCRFoundation` contains shared value contracts and localization; `BCRSurfaceDomain`, `BCRAgentDomain`, `BCRRobotDomain`, and `BCRChassisDomain` own independent domain state.
+- `BCRCodexAdapter`, `BCRCoreMIDIDriver`, persistence, MCP and HTTP/SSE are outer adapters. `BCRProviderApplication` owns explicit composition, not transport or UI.
+- `BCRAgentCore` is a source-compatibility export facade only; new domains must not import it. Run `python3 configs/check_domain_boundaries.py` to enforce direction.
+- `BCRAgentConsole` is the GUI composition host; `BCRProviderService` is the headless host. Both use the same domain and application services.
 - Views render state and emit user intent; they do not own MIDI or Mock business logic.
 - Do not guess a user's BCR2000 preset. Keep physical controls behind the persisted Quick Learn profile.
 - Port 1 is the preferred BCR2000 control-surface endpoint, with a visible disconnected/error state.

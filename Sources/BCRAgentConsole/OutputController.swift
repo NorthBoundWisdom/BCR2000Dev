@@ -8,7 +8,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
     var enabled = false
     var host = "127.0.0.1"
     var port = 9000
-    var enableParameter: ParameterID = "arm.enabled"
+    var enableParameter: ParameterID = ""
     var ledSource: LEDFeedbackSource = .target
     var limits: [MotionLimit] = []
 
@@ -29,7 +29,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
 
     static func defaults(for configuration: SurfaceConfiguration) -> OutputSettings {
         var settings = OutputSettings()
-        settings.enableParameter = configuration.parameters.first(where: { $0.kind == .toggle })?.id ?? "arm.enabled"
+        settings.enableParameter = configuration.parameters.first(where: { $0.kind == .toggle })?.id ?? ""
         settings.limits = configuration.parameters.filter { $0.kind == .continuous }.map {
             .init(id: $0.id, minimum: $0.minimum, maximum: $0.maximum,
                   maximumChange: min(1, $0.maximum - $0.minimum),

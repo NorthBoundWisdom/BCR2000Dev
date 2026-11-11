@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class PersistenceValidationTests: XCTestCase {
     func testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer() throws {
@@ -141,7 +143,7 @@ final class PersistenceValidationTests: XCTestCase {
         try await MainActor.run {
             let session = SurfaceSession(
                 hardwareDevice: ValidationFakeDevice(),
-                saveHardwareMap: { _ in },
+                configuration: .robotArmDemo(), saveHardwareMap: { _ in },
                 saveConfiguration: { _ in }
             )
             session.selectSource(.hardware)

@@ -19,8 +19,8 @@ initialize → notifications/initialized → 工具调用；初始化返回 Mcp-
 旧握手不是任何特定客户端的专用协议。UI 的会话计数只代表此兼容模式；现代版无协议层会话。
 
 所有请求均为单条 JSON-RPC 2.0 消息。响应为 application/json；通知接受后返回无消息体的 202。
-未实现的方法返回 -32601；现代版同时返回 HTTP 404。GET 不提供 SSE，返回 405。
-没有广告订阅、MRTR 或 SSE 能力。现代版元数据错误返回 400/-32020，不支持版本返回 400/-32022。
+未实现的方法返回 -32601；现代版同时返回 HTTP 404。GET 的受鉴权参数事件 SSE 见下文扩展；未协商事件流时返回 405。
+没有广告通用资源订阅或 MRTR 能力。现代版元数据错误返回 400/-32020，不支持版本返回 400/-32022。
 
 ## 安全与设置
 
@@ -61,6 +61,10 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | assign_control | assignment: 完整功能分配对象 | 保存后的分配，需要配置写入 |
 | create_parameter | definition: 参数定义对象 | 创建后的参数信息，需要配置写入 |
 | update_parameter | definition: 参数定义对象 | 更新后的参数信息，需要配置写入 |
+| set_device_source | source: mock / hardware | 需要 parameterWrite 与 deviceControl；外部输出停止、无学习活动；实体源必须有健康双向 MIDI 路由 |
+| begin_control_learn | control: 控件对象 | 仅实体源、健康路由、外部输出停止时等待实际输入；拒绝覆盖已有学习映射 |
+| stop_control_learn | 空对象 | 停止学习，需要配置写入 |
+| restrict_configuration_write | 空对象 | 关闭配置写入权限；GUI 持久化，独立服务按进程启动策略；不能通过 MCP 重新开启 |
 
 所有 inputSchema 都是 object、additionalProperties=false，required 字段见上表。
 参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable/step；
@@ -77,6 +81,15 @@ buttonBehavior（toggle/momentary）、inverted，以及可选 encoderMode（abs
 
 准确的枚举分支与字段范围也由 tools/list 的嵌套 oneOf schema 提供。
 
+`get_status.learningControl` 是当前等待学习的控件或 null。学习工具不制造输入；实际消息仍来自
+CoreMIDI，经原 SurfaceSession 路径保存。自动跳到下一未学习控件后应显式 stop，不能把设备快照
+回读与等待实体按键学习同时运行。来源切换和学习均不会开启 OSC 输出，也不会写设备预设。
+
+程序启动可显式传入 `--mcp-token-stdin`：只接受匿名 FIFO 管道中的 64 字节小写十六进制凭据，
+保存在进程内存中，不进入 argv、配置或日志。该方式不能与 startup-smoke / integration-test 混用；
+正常启动仍从 Keychain 读取。用于已获授权的本机父进程从 Keychain 取得凭据后启动重建的 App，
+不接受终端或普通文件输入，不更改 Keychain 访问策略。凭据权限与 HTTP 鉴权保持相同。
+
 ## 通用客户端验收
 
 在 MCP 设置中启用服务并复制 token；只把凭据放入本机环境变量，不要将它写到命令文件或仓库。
@@ -89,7 +102,8 @@ buttonBehavior（toggle/momentary）、inverted，以及可选 encoderMode（abs
 错误 token 与非法 Origin 检查。它恢复原参数值并清理旧会话，不打印凭据。
 MCP 设置里的“复制连接命令”给出通用 curl server/discover 请求，不需要特定 Agent CLI。
 
-当前配置 v4；v1→v2 新增 agentWritable，v2→v3 新增 step 和触发参数功能，v3→v4 新增编码器模式与相对步长。旧定义缺省为可写，arm.enabled 缺省不可写；
+当前配置 v7、硬件映射 v4。v7 用 externallyProtected 显式声明外部写保护，优先于 agentWritable；
+旧配置的示例保护由兼容适配器迁移，通用会话没有保留参数名。
 App 显示迁移提示，并保持原文件直到用户后续修改配置。
 
 ## 隔离原生验收
@@ -108,8 +122,8 @@ stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {
 ### 审查修正：写入权限边界
 
 配置写入权限不授予修改权限策略的能力。update_parameter 不允许改变已有参数的 agentWritable，
-也不允许修改当前不可写参数的任何定义。arm.enabled 和输出设置选定的使能参数始终禁止 MCP
-创建/修改定义或写值，即使操作员曾在本地把其 agentWritable 设为 true。
+也不允许修改当前不可写参数的任何定义。externallyProtected 参数和输出设置选定的使能参数始终禁止 MCP
+修改定义或写值，即使其 agentWritable 为 true；已有保护字段也不能由 MCP 去除。
 get_parameter 的 writable 反映此约束。reset_group 跳过这些参数并明确返回 skipped；
 其余可写参数仍在全部验证、限速通过后统一复位。参数写权限关闭时复位仍被拒绝。
 
@@ -146,3 +160,17 @@ list_controls 与 assign_control 作用于当前会话页面；get_status 的 ac
 
 大于增量上限的有效变更会转换为当前完整快照，避免永久无法订阅；初始快照不占增量额度。
 断线、服务停止会取消待刷新事件；服务器释放时移除参数观察者并关闭连接。
+
+## Provider 1.0 与独立无界面宿主
+
+公开设备合同、完整输入/输出 Schema、启动与安装步骤见 [Provider API](PROVIDER_API.md) 和
+[公开接线入口](PROVIDER_QUICKSTART.md)。新能力通过模块注册，机器人/底盘未启用时不注册其命令，明确返回 unsupported。
+独立服务不注册 Agent 工具；GUI 与服务使用同一应用服务，互不读取消费方业务对象。
+
+`provider_id` 为应用实例启动唯一身份，GUI 内只重启 HTTP 不改变身份，进程重启必变；资源 generation
+另行管理。客户端通过 `BCR-Provider-Id` pin，服务在 RPC/SSE 处理前拒绝错误实例（409）并回显身份。
+无 pin 只保留旧客户端兼容。新接线应固定预期实例，不自动信任重启或改端口后出现的另一个服务。
+
+`GET /mcp` 的 `BCR-Event-Stream` 可选 parameters（默认）、console、devices；仅声明实际可用通道。
+控件和设备事件有来源、代次、序号和有界库存。旧游标返回 event_gap，连接/映射改变返回新代次。
+SSE 初始/reset 快照是状态，不可回放为新用户动作；反馈、回显、Agent 注入及诊断读取均有独立来源。

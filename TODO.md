@@ -65,6 +65,7 @@ App 与工具只发送只读查询 SysEx，不改写设备 Preset，不回放备
 
 D3 软件部分、D4、P0-S4/P0-S5、页面/层/宏、配置库、WebSocket/ROS 2 rosbridge、
 MCP Agent/设备控制工具与 stdio 桥接均已实现并通过非硬件回归。
+本机未提交增量另补未绑定控件学习/停止、配置写权限关闭与程序化凭据管道启动。
 详细范围、测试入口与限制见 [非硬件验收](docs/OFFLINE_ACCEPTANCE.md)、[Codex](docs/CODEX.md)、
 [网络输出](docs/NETWORK_OUTPUT.md)、[MCP](docs/MCP.md)。
 30 分钟 JSONL soak 已通过：墙钟 1800.091 秒、264,873 个 Turn、八个槽位，无分叉/失败。

@@ -66,6 +66,8 @@ Swift 使用 `configs/.swiftformat`（Swift 6、4 空格、120 列），Python �
 ```bash
 python3 configs/format_repo.py --all --check
 swift test --build-path build/swiftpm            # 必须全部通过
+python3 configs/check_domain_boundaries.py
+PYTHONPATH=Clients/Python python3 -m unittest discover -s Clients/Python/tests
 python3 -m unittest discover -s Tests/BuildWorkflowTests
 python3 configs/validate_repo_commands.py .
 git diff --check
@@ -89,8 +91,8 @@ MCP 控制接口（ROADMAP R8）完成后，每轮验收还要在运行中的 Ap
 ## 3. 架构规则
 
 - **分层**：物理控件 → 硬件映射 → 功能分配 → 参数状态。新概念先确定属于哪一层。
-- `BCRAgentCore`：纯值类型、无 UI、无 CoreMIDI，可单元测试。状态转换都在这里。
-- `BCRAgentConsole`：SwiftUI、CoreMIDI 生命周期、持久化与依赖装配。
+- 领域拆分见 ADR 0001；`BCRAgentCore` 仅为兼容导出，不接受新领域逻辑。纯领域不依赖 UI、CoreMIDI、MCP、网络或具体 Agent 后端。
+- `BCRAgentConsole` 与 `BCRProviderService` 为宿主；设备/协议/持久化均经独立适配器装配。
   视图只渲染状态、发出意图，不直接发送 MIDI，不包含业务规则。
 - 所有设备写回都通过 `SurfaceEngine` 返回的 `SurfaceEffect` 走 `SurfaceSession` 的效果管线，
   不另开旁路。

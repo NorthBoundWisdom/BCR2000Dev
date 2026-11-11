@@ -107,7 +107,7 @@ class LocalizationPackagingTests(unittest.TestCase):
                 binary.write_bytes(b"executable")
                 for language in ("en", "zh-Hans"):
                     catalog = (
-                        binary.parent / "BCRAgentConsole_BCRAgentCore.bundle" / f"{language}.lproj/Localizable.strings"
+                        binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"
                     )
                     catalog.parent.mkdir(parents=True)
                     catalog.write_text(language)
@@ -127,7 +127,7 @@ class LocalizationPackagingTests(unittest.TestCase):
                 binary = macos_workflow._swift_build("release", "universal")
             for language in ("en", "zh-Hans"):
                 catalog = (
-                    binary.parent / "BCRAgentConsole_BCRAgentCore.bundle" / f"{language}.lproj/Localizable.strings"
+                    binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"
                 )
                 self.assertEqual(catalog.read_text(), language)
 

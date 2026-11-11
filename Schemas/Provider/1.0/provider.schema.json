@@ -1,0 +1,2453 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bcr:provider:1.0",
+  "title": "BCR provider contract 1.0",
+  "$defs": {
+    "robotCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "initialize"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "initial_joints_rad": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 6,
+              "maxItems": 6
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "initial_joints_rad"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "acquire"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "ttl_s": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "owner",
+            "ttl_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "enable"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "stop"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "disable"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "release"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "renew"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ttl_s": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence",
+            "ttl_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "move_joints"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "target_joints_rad": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 6,
+              "maxItems": 6
+            },
+            "duration_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 5
+            },
+            "valid_for_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence",
+            "target_joints_rad",
+            "duration_s",
+            "valid_for_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "reset"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "fault"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "fault_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "fault_code"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "operation": {
+              "const": "clear_fault"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "chassisCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "initialize"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "initial_pose_m_rad": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "initial_pose_m_rad"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "acquire"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "ttl_s": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "owner",
+            "ttl_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "enable"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "stop"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "disable"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "release"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "renew"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "ttl_s": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence",
+            "ttl_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "drive"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "control_token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "command_sequence": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "speed_m_s": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "steering_angle_rad": {
+              "type": "number",
+              "minimum": -0.5,
+              "maximum": 0.5
+            },
+            "valid_for_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "control_token",
+            "command_sequence",
+            "speed_m_s",
+            "steering_angle_rad",
+            "valid_for_s"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "reset"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "fault"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "fault_code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation",
+            "fault_code"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "operation": {
+              "const": "clear_fault"
+            },
+            "generation": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "schema_version",
+            "device_id",
+            "operation",
+            "generation"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "robotStateRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "device_id": {
+          "const": "robot.reference"
+        }
+      },
+      "required": [
+        "schema_version",
+        "device_id"
+      ],
+      "additionalProperties": false
+    },
+    "chassisStateRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "device_id": {
+          "const": "chassis.reference"
+        }
+      },
+      "required": [
+        "schema_version",
+        "device_id"
+      ],
+      "additionalProperties": false
+    },
+    "deviceMetadata": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "device_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "source": {
+          "enum": [
+            "hardware",
+            "mock",
+            "simulation"
+          ]
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulated_time_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "state": {
+          "enum": [
+            "uninitialized",
+            "disabled",
+            "idle",
+            "running",
+            "stopping",
+            "stopped",
+            "fault"
+          ]
+        },
+        "initialized": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "fault": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "control_owner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "control_expires_at_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "last_command_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "frame_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "schema_version",
+        "device_id",
+        "model_id",
+        "source",
+        "generation",
+        "sequence",
+        "simulated_time_s",
+        "state",
+        "initialized",
+        "enabled",
+        "last_command_sequence",
+        "frame_id"
+      ],
+      "additionalProperties": false
+    },
+    "simulationAdvance": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "domain": {
+          "enum": [
+            "robot",
+            "chassis"
+          ]
+        },
+        "dt_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.1
+        }
+      },
+      "required": [
+        "schema_version",
+        "domain",
+        "dt_s"
+      ],
+      "additionalProperties": false
+    },
+    "consoleEventsRequest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "generation": {
+          "type": "string"
+        },
+        "after_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        }
+      },
+      "required": [
+        "schema_version"
+      ],
+      "additionalProperties": false
+    },
+    "robotActual": {
+      "type": "object",
+      "properties": {
+        "joints_rad": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "joint_velocity_rad_s": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "base_from_tool_row_major_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 16,
+          "maxItems": 16
+        }
+      },
+      "required": [
+        "joints_rad",
+        "joint_velocity_rad_s",
+        "base_from_tool_row_major_m"
+      ],
+      "additionalProperties": false
+    },
+    "chassisActual": {
+      "type": "object",
+      "properties": {
+        "pose_m_rad": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "speed_m_s": {
+          "type": "number"
+        },
+        "steering_angle_rad": {
+          "type": "number"
+        },
+        "yaw_rate_rad_s": {
+          "type": "number"
+        },
+        "rear_wheel_velocity_rad_s": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "pose_m_rad",
+        "speed_m_s",
+        "steering_angle_rad",
+        "yaw_rate_rad_s",
+        "rear_wheel_velocity_rad_s"
+      ],
+      "additionalProperties": false
+    },
+    "robotSnapshot": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/deviceMetadata"
+        },
+        "actual": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/robotActual"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_joints_rad": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 6,
+              "maxItems": 6
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "motion_active": {
+          "type": "boolean"
+        },
+        "stopped": {
+          "type": "boolean"
+        },
+        "trace_dropped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "metadata",
+        "actual",
+        "target_joints_rad",
+        "motion_active",
+        "stopped",
+        "trace_dropped"
+      ],
+      "additionalProperties": false
+    },
+    "chassisSnapshot": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/deviceMetadata"
+        },
+        "actual": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/chassisActual"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_speed_m_s": {
+          "type": "number"
+        },
+        "target_steering_angle_rad": {
+          "type": "number"
+        },
+        "command_expires_at_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stopped": {
+          "type": "boolean"
+        },
+        "trace_dropped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "metadata",
+        "actual",
+        "target_speed_m_s",
+        "target_steering_angle_rad",
+        "command_expires_at_s",
+        "stopped",
+        "trace_dropped"
+      ],
+      "additionalProperties": false
+    },
+    "control": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "section": {
+              "const": "pushEncoder"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "section",
+            "row",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "section": {
+              "const": "pushEncoderButton"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "section",
+            "row",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "section": {
+              "const": "button"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "section",
+            "row",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "section": {
+              "const": "encoder"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          },
+          "required": [
+            "section",
+            "row",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "section": {
+              "const": "userButton"
+            },
+            "row": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            }
+          },
+          "required": [
+            "section",
+            "row",
+            "index"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "midiControl": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "controlChange"
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "required": [
+            "kind",
+            "channel",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "note"
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 127
+            }
+          },
+          "required": [
+            "kind",
+            "channel",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "nrpn"
+            },
+            "channel": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 15
+            },
+            "number": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16383
+            }
+          },
+          "required": [
+            "kind",
+            "channel",
+            "number"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "controlGrant": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "control_token": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "expires_at_s": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "generation",
+        "control_token",
+        "expires_at_s"
+      ],
+      "additionalProperties": false
+    },
+    "robotCommandReply": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "const": true
+        },
+        "control": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/controlGrant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/robotSnapshot"
+        }
+      },
+      "required": [
+        "accepted",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "robotTraceSample": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "simulation"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulated_time_s": {
+          "type": "number"
+        },
+        "actual": {
+          "$ref": "#/$defs/robotActual"
+        }
+      },
+      "required": [
+        "source",
+        "generation",
+        "sequence",
+        "simulated_time_s",
+        "actual"
+      ],
+      "additionalProperties": false
+    },
+    "robotTrace": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/deviceMetadata"
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/robotTraceSample"
+          }
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "earliest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "metadata",
+        "samples",
+        "dropped",
+        "earliest_sequence",
+        "latest_sequence"
+      ],
+      "additionalProperties": false
+    },
+    "chassisCommandReply": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "const": true
+        },
+        "control": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/controlGrant"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/chassisSnapshot"
+        }
+      },
+      "required": [
+        "accepted",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "chassisTraceSample": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "simulation"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulated_time_s": {
+          "type": "number"
+        },
+        "actual": {
+          "$ref": "#/$defs/chassisActual"
+        }
+      },
+      "required": [
+        "source",
+        "generation",
+        "sequence",
+        "simulated_time_s",
+        "actual"
+      ],
+      "additionalProperties": false
+    },
+    "chassisTrace": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/deviceMetadata"
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/chassisTraceSample"
+          }
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "earliest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "metadata",
+        "samples",
+        "dropped",
+        "earliest_sequence",
+        "latest_sequence"
+      ],
+      "additionalProperties": false
+    },
+    "providerState": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "source": {
+          "const": "simulation"
+        },
+        "clock": {
+          "enum": [
+            "manual",
+            "realtime"
+          ]
+        },
+        "robot": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/robotSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chassis": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/chassisSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "provider_id",
+        "source",
+        "clock",
+        "robot",
+        "chassis"
+      ],
+      "additionalProperties": false
+    },
+    "eventPayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "diagnostic_readback": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "reason",
+            "diagnostic_readback"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "enum": [
+                "hardware",
+                "mock",
+                "software",
+                "agent",
+                "external",
+                "feedback",
+                "readback"
+              ]
+            },
+            "writer_origin": {
+              "enum": [
+                "software",
+                "agent",
+                "external"
+              ]
+            },
+            "accepted": {
+              "const": false
+            },
+            "ignored": {
+              "type": "boolean"
+            },
+            "control": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/control"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "midi": {
+              "$ref": "#/$defs/midiControl"
+            },
+            "raw_value": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16383
+            }
+          },
+          "required": [
+            "origin",
+            "writer_origin",
+            "accepted",
+            "ignored",
+            "control",
+            "midi",
+            "raw_value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "origin": {
+              "enum": [
+                "hardware",
+                "software",
+                "agent",
+                "external"
+              ]
+            },
+            "writer_origin": {
+              "enum": [
+                "software",
+                "agent",
+                "external"
+              ]
+            },
+            "accepted": {
+              "const": true
+            },
+            "control": {
+              "$ref": "#/$defs/control"
+            },
+            "midi": {
+              "$ref": "#/$defs/midiControl"
+            },
+            "raw_value": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16383
+            },
+            "mapped_value": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "origin",
+            "writer_origin",
+            "accepted",
+            "control",
+            "midi",
+            "raw_value",
+            "mapped_value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "parameter_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "origin": {
+              "enum": [
+                "software",
+                "agent",
+                "external"
+              ]
+            },
+            "mapped_value": {
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "parameter_id",
+            "origin",
+            "mapped_value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/$defs/providerState"
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "enum": [
+            "hardware",
+            "mock",
+            "simulation"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "observed_monotonic_s": {
+          "type": "number"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "payload": {
+          "$ref": "#/$defs/eventPayload"
+        }
+      },
+      "required": [
+        "schema_version",
+        "generation",
+        "sequence",
+        "source",
+        "kind",
+        "observed_monotonic_s",
+        "observed_at",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    "eventBatch": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "source": {
+          "enum": [
+            "hardware",
+            "mock",
+            "simulation"
+          ]
+        },
+        "earliest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latest_sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reset": {
+          "type": "boolean"
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "generation",
+        "source",
+        "earliest_sequence",
+        "latest_sequence",
+        "dropped",
+        "reset",
+        "events"
+      ],
+      "additionalProperties": false
+    },
+    "mockInputReply": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "const": "mock"
+        },
+        "origin": {
+          "const": "agent"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "source",
+        "origin",
+        "generation"
+      ],
+      "additionalProperties": false
+    },
+    "diagnosticReply": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "token": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "active": {
+              "const": true
+            }
+          },
+          "required": [
+            "token",
+            "active"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "active": {
+              "const": false
+            }
+          },
+          "required": [
+            "active"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "parameterWrite": {
+          "type": "boolean"
+        },
+        "configurationWrite": {
+          "type": "boolean"
+        },
+        "agentControl": {
+          "type": "boolean"
+        },
+        "deviceControl": {
+          "type": "boolean"
+        },
+        "robotControl": {
+          "type": "boolean"
+        },
+        "chassisControl": {
+          "type": "boolean"
+        },
+        "simulationControl": {
+          "type": "boolean"
+        },
+        "writesPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      },
+      "required": [
+        "parameterWrite",
+        "configurationWrite",
+        "agentControl",
+        "deviceControl",
+        "robotControl",
+        "chassisControl",
+        "simulationControl",
+        "writesPerSecond"
+      ],
+      "additionalProperties": false
+    },
+    "robotModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "minimum": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "maximum": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "maximum_speed_rad_s": {
+          "type": "number"
+        },
+        "maximum_acceleration_rad_s2": {
+          "type": "number"
+        },
+        "dh_a_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "dh_d_m": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "dh_alpha_rad": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 6,
+          "maxItems": 6
+        }
+      },
+      "required": [
+        "id",
+        "minimum",
+        "maximum",
+        "maximum_speed_rad_s",
+        "maximum_acceleration_rad_s2",
+        "dh_a_m",
+        "dh_d_m",
+        "dh_alpha_rad"
+      ],
+      "additionalProperties": false
+    },
+    "chassisModel": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "wheelbase_m": {
+          "type": "number"
+        },
+        "track_m": {
+          "type": "number"
+        },
+        "wheel_radius_m": {
+          "type": "number"
+        },
+        "maximum_speed_m_s": {
+          "type": "number"
+        },
+        "maximum_acceleration_m_s2": {
+          "type": "number"
+        },
+        "maximum_steering_rad": {
+          "type": "number"
+        },
+        "maximum_steering_rate_rad_s": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "wheelbase_m",
+        "track_m",
+        "wheel_radius_m",
+        "maximum_speed_m_s",
+        "maximum_acceleration_m_s2",
+        "maximum_steering_rad",
+        "maximum_steering_rate_rad_s"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "contract_version": {
+          "const": "1.0"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "provider_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "resources": {
+          "enum": [
+            "embedded",
+            "swiftpm_development"
+          ]
+        },
+        "transport": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "mcp_http",
+              "sse"
+            ]
+          }
+        },
+        "network": {
+          "const": "ipv4_loopback_only"
+        },
+        "clock": {
+          "enum": [
+            "manual",
+            "realtime"
+          ]
+        },
+        "console": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "source": {
+              "enum": [
+                "mock",
+                "hardware",
+                null
+              ]
+            },
+            "generation": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "diagnostic_readback": {
+              "type": "boolean"
+            },
+            "input_event_capacity": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "supported_encodings": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "hardware_qualification": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "hardware_unqualified_encoding": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "source",
+            "generation",
+            "diagnostic_readback",
+            "input_event_capacity",
+            "supported_encodings",
+            "hardware_qualification",
+            "hardware_unqualified_encoding"
+          ],
+          "additionalProperties": false
+        },
+        "robot": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "source": {
+              "const": "simulation"
+            },
+            "device_id": {
+              "const": "robot.reference"
+            },
+            "model": {
+              "$ref": "#/$defs/robotModel"
+            },
+            "units": {
+              "type": "object",
+              "properties": {
+                "joints": {
+                  "const": "rad"
+                },
+                "translation": {
+                  "const": "m"
+                }
+              },
+              "required": [
+                "joints",
+                "translation"
+              ],
+              "additionalProperties": false
+            },
+            "frame": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "unsupported": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "frame_id": {
+              "const": "reference_robot_base_v1"
+            },
+            "coordinate_convention": {
+              "const": "right_handed_X_forward_Y_left_Z_up"
+            },
+            "transform_layout": {
+              "const": "row_major_column_vector"
+            }
+          },
+          "required": [
+            "enabled",
+            "source",
+            "device_id",
+            "model",
+            "units",
+            "frame",
+            "unsupported",
+            "frame_id",
+            "coordinate_convention",
+            "transform_layout"
+          ],
+          "additionalProperties": false
+        },
+        "chassis": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "source": {
+              "const": "simulation"
+            },
+            "device_id": {
+              "const": "chassis.reference"
+            },
+            "model": {
+              "$ref": "#/$defs/chassisModel"
+            },
+            "units": {
+              "type": "object",
+              "properties": {
+                "speed": {
+                  "const": "m/s"
+                },
+                "steering": {
+                  "const": "rad"
+                }
+              },
+              "required": [
+                "speed",
+                "steering"
+              ],
+              "additionalProperties": false
+            },
+            "frame": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "unsupported": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "frame_id": {
+              "const": "chassis_x_forward_y_left_z_up_v1"
+            },
+            "coordinate_convention": {
+              "const": "right_handed_X_forward_Y_left_Z_up"
+            },
+            "pose_layout": {
+              "const": "x_m_y_m_yaw_rad_ccw"
+            }
+          },
+          "required": [
+            "enabled",
+            "source",
+            "device_id",
+            "model",
+            "units",
+            "frame",
+            "unsupported",
+            "frame_id",
+            "coordinate_convention",
+            "pose_layout"
+          ],
+          "additionalProperties": false
+        },
+        "permissions": {
+          "$ref": "#/$defs/permissions"
+        },
+        "agent": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "control_permission": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled",
+            "control_permission"
+          ],
+          "additionalProperties": false
+        },
+        "event_limits": {
+          "type": "object",
+          "properties": {
+            "journal_capacity": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "read_limit": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sse_delta_bytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "journal_capacity",
+            "read_limit",
+            "sse_delta_bytes"
+          ],
+          "additionalProperties": false
+        },
+        "requirements": {
+          "type": "object",
+          "properties": {
+            "max_control_ttl_s": {
+              "type": "number"
+            },
+            "max_manual_step_s": {
+              "type": "number"
+            },
+            "normal_observation_budget_s": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "max_control_ttl_s",
+            "max_manual_step_s",
+            "normal_observation_budget_s"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "contract_version",
+        "schema_version",
+        "provider_id",
+        "resources",
+        "transport",
+        "network",
+        "clock",
+        "console",
+        "robot",
+        "chassis",
+        "permissions",
+        "agent",
+        "event_limits",
+        "requirements"
+      ],
+      "additionalProperties": false
+    },
+    "schemaDocument": {
+      "type": "object",
+      "required": [
+        "$schema",
+        "$id",
+        "$defs"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "$id": {
+          "const": "urn:bcr:provider:1.0"
+        },
+        "title": {
+          "type": "string"
+        },
+        "$defs": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

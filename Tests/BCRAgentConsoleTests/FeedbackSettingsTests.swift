@@ -2,6 +2,8 @@ import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 private final class FeedbackDevice: SurfaceDevice {
@@ -17,7 +19,8 @@ final class FeedbackSettingsTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let session = SurfaceSession(hardwareDevice: FeedbackDevice(), hardwareMap: .mockPreset(),
-                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+                                     configuration: .robotArmDemo(), saveHardwareMap: { _ in },
+                                     saveConfiguration: { _ in })
         session.selectSource(.hardware)
         var controller: FeedbackSettingsController? = FeedbackSettingsController(
             session: session,

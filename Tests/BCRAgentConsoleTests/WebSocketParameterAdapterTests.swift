@@ -2,6 +2,8 @@ import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 @MainActor
 final class WebSocketParameterAdapterTests: XCTestCase {

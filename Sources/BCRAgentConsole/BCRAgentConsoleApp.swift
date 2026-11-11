@@ -1,4 +1,5 @@
 import BCRAgentCore
+import BCRProviderApplication
 import AppKit
 import Darwin
 import SwiftUI
@@ -76,6 +77,24 @@ struct BCRAgentConsoleApp: App {
 
     init() {
         let smoke = CommandLine.arguments.contains("--startup-smoke")
+        let providerConfiguration = ProviderConfiguration(
+            robot: CommandLine.arguments.contains("--robot-sim"),
+            chassis: CommandLine.arguments.contains("--chassis-sim")
+        )
+        var pipedCredentials: (any MCPCredentialStore)?
+        if CommandLine.arguments.contains("--mcp-token-stdin") {
+            do {
+                var info = stat()
+                guard !smoke, !CommandLine.arguments.contains("--integration-test"),
+                      fstat(STDIN_FILENO, &info) == 0, info.st_mode & S_IFMT == S_IFIFO
+                else { throw MCPHTTPParseError(reason: L10n.text("MCP 凭据必须从专用管道传入")) }
+                pipedCredentials = try PipedMCPCredentialStore(data: FileHandle.standardInput
+                    .read(upToCount: 65) ?? Data())
+            } catch {
+                FileHandle.standardError.write(Data((L10n.text("MCP 管道凭据无效") + "\n").utf8))
+                Darwin.exit(2)
+            }
+        }
         if CommandLine.arguments.contains("--integration-test") {
             #if DEBUG
                 do {
@@ -85,7 +104,8 @@ struct BCRAgentConsoleApp: App {
                         stores: context.stores, startsMIDI: false,
                         mcpCredentials: context.credentials, integrationTest: true,
                         // Native acceptance scripts exercise the arm example's parameters and safety gate.
-                        initialPreset: .robotArm
+                        initialPreset: .robotArm,
+                        providerConfiguration: providerConfiguration
                     ))
                     return
                 } catch {
@@ -100,7 +120,9 @@ struct BCRAgentConsoleApp: App {
         }
         _model = StateObject(wrappedValue: ConsoleViewModel(
             stores: smoke ? .temporary() : .standard,
-            startsMIDI: !smoke
+            startsMIDI: !smoke,
+            mcpCredentials: pipedCredentials,
+            providerConfiguration: providerConfiguration
         ))
     }
 
@@ -146,7 +168,7 @@ struct BCRAgentConsoleApp: App {
                 detail: "swift test --build-path build/swiftpm\n/offline-fixture/workspace\nReview the requested test execution before deciding.",
                 threadID: "preview-thread", turnID: "preview-turn"
             ))), CGSize(width: 660, height: 460)),
-            ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 680)),
+            ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 720)),
             ("output", AnyView(OutputSettingsView(controller: model.output)), CGSize(width: 880, height: 720)),
             ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
             ("agents", AnyView(CodexAgentSettingsView(controller: model.codex)), CGSize(width: 680, height: 660)),

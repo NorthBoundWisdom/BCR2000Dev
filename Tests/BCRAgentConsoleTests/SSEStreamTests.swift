@@ -3,6 +3,10 @@ import Network
 import XCTest
 @testable import BCRAgentCore
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRFoundation
+@testable import BCRHTTPTransport
+@testable import BCRSurfaceDomain
 
 @MainActor
 private final class SSEDevice: SurfaceDevice {
@@ -16,11 +20,12 @@ private final class SSEDevice: SurfaceDevice {
 private final class SSEProbe {
     let connection: NWConnection
     var closed = false
-    init(port: UInt16, session: String? = nil) {
+    init(port: UInt16, session: String? = nil, channel: String? = nil) {
         connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
         let sessionHeader = session.map { "Mcp-Session-Id: \($0)\r\n" } ?? ""
         let version = session == nil ? MCPVersions.current : MCPVersions.legacy
-        let request = Data("GET /mcp HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nAuthorization: Bearer fixture\r\nAccept: text/event-stream\r\nMCP-Protocol-Version: \(version)\r\n\(sessionHeader)\r\n"
+        let channelHeader = channel.map { "BCR-Event-Stream: \($0)\r\n" } ?? ""
+        let request = Data("GET /mcp HTTP/1.1\r\nHost: 127.0.0.1:\(port)\r\nAuthorization: Bearer fixture\r\nAccept: text/event-stream\r\nMCP-Protocol-Version: \(version)\r\n\(sessionHeader)\(channelHeader)\r\n"
             .utf8)
         connection.stateUpdateHandler = { [weak self] state in
             Task { @MainActor [weak self] in
@@ -129,12 +134,69 @@ final class SSEStreamTests: XCTestCase {
 
     func testObserverIsRemovedWhenServerIsReleased() async throws {
         let source = session()
+        let devices = ProviderEventJournal(source: .simulation)
         let router = MCPRouter(service: AgentControlService(session: source))
-        var server: MCPHTTPServer? = MCPHTTPServer(router: router)
+        var server: MCPHTTPServer? = MCPHTTPServer(router: router, eventSources: [
+            "devices": MCPStreamSource(notification: "notifications/bcr/devices", journal: devices)
+        ])
         XCTAssertNotNil(server)
         XCTAssertEqual(source.parameterObserverCount, 1)
+        XCTAssertEqual(source.inputEvents.observerCount, 1)
+        XCTAssertEqual(devices.observerCount, 1)
         server = nil
-        try await until { source.parameterObserverCount == 0 }
+        try await until {
+            source.parameterObserverCount == 0 && source.inputEvents.observerCount == 0 && devices.observerCount == 0
+        }
+    }
+
+    func testConsoleBurstPreservesOrderAndSeparatesEpochs() async throws {
+        let source = session()
+        var writes: [JSONValue] = []
+        let server = MCPHTTPServer(
+            router: MCPRouter(service: AgentControlService(session: source)),
+            eventWriter: { _, data, completion in
+                if let line = String(data: data, encoding: .utf8)?.split(separator: "\n")
+                    .first(where: { $0.hasPrefix("data: ") }),
+                   let value = try? JSONDecoder()
+                       .decode(JSONValue.self, from: Data(line.dropFirst(6).utf8)) { writes.append(value) }
+                completion(nil)
+            }
+        )
+        let port = try await server.start(port: 0, token: "fixture")
+        defer { server.stop() }
+        let probe = SSEProbe(port: port, channel: "console")
+        try await until { writes.count == 1 }
+        for value in 1 ... 100 { source.inputEvents.append(kind: "fixture", payload: .number(value)) }
+        try await until { writes.count == 2 }
+        let events = try XCTUnwrap(writes.last?.objectValue?["params"]?.objectValue?["events"]?.arrayValue)
+        XCTAssertEqual(events.compactMap { $0.objectValue?["sequence"]?.intValue }, Array(1 ... 100))
+        let previous = source.inputEvents.generation
+        source.inputEvents.append(kind: "stale", payload: .null)
+        source.inputEvents.reset(source: .hardware)
+        source.inputEvents.append(kind: "new", payload: .null)
+        try await until { writes.count == 3 }
+        let reset = try XCTUnwrap(writes.last?.objectValue?["params"]?.objectValue)
+        XCTAssertNotEqual(reset["generation"], .string(previous))
+        XCTAssertEqual(reset["reset"], .bool(true))
+        XCTAssertEqual(reset["events"]?.arrayValue?.count, 1)
+        XCTAssertEqual(reset["events"]?.arrayValue?.first?.objectValue?["kind"], .string("new"))
+        XCTAssertFalse(probe.closed)
+    }
+
+    func testConsoleOverflowDisconnectsRatherThanDroppingAnInputSilently() async throws {
+        let source = session()
+        let server = MCPHTTPServer(
+            router: MCPRouter(service: AgentControlService(session: source)),
+            eventWriter: { _, _, completion in completion(nil) }
+        )
+        let port = try await server.start(port: 0, token: "fixture")
+        defer { server.stop() }
+        let probe = SSEProbe(port: port, channel: "console")
+        try await until { server.activeStreamCount == 1 }
+        for value in 1 ... 513 { source.inputEvents.append(kind: "fixture", payload: .number(value)) }
+        try await until { probe.closed }
+        XCTAssertEqual(server.activeStreamCount, 0)
+        XCTAssertEqual(source.inputEvents.dropped, 1)
     }
 
     func testDeletingLegacySessionClosesItsEventStream() async throws {

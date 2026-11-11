@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class MIDIEndpointSelectionTests: XCTestCase {
     private let endpoints = [

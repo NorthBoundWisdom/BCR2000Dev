@@ -1,5 +1,7 @@
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class SurfaceEngineTests: XCTestCase {
     private let t0 = Date(timeIntervalSinceReferenceDate: 1_000)

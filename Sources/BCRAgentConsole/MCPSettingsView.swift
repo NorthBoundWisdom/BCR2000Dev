@@ -31,7 +31,7 @@ struct MCPSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 SectionTitle(L10n.text("MCP 控制接口"), icon: "network")
                 Spacer()
@@ -60,7 +60,10 @@ struct MCPSettingsView: View {
                 Toggle(L10n.text("参数写入（关闭时只读）"), isOn: $draft.permissions.parameterWrite)
                 Toggle(L10n.text("配置写入（修改分配和定义）"), isOn: $draft.permissions.configurationWrite)
                 Toggle(L10n.text("允许 Agent 启动和中断任务"), isOn: $draft.permissions.agentControl)
-                Toggle(L10n.text("允许切换设备源"), isOn: $draft.permissions.deviceControl)
+                Toggle(L10n.text("允许控制台设备切换、诊断和 Mock 输入"), isOn: $draft.permissions.deviceControl)
+                Toggle(L10n.text("允许机器人模拟控制"), isOn: $draft.permissions.robotControl)
+                Toggle(L10n.text("允许底盘模拟控制"), isOn: $draft.permissions.chassisControl)
+                Toggle(L10n.text("允许仿真重置、故障和时钟推进"), isOn: $draft.permissions.simulationControl)
                 TextField(L10n.text("每秒最多写入参数数"), value: $draft.permissions.writesPerSecond, format: .number)
             }
             .formStyle(.columns)
@@ -86,10 +89,10 @@ struct MCPSettingsView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(minHeight: 120)
+            .frame(minHeight: 80)
         }
         .padding(24)
-        .frame(width: 700, height: 680)
+        .frame(width: 700, height: 720)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }

@@ -1,10 +1,12 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 @MainActor
 private final class MCPFakeDevice: SurfaceDevice {
-    let connection = MIDIConnectionSnapshot()
+    var connection = MIDIConnectionSnapshot()
     var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     func send(_ message: MIDIVoiceMessage) throws {}
@@ -19,7 +21,7 @@ private final class MCPTestClock {
 final class MCPTests: XCTestCase {
     private func makeService(clock: MCPTestClock = MCPTestClock()) -> AgentControlService {
         AgentControlService(session: SurfaceSession(
-            hardwareDevice: MCPFakeDevice(), now: { clock.time },
+            hardwareDevice: MCPFakeDevice(), configuration: .robotArmDemo(), now: { clock.time },
             saveHardwareMap: { _ in }, saveConfiguration: { _ in }
         ), now: { clock.time })
     }
@@ -65,7 +67,7 @@ final class MCPTests: XCTestCase {
         XCTAssertFalse(permissions.deviceControl)
         let session = SurfaceSession(
             hardwareDevice: MCPFakeDevice(),
-            saveHardwareMap: { _ in },
+            configuration: .robotArmDemo(), saveHardwareMap: { _ in },
             saveConfiguration: { _ in }
         )
         let service = AgentControlService(session: session)
@@ -122,6 +124,126 @@ final class MCPTests: XCTestCase {
             "set_parameter",
             arguments: .object(["id": .string("arm.j1"), "value": .double(.nan)])
         ).isError)
+    }
+
+    func testSourceAndLearnToolsRequireLocalConfigurationPermissionAndHardware() async throws {
+        let device = MCPFakeDevice()
+        let session = SurfaceSession(
+            hardwareDevice: device,
+            configuration: .robotArmDemo(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let service = AgentControlService(session: session)
+        let source: JSONValue = .object(["source": .string("hardware")])
+        let control = BCRControlID.button(row: 2, 2)
+        let learn: JSONValue = .object(["control": try .encoded(control)])
+        XCTAssertTrue(service.call("set_device_source", arguments: source).isError)
+        XCTAssertTrue(service.call("begin_control_learn", arguments: learn).isError)
+        XCTAssertTrue(service.call("stop_control_learn").isError)
+        service.permissions.configurationWrite = true
+        service.permissions.deviceControl = true
+        service.onSelectSource = { session.selectSource($0) }
+        XCTAssertTrue(service.call("set_device_source", arguments: source).isError)
+        XCTAssertEqual(session.source, .mock)
+        device.connection = MIDIConnectionSnapshot(connectedSource: "BCR Port 1", connectedDestination: "BCR Port 1")
+        device.onConnection?(device.connection)
+        XCTAssertTrue(service.call("begin_control_learn", arguments: learn).isError)
+        XCTAssertFalse(service.call("set_device_source", arguments: source).isError)
+        XCTAssertEqual(session.source, .hardware)
+        XCTAssertFalse(service.call("begin_control_learn", arguments: learn).isError)
+        XCTAssertEqual(session.engine.learnTarget, control)
+        XCTAssertTrue(service.call("set_device_source", arguments: .object(["source": .string("mock")])).isError)
+        XCTAssertFalse(service.call("stop_control_learn").isError)
+        XCTAssertNil(session.engine.learnTarget)
+        XCTAssertTrue(service.call("set_device_source", arguments: .object(["source": .string("unknown")])).isError)
+    }
+
+    func testLearnUsesRealInputPathAndCannotOverwriteExistingBinding() async throws {
+        let device = MCPFakeDevice()
+        device.connection = MIDIConnectionSnapshot(connectedSource: "BCR Port 1", connectedDestination: "BCR Port 1")
+        var saved: [HardwareMap] = []
+        let session = SurfaceSession(
+            hardwareDevice: device,
+            configuration: .robotArmDemo(), saveHardwareMap: { saved.append($0) },
+            saveConfiguration: { _ in }
+        )
+        let service = AgentControlService(
+            session: session,
+            permissions: MCPPermissions(configurationWrite: true, deviceControl: true)
+        )
+        service.onSelectSource = { session.selectSource($0) }
+        XCTAssertFalse(service.call("set_device_source", arguments: .object(["source": .string("hardware")])).isError)
+        let control = BCRControlID.button(row: 2, 2)
+        let learn: JSONValue = .object(["control": try .encoded(control)])
+        XCTAssertFalse(service.call("begin_control_learn", arguments: learn).isError)
+        XCTAssertNil(session.engine.hardwareMap.midi(for: control))
+        device.onMessages?([.controlChange(channel: 0, number: 70, value: 127)])
+        XCTAssertEqual(session.engine.hardwareMap.midi(for: control)?.number, 70)
+        XCTAssertEqual(saved.count, 1)
+        XCTAssertFalse(service.call("stop_control_learn").isError)
+        XCTAssertTrue(service.call("begin_control_learn", arguments: learn).isError)
+        XCTAssertEqual(saved.count, 1)
+    }
+
+    func testRestrictConfigurationWritePersistsBeforeRevocationAndCannotRegrant() async {
+        let service = makeService()
+        service.permissions.configurationWrite = true
+        service.onRestrictConfigurationWrite = { throw MCPToolFailure("fixture save failure") }
+        XCTAssertTrue(service.call("restrict_configuration_write").isError)
+        XCTAssertTrue(service.permissions.configurationWrite)
+        var persisted = false
+        service.onRestrictConfigurationWrite = { persisted = true }
+        XCTAssertFalse(service.call("restrict_configuration_write").isError)
+        XCTAssertTrue(persisted)
+        XCTAssertFalse(service.permissions.configurationWrite)
+        XCTAssertTrue(service.permissions.parameterWrite)
+        XCTAssertTrue(service.call("restrict_configuration_write", arguments: .object(["enabled": .bool(true)]))
+            .isError)
+    }
+
+    func testDeviceSourceAndLearningRefuseActiveExternalOutput() async throws {
+        let device = MCPFakeDevice()
+        device.connection = MIDIConnectionSnapshot(connectedSource: "BCR Port 1", connectedDestination: "BCR Port 1")
+        let session = SurfaceSession(
+            hardwareDevice: device,
+            configuration: .robotArmDemo(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
+        let service = AgentControlService(
+            session: session,
+            permissions: MCPPermissions(configurationWrite: true, deviceControl: true)
+        )
+        service.onSelectSource = { session.selectSource($0) }
+        session.setMotionSafety(MotionSafetySnapshot(
+            status: .ready,
+            reason: "fixture",
+            outputs: [:],
+            actual: [:],
+            limited: false
+        ))
+        XCTAssertTrue(service.call("set_device_source", arguments: .object(["source": .string("hardware")])).isError)
+        session.setMotionSafety(MotionSafetySnapshot(
+            status: .disconnected,
+            reason: "fixture",
+            outputs: [:],
+            actual: [:],
+            limited: false
+        ))
+        XCTAssertFalse(service.call("set_device_source", arguments: .object(["source": .string("hardware")])).isError)
+        session.setMotionSafety(MotionSafetySnapshot(
+            status: .ready,
+            reason: "fixture",
+            outputs: [:],
+            actual: [:],
+            limited: false
+        ))
+        XCTAssertTrue(service.call(
+            "begin_control_learn",
+            arguments: .object(["control": try .encoded(BCRControlID.button(row: 2, 2))])
+        ).isError)
+        XCTAssertNil(session.engine.learnTarget)
     }
 
     func testProtectedParametersReadOnlyAndAtomicBatchFailures() async {
@@ -301,12 +423,16 @@ final class MCPTests: XCTestCase {
     func testConfigurationPersistenceFailureIsReturnedToMCPCaller() async throws {
         let session = SurfaceSession(
             hardwareDevice: MCPFakeDevice(),
-            saveHardwareMap: { _ in },
+            configuration: .robotArmDemo(), saveHardwareMap: { _ in },
             saveConfiguration: { _ in
                 throw MCPToolFailure("test store unavailable")
             }
         )
-        let service = AgentControlService(session: session, permissions: MCPPermissions(configurationWrite: true))
+        let service = AgentControlService(
+            session: session,
+            permissions: MCPPermissions(configurationWrite: true, deviceControl: true)
+        )
+        service.onSelectSource = { session.selectSource($0) }
         let result = service.call("create_parameter", arguments: .object([
             "definition": try .encoded(ParameterDefinition(id: "x", name: "X"))
         ]))
@@ -365,7 +491,11 @@ final class MCPTests: XCTestCase {
         let definition = ParameterDefinition(id: "arm.enabled", name: "Enable", minimum: 0, maximum: 1)
         var object = try JSONValue.encoded(definition).objectValue!
         object.removeValue(forKey: "agentWritable")
-        let decoded = try JSONValue.object(object).decoded(ParameterDefinition.self)
+        object.removeValue(forKey: "externallyProtected")
+        let decoded = try SurfaceConfigurationCodec.makeDecoder().decode(
+            ParameterDefinition.self,
+            from: JSONEncoder().encode(JSONValue.object(object))
+        )
         XCTAssertFalse(decoded.agentWritable)
         let demo = SurfaceConfiguration.robotArmDemo()
         XCTAssertEqual(demo.version, SurfaceConfiguration.currentVersion)

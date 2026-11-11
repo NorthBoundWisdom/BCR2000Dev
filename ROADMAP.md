@@ -4,6 +4,12 @@
 > 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的历史任务说明见
 > [封存开发任务](docs/archive/DEV_PROMPT.md)（WP1–WP7，不作为当前待办）。
 
+## 当前领域接口增量
+
+用户已确认可选控制台、参考机器人及 Ackermann 底盘模块，GUI 与独立服务共用应用服务，
+只开放回环 MCP/HTTP/SSE。代码、合同与黑盒交付按 [领域 TODO](TODO_DOMAIN_INTERFACES.md) 和
+[ADR 0001](docs/adr/0001-provider-domain-boundaries.md) 验证；未测实体行为与既有 R1 待办保持分开。
+
 ## 当前基线
 
 - 现行文档与历史交接已分离；六项隔离 Mock 的 [原生 UI 验收](docs/UI_ACCEPTANCE.md) 全部通过。
@@ -103,6 +109,8 @@ R5 的安全门同时约束硬件、滑块和 MCP 三种来源的写入。
 6. [x] **扩展入口**：BCR 参数变化 SSE（快照 + 16 ms 合并的版本化变更）、Agent/设备控制工具及 stdio 桥接。
    新增控制权限默认关闭。SSE 是已公布能力的 BCR 扩展，不冒充标准 resources 订阅或请求级 SSE；
    后两者若有通用客户端需求，再独立规划协议扩展。
+
+本机未提交增量另补未绑定控件学习/停止、配置写权限关闭与程序化凭据管道启动，见 [MCP 文档](docs/MCP.md)。
 
 验收：使用通用 MCP 客户端或 Python 标准库脚本，写入 arm.j1=90 后滑块和 P1-1 LED 同步；
 面板操作可由 get_parameter 读回；保护参数、鉴权、Origin 和停止服务均按规则拒绝。

@@ -1,5 +1,8 @@
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRCodexAdapter
 
 final class CodexSessionStateMachineTests: XCTestCase {
     func testTurnStartedThenCompleted() async throws {

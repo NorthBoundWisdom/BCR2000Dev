@@ -1,5 +1,6 @@
 import AppKit
 import BCRAgentCore
+import BCRProviderApplication
 import Combine
 import Foundation
 import Security
@@ -7,6 +8,21 @@ import Security
 @MainActor
 protocol MCPCredentialStore: AnyObject {
     func loadOrCreate() async throws -> String
+}
+
+/// Explicit programmatic launch only; the ordinary app still uses Keychain.
+@MainActor
+final class PipedMCPCredentialStore: MCPCredentialStore {
+    private let token: String
+
+    init(data: Data) throws {
+        guard data.count == 64, data.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) }),
+              let token = String(data: data, encoding: .utf8)
+        else { throw MCPHTTPParseError(reason: L10n.text("MCP 管道凭据无效")) }
+        self.token = token
+    }
+
+    func loadOrCreate() async throws -> String { token }
 }
 
 @MainActor
@@ -89,17 +105,32 @@ final class MCPController: ObservableObject {
     let integrationTest: Bool
 
     init(session: SurfaceSession, store: JSONFileStore<MCPSettings>,
-         credentials: any MCPCredentialStore = KeychainMCPCredentialStore(), integrationTest: Bool = false)
+         credentials: any MCPCredentialStore = KeychainMCPCredentialStore(), integrationTest: Bool = false,
+         provider: ProviderApplication? = nil)
     {
         self.store = store
         self.credentials = credentials
         self.integrationTest = integrationTest
         service = AgentControlService(session: session)
-        server = MCPHTTPServer(router: MCPRouter(service: service))
+        server = MCPHTTPServer(
+            router: MCPRouter(service: service),
+            providerID: provider?.providerID,
+            eventSources: provider.map { ["devices": MCPStreamSource(
+                notification: "notifications/bcr/devicesChanged",
+                journal: $0.events
+            )] } ?? [:]
+        )
         do {
             if let loaded = try store.load() { try loaded.validate(); settings = loaded }
         } catch { self.error = L10n.text("MCP 设置读取失败：\(error.localizedDescription)") }
         service.permissions = settings.permissions
+        service.onRestrictConfigurationWrite = { [weak self] in
+            guard let self else { throw MCPHTTPParseError(reason: L10n.text("MCP 服务不可用")) }
+            var restricted = self.settings
+            restricted.permissions.configurationWrite = false
+            try self.store.save(restricted)
+            self.settings = restricted
+        }
         service.onChange = { [weak self] in self?.objectWillChange.send() }
         server.onChange = { [weak self] in
             guard let self else { return }

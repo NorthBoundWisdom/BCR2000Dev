@@ -1,5 +1,7 @@
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class SurfaceConfigurationTests: XCTestCase {
     private let joint = ParameterDefinition(id: "j", name: "Joint", unit: "°", minimum: -90, maximum: 90)

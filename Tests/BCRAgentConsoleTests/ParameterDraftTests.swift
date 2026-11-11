@@ -1,6 +1,8 @@
 import BCRAgentCore
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 final class ParameterDraftTests: XCTestCase {
     func testPristineDraftRefreshesWhenSameParameterChangesExternally() {

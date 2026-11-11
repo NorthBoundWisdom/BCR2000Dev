@@ -75,7 +75,7 @@ def _swift_build(configuration: str, architecture: str) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
     _run(["lipo", "-create", *binaries, "-output", output])
     # Resource bundles are architecture-independent, but must also accompany the lipo output.
-    localization = binaries[0].parent / "BCRAgentConsole_BCRAgentCore.bundle"
+    localization = binaries[0].parent / "BCRAgentConsole_BCRFoundation.bundle"
     shutil.copytree(localization, output.parent / localization.name, dirs_exist_ok=True)
     return output
 
@@ -143,7 +143,7 @@ def build(
     shutil.copy2(executable, macos / PRODUCT)
     (macos / PRODUCT).chmod(0o755)
     shutil.copy2(icon, resources / "AppIcon.icns")
-    localization = executable.parent / "BCRAgentConsole_BCRAgentCore.bundle"
+    localization = executable.parent / "BCRAgentConsole_BCRFoundation.bundle"
     if not localization.is_dir():
         raise ValueError("SwiftPM localization resource bundle is missing.")
     shutil.copytree(localization, resources / localization.name)
@@ -186,7 +186,7 @@ def verify_bundle(bundle: Path) -> dict:
         raise ValueError("Packaged application icon is missing.")
     if info.get("CFBundleLocalizations") != ["en", "zh-Hans"]:
         raise ValueError("Application language metadata is missing.")
-    localization = bundle / "Contents/Resources/BCRAgentConsole_BCRAgentCore.bundle"
+    localization = bundle / "Contents/Resources/BCRAgentConsole_BCRFoundation.bundle"
     for language in ("en", "zh-Hans"):
         candidates = [localization / "Contents/Resources", localization]
         if not any((root / f"{language}.lproj/Localizable.strings").is_file() for root in candidates):

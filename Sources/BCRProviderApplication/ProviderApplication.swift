@@ -1,0 +1,264 @@
+import BCRFoundation
+import BCRRobotDomain
+import BCRChassisDomain
+import BCRSurfaceDomain
+import Foundation
+
+public enum ProviderClock: String, Codable, Sendable { case realtime, manual }
+public struct ProviderConfiguration: Codable, Sendable {
+    public var robot: Bool
+    public var chassis: Bool
+    public var clock: ProviderClock
+    public init(robot: Bool = false, chassis: Bool = false, clock: ProviderClock = .realtime) {
+        self.robot = robot; self.chassis = chassis; self.clock = clock
+    }
+}
+
+public struct ProviderAccess: Sendable {
+    public let write: Bool
+    public let robot: Bool
+    public let chassis: Bool
+    public let simulation: Bool
+    public init(write: Bool, robot: Bool, chassis: Bool, simulation: Bool) {
+        self.write = write; self.robot = robot; self.chassis = chassis; self.simulation = simulation
+    }
+}
+
+public enum RobotOperation: Sendable {
+    case initialize(String, [Double]), acquire(String, String, Double)
+    case enable(DeviceCommandProof), stop(DeviceCommandProof), disable(DeviceCommandProof), release(DeviceCommandProof)
+    case renew(DeviceCommandProof, Double), move(DeviceCommandProof, [Double], Double, Double)
+    case reset(String), fault(String, String), clearFault(String)
+}
+
+public enum ChassisOperation: Sendable {
+    case initialize(String, [Double]), acquire(String, String, Double)
+    case enable(DeviceCommandProof), stop(DeviceCommandProof), disable(DeviceCommandProof), release(DeviceCommandProof)
+    case renew(DeviceCommandProof, Double), drive(DeviceCommandProof, Double, Double, Double)
+    case reset(String), fault(String, String), clearFault(String)
+}
+
+public struct RobotCommandReply: Codable, Sendable {
+    public let accepted: Bool
+    public let control: DeviceControlGrant?
+    public let state: RobotSnapshot
+}
+
+public struct ChassisCommandReply: Codable, Sendable {
+    public let accepted: Bool
+    public let control: DeviceControlGrant?
+    public let state: ChassisSnapshot
+}
+
+/// Composition/application boundary shared by GUI and headless hosts. No transport or UI dependency.
+@MainActor
+public final class ProviderApplication {
+    /// Identity of this application instance, not configurable and not a device generation.
+    public let providerID = UUID().uuidString
+    public let configuration: ProviderConfiguration
+    public let events = ProviderEventJournal(source: .simulation)
+    private var robot: RobotSimulator?
+    private var chassis: ChassisSimulator?
+    private var timer: Task<Void, Never>?
+    private let monotonic: @MainActor () -> Double
+    private var lastMonotonic: Double
+
+    public init(
+        configuration: ProviderConfiguration = .init(),
+        monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime }
+    ) {
+        self.configuration = configuration; self.monotonic = monotonic; lastMonotonic = monotonic()
+        // Only these immutable, validated reference profiles are enabled in API 1.0.
+        robot = configuration.robot ? try! RobotSimulator() : nil
+        chassis = configuration.chassis ? try! ChassisSimulator() : nil
+    }
+
+    deinit { timer?.cancel() }
+    public func start() {
+        guard configuration.clock == .realtime, robot != nil || chassis != nil, timer == nil else { return }
+        lastMonotonic = monotonic()
+        timer = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(20)) } catch { return }
+                self?.tick()
+            }
+        }
+    }
+
+    public func stopClock() { timer?.cancel(); timer = nil }
+    public func revokeControl(domain: String) {
+        switch domain {
+        case "robot": robot?.revokeControl()
+        case "chassis": chassis?.revokeControl()
+        default: return
+        }
+        publish()
+    }
+
+    public func tick() {
+        guard configuration.clock == .realtime else { return }
+        let now = monotonic(), elapsed = now - lastMonotonic; lastMonotonic = now
+        guard elapsed >= 0 && elapsed <= 2 else {
+            if var robot { try? robot.fault("host_clock_gap", generation: robot.control.generation); self.robot = robot
+            }
+            if var chassis {
+                try? chassis.fault("host_clock_gap", generation: chassis.control.generation); self.chassis = chassis
+            }
+            publish(); return
+        }
+        var remaining = elapsed
+        while remaining > 1e-9 {
+            let step = min(0.02, remaining)
+            do { try robot?.advance(step); try chassis?.advance(step) }
+            catch { assertionFailure("Invalid internal simulation step") }
+            remaining -= step
+        }
+        if elapsed > 0 { publish() }
+    }
+
+    public func robotState() throws -> RobotSnapshot {
+        guard let robot else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }
+        return robot.snapshot()
+    }
+
+    public func chassisState() throws -> ChassisSnapshot {
+        guard let chassis else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }
+        return chassis.snapshot()
+    }
+
+    public func robotTrace() throws -> [RobotTraceSample] {
+        guard let robot
+        else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }; return robot.trace
+    }
+
+    public func chassisTrace() throws -> [ChassisTraceSample] {
+        guard let chassis
+        else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }; return chassis.trace
+    }
+
+    public func executeRobot(_ operation: RobotOperation, access: ProviderAccess) throws -> RobotCommandReply {
+        guard var robot else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }
+        try ProviderValidation.require(
+            access.write && access.robot,
+            "permission_denied",
+            "Robot control permission is required"
+        )
+        var grant: DeviceControlGrant?
+        switch operation {
+        case let .initialize(generation, joints): try robot.initialize(joints, generation: generation)
+        case let .acquire(generation, owner, ttl): grant = try robot.acquire(
+                generation: generation,
+                owner: owner,
+                ttl: ttl
+            )
+        case let .enable(proof): try robot.enable(proof)
+        case let .stop(proof): try robot.stop(proof)
+        case let .disable(proof): try robot.stop(proof, disable: true)
+        case let .release(proof): try robot.release(proof)
+        case let .renew(proof, ttl): try robot.renew(proof, ttl: ttl)
+        case let .move(proof, joints, duration, validity): try robot.move(
+                proof,
+                target: joints,
+                duration: duration,
+                validFor: validity
+            )
+        case let .reset(generation), let .clearFault(generation):
+            try ProviderValidation.require(
+                access.simulation,
+                "permission_denied",
+                "Simulation administration permission is required"
+            )
+            try robot.reset(generation: generation)
+        case let .fault(generation, code):
+            try ProviderValidation.require(
+                access.simulation,
+                "permission_denied",
+                "Simulation fault permission is required"
+            )
+            try robot.fault(code, generation: generation)
+        }
+        self.robot = robot; publish()
+        return RobotCommandReply(accepted: true, control: grant, state: robot.snapshot())
+    }
+
+    public func executeChassis(_ operation: ChassisOperation, access: ProviderAccess) throws -> ChassisCommandReply {
+        guard var chassis else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }
+        try ProviderValidation.require(
+            access.write && access.chassis,
+            "permission_denied",
+            "Chassis control permission is required"
+        )
+        var grant: DeviceControlGrant?
+        switch operation {
+        case let .initialize(generation, pose): try chassis.initialize(pose, generation: generation)
+        case let .acquire(generation, owner, ttl): grant = try chassis.acquire(
+                generation: generation,
+                owner: owner,
+                ttl: ttl
+            )
+        case let .enable(proof): try chassis.enable(proof)
+        case let .stop(proof): try chassis.stop(proof)
+        case let .disable(proof): try chassis.stop(proof, disable: true)
+        case let .release(proof): try chassis.release(proof)
+        case let .renew(proof, ttl): try chassis.renew(proof, ttl: ttl)
+        case let .drive(proof, speed, steering, validity): try chassis.drive(
+                proof,
+                speed: speed,
+                steering: steering,
+                validFor: validity
+            )
+        case let .reset(generation), let .clearFault(generation):
+            try ProviderValidation.require(
+                access.simulation,
+                "permission_denied",
+                "Simulation administration permission is required"
+            )
+            try chassis.reset(generation: generation)
+        case let .fault(generation, code):
+            try ProviderValidation.require(
+                access.simulation,
+                "permission_denied",
+                "Simulation fault permission is required"
+            )
+            try chassis.fault(code, generation: generation)
+        }
+        self.chassis = chassis; publish()
+        return ChassisCommandReply(accepted: true, control: grant, state: chassis.snapshot())
+    }
+
+    public func advance(domain: String, dt: Double, access: ProviderAccess) throws {
+        try ProviderValidation.require(
+            configuration.clock == .manual,
+            "unsupported",
+            "Manual advance requires manual-clock mode"
+        )
+        try ProviderValidation.require(
+            access.write && access.simulation,
+            "permission_denied",
+            "Simulation clock permission is required"
+        )
+        switch domain {
+        case "robot":
+            guard var robot else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }
+            try robot.advance(dt); self.robot = robot
+        case "chassis":
+            guard var chassis else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }
+            try chassis.advance(dt); self.chassis = chassis
+        default: throw ProviderDomainError("unsupported", "Unknown simulation domain")
+        }
+        publish()
+    }
+
+    public func state() -> JSONValue {
+        .object([
+            "schema_version": .number(1),
+            "provider_id": .string(providerID),
+            "source": .string("simulation"),
+            "clock": .string(configuration.clock.rawValue),
+            "robot": robot.map { try! JSONValue.encoded($0.snapshot()) } ?? .null,
+            "chassis": chassis.map { try! JSONValue.encoded($0.snapshot()) } ?? .null
+        ])
+    }
+
+    private func publish() { events.append(kind: "devices.changed", payload: state()) }
+}

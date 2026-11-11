@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 final class SurfaceProgramsTests: XCTestCase {
     func testPageSwitchPreservesValuesChangesAssignmentsAndRoundTrips() throws {
@@ -47,7 +49,7 @@ final class SurfaceProgramsTests: XCTestCase {
         let migrated = try old.migrated()
         XCTAssertNil(migrated.activePageID)
         XCTAssertEqual(migrated.pages, config.pages)
-        XCTAssertEqual(migrated.version, 6)
+        XCTAssertEqual(migrated.version, SurfaceConfiguration.currentVersion)
     }
 
     func testMacroOrderClampingSnappingAndSinglePressDebounce() throws {

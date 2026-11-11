@@ -1,6 +1,8 @@
 import Foundation
 import XCTest
 @testable import BCRAgentCore
+@testable import BCRMCPAdapter
+@testable import BCRSurfaceDomain
 
 @MainActor
 private final class FunctionDevice: SurfaceDevice {
@@ -177,7 +179,12 @@ final class FunctionSystemTests: XCTestCase {
     }
 
     func testBulkPreviewPreservesValuesMappingAndAgentStateAndRejectsStalePlan() async throws {
-        let s = SurfaceSession(hardwareDevice: FunctionDevice(), saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let s = SurfaceSession(
+            hardwareDevice: FunctionDevice(),
+            configuration: .robotArmDemo(),
+            saveHardwareMap: { _ in },
+            saveConfiguration: { _ in }
+        )
         s.setParameter("arm.j1", to: 37)
         s.setAgentFeedback(AgentSlotID(1), value: 96)
         let plan = try BulkAssignmentPlan(

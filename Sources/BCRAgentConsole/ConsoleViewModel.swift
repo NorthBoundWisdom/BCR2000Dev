@@ -1,5 +1,7 @@
 import AppKit
 import BCRAgentCore
+import BCRProviderApplication
+import BCRProviderMCPAdapter
 import UniformTypeIdentifiers
 import Combine
 import Foundation
@@ -42,6 +44,7 @@ final class ConsoleViewModel: ObservableObject {
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
+    let provider: ProviderApplication
     let feedbackSettings: FeedbackSettingsController
     private var pendingTouchedControl: BCRControlID?
     private var uiPublishTask: Task<Void, Never>?
@@ -69,8 +72,10 @@ final class ConsoleViewModel: ObservableObject {
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter,
-         codexFactory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil)
+         codexFactory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil,
+         providerConfiguration: ProviderConfiguration = .init())
     {
+        provider = ProviderApplication(configuration: providerConfiguration)
         codex = CodexAgentController(
             directory: stores.configuration.fileURL.deletingLastPathComponent(),
             factory: codexFactory
@@ -121,10 +126,13 @@ final class ConsoleViewModel: ObservableObject {
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
         credentials: mcpCredentials ?? KeychainMCPCredentialStore(),
-        integrationTest: integrationTest)
+        integrationTest: integrationTest, provider: provider)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
         adapter: outputTransport ?? OutputTransportRouter())
+        do { try ProviderMCPModule.install(on: mcp.service, application: provider) }
+        catch { preconditionFailure("Invalid built-in provider module registration") }
+        provider.start()
         mcp.service.onReadAgents = { [weak self] in
             guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
             return .object(["backend": .string(self.codex.backend.rawValue), "slots": try .encoded(self.slots)])

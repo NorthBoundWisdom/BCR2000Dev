@@ -1,5 +1,7 @@
 import XCTest
 @testable import BCRAgentConsole
+@testable import BCRCoreMIDIDriver
+@testable import BCRHTTPTransport
 
 final class ConsoleLayoutTests: XCTestCase {
     func testMinimumWindowKeepsNaturalPanelStacked() {
