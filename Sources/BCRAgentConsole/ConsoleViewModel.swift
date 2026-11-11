@@ -68,9 +68,13 @@ final class ConsoleViewModel: ObservableObject {
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
-         initialPreset: ConfigurationPreset = .starter)
+         initialPreset: ConfigurationPreset = .starter,
+         codexFactory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil)
     {
-        codex = CodexAgentController(directory: stores.configuration.fileURL.deletingLastPathComponent())
+        codex = CodexAgentController(
+            directory: stores.configuration.fileURL.deletingLastPathComponent(),
+            factory: codexFactory
+        )
         library = ConfigurationLibrary(url: stores.configuration.fileURL.deletingLastPathComponent()
             .appending(path: "configuration-library.json"))
         slots = AgentStateMachine().slots
@@ -182,7 +186,7 @@ final class ConsoleViewModel: ObservableObject {
             }
         }
         session.onEvent = { [weak self] in self?.handleSessionEvent($0) }
-        session.onTriggerAgent = { [weak self] in self?.performPrimaryAction($0) }
+        session.onTriggerAgent = { [weak self] in self?.performSurfaceAgentAction($0) }
         if integrationTest {
             notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
         }
@@ -582,6 +586,10 @@ final class ConsoleViewModel: ObservableObject {
         for slot in newSlots where previous[slot.id] != slot.state {
             session.setAgentFeedback(slot.id, value: slot.state.feedbackValue)
         }
+    }
+
+    func showSurfaceApprovalNotice() {
+        notice = ConsoleNotice(level: .info, text: L10n.text("请在 Agent 页查看详情后批准或拒绝"))
     }
 
     func report(_ error: Error) {

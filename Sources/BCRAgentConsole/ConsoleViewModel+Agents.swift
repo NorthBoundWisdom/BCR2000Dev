@@ -6,6 +6,21 @@ import Foundation
 extension ConsoleViewModel {
     func performPrimaryAction(_ slotID: AgentSlotID) {
         if codex.backend == .codex { codex.perform(slotID); return }
+        performMockPrimaryAction(slotID)
+    }
+
+    /// Device-origin intents cannot grant a real Codex approval or dismiss its pending request.
+    func performSurfaceAgentAction(_ slotID: AgentSlotID) {
+        if codex.backend == .codex {
+            if codex.slots.first(where: { $0.id == slotID })?.state == .waitingApproval {
+                showSurfaceApprovalNotice()
+                return
+            }
+            codex.perform(slotID)
+        } else { performMockPrimaryAction(slotID) }
+    }
+
+    private func performMockPrimaryAction(_ slotID: AgentSlotID) {
         guard let slot = agentMachine.slot(slotID) else { return }
         switch slot.state {
         case .waitingApproval: approve(slotID)

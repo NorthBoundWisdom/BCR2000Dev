@@ -91,10 +91,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
   `running`，第二个请求在 `resumeAfterApproval` 抛错，但 gate 已记为已决，重试直接返回 `false`，永不回复。
   同理 `rpc.sendEnvelope` 失败时决定已记录但 Codex 没收到。
   修复方向：先发送成功再记为已决；槽位仍有其他待批请求时保持 `awaitingApproval`。补并发审批与发送失败测试。
-- [ ] RV3 实体按键 / 主操作直接批准（需用户决定）。`CodexAgentController.perform` 在 `waitingApproval`
-  时调用 `decide(approve: true)`，绑定的 BCR 按键一次按下即批准命令执行或文件修改，无需看过详情；
-  Mock 时期的行为被原样沿用到真实后端。建议：Codex 后端下实体按键不批准（只在 Agent 页点击批准），
-  或增加明确的设置项并默认关闭。同时 Agent 卡片在等待审批时没有“中断”入口，建议补上。
 
 ### P1
 
