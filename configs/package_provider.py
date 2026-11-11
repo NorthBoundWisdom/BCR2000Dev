@@ -9,9 +9,15 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from configs.build_environment import load_build_environment  # noqa: E402
+from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 
 
 def run(*args):
@@ -19,6 +25,7 @@ def run(*args):
 
 
 def package(output, configuration="release", skip_build=False):
+    ensure_dependency(ROOT, environ=load_build_environment(ROOT))
     if output.exists():
         raise ValueError("Use a fresh provider output directory")
     if not skip_build:

@@ -7,7 +7,7 @@
 - Scope and dependency direction are recorded in `docs/adr/0001-provider-domain-boundaries.md`; real actuator connections and public releases remain separately authorized.
 - The current product milestone is a SwiftUI/CoreMIDI MVP with a deterministic Mock Agent.
 - `BCRFoundation` contains host value contracts/localization. `BCRSurfaceDomain`, `BCRRobotDomain`, and `BCRChassisDomain` own independent state. Shared `AgentPlugin` owns Mock Agent state/timing; `BCRAgentDomain` is a compatibility projection (shared state alias, legacy Date/name/Codable/errors), with transition policy delegated to the shared machine.
-- `SurfacePlugins` is a separate MIT package, not a clone of this host. Depend on the exact `0.1.0` git version; `SURFACE_PLUGINS_PATH` selects an authorized local checkout. It has no host/device/localization assumptions. See `docs/SHARED_PLUGINS.md`.
+- `SurfacePlugins` is a separate MIT package, not a clone of this host. Commit an HTTPS remote/full-revision JSON lock; the stdlib/Git manager materializes only committed objects to `build/dependencies/SurfacePlugins`. `SURFACE_PLUGINS_SOURCE` selects an acquisition source, never a compilation path; legacy `SURFACE_PLUGINS_PATH` is acquisition-only. It has no host/device/localization assumptions. See `docs/SHARED_PLUGINS.md`.
 - `BCRPluginHost` owns explicit transactional composition and MainActor time driving. `BCRConfigurationAdapter` owns old binding translation, legacy feedback API extensions and BCR indicator presentation. Both GUI and headless composition inject neutral bindings; the surface engine stores feedback only by `IndicatorID`.
 - Workspace D8 retains `agentPrimaryAction`, `triggerAgent`, `onTriggerAgent` and uninjected legacy fallback for old enum patterns. Production routes generic `triggerAction`. External exhaustive `SurfaceEffect` switches must add the new case; old disk JSON and Provider 1.0 remain unchanged.
 - `BCRCodexAdapter`, `BCRCoreMIDIDriver`, persistence, MCP and HTTP/SSE are outer adapters. `BCRProviderApplication` owns explicit composition, not transport or UI.
@@ -44,9 +44,10 @@ python3 configs/macos_workflow.py run
 
 Focused checks:
 
-Before the shared remote version is published, set `SURFACE_PLUGINS_PATH=../SurfacePlugins` in the shell
-for direct Swift/check commands, or in ignored `build.local.json` for `macos_workflow.py` build/test.
-No absolute paths or local dependency override is committed to the package manifest.
+Use `SURFACE_PLUGINS_SOURCE=../SurfacePlugins` in shell or ignored `build.local.json` while locked commits are unpushed.
+Run `python3 configs/surface_plugins_dependency.py ensure` before direct Swift commands; workflow build/test/package/setup
+ensure automatically. The manifest only verifies the clean fixed build path and never fetches. For a lock upgrade,
+explicit `update` may replace only a manager-owned clean old cache. No source reset/clean and no FreeCM dependency.
 
 ```bash
 python3 -m compileall -q configs

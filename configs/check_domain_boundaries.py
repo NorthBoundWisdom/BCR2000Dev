@@ -7,8 +7,15 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from configs.build_environment import load_build_environment  # noqa: E402
+from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+
 ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
     "BCRFoundation": set(),
@@ -73,6 +80,7 @@ PURE = {
 
 
 def check():
+    ensure_dependency(ROOT, environ=load_build_environment(ROOT))
     package = json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=ROOT, text=True))
     targets = {target["name"]: target for target in package["targets"]}
     errors = []

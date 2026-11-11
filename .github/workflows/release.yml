@@ -38,6 +38,7 @@ jobs:
       - name: Require a main commit for a pushed tag
         if: github.event_name == 'push'
         run: git merge-base --is-ancestor HEAD origin/main
+      - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/setup_local_project.py
       - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
       - run: python3 configs/macos_workflow.py test

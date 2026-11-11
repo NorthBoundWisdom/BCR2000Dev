@@ -4,24 +4,33 @@
 
 ## 依赖与本地构建
 
-`Package.swift` 固定 `https://github.com/NorthBoundWisdom/SurfacePlugins.git` 的精确 `0.1.0`。
-远端仓库已存在，当前远端 main 仍为初始提交 `09191a9`；共享业务实现和 `0.1.0` 标签尚未推送发布。
-当前使用已有的并列 `SurfacePlugins` 工作副本：
+`configs/surface_plugins.lock.json` 提交 HTTPS remote 与完整40位 commit revision。
+`Package.swift` 只引用固定 `build/dependencies/SurfacePlugins`，不通过 SwiftPM 解析远端或标签。
+Python stdlib + Git 的 `configs/surface_plugins_dependency.py` 将锁定提交物化到该路径；不依赖 FreeCM。
+
+远端仓库已有初始 main，业务提交未推送；当前从已有并列 Git 副本获取已提交的锁定对象：
 
 ```bash
-export SURFACE_PLUGINS_PATH=../SurfacePlugins
+export SURFACE_PLUGINS_SOURCE=../SurfacePlugins
+python3 configs/surface_plugins_dependency.py ensure
 swift test --build-path build/swiftpm
 python3 configs/check_domain_boundaries.py
 python3 configs/macos_workflow.py build
 ```
 
-也可把 `SURFACE_PLUGINS_PATH` 放在被忽略的 `build.local.json` 的 `environment` 中，
-`macos_workflow.py` 的 build/test 会继承它；直接 Swift/边界脚本需要 shell 环境变量。
-继承的环境变量优先于本机配置。没有提交机器绝对路径或固定相对路径依赖，宿主不依赖另一个控制台仓库。
-共享包是独立的业务插件库，不属于禁止的额外宿主 clone/分支/worktree。
+`SURFACE_PLUGINS_SOURCE` 仅是 Git 获取源，不是编译路径；不会复制工作树中的未提交改动。
+旧 `SURFACE_PLUGINS_PATH` 兼容解释为获取源，两个变量不一致时报错。也可在 ignored `build.local.json`
+的 `environment` 中配置 SOURCE，构建/测试/配置/Provider打包入口会加载后先ensure；直接helper CLI使用shell环境。
+锁文件升级后，已有干净且manager-owned缓存须显式运行 `python3 configs/surface_plugins_dependency.py update`。
+普通ensure和只读verify对错SHA、dirty（含ignored文件）、非manager目录或symlink拒绝，不reset/clean任何源码目录。
 
-当前只作本地提交，不推送或创建远端/标签。用户决定推送共享实现并发布 `0.1.0` 后，再安排宿主推送时机；
-未发布前不能声称远端解析或干净 CI 已通过，也不提交虚构的 `Package.resolved`。
+缓存命中只检查本地对象/HEAD/dirty，不再次联网。物化使用独立staging、文件锁和原子rename；
+Package执行只读verify，因此直跑Swift也不能绕过缓存检查，且清单验证不获取依赖/不联网。
+所有编译都从build内锁定提交进行，不直接编译并列副本。两个宿主复制同一helper与锁格式，各自独立物化；
+不依赖另一个宿主源码。CI构建入口先ensure，未推送SHA的远端获取仍未验证。
+
+当前只作本地提交，不推送或创建远端/标签。用户决定共享实现与版本发布时机；
+锁定commit不依赖标签是否存在，不提交虚构的 `Package.resolved`。
 
 ## 归属与运行
 

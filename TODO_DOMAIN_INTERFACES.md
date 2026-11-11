@@ -232,7 +232,7 @@ public struct PluginUpdate: Sendable {
 | 编号 | 决定 |
 | --- | --- |
 | D1 | 包/目录 `SurfacePlugins`；targets `SurfacePluginContracts`、`SurfacePluginConformance`、`AgentPlugin`，后续各业务插件独立产品 |
-| D2 | 清单 git 地址加精确 `0.1.0`，`SURFACE_PLUGINS_PATH` 提供本地覆盖；值仅在 ignored local 配置/shell，不提交绝对路径 |
+| D2 | JSON锁提交remote+完整revision；stdlib/Git物化到build/dependencies/SurfacePlugins，清单只读验证该固定路径不联网。SOURCE仅获取已提交对象，旧PATH仅获取兼容 |
 | D3 | BCR 参数基线：可选step、0锚点网格、包含端点、平分取较小值、toggle中点分界；XTouch后续对齐 |
 | D4 | 共享七态转换表，可配置槽位默认8，越界错误；Mock改注入时间 |
 | D5 | BCR逐值0/40/127/96/72/20/8，XTouch running/on、waitingApproval/blink、其余off；呈现留各宿主 |
@@ -240,7 +240,7 @@ public struct PluginUpdate: Sendable {
 | D7 | 各仓测试记录数量；硬件未连接，不能宣称实机已验证 |
 | D8 | BCR旧枚举case/callback和无注入fallback仅为兼容；生产注入配置适配的通用动作/指示绑定，storage只IndicatorID；不复制整个引擎。新增triggerAction要求旧穷举switch补case，保留旧case构造/pattern/方法行为 |
 
-U1：远端已有初始main，共享实现与0.1.0尚未推送发布，等用户决定；U2：XTouch旧检出改动归属尚待用户处理，当前暂停该宿主；
+U1：远端已有初始main，共享实现尚未推送；当前锁定commit从本地Git获取，不依赖0.1.0标签，推送/发布等用户决定；U2：XTouch旧检出改动归属尚待用户处理，当前暂停该宿主；
 U3：M2在XTouch装配哪些可选模拟器尚待决定；U4：三个仓库统一MIT/NorthBoundWisdom，已确定。
 
 ## 6. 阶段任务
@@ -332,7 +332,7 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 
 - **X1 依赖边界**：只引入 `SurfacePluginContracts` 不会编译任何插件；只引入一个插件不会编译其他插件、
   GUI、CoreMIDI 或网络代码。
-- **X2 同源同版本**：两个宿主的锁定文件指向共享包的同一个版本；任一宿主在没有另一个宿主源码的机器上可以构建和测试。
+- **X2 同源同版本**：两个宿主的JSON锁指向共享包的同一个完整commit；任一宿主在没有另一个宿主源码的机器上可以构建和测试。
 - **X3 行为一致**：同一段插件输入序列在两个宿主的适配测试里得到相同的插件快照；
   呈现差异只来自设备适配器的映射表。
 - **X4 设备事实**：反馈发送不伪造物理观测；XTouch 触摸时不驱动电机，启动、切层、重连、载入配置不自动召回；

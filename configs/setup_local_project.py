@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure the Swift application locally without downloading dependencies."""
+"""Configure the Swift application and ensure its locked source dependency."""
 
 from __future__ import annotations
 
@@ -15,11 +15,13 @@ if str(REPO_ROOT) not in sys.path:
 from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import ensure_local_build_environment, use_build_environment  # noqa: E402
 from configs.validate_repo_commands import main as validate_commands  # noqa: E402
+from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 
 
 def main() -> int:
     ensure_local_build_environment(REPO_ROOT)
     with use_build_environment(REPO_ROOT):
+        ensure_dependency(REPO_ROOT)
         settings = load_app_build_settings(REPO_ROOT)
         if validate_commands([str(REPO_ROOT)]) != 0:
             return 1

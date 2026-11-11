@@ -3,9 +3,29 @@
 import Foundation
 import PackageDescription
 
-let surfacePlugins: Package.Dependency = ProcessInfo.processInfo.environment["SURFACE_PLUGINS_PATH"]
-    .map { .package(path: $0) }
-    ?? .package(url: "https://github.com/NorthBoundWisdom/SurfacePlugins.git", exact: "0.1.0")
+// Acquisition is explicit and outside SwiftPM. Even direct Swift invocations validate
+// the locked clean materialization; this read-only verification never contacts a remote.
+let repositoryRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let dependencyCheck = Process()
+dependencyCheck.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+dependencyCheck.arguments = [
+    "python3",
+    repositoryRoot.appendingPathComponent("configs/surface_plugins_dependency.py").path,
+    "verify"
+]
+dependencyCheck.currentDirectoryURL = repositoryRoot
+let dependencyOutput = Pipe()
+dependencyCheck.standardOutput = dependencyOutput
+dependencyCheck.standardError = dependencyOutput
+do {
+    try dependencyCheck.run()
+    dependencyCheck.waitUntilExit()
+    if dependencyCheck.terminationStatus != 0 {
+        let message = String(decoding: dependencyOutput.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        fatalError(message + "\nRun python3 configs/surface_plugins_dependency.py ensure first.")
+    }
+} catch { fatalError("Cannot verify locked SurfacePlugins dependency: \(error)") }
+let surfacePlugins: Package.Dependency = .package(path: "build/dependencies/SurfacePlugins")
 
 let package = Package(
     name: "BCRAgentConsole",

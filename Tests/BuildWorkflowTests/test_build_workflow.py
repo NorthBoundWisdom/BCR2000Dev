@@ -58,9 +58,11 @@ class BuildConfigurationTests(unittest.TestCase):
         os.utime(marker, (1, 1))
         with (
             patch.object(setup_local_project, "REPO_ROOT", self.root),
+            patch.object(setup_local_project, "ensure_dependency") as dependency,
             patch.object(setup_local_project.subprocess, "run") as command,
         ):
             self.assertEqual(setup_local_project.main(), 0)
+            dependency.assert_called_once_with(self.root)
             command.assert_any_call(
                 ["git", "config", "--local", "core.hooksPath", "configs/githooks"], cwd=self.root, check=True
             )
@@ -119,11 +121,13 @@ class BuildConfigurationTests(unittest.TestCase):
                 patch.object(macos_workflow, "REPO_ROOT", self.root),
                 patch.object(macos_workflow, "build", side_effect=build),
                 patch.object(macos_workflow, "_run", side_effect=run),
+                patch.object(macos_workflow, "ensure_dependency") as dependency,
             ):
                 before = dict(os.environ)
                 self.assertEqual(macos_workflow.main(["build"]), 0)
                 self.assertEqual(dict(os.environ), before)
                 self.assertEqual(macos_workflow.main(["test"]), 0)
+                dependency.assert_called_once_with(self.root)
                 self.assertEqual(dict(os.environ), before)
                 expected = inherited.get("SURFACE_PLUGINS_PATH", "../SurfacePlugins")
                 self.assertEqual(observed[-2:], [("build", expected), ("test", expected)])
@@ -220,8 +224,10 @@ class LocalizationPackagingTests(unittest.TestCase):
             with (
                 patch.object(macos_workflow, "SWIFTPM_BUILD_ROOT", root),
                 patch.object(macos_workflow, "_run", side_effect=run),
+                patch.object(macos_workflow, "ensure_dependency") as dependency,
             ):
                 binary = macos_workflow._swift_build("release", "universal")
+                dependency.assert_called_once_with(macos_workflow.REPO_ROOT)
             for language in ("en", "zh-Hans"):
                 catalog = (
                     binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"
