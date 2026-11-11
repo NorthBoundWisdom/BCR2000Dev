@@ -1,5 +1,8 @@
 # 实机诊断与端口选择交接
 
+> 历史交接 / 任务记录，保留当时的实现状态与验收结果；当前工作以
+> [TODO](../../TODO.md) 和 [ROADMAP](../../ROADMAP.md) 为准。文中代码路径均相对仓库根目录。
+
 ## 已实现
 
 - 顶栏设备状态可打开独立 MIDI 输入/输出选择。默认 BCR2000 Port 1，手动支持通用 USB-MIDI/DIN/网络接口并保存稳定 UniqueID；
@@ -34,5 +37,5 @@
 - 没有完整重启 Mac，也没有删系统 MIDI 设置、刷固件、回放备份或安装驱动。
   下一步是完整重启后的同脚本对照；USB 主机路径具体根因仍待确定。
 
-详细事实见 [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md)，工具使用见 [MIDI_DIAGNOSTICS.md](MIDI_DIAGNOSTICS.md)。
+详细事实见 [HARDWARE_VALIDATION.md](../HARDWARE_VALIDATION.md)，工具使用见 [MIDI_DIAGNOSTICS.md](../MIDI_DIAGNOSTICS.md)。
 原始 MIDI 身份、预设备份和采样日志留在本机，不进 git。

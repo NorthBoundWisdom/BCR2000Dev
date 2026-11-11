@@ -95,7 +95,9 @@ OSC 输出运行时“输出”面板会自动出现，确保安全门的实时�
 ## 连接实体 BCR2000
 
 1. 用 USB 连接 BCR2000，并建议设为 USB 模式 **U-1**：同时按 `EDIT + STORE` 进入 Global Setup，
-   用 Push Encoder 1 选择 `U-1`，按 `EXIT`。U-1 支持软件 parameter feedback。
+   用 Push Encoder 1 选择 `U-1`，按 `EXIT` 保存，等待 USB 重新连接，再重启 App 测试软件回写。
+   U-1 支持软件 parameter feedback，设置说明见
+   [官方手册](https://mediadl.musictribe.com/media/PLM/data/docs/P0245/BCF2000_BCR2000_M_EN.pdf)。
 2. 在顶栏切换到 `实体 BCR2000`。应用优先连接 **BCR2000 Port 1**；点击右上角设备状态可手动选择 MIDI
    输入 / 输出端口（含通用 USB-MIDI 接口）。手动选择的端口缺失时不会自动换路由，而是显示未连接。
 3. **学习映射**：在面板上选中控件，在检查器点“从这里开始学习”，然后转动编码器或按下按键。
@@ -125,8 +127,8 @@ OSC 输出运行时“输出”面板会自动出现，确保安全门的实时�
 
 参数工作区可导入 / 导出版本化 JSON，仅包含参数定义与功能分配，不含实体映射、MCP 凭据或运行值。
 导入先校验、确认后才替换；失败时保留当前配置。加载到非法的本地配置会保留原文件并另存指纹命名的备份，
-同时显示持续提示。当前配置格式为 v3，读取旧版会显示迁移信息并在保存前备份。
-详见 [配置恢复规则](docs/CONTROL_MAP.md) 与 [WP4 验收记录](docs/WP4_HANDOFF.md)。
+同时显示持续提示。当前功能配置与硬件映射格式均为 v4，读取旧版会显示迁移信息并在保存前备份。
+详见 [配置恢复规则](docs/CONTROL_MAP.md) 与 [WP4 验收记录](docs/archive/WP4_HANDOFF.md)。
 
 ### Agent 槽位
 
@@ -225,7 +227,8 @@ python3 configs/codex_schema.py verify   # 更新 schema 后先执行 generate
 git diff --check
 ```
 
-提交约定与自动格式化见 [开发规范](CONTRIBUTING.md)。
+提交约定与自动格式化见 [开发规范](CONTRIBUTING.md)；六项隔离 Mock 的交互验收命令与覆盖范围见
+[原生 UI 验收](docs/UI_ACCEPTANCE.md)。
 
 ## 文档
 
@@ -237,4 +240,4 @@ git diff --check
 | 构建与发布 | [打包、签名与 CI 发布](docs/PACKAGING.md) · [Tag 发布](docs/TAG_RELEASE_SETUP.md) · [图标说明](assets/README.md) |
 | 协作 | [开发规范](CONTRIBUTING.md) · [路线图](ROADMAP.md) · [TODO](TODO.md) · [Agent 指南](AGENTS.md) |
 
-后续工作的顺序与状态以 [TODO](TODO.md) 为准。
+历史工作包与一次性交接见 [封存索引](docs/archive/README.md)。后续工作的顺序与状态以 [TODO](TODO.md) 为准。

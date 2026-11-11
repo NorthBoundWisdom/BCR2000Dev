@@ -1,5 +1,8 @@
 # WP6 交接：安全门与 OSC 仿真
 
+> 历史交接 / 任务记录，保留当时的实现状态与验收结果；当前工作以
+> [TODO](../../TODO.md) 和 [ROADMAP](../../ROADMAP.md) 为准。文中代码路径均相对仓库根目录。
+
 已在本机 main 实现并验证，只作本地提交，不推送；继续 WP7。
 
 - Core 纯值安全门统一限制硬件、滑块、MCP 目标；使能、软限位、单步变化、速度、断线、
@@ -13,6 +16,6 @@
 - Swift 新增 MotionSafetyTests 9、OSCCodecTests 7、OutputControllerTests 3；
   Python 仿真 6 条覆盖超时/速度/原子性/租约/重放及旧 epoch。完整检查结果见本地 build/wp6-*.log。
 
-协议与启动见 [OSC.md](OSC.md)。WebSocket/ROS 与可选 dead-man 未实现，不属于本包必需项。
+协议与启动见 [OSC.md](../OSC.md)。WebSocket/ROS 与可选 dead-man 未实现，不属于本包必需项。
 未接真实机械臂，也没有将 UDP 连接状态当作执行端在线证明。真实设备独立停机策略仍需后续验证。
 审查重点：新鲜度、重新使能基线、float32 边界、整个帧校验后应用、实际值与软件目标隔离。

@@ -1,5 +1,8 @@
 # WP7 交接：相对编码与 14-bit NRPN
 
+> 历史交接 / 任务记录，保留当时的实现状态与验收结果；当前工作以
+> [TODO](../../TODO.md) 和 [ROADMAP](../../ROADMAP.md) 为准。文中代码路径均相对仓库根目录。
+
 已在 main 工作区实现并验证，提交仅保留本地，不推送。WP3–WP7 已按顺序完成。
 
 ## 改动与取舍
@@ -44,5 +47,5 @@
 - 发现但未处理：现有 ArmPreviewView 对极大自定义角度使用 Int 转换，可能超出显示范围。
   该问题已在后续审查修正中解决，见 [REVIEW_FIXES.md](REVIEW_FIXES.md)。
 
-完整编码规则、手册来源与迁移见 [CONTROL_MAP.md](CONTROL_MAP.md)，
-通用 MCP 接口见 [MCP.md](MCP.md)，OSC 仿真见 [OSC.md](OSC.md)。
+完整编码规则、手册来源与迁移见 [CONTROL_MAP.md](../CONTROL_MAP.md)，
+通用 MCP 接口见 [MCP.md](../MCP.md)，OSC 仿真见 [OSC.md](../OSC.md)。

@@ -6,8 +6,9 @@
 
 本文把 MVP 需求收敛为可实施、可测试、可演进的工程设计。它用于指导后续代码结构、接口边界、安全约束、里程碑和验收，不替代产品需求。
 
-当前仓库已完成 SwiftUI/CoreMIDI/Mock 的首个可运行纵切。本文仍描述完整产品目标；
-尚未实现的 Codex adapter、批准安全门与诊断能力继续作为后续里程碑。
+本文保留早期 MVP 的设计背景、环境快照和完整产品目标，不代表当前实现状态。
+现行分层与行为见 [控制器映射与反馈](CONTROL_MAP.md)，开发顺序和完成情况以
+[TODO.md](../TODO.md) 与 [ROADMAP.md](../ROADMAP.md) 为准。
 
 ## 2. 已确认的开发基线
 
@@ -846,49 +847,15 @@ errors.log
 - 安全相关改动有失败路径测试；
 - 文档与实际命令一致。
 
-## 15. 开发里程碑
+## 15. 历史里程碑设计
 
-当前状态快照（与 `TODO.md` 一致）：
+以下 M0–M6 是重构前的交付设计，保留用于说明最初的范围与退出标准，不表示当前实现进度。
+当前阶段与验收标准见 [ROADMAP.md](../ROADMAP.md)，执行顺序与未完成事项见
+[TODO.md](../TODO.md)，不在本文重复维护状态快照。
 
-- [x] M0 — 工程骨架
-- [x] M1 — MIDI 发现与采集
-- [x] M2 — 映射与双向反馈
-- [x] M3 — Mock Agent Console
-- [ ] M4 — Codex 基础
-- [ ] M5 — 权限与批准
-- [ ] M6 — 稳定性与发布
-- [ ] M7 — 完整映射与可配置性
-
-### 15.1 下一阶段开发清单（Todolist）
-
-- [ ] P0-S1（Codex 生命周期）
-  - [ ] App Server 进程启动失败重试策略（指数退避，最多 3 次）
-  - [ ] `stdin/stdout/stderr` 分流与停止时序（先停输入，等终结，再清理）
-  - [ ] 进程异常退出事件带时间戳上报到诊断事件流
-- [ ] P0-S2（Handshake）
-  - [ ] `initialize` / `initialized` 完整链路（含异常重放保护）
-  - [ ] `account/read` + `model/list` 分页读取与筛选
-  - [ ] 约束 `model/list` 回包与 Schema 校验失败直接进入失败态
-- [ ] P0-S3（Turn）
-  - [ ] `thread/start` 与 `thread/resume` 按 slot 单例模型接入
-  - [ ] `turn/start` 填充 `intent`（model/effort/permission/timeout）
-  - [ ] `turn/interrupt` 与 turn 完成事件回收状态
-- [ ] P0-S4（安全审批）
-  - [ ] 硬件 approve/decline 绑定 `slot/request-id/可见性/时间窗`
-  - [ ] `commandExecution` 与 `fileChange` 两类 server request 的一次性响应路径
-  - [ ] 审批被拒绝、超时、重复请求的幂等策略
-- [ ] P0-S5（交付质量）
-  - [ ] 最小集成测试：mock app-server 协议链 + 升级 schema 的合同测试
-  - [ ] `Stop All` 在 `disconnect`/`reconnect` 后行为回归
-  - [ ] 审计日志字段脱敏（token/password/env/prompt）
-
-本轮已完成：Codex/安全基础落地文件已新增。
-
-- `configs/codex_schema.py`：固定 CLI 版本 `0.145.0` 并提供 `generate/verify`。
-- `Sources/BCRAgentCore/CodexProtocol.swift`：JSON-RPC envelope、request-id、权限基元与 turn intent。
-- `Sources/BCRAgentCore/CodexTransport.swift`：JSONL in-memory transport，可用于自动化验收。
-- `Sources/BCRAgentCore/CodexRPCClient.swift`：request-id 跟踪、超时、失效响应与回调分发。
-- `Sources/BCRAgentCore/WorkspacePolicy.swift`：工作目录与 writableRoot 规范化与越界校验。
+原 P0-S1…S5 清单不再维护；当前 TODO 的 P0-S5 指 App 会话接入，P0-S4 指集成与稳定性，
+不能按旧清单的“安全审批 / 交付质量”含义解读。Core 已具备 App Server 生命周期、握手、
+Thread/Turn 和审批安全门；App 接入与剩余验证以 TODO 第 4 节为准。
 
 ### M0 — 工程骨架
 
@@ -1044,10 +1011,9 @@ ADR 至少包含背景、决策、替代方案、后果和验证方式。
 
 ## 19. 下一次开发会话的起点
 
-- [ ] 按 `TODO.md` 优先级 P0 开始：完成 Codex CLI 版本锁定、App Server 进程管理和 JSONL 连接层；
-- [ ] 完成 initialize/account/model/thread-turn/interrupt 的 adapter 实现与最小契约测试；
-- [ ] 让审批请求与硬件按钮实现“可见性 + 槽位 + requestId”三重校验，完成 decline 与 fail-closed；
-- [ ] 先补齐核心回归（状态机、协议、反馈）再展开 M2 后续优化与发布。
+先检查工作区状态，再读取 [TODO.md](../TODO.md) 的执行顺序与前置条件。
+本文记录设计背景，不作为当前待办来源；涉及实体设备的结论以
+[实机验证记录](HARDWARE_VALIDATION.md) 为准。
 
 ## 20. MVP 完成定义
 

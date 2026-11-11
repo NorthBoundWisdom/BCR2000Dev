@@ -1,5 +1,8 @@
 # 远程 Mac 实机测试准备交接
 
+> 历史交接 / 任务记录，保留当时的实现状态与验收结果；当前工作以
+> [TODO](../../TODO.md) 和 [ROADMAP](../../ROADMAP.md) 为准。文中代码路径均相对仓库根目录。
+
 ## 交付范围
 
 - 提供独立诊断入口、只读预检、受控实机查询矩阵、显式写入回读、原子私有报告及全程/单 worker 期限。
@@ -29,7 +32,7 @@
 ## 现场实测更新
 
 2026-11-10 已在另一台 Mac 接回设备实测：真实缓存读取、SSH/GUI 入口和硬件输入均已验证；
-输出查询与现场灯环均失败，内核明确拒绝 OUT 包长 4。详见 [现场诊断](MAC_USB_FIELD_RESULTS.md)。
+输出查询与现场灯环均失败，内核明确拒绝 OUT 包长 4。详见 [现场诊断](../MAC_USB_FIELD_RESULTS.md)。
 
 ## 准备阶段列出的待验项（历史记录）
 
@@ -38,5 +41,5 @@
 - 灯环视觉验收；设备值回读成功不直接等同光学观察。
 - 4-byte Full-Speed Bulk OUT 仍是兼容性线索，不是已经证实或修复的 Apple 根因。
 
-现场与远端顺序见 [MAC_REMOTE_TEST_PLAN.md](MAC_REMOTE_TEST_PLAN.md)。
+现场与远端顺序见 [MAC_REMOTE_TEST_PLAN.md](../MAC_REMOTE_TEST_PLAN.md)。
 不会自动重启 Mac/MIDIServer、删除系统 MIDI 配置、独占 USB、安装驱动、调整管道或修改固件/预设。

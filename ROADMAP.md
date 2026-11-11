@@ -1,18 +1,19 @@
 # BCR Console 后续开发计划
 
-> 更新：2026-11-09。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
-> 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的外部开发任务见
-> [DEV_PROMPT.md](DEV_PROMPT.md)（WP1–WP7）。
+> 更新：2026-11-11。本文是阶段目标与验收标准；可勾选的细项在 [TODO.md](TODO.md)，
+> 开发规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。无真机阶段的历史任务说明见
+> [封存开发任务](docs/archive/DEV_PROMPT.md)（WP1–WP7，不作为当前待办）。
 
 ## 当前基线
 
+- 现行文档与历史交接已分离；六项隔离 Mock 的 [原生 UI 验收](docs/UI_ACCEPTANCE.md) 全部通过。
 - 108 个物理控件模型（`BCRLayout`）、实体学习映射（`HardwareMap`）、功能分配与参数
   （`SurfaceConfiguration`）、双向同步引擎（`SurfaceEngine`）均在 `BCRAgentCore`，有单元测试。
 - `MockBCR2000` 模拟 U-1 模式行为；虚拟面板在 Mock 下即硬件，在实体模式下为镜像。
 - 首次启动载入中性“默认配置”（8 个通用参数 + 8 个 Mock Agent + 复位）；“机械臂示例”
   （6 关节 + 夹爪 + 速度 + 使能 + 复位）改为从“载入预置…”显式载入，集成测试仍以它为基线。
 - 配置替换保留设备时序策略、清除已移除控件的反馈；重新载入相同配置也停止运行中的输出，避免沿用旧安全门。
-- WP3–WP7（MCP、持久化、功能系统、安全门/OSC、相对编码与 NRPN）已在 Mock 下完成，审查修正进行中。
+- WP3–WP7（MCP、持久化、功能系统、安全门/OSC、相对编码与 NRPN）及审查修正已在 Mock 下完成。
 - 实体 BCR2000 已连接（CoreMIDI 可见 Port 1/2 输入、Port 1/2/3 输出），尚未完成 R1 实机验证。
 - 视窗保留自定义无标题栏样式，AppKit 处理移动与双击放大；面板阴影限于背景形状，避免拖曳合成卡顿。
 
@@ -67,7 +68,7 @@ Codex（可并行）→ 发布 → 页面/层、宏、WebSocket/ROS。
 
 ## R2 同步可靠性（P0）
 
-1. [x] **可测试的会话层（WP1，审查修正待确认）**：`SurfaceDevice` 统一设备边界，
+1. [x] **可测试的会话层（WP1，含审查修正）**：`SurfaceDevice` 统一设备边界，
    `SurfaceSession` 承担效果管线、路由、连接回写、学习与日志；CoreMIDI / Mock 适配器接入，
    假设备整合测试覆盖，无需真机。
 2. **反馈调度**：同一控件在一帧内只发最后一个值（合并），全局限速；拖动滑块时不刷屏。
