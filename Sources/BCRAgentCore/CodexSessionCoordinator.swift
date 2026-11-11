@@ -72,6 +72,9 @@ public actor CodexSessionCoordinator {
     private var slotByThread: [String: AgentSlotID] = [:]
     private var seenApprovalIDs: Set<CodexRequestID> = []
     private var approvals: [CodexRequestID: CodexPendingApproval] = [:]
+    private var startIDs: [AgentSlotID: UUID] = [:]
+    private var cancelledStarts: Set<UUID> = []
+    private var interrupting: Set<AgentSlotID> = []
     private var starting: Set<AgentSlotID> = []
     private var generation = 0
     private var lastError: String?
@@ -135,6 +138,11 @@ public actor CodexSessionCoordinator {
         generation += 1
         let revision = generation
         connectionPhase = .initializing
+        starting.removeAll(); startIDs.removeAll(); cancelledStarts.removeAll(); interrupting.removeAll()
+        approvals.removeAll(); responding.removeAll(); seenApprovalIDs.removeAll()
+        threadBySlot.removeAll(); slotByThread.removeAll()
+        await approvalGate.clearAll()
+        for slot in (1 ... 8).map({ AgentSlotID($0) }) { try? await stateMachine.reset(slotID: slot) }
         lastError = nil
         await publish()
         await rpc.setEventHandlers(onServerRequest: { [weak self] event in
@@ -190,10 +198,11 @@ public actor CodexSessionCoordinator {
     }
 
     private func disconnected(_ error: String, generation revision: Int) async {
-        guard revision == generation, connectionPhase != .stopped else { return }
+        guard revision == generation, connectionPhase != .stopped, connectionPhase != .failed else { return }
         connectionPhase = .failed
         lastError = error
         starting.removeAll()
+        startIDs.removeAll(); cancelledStarts.removeAll(); interrupting.removeAll()
         approvals.removeAll()
         responding.removeAll()
         for (slot, state) in await stateMachine.allStates() {
@@ -208,6 +217,7 @@ public actor CodexSessionCoordinator {
         generation += 1
         connectionPhase = .stopped
         starting.removeAll()
+        startIDs.removeAll(); cancelledStarts.removeAll(); interrupting.removeAll()
         approvals.removeAll()
         responding.removeAll()
         seenApprovalIDs.removeAll()
@@ -222,7 +232,8 @@ public actor CodexSessionCoordinator {
     }
 
     public func startTurn(slotID: AgentSlotID, userPrompt: String, modelID: String, effortID: String? = nil,
-                          permission: CodexPermissionPolicy, timeoutMs: Int? = nil, cwd: String? = nil) async throws
+                          permission: CodexPermissionPolicy, timeoutMs: Int? = nil, cwd: String? = nil,
+                          startID: UUID = UUID()) async throws
     {
         guard connectionPhase == .ready, !starting.contains(slotID) else {
             throw CodexSessionCoordinatorError.invalidState("connection not ready or slot busy")
@@ -237,12 +248,19 @@ public actor CodexSessionCoordinator {
         else {
             throw CodexSessionCoordinatorError.modelUnavailable
         }
+        let cwd = try cwd.map { try WorkspacePolicy.canonicalWorkspaceRoot($0).path }
         if permission.type == .workspaceWrite {
             try WorkspacePolicy.validateWorkspaceWrite(cwdPath: cwd, writableRoots: permission.writableRoots)
         }
         let revision = generation
         starting.insert(slotID)
-        defer { if revision == generation { starting.remove(slotID) } }
+        startIDs[slotID] = startID
+        defer { if revision == generation { starting.remove(slotID); cancelledStarts.remove(startID) } }
+        lastError = nil
+        if cancelledStarts.contains(startID) {
+            try await stateMachine.cancelPendingStart(slotID: slotID)
+            await publish(); return
+        }
         let thread: String
         if let existing = threadBySlot[slotID] {
             thread = existing
@@ -261,6 +279,11 @@ public actor CodexSessionCoordinator {
             threadBySlot[slotID] = id
             slotByThread[id] = slotID
             try await stateMachine.bindThread(slotID: slotID, threadID: id)
+        }
+        try check(revision)
+        if cancelledStarts.contains(startID) {
+            try await stateMachine.cancelPendingStart(slotID: slotID)
+            await publish(); return
         }
         var sandbox: [String: JSONValue] =
             ["type": .string(permission.type == .safeRead ? "readOnly" : "workspaceWrite")]
@@ -288,16 +311,31 @@ public actor CodexSessionCoordinator {
         {
             try await stateMachine.onTurnStart(slotID: slotID, threadID: thread, turnID: turn)
         }
+        if cancelledStarts.contains(startID) { _ = try await interruptActiveTurn(slotID: slotID) }
         await publish()
     }
 
+    public func requestInterrupt(slotID: AgentSlotID, startID: UUID?) async throws -> Bool {
+        guard connectionPhase == .ready else { throw CodexSessionCoordinatorError.invalidState("connection not ready") }
+        if let startID, startIDs[slotID] != startID || starting.contains(slotID) {
+            cancelledStarts.insert(startID)
+            return true
+        }
+        return try await interruptActiveTurn(slotID: slotID)
+    }
+
     public func interruptTurn(slotID: AgentSlotID) async throws {
+        if starting.contains(slotID), let id = startIDs[slotID] { cancelledStarts.insert(id); return }
+        _ = try await interruptActiveTurn(slotID: slotID)
+    }
+
+    private func interruptActiveTurn(slotID: AgentSlotID) async throws -> Bool {
         let revision = generation
         guard let state = await stateMachine.snapshot(slotID: slotID), let thread = state.threadID,
-              let turn = state.turnID
-        else {
-            throw CodexSessionCoordinatorError.invalidState("no active turn")
-        }
+              let turn = state.turnID,
+              state.phase == .running || state.phase == .awaitingApproval else { return false }
+        guard interrupting.insert(slotID).inserted else { return true }
+        defer { if generation == revision { interrupting.remove(slotID) } }
         _ = try await rpc.sendRequest(
             .turnInterrupt,
             params: .object(["threadId": .string(thread), "turnId": .string(turn)])
@@ -305,12 +343,14 @@ public actor CodexSessionCoordinator {
         try check(revision)
         try await stateMachine.onInterrupt(slotID: slotID)
         approvals = approvals.filter { $0.value.slotID != slotID }
+        lastError = nil
         await publish()
+        return true
     }
 
     public func onServerEnvelope(_ envelope: CodexEnvelope) async { await receive(envelope, generation: generation) }
     private func receive(_ envelope: CodexEnvelope, generation revision: Int) async {
-        guard revision == generation, connectionPhase != .stopped else { return }
+        guard revision == generation, connectionPhase != .stopped, connectionPhase != .failed else { return }
         do {
             guard let event = try envelope.asServerEvent() else { return }
             switch event {

@@ -31,6 +31,9 @@ final class CodexAgentController: ObservableObject {
     private var snapshots: AsyncStream<CodexSessionSnapshot>.Continuation?
     private var coordinator: CodexSessionCoordinator?
     private var generation = 0
+    private var startIDs: [AgentSlotID: UUID] = [:]
+    private var pendingInterrupts: Set<AgentSlotID> = []
+    private var interruptTasks: [AgentSlotID: Task<Void, Never>] = [:]
     private var tasks: [AgentSlotID: Task<Void, Never>] = [:]
 
     init(directory: URL, factory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil) {
@@ -42,6 +45,7 @@ final class CodexAgentController: ObservableObject {
         guard value != backend else { return }
         await stopAll()
         backend = value
+        error = nil
         onStopMock?()
     }
 
@@ -94,6 +98,8 @@ final class CodexAgentController: ObservableObject {
         approvalTasks.removeAll()
         respondingApprovals.removeAll()
         dismissApprovalReview()
+        interruptTasks.values.forEach { $0.cancel() }
+        interruptTasks.removeAll(); startIDs.removeAll(); pendingInterrupts.removeAll()
         tasks.values.forEach { $0.cancel() }
         tasks.removeAll()
         let session = coordinator
@@ -118,14 +124,18 @@ final class CodexAgentController: ObservableObject {
 
     func start(_ id: AgentSlotID) {
         guard backend == .codex, phase == .ready, let coordinator,
-              let index = slots.firstIndex(where: { $0.id == id }), !slots[index].state.isActive
-        else {
-            error = L10n.text("Codex 连接未建立"); return
+              let index = slots.firstIndex(where: { $0.id == id })
+        else { error = L10n.text("Codex 连接未建立"); return }
+        guard !slots[index].state.isActive, tasks[id] == nil, interruptTasks[id] == nil else {
+            error = L10n.text("Agent 正忙"); return
         }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             error = L10n.text("任务内容不能为空"); return
         }
+        error = nil
         let revision = generation
+        let intent = UUID()
+        startIDs[id] = intent
         let text = prompt, model = modelID, root = workspace, selectedEffort = effort
         let policy = CodexPermissionPolicy(type: allowWorkspaceWrites ? .workspaceWrite : .safeRead,
                                            networkAccess: false, writableRoots: allowWorkspaceWrites ? [root] : nil)
@@ -136,7 +146,7 @@ final class CodexAgentController: ObservableObject {
             do {
                 try await coordinator.startTurn(slotID: id, userPrompt: text, modelID: model,
                                                 effortID: selectedEffort.isEmpty ? nil : selectedEffort,
-                                                permission: policy, cwd: root)
+                                                permission: policy, cwd: root, startID: intent)
             } catch {
                 guard let self, self.generation == revision else { return }
                 self.error = error.localizedDescription
@@ -146,20 +156,30 @@ final class CodexAgentController: ObservableObject {
                     self.onSlots?(self.slots)
                 }
             }
-            if let self, self.generation == revision { self.tasks[id] = nil }
+            if let self, self.generation == revision, self.startIDs[id] == intent { self.tasks[id] = nil }
         }
     }
 
     func interrupt(_ id: AgentSlotID) {
-        guard let coordinator else { return }
-        // A queued thread may not yet have a turn ID; stopping the connection cancels it safely.
-        if slots.first(where: { $0.id == id })?.state == .queued {
-            Task { await stopAll() }; return
-        }
+        guard let coordinator, let slot = slots.first(where: { $0.id == id }), slot.state.isActive else { return }
+        guard interruptTasks[id] == nil else { return }
+        error = nil
+        pendingInterrupts.insert(id)
+        approvals.removeAll { $0.slotID == id }
+        if reviewingApproval?.slotID == id { dismissApprovalReview() }
         let revision = generation
-        tasks[id] = Task { [weak self] in
-            do { try await coordinator.interruptTurn(slotID: id) }
-            catch { if let self, self.generation == revision { self.error = error.localizedDescription } }
+        let intent = startIDs[id]
+        interruptTasks[id] = Task { [weak self] in
+            defer { if let self, self.generation == revision { self.interruptTasks[id] = nil } }
+            do {
+                _ = try await coordinator.requestInterrupt(slotID: id, startID: intent)
+                if let self, self.generation == revision { self.apply(await coordinator.snapshot()) }
+            } catch {
+                if let self,
+                   self
+                       .generation ==
+                       revision { self.pendingInterrupts.remove(id); self.error = error.localizedDescription }
+            }
         }
     }
 
@@ -225,7 +245,7 @@ final class CodexAgentController: ObservableObject {
     private func apply(_ snapshot: CodexSessionSnapshot) {
         phase = snapshot.phase
         models = snapshot.models
-        approvals = snapshot.approvals
+        approvals = snapshot.approvals.filter { !pendingInterrupts.contains($0.slotID) }
         if let review = reviewingApproval,
            !approvals.contains(where: { $0.id == review.id }) { dismissApprovalReview() }
         if !models
@@ -236,6 +256,11 @@ final class CodexAgentController: ObservableObject {
         if let error = snapshot.error { self.error = error }
         for index in slots.indices {
             guard let state = snapshot.states[slots[index].id] else { continue }
+            if pendingInterrupts.contains(slots[index].id), snapshot.phase != .failed {
+                if [.completed, .interrupted, .failed]
+                    .contains(state.phase) { pendingInterrupts.remove(slots[index].id) }
+                else { slots[index].statusText = L10n.text("正在中断"); continue }
+            }
             // Idle snapshots from another slot must not clear a start request still in flight.
             if snapshot.phase == .failed, slots[index].state.isActive {
                 slots[index].state = .error

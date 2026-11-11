@@ -278,6 +278,53 @@ final class CodexSessionIntegrationTests: XCTestCase {
         await session.stop()
     }
 
+    func testReadOnlyTurnRejectsRelativeWorkspace() async throws {
+        let session = try await makeSession()
+        try await session.start()
+        do {
+            try await session.startTurn(
+                slotID: AgentSlotID(1),
+                userPrompt: "hold",
+                modelID: "fixture",
+                permission: .init(type: .safeRead),
+                cwd: "."
+            )
+            XCTFail("Relative cwd must be rejected in read-only mode as well")
+        } catch WorkspacePolicyError.pathNotAbsolute {}
+        await session.stop()
+    }
+
+    func testSameCoordinatorReconnectCreatesFreshServerThread() async throws {
+        let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appending(path: "Fixtures/mock_app_server.py")
+        let process = CodexProcessSupervisor()
+        let cache = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: cache) }
+        let session = CodexSessionCoordinator(
+            transport: process,
+            modelCatalogStore: CodexModelCatalogStore(fileURL: cache)
+        )
+        for _ in 0 ..< 2 {
+            try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
+            try await session.start()
+            try await session.startTurn(
+                slotID: AgentSlotID(1),
+                userPrompt: "complete",
+                modelID: "fixture",
+                permission: .init(type: .safeRead)
+            )
+            try await wait(session, slot: AgentSlotID(1), phase: .completed)
+            await process.stop()
+            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            while await session.snapshot().phase != .failed,
+                  ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+            let state = await session.snapshot()
+            XCTAssertEqual(state.phase, .failed)
+            await session.rpc.stop()
+        }
+        await session.stop()
+    }
+
     func testFailedTurnIsNotReportedAsCompleted() async throws {
         let session = try await makeSession()
         try await session.start()

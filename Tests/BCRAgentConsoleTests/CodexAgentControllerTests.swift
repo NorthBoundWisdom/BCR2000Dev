@@ -142,6 +142,48 @@ final class CodexAgentControllerTests: XCTestCase {
         await controller.stopAll()
     }
 
+    func testQueuedInterruptIsScopedToOneSlot() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = controller(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        await controller.connect()
+        controller.prompt = "hold"
+        controller.start(AgentSlotID(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller.slots[1].state != .running,
+              ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        controller.prompt = "delayed_hold"
+        controller.start(AgentSlotID(1))
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(controller.slots[0].state, .queued)
+        controller.interrupt(AgentSlotID(1))
+        try await waitFor(controller, phase: .interrupted)
+        XCTAssertEqual(controller.phase, .ready)
+        XCTAssertEqual(controller.slots[1].state, .running)
+        XCTAssertNil(controller.error)
+        await controller.stopAll()
+    }
+
+    func testImmediateQueuedInterruptDoesNotCancelNextStart() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = controller(directory: directory)
+        controller.workspace = FileManager.default.temporaryDirectory.path
+        await controller.selectBackend(.codex)
+        await controller.connect()
+        controller.prompt = "hold"
+        controller.start(AgentSlotID(1))
+        controller.interrupt(AgentSlotID(1))
+        try await waitFor(controller, phase: .interrupted)
+        try await Task.sleep(for: .milliseconds(20))
+        controller.start(AgentSlotID(1))
+        try await waitFor(controller, phase: .running)
+        XCTAssertNil(controller.error)
+        await controller.stopAll()
+    }
+
     func testConnectionFailureIsVisibleAndDoesNotFallBackToMock() async throws {
         let controller = CodexAgentController(directory: FileManager.default.temporaryDirectory)
         controller.workspace = FileManager.default.temporaryDirectory.path

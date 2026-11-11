@@ -5,6 +5,7 @@ No network, credentials, shell execution or repository writes. Fails on unsafe w
 
 import json
 import sys
+import time
 
 threads = {}
 turns = {}
@@ -71,6 +72,9 @@ for line in sys.stdin:
         turn = "turn-" + str(next_turn)
         next_turn += 1
         turns[thread] = turn
+        text = args["input"][0]["text"]
+        if text == "delayed_hold":
+            time.sleep(0.2)
         emit({"id": identifier, "result": {"turn": {"id": turn, "status": "inProgress"}}})
         emit({"method": "turn/started", "params": {"threadId": thread, "turn": {"id": turn}}})
         text = args["input"][0]["text"]

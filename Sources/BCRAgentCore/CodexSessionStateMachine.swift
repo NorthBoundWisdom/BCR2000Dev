@@ -166,6 +166,15 @@ public actor CodexSessionStateMachine {
         slots[slotID] = state
     }
 
+    public func cancelPendingStart(slotID: AgentSlotID, at now: Date = .now) throws {
+        guard var state = slots[slotID] else { throw CodexSessionStateMachineError.slotMissing(slotID) }
+        guard state.turnID == nil else { return }
+        state.phase = .interrupted
+        state.lastError = nil
+        state.lastEventAt = now
+        slots[slotID] = state
+    }
+
     public func onInterrupt(slotID: AgentSlotID, at: Date = .now) throws {
         guard var state = slots[slotID] else {
             throw CodexSessionStateMachineError.slotMissing(slotID)

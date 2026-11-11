@@ -78,25 +78,8 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
 方向：离线功能面已足够宽，暂停新增功能。顺序为 P0 审批链路 → RV4 反馈调度 → 回到第 1 节实机验证；
 其余 P2 在实机等待间隙处理。
 
-### P0 Codex 审批链路
-
-- [ ] RV1 审批过期后槽位死锁。`CodexApprovalGate.registerRequest` 默认窗口 8 秒；过期后
-  `resolve` 先移除 pending 再抛 `requestExpired`，`CodexSessionCoordinator.sendApproval` 不向 Codex 回复，
-  `approvals` 中的条目也不清除，之后批准和拒绝都抛 `requestMissing`，Turn 永远停在 `awaitingApproval`，
-  界面只剩“全部停止”。8 秒也不足以阅读命令详情。
-  修复方向：过期时显式回复 decline 并清除条目、发布快照；窗口时长改为可见且足够（或改为不自动过期，
-  只防重放）；拒绝在任何时候都必须可达。补：过期、过期后拒绝、过期后槽位可重新启动的测试。
-- [ ] RV2 同一槽位并发审批会卡住第二个请求。`sendApproval` 顺序是 gate 记为已决 →
-  `resumeAfterApproval`（要求当前为 `awaitingApproval`）→ 移除条目 → 发送。第一个审批后槽位变为
-  `running`，第二个请求在 `resumeAfterApproval` 抛错，但 gate 已记为已决，重试直接返回 `false`，永不回复。
-  同理 `rpc.sendEnvelope` 失败时决定已记录但 Codex 没收到。
-  修复方向：先发送成功再记为已决；槽位仍有其他待批请求时保持 `awaitingApproval`。补并发审批与发送失败测试。
-
 ### P1
 
-- [ ] RV5 中断一个排队中的槽位会停掉全部槽位并断开连接。`CodexAgentController.interrupt` 对 `.queued`
-  调用 `stopAll()`；MCP `interrupt_agent` 也走这条路径，外部 Agent 可借此断开其余七个槽位。
-  修复方向：只取消该槽位——记录“待中断”，拿到 turnId 后立即 `turn/interrupt`，或取消尚未发出的启动。
 - [ ] RV6 Codex 设置不持久，且从 Finder 启动找不到 `codex`。后端、可执行文件、工作目录、模型、写入开关
   每次启动都重置；`resolveExecutable` 只查进程 `PATH`，GUI 启动时不含用户 shell 路径，默认值 `codex`
   会报找不到可执行文件。修复方向：持久化非敏感设置（不含任务内容），可执行文件用文件选择器取绝对路径，
@@ -123,11 +106,6 @@ P1 先于 HW6 / D3 校准；P2 可随手处理。
   保存并移除观察者。
 - [ ] RV12 `OutputController.start` 用 `adapter as? OutputTransportRouter` 选择传输，注入其他适配器时
   传输设置被静默忽略，违反“不加静默回退”。把 `select` 放进协议或在构造时注入。
-- [ ] RV14 `CodexAgentController` 小问题：`interrupt` / `decide` 覆盖 `tasks[id]` 而不取消原启动任务，
-  原任务结束时会把新任务句柄清掉；`error` 只在重新连接时清除；槽位忙时 `start` 报“Codex 连接未建立”。
-- [ ] RV15 `CodexSessionCoordinator` 在 `disconnected` 后保留 `threadBySlot` / `seenApprovalIDs`，
-  同一实例再次 `start()` 会对新进程复用旧 threadId。控制器目前每次新建实例所以未触发，在 `start()` 里清空即可。
-  只读模式下 `startTurn` 不校验 `cwd`，统一走 `WorkspacePolicy.canonicalWorkspaceRoot`。
 - [ ] RV16 文档与常量。ROADMAP 的 R4（“页面/层/宏待后续”）、R5（“WebSocket JSON、ROS 2 桥留待后续”）、
   R8 第 6 点和“当前执行顺序”一行与已完成状态矛盾；`CodexSchema.stableSchemaDirectory` 指向的
   `Schemas/Codex/0.167.1` 在资源目录中不存在（核实是否仍被使用，未使用则删除）；
