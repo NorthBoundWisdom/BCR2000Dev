@@ -81,67 +81,41 @@ private struct ParameterListView: View {
             Text(L10n.text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 165), alignment: .leading)], alignment: .leading) {
-                Button {
-                    model.createParameter()
-                } label: {
-                    Label(L10n.text("新建参数"), systemImage: "plus")
-                }
-                Button(L10n.text("导入配置…")) {
-                    Task {
-                        pendingImport = await model.chooseConfigurationImport()
-                        confirmsImport = pendingImport != nil
-                    }
-                }
-                .accessibilityLabel(L10n.text("导入配置"))
-                .accessibilityIdentifier("configuration.import")
-                .help(L10n.text("导入参数与功能分配，确认后替换当前配置"))
-                .confirmationDialog(L10n.text("替换当前全部参数与分配？"), isPresented: $confirmsImport) {
-                    Button(L10n.text("导入并替换"), role: .destructive) {
-                        if let pendingImport { model.installConfiguration(pendingImport) }
-                        pendingImport = nil
-                    }
-                    Button(L10n.text("取消"), role: .cancel) { pendingImport = nil }
-                } message: {
-                    if let pendingImport {
-                        Text(
-                            L10n
-                                .text(
-                                    "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
-                                )
-                        )
-                    }
-                }
-                Button(L10n.text("导出配置…")) { Task { await model.chooseConfigurationExport() } }
-                    .accessibilityLabel(L10n.text("导出配置"))
-                    .accessibilityIdentifier("configuration.export")
-                    .help(L10n.text("导出参数与功能分配，不包含实体映射"))
-                Menu(L10n.text("载入预置…")) {
-                    ForEach(ConfigurationPreset.allCases) { preset in
-                        Button {
-                            pendingPreset = preset
-                        } label: {
-                            Text(preset.title)
-                            Text(preset.summary)
-                        }
-                    }
-                }
-                .fixedSize()
-                .accessibilityLabel(L10n.text("载入预置配置"))
-                .accessibilityIdentifier("configuration.preset")
-                .help(L10n.text("用内置的默认配置或示例替换当前配置"))
-                .confirmationDialog(
-                    L10n.text("载入“\(pendingPreset?.title ?? "")”？"),
-                    isPresented: Binding(get: { pendingPreset != nil }, set: { if !$0 { pendingPreset = nil } }),
-                    presenting: pendingPreset
-                ) { preset in
-                    Button(L10n.text("载入并替换"), role: .destructive) { model.loadPreset(preset) }
-                    Button(L10n.text("取消"), role: .cancel) {}
-                } message: { preset in
-                    Text(L10n.text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。"))
+            // One row when it fits; otherwise two aligned rows instead of ragged grid cells.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { createButton; Spacer(minLength: 8); importButton; exportButton; presetMenu }
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) { createButton; presetMenu }
+                    HStack(spacing: 8) { importButton; exportButton }
                 }
             }
             .controlSize(.small)
+            .confirmationDialog(L10n.text("替换当前全部参数与分配？"), isPresented: $confirmsImport) {
+                Button(L10n.text("导入并替换"), role: .destructive) {
+                    if let pendingImport { model.installConfiguration(pendingImport) }
+                    pendingImport = nil
+                }
+                Button(L10n.text("取消"), role: .cancel) { pendingImport = nil }
+            } message: {
+                if let pendingImport {
+                    Text(
+                        L10n
+                            .text(
+                                "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
+                            )
+                    )
+                }
+            }
+            .confirmationDialog(
+                L10n.text("载入“\(pendingPreset?.title ?? "")”？"),
+                isPresented: Binding(get: { pendingPreset != nil }, set: { if !$0 { pendingPreset = nil } }),
+                presenting: pendingPreset
+            ) { preset in
+                Button(L10n.text("载入并替换"), role: .destructive) { model.loadPreset(preset) }
+                Button(L10n.text("取消"), role: .cancel) {}
+            } message: { preset in
+                Text(L10n.text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。"))
+            }
 
             ForEach(model.configuration.parameterGroups, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 6) {
@@ -156,10 +130,53 @@ private struct ParameterListView: View {
                         ParameterRow(model: model, definition: definition)
                     }
                 }
-                .padding(10)
-                .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 9))
+                .insetCard()
             }
         }
+    }
+
+    private var createButton: some View {
+        Button {
+            model.createParameter()
+        } label: {
+            Label(L10n.text("新建参数"), systemImage: "plus")
+        }
+    }
+
+    private var importButton: some View {
+        Button(L10n.text("导入配置…")) {
+            Task {
+                pendingImport = await model.chooseConfigurationImport()
+                confirmsImport = pendingImport != nil
+            }
+        }
+        .accessibilityLabel(L10n.text("导入配置"))
+        .accessibilityIdentifier("configuration.import")
+        .help(L10n.text("导入参数与功能分配，确认后替换当前配置"))
+    }
+
+    private var exportButton: some View {
+        Button(L10n.text("导出配置…")) { Task { await model.chooseConfigurationExport() } }
+            .accessibilityLabel(L10n.text("导出配置"))
+            .accessibilityIdentifier("configuration.export")
+            .help(L10n.text("导出参数与功能分配，不包含实体映射"))
+    }
+
+    private var presetMenu: some View {
+        Menu(L10n.text("载入预置…")) {
+            ForEach(ConfigurationPreset.allCases) { preset in
+                Button {
+                    pendingPreset = preset
+                } label: {
+                    Text(preset.title)
+                    Text(preset.summary)
+                }
+            }
+        }
+        .fixedSize()
+        .accessibilityLabel(L10n.text("载入预置配置"))
+        .accessibilityIdentifier("configuration.preset")
+        .help(L10n.text("用内置的默认配置或示例替换当前配置"))
     }
 }
 
@@ -291,8 +308,7 @@ private struct AgentGridView: View {
                         }
                         .controlSize(.small)
                     }
-                    .padding(11)
-                    .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 9))
+                    .insetCard(padding: 11)
                 }
             }
         }

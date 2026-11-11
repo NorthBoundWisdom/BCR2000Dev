@@ -11,24 +11,33 @@ struct BulkAssignmentSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(L10n.text("批量分配"), icon: "rectangle.grid.1x2")
-            Picker(L10n.text("控件区"), selection: $section) {
-                ForEach(BCRSection.allCases, id: \.self) { Text($0.displayName).tag($0) }
-            }
-            Picker(L10n.text("组 / 行"), selection: $row) {
-                ForEach(Array(section.rowRange), id: \.self) { Text(String($0)).tag($0) }
-            }
-            Picker(L10n.text("参数组"), selection: $group) {
-                ForEach(model.configuration.parameterGroups, id: \.self) {
-                    Text($0.isEmpty ? L10n.text("未分组") : $0).tag($0)
+            FieldRow(L10n.text("控件区")) {
+                Picker(L10n.text("控件区"), selection: $section) {
+                    ForEach(BCRSection.allCases, id: \.self) { Text($0.displayName).tag($0) }
                 }
             }
-            Button(L10n.text("预览批量分配…")) {
-                if let plan = model.bulkAssignmentPlan(section: section, row: row, group: group) {
-                    preview = BulkPreviewPresentation(plan: plan)
+            FieldRow(L10n.text("组 / 行")) {
+                Picker(L10n.text("组 / 行"), selection: $row) {
+                    ForEach(Array(section.rowRange), id: \.self) { Text(String($0)).tag($0) }
                 }
             }
-            .disabled(model.configuration.parameters.isEmpty)
-            .help(L10n.text("预览整行与参数组的顺序绑定，确认后应用"))
+            FieldRow(L10n.text("参数组")) {
+                Picker(L10n.text("参数组"), selection: $group) {
+                    ForEach(model.configuration.parameterGroups, id: \.self) {
+                        Text($0.isEmpty ? L10n.text("未分组") : $0).tag($0)
+                    }
+                }
+            }
+            HStack {
+                Spacer()
+                Button(L10n.text("预览批量分配…")) {
+                    if let plan = model.bulkAssignmentPlan(section: section, row: row, group: group) {
+                        preview = BulkPreviewPresentation(plan: plan)
+                    }
+                }
+                .disabled(model.configuration.parameters.isEmpty)
+                .help(L10n.text("预览整行与参数组的顺序绑定，确认后应用"))
+            }
         }
         .panelStyle()
         .onAppear { selectValidGroup() }

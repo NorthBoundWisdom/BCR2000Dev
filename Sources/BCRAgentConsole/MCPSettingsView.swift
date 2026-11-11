@@ -7,14 +7,13 @@ struct MCPStatusButton: View {
 
     var body: some View {
         Button { showsSettings = true } label: {
-            Label(
-                controller.integrationTest ? L10n.text("测试 · \(controller.status)") : controller.status,
-                systemImage: "network"
+            StatusChip(
+                title: controller.integrationTest ? L10n.text("测试 · \(controller.status)") : controller.status,
+                icon: "network",
+                tint: controller.error != nil ? .red : (controller.isListening ? Theme.parameter : .secondary)
             )
-            .font(.caption)
-            .foregroundStyle(controller.error == nil ? Theme.parameter : .red)
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(.plain)
         .accessibilityLabel(L10n.text("MCP 设置：\(controller.status)"))
         .help(L10n.text("通用 MCP 接口设置"))
         .sheet(isPresented: $showsSettings) { MCPSettingsView(controller: controller) }

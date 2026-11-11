@@ -27,6 +27,7 @@ struct ControlInspectorView: View {
                 BulkAssignmentSection(model: model)
             }
             .padding(14)
+            .controlSize(.small)
         }
         .background(Color.black.opacity(0.18))
     }
@@ -76,9 +77,7 @@ struct ControlInspectorView: View {
 
             switch model.source {
             case .mock:
-                Text(L10n.text("Mock 默认预设为通道 1 的 CC。可临时切换单个编码器到通道 16 NRPN，不写入实体映射。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                FieldNote(L10n.text("Mock 默认预设为通道 1 的 CC。可临时切换单个编码器到通道 16 NRPN，不写入实体映射。"))
                 if control.isContinuous {
                     Toggle("Mock 14-bit NRPN", isOn: Binding(
                         get: { model.engine.hardwareMap.midi(for: control)?.kind == .nrpn },
@@ -87,11 +86,13 @@ struct ControlInspectorView: View {
                     .help(L10n.text("仅切换所选 Mock 编码器的 14-bit NRPN 预设"))
                 }
             case .hardware:
-                Picker(L10n.text("学习消息格式"), selection: $learnFormat) {
-                    Text("CC / Note").tag(MIDILearnFormat.voice)
-                    Text("14-bit NRPN").tag(MIDILearnFormat.nrpn14)
+                FieldRow(L10n.text("学习消息格式")) {
+                    Picker(L10n.text("学习消息格式"), selection: $learnFormat) {
+                        Text("CC / Note").tag(MIDILearnFormat.voice)
+                        Text("14-bit NRPN").tag(MIDILearnFormat.nrpn14)
+                    }
+                    .disabled(model.isLearning)
                 }
-                .disabled(model.isLearning)
                 HStack {
                     if model.isLearning {
                         Button(L10n.text("停止学习")) { model.stopLearning() }
@@ -104,14 +105,12 @@ struct ControlInspectorView: View {
                     Button(L10n.text("清除绑定")) { model.unbind(control) }
                         .disabled(model.engine.hardwareMap.midi(for: control) == nil)
                 }
-                Text(
+                FieldNote(
                     L10n
                         .text(
                             "学习时请操作实体控件：编码器转动、按键按下。完成后自动跳到本区下一个未学习控件。已学习 \(model.learnedCount) / \(BCRLayout.allControls.count)。"
                         )
                 )
-                .font(.caption)
-                .foregroundStyle(.secondary)
                 Button(L10n.text("清空全部实体映射…"), role: .destructive) { confirmsMapReset = true }
                     .buttonStyle(.link)
                     .font(.caption)
@@ -179,91 +178,110 @@ private struct FunctionSection: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(L10n.text("功能"), icon: "slider.horizontal.3")
 
-            Picker(L10n.text("类型"), selection: kindBinding) {
-                ForEach(availableKinds) { Text($0.title).tag($0) }
+            FieldRow(L10n.text("类型")) {
+                Picker(L10n.text("类型"), selection: kindBinding) {
+                    ForEach(availableKinds) { Text($0.title).tag($0) }
+                }
             }
 
             switch assignment?.target {
             case let .switchPage(id)?:
-                Picker(L10n.text("页面"), selection: Binding(get: { id }, set: { update(target: .switchPage($0)) })) {
-                    Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
-                    ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
+                FieldRow(L10n.text("页面")) {
+                    Picker(
+                        L10n.text("页面"),
+                        selection: Binding(get: { id }, set: { update(target: .switchPage($0)) })
+                    ) {
+                        Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
+                        ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
+                    }
                 }
             case let .runMacro(id)?:
-                Picker(L10n.text("宏"), selection: Binding(get: { id }, set: { update(target: .runMacro($0)) })) {
-                    ForEach(model.configuration.macros) { Text($0.name).tag($0.id) }
+                FieldRow(L10n.text("宏")) {
+                    Picker(L10n.text("宏"), selection: Binding(get: { id }, set: { update(target: .runMacro($0)) })) {
+                        ForEach(model.configuration.macros) { Text($0.name).tag($0.id) }
+                    }
                 }
 
             case let .parameter(id)?:
-                HStack {
-                    Picker(L10n.text("参数"), selection: Binding(
-                        get: { id },
-                        set: { update(target: .parameter($0)) }
-                    )) {
-                        ForEach(model.configuration.parameters) { parameter in
-                            Text(parameter.group.isEmpty ? parameter.name : "\(parameter.group) · \(parameter.name)")
-                                .tag(parameter.id)
+                FieldRow(L10n.text("参数")) {
+                    HStack(spacing: 6) {
+                        Picker(L10n.text("参数"), selection: Binding(
+                            get: { id },
+                            set: { update(target: .parameter($0)) }
+                        )) {
+                            ForEach(model.configuration.parameters) { parameter in
+                                Text(parameter.group.isEmpty ? parameter
+                                    .name : "\(parameter.group) · \(parameter.name)")
+                                    .tag(parameter.id)
+                            }
                         }
+                        Button {
+                            model.createParameter(assigningTo: control)
+                        } label: {
+                            Image(systemName: "plus")
+                        }
+                        .help(L10n.text("新建参数并分配给此控件"))
+                        .accessibilityLabel(L10n.text("新建参数并分配给此控件"))
                     }
-                    Button {
-                        model.createParameter(assigningTo: control)
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .help(L10n.text("新建参数并分配给此控件"))
                 }
                 if !control.isContinuous {
-                    Picker(L10n.text("按键行为"), selection: Binding(
-                        get: { assignment?.buttonBehavior ?? .toggle },
-                        set: { behavior in modify { $0.buttonBehavior = behavior } }
-                    )) {
-                        ForEach(ButtonBehavior.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    FieldRow(L10n.text("按键行为")) {
+                        Picker(L10n.text("按键行为"), selection: Binding(
+                            get: { assignment?.buttonBehavior ?? .toggle },
+                            set: { behavior in modify { $0.buttonBehavior = behavior } }
+                        )) {
+                            ForEach(ButtonBehavior.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                 }
                 if control.isContinuous {
-                    Picker(L10n.text("编码器模式"), selection: Binding(
-                        get: { assignment?.encoderMode ?? .absolute },
-                        set: { value in modify { $0.encoderMode = value } }
-                    )) {
-                        Text(L10n.text("绝对")).tag(EncoderMode.absolute)
-                        Text(L10n.text("相对 1")).tag(EncoderMode.relative1)
-                        Text(L10n.text("相对 2")).tag(EncoderMode.relative2)
+                    FieldRow(L10n.text("编码器模式")) {
+                        Picker(L10n.text("编码器模式"), selection: Binding(
+                            get: { assignment?.encoderMode ?? .absolute },
+                            set: { value in modify { $0.encoderMode = value } }
+                        )) {
+                            Text(L10n.text("绝对")).tag(EncoderMode.absolute)
+                            Text(L10n.text("相对 1")).tag(EncoderMode.relative1)
+                            Text(L10n.text("相对 2")).tag(EncoderMode.relative2)
+                        }
+                        .pickerStyle(.segmented)
+                        .help(L10n.text("相对模式：1 为补码，2 为二进制偏移；待 R1 实机验证"))
                     }
-                    .pickerStyle(.segmented)
-                    .help(L10n.text("相对模式：1 为补码，2 为二进制偏移；待 R1 实机验证"))
                     if assignment?.encoderMode != .absolute {
-                        TextField(L10n.text("相对步长"), value: Binding(
-                            get: { assignment?.encoderStep ?? 1 },
-                            set: { value in modify { $0.encoderStep = value } }
-                        ), format: .number)
-                            .accessibilityLabel(L10n.text("相对步长"))
-                            .help(L10n.text("设置相对编码器每格步长"))
-                        Text(L10n.text("每格步长 × 消息幅度（加速度）。灯环保持绝对位置；参数吸附仍生效。"))
-                            .font(.caption).foregroundStyle(.secondary)
+                        FieldRow(L10n.text("相对步长")) {
+                            TextField(L10n.text("相对步长"), value: Binding(
+                                get: { assignment?.encoderStep ?? 1 },
+                                set: { value in modify { $0.encoderStep = value } }
+                            ), format: .number)
+                                .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(L10n.text("相对步长"))
+                                .help(L10n.text("设置相对编码器每格步长"))
+                        }
+                        FieldNote(L10n.text("每格步长 × 消息幅度（加速度）。灯环保持绝对位置；参数吸附仍生效。"))
                     }
                 }
-                Toggle(L10n.text("反向"), isOn: Binding(
-                    get: { assignment?.inverted ?? false },
-                    set: { inverted in modify { $0.inverted = inverted } }
-                ))
+                FieldIndent {
+                    Toggle(L10n.text("反向"), isOn: Binding(
+                        get: { assignment?.inverted ?? false },
+                        set: { inverted in modify { $0.inverted = inverted } }
+                    ))
+                }
                 let shared = model.configuration.controls(targetingParameter: id).filter { $0 != control }
                 if !shared.isEmpty {
-                    Text(L10n.text("同一参数也绑定在：\(shared.map(\.shortName).joined(separator: "、"))，会互相同步。"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    FieldNote(L10n.text("同一参数也绑定在：\(shared.map(\.shortName).joined(separator: "、"))，会互相同步。"))
                 }
 
             case let .agentPrimaryAction(slot)?:
-                Picker(L10n.text("槽位"), selection: Binding(
-                    get: { slot.rawValue },
-                    set: { update(target: .agentPrimaryAction(AgentSlotID($0))) }
-                )) {
-                    ForEach(1 ... 8, id: \.self) { Text("Agent \($0)").tag($0) }
+                FieldRow(L10n.text("槽位")) {
+                    Picker(L10n.text("槽位"), selection: Binding(
+                        get: { slot.rawValue },
+                        set: { update(target: .agentPrimaryAction(AgentSlotID($0))) }
+                    )) {
+                        ForEach(1 ... 8, id: \.self) { Text("Agent \($0)").tag($0) }
+                    }
                 }
-                Text(L10n.text("空闲时启动、运行时中断、等待批准时批准；LED 亮度表示 Agent 状态。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                FieldNote(L10n.text("空闲时启动、运行时中断、等待批准时批准；LED 亮度表示 Agent 状态。"))
 
             case .stepParameter?, .setParameter?, .cycleParameter?:
                 if let target = assignment?.target {
@@ -271,24 +289,22 @@ private struct FunctionSection: View {
                 }
 
             case let .resetGroup(group)?:
-                Picker(L10n.text("参数组"), selection: Binding(
-                    get: { group },
-                    set: { update(target: .resetGroup($0)) }
-                )) {
-                    ForEach(model.configuration.parameterGroups, id: \.self) {
-                        Text($0.isEmpty ? L10n.text("（未分组）") : $0).tag($0)
+                FieldRow(L10n.text("参数组")) {
+                    Picker(L10n.text("参数组"), selection: Binding(
+                        get: { group },
+                        set: { update(target: .resetGroup($0)) }
+                    )) {
+                        ForEach(model.configuration.parameterGroups, id: \.self) {
+                            Text($0.isEmpty ? L10n.text("（未分组）") : $0).tag($0)
+                        }
                     }
                 }
-                Text(L10n.text("按下时把该组全部参数恢复为默认值，并回写所有绑定控件。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                FieldNote(L10n.text("按下时把该组全部参数恢复为默认值，并回写所有绑定控件。"))
 
             case nil:
-                Text(control.isContinuous
+                FieldNote(control.isContinuous
                     ? L10n.text("未分配的编码器仍会显示原始值；在实体模式下拖动会直接回写灯环，便于测试。")
                     : L10n.text("选择“参数”可做开关/按住，选择触发类功能可启动 Agent 或复位。"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .panelStyle()
@@ -412,32 +428,33 @@ private struct ParameterEditor: View {
                     Text(L10n.text("保留草稿后再应用，将覆盖新定义。")).foregroundStyle(.secondary)
                 }
                 .font(.caption)
-                .controlSize(.small)
             }
 
-            Form {
-                TextField(L10n.text("名称"), text: $draftState.value.name)
-                TextField(L10n.text("分组"), text: $draftState.value.group)
-                TextField(L10n.text("单位"), text: $draftState.value.unit)
-                Picker(L10n.text("类型"), selection: $draftState.value.kind) {
-                    ForEach(ParameterKind.allCases, id: \.self) { Text($0.displayName).tag($0) }
+            VStack(alignment: .leading, spacing: 8) {
+                textRow(L10n.text("名称"), $draftState.value.name)
+                textRow(L10n.text("分组"), $draftState.value.group)
+                textRow(L10n.text("单位"), $draftState.value.unit)
+                FieldRow(L10n.text("类型")) {
+                    Picker(L10n.text("类型"), selection: $draftState.value.kind) {
+                        ForEach(ParameterKind.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
                 }
-                TextField(L10n.text("最小值"), value: $draftState.value.minimum, format: .number)
-                TextField(L10n.text("最大值"), value: $draftState.value.maximum, format: .number)
-                TextField(L10n.text("默认值"), value: $draftState.value.defaultValue, format: .number)
-                Toggle(L10n.text("允许 Agent 写入"), isOn: $draftState.value.agentWritable)
-                Toggle(L10n.text("启用步长吸附"), isOn: Binding(
-                    get: { draftState.value.step != nil },
-                    set: { draftState.value.step = $0 ? (draftState.value.step ?? 1) : nil }
-                ))
+                numberRow(L10n.text("最小值"), $draftState.value.minimum)
+                numberRow(L10n.text("最大值"), $draftState.value.maximum)
+                numberRow(L10n.text("默认值"), $draftState.value.defaultValue)
+                FieldIndent { Toggle(L10n.text("允许 Agent 写入"), isOn: $draftState.value.agentWritable) }
+                FieldIndent {
+                    Toggle(L10n.text("启用步长吸附"), isOn: Binding(
+                        get: { draftState.value.step != nil },
+                        set: { draftState.value.step = $0 ? (draftState.value.step ?? 1) : nil }
+                    ))
+                }
                 if draftState.value.step != nil {
-                    TextField(L10n.text("步长"), value: Binding(
+                    numberRow(L10n.text("步长"), Binding(
                         get: { draftState.value.step ?? 1 }, set: { draftState.value.step = $0 }
-                    ), format: .number)
+                    ))
                 }
             }
-            .formStyle(.columns)
-            .controlSize(.small)
 
             HStack {
                 Button(L10n.text("应用修改")) {
@@ -455,9 +472,24 @@ private struct ParameterEditor: View {
                         Text(L10n.text("所有绑定到它的控件都会变为未分配。"))
                     }
             }
-            .controlSize(.small)
         }
         .panelStyle()
         .onChange(of: definition) { _, updated in draftState.receive(updated) }
+    }
+
+    private func textRow(_ label: String, _ text: Binding<String>) -> some View {
+        FieldRow(label) {
+            TextField(label, text: text)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(label)
+        }
+    }
+
+    private func numberRow(_ label: String, _ value: Binding<Double>) -> some View {
+        FieldRow(label) {
+            TextField(label, value: value, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(label)
+        }
     }
 }

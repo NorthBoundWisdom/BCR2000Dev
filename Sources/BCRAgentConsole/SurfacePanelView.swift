@@ -110,7 +110,7 @@ struct SurfacePanelView: View {
             header
             HStack(alignment: .top, spacing: m(16)) {
                 VStack(alignment: .leading, spacing: m(10)) {
-                    row(L10n.text("组\(model.visibleGroup)")) {
+                    row("P\(model.visibleGroup)") {
                         ForEach(1 ... 8, id: \.self) { index in
                             VStack(spacing: m(4)) {
                                 knob(.pushEncoder(group: model.visibleGroup, index))

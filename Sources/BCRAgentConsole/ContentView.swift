@@ -19,7 +19,7 @@ struct ContentView: View {
             }
             Divider()
             GeometryReader { proxy in
-                let inspectorWidth = min(max(proxy.size.width * 0.24, 330), 400)
+                let inspectorWidth = min(max(proxy.size.width * 0.26, 360), 420)
                 HStack(spacing: 0) {
                     SurfaceArea(model: model)
                     Divider()
@@ -30,6 +30,8 @@ struct ContentView: View {
         }
         .background(CodexApprovalPresentation(controller: model.codex))
         .background(Theme.background)
+        // The header's first row occupies the title strip instead of leaving it empty.
+        .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(.dark)
     }
 }
@@ -114,66 +116,80 @@ private struct SurfaceArea: View {
     }
 }
 
+/// Two tight rows: the product and configuration name share the window's title strip with the
+/// traffic lights; every interactive control sits in a single row below it, outside the strip, so
+/// window dragging and double-click zoom keep working.
 private struct HeaderBar: View {
     @ObservedObject var model: ConsoleViewModel
 
     var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("BCR CONSOLE")
-                        .font(.system(size: 20, weight: .black, design: .rounded))
-                        .tracking(1.6)
-                    Text(model.configuration.name)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
+        VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("BCR CONSOLE")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .tracking(1.2)
+                Text(model.configuration.name)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, Theme.trafficLightInset - ConsoleLayout.padding)
+            .frame(height: Theme.titleStripHeight)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
 
+            HStack(spacing: 10) {
                 Picker(L10n.text("设备"), selection: Binding(get: { model.source }, set: { model.selectSource($0) })) {
                     ForEach(DeviceSource.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 240)
+                .fixedSize()
 
-                Spacer()
+                if let target = model.engine.learnTarget {
+                    HStack(spacing: 6) {
+                        Image(systemName: "record.circle")
+                            .symbolEffect(.pulse)
+                        Text(L10n.text("学习中：请操作实体 \(target.shortName)"))
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                        Button(L10n.text("停止")) { model.stopLearning() }
+                            .controlSize(.mini)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Theme.learn)
+                    .padding(.horizontal, 10)
+                    .frame(height: 26)
+                    .background(Theme.learn.opacity(0.12), in: Capsule())
+                }
+
+                Spacer(minLength: 8)
+
+                OutputStatusButton(controller: model.output)
+                MCPStatusButton(controller: model.mcp)
+                DeviceStatus(model: model)
+
+                Divider().frame(height: 16)
 
                 Toggle(L10n.text("跟随触碰"), isOn: $model.followsTouch)
                     .toggleStyle(.switch)
-                    .controlSize(.small)
+                    .controlSize(.mini)
+                    .font(.caption)
+                    .fixedSize()
                     .help(L10n.text("操作设备上的控件时自动在检查器中选中它"))
 
                 SettingsLink {
                     Image(systemName: "gearshape")
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(L10n.text("设置"))
                 .accessibilityLabel(L10n.text("设置"))
             }
-            HStack(spacing: 16) {
-                if let target = model.engine.learnTarget {
-                    HStack(spacing: 8) {
-                        Image(systemName: "record.circle")
-                            .symbolEffect(.pulse)
-                        Text(L10n.text("学习中：请操作实体 \(target.shortName)"))
-                            .font(.callout.bold())
-                        Button(L10n.text("停止")) { model.stopLearning() }
-                            .controlSize(.small)
-                    }
-                    .foregroundStyle(Theme.learn)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Theme.learn.opacity(0.12), in: Capsule())
-                }
-
-                Spacer(minLength: 0)
-                OutputStatusButton(controller: model.output)
-                MCPStatusButton(controller: model.mcp)
-                DeviceStatus(model: model)
-            }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 14)
+        .padding(.horizontal, ConsoleLayout.padding)
         .padding(.bottom, 10)
     }
 }
@@ -185,22 +201,11 @@ private struct DeviceStatus: View {
     var body: some View {
         let (title, detail, color, icon) = status
         Button { showsPorts = true } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .foregroundStyle(color)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.callout.bold()).foregroundStyle(color)
-                    Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10))
-            .frame(maxWidth: 360, alignment: .trailing)
+            StatusChip(title: title, icon: icon, tint: color, detail: detail)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.text("MIDI 端口设置：\(title)"))
-        .help(L10n.text("选择实体 MIDI 输入与输出端口"))
+        .help(L10n.text("选择实体 MIDI 输入与输出端口") + "\n" + detail)
         .sheet(isPresented: $showsPorts) { MIDIEndpointSettingsView(model: model) }
     }
 
@@ -264,8 +269,9 @@ private struct NoticeBanner: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(10)
-        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 9))
-        .overlay { RoundedRectangle(cornerRadius: 9).stroke(color.opacity(0.25)) }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: Theme.insetRadius))
+        .overlay { RoundedRectangle(cornerRadius: Theme.insetRadius).stroke(color.opacity(0.25)) }
     }
 }

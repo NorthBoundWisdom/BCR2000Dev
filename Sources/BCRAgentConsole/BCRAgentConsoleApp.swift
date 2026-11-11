@@ -36,7 +36,15 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                                       path.hasPrefix("/"),
                                       let model = self.snapshotModel
                                 else { throw CocoaError(.fileWriteInvalidFileName) }
-                                try await renderNativeUISnapshots(model: model, directory: URL(fileURLWithPath: path))
+                                let directory = URL(fileURLWithPath: path)
+                                try await renderNativeUISnapshots(model: model, directory: directory)
+                                // The real window shows the title strip and safe-area layout the previews cannot.
+                                guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+                                else { throw CocoaError(.fileWriteUnknown) }
+                                view.cacheDisplay(in: view.bounds, to: bitmap)
+                                guard let data = bitmap.representation(using: .png, properties: [:])
+                                else { throw CocoaError(.fileWriteUnknown) }
+                                try data.write(to: directory.appending(path: "main-window.png"))
                             } catch {
                                 FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
                                 Darwin.exit(2)

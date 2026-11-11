@@ -6,16 +6,15 @@ struct OutputStatusButton: View {
     @State private var showsSettings = false
     var body: some View {
         Button { showsSettings = true } label: {
-            Label(
-                controller.settings.enabled ? L10n
+            StatusChip(
+                title: controller.settings.enabled ? L10n
                     .text("输出 · \(controller.status == .ready ? L10n.text("运行") : L10n.text("受限"))") : L10n
                     .text("输出关闭"),
-                systemImage: "arrow.up.forward.circle"
+                icon: "arrow.up.forward.circle",
+                tint: !controller.settings.enabled ? .secondary : (controller.status == .ready ? .green : .orange)
             )
-            .font(.caption)
         }
-        .buttonStyle(.bordered)
-        .tint(controller.status == .ready ? .green : .orange)
+        .buttonStyle(.plain)
         .help(L10n.text("设置 OSC 输出、软限位、速度和 LED 来源"))
         .sheet(isPresented: $showsSettings) { OutputSettingsView(controller: controller) }
     }

@@ -109,6 +109,11 @@ final class MCPController: ObservableObject {
         server.router.onChange = { [weak self] in self?.objectWillChange.send() }
     }
 
+    var isListening: Bool {
+        if case .listening = server.state { return true }
+        return false
+    }
+
     var status: String {
         if isStarting { return L10n.text("MCP 等待启动") }
         if error != nil { return L10n.text("MCP 错误") }
