@@ -29,7 +29,10 @@ final class FeedbackSettingsTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(controller).isPolling)
         controller?.apply(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
         XCTAssertTrue(try XCTUnwrap(controller).isPolling)
-        try await Task.sleep(for: .milliseconds(80))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while controller?.isPolling == true, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         XCTAssertEqual(session.pendingFeedbackCount, 0)
         XCTAssertFalse(try XCTUnwrap(controller).isPolling)
         session.setParameter("arm.j1", to: 50)

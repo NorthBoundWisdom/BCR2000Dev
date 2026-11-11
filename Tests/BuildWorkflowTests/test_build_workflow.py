@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -98,6 +99,36 @@ class BuildConfigurationTests(unittest.TestCase):
 
 
 class LocalizationPackagingTests(unittest.TestCase):
+    def test_bundle_verification_accepts_normalized_locales_and_rejects_missing_catalog(self):
+        for layout in ("", "Contents/Resources"):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as temporary:
+                bundle = Path(temporary) / "Console.app"
+                resources = bundle / "Contents/Resources"
+                resources.mkdir(parents=True)
+                info = {
+                    "CFBundleIdentifier": macos_workflow.BUNDLE_ID,
+                    "CFBundleExecutable": macos_workflow.PRODUCT,
+                    "CFBundleIconFile": "AppIcon.icns",
+                    "LSMinimumSystemVersion": "14.0",
+                    "CFBundleLocalizations": ["en", "zh-Hans"],
+                }
+                (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
+                (resources / "AppIcon.icns").write_bytes(b"icon")
+                executable = bundle / "Contents/MacOS" / macos_workflow.PRODUCT
+                executable.parent.mkdir()
+                executable.write_bytes(b"executable")
+                executable.chmod(0o755)
+                catalogs = resources / "BCRAgentConsole_BCRFoundation.bundle" / layout
+                for language in ("en", "zh-hans"):
+                    catalog = catalogs / f"{language}.lproj/Localizable.strings"
+                    catalog.parent.mkdir(parents=True)
+                    catalog.write_text(language)
+                with patch.object(macos_workflow, "_run", return_value=""):
+                    self.assertEqual(macos_workflow.verify_bundle(bundle), info)
+                    (catalogs / "zh-hans.lproj/Localizable.strings").unlink()
+                    with self.assertRaisesRegex(ValueError, "Bundled zh-Hans translations are missing"):
+                        macos_workflow.verify_bundle(bundle)
+
     def test_universal_binary_carries_both_resource_catalogs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

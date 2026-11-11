@@ -6,6 +6,17 @@ import XCTest
 @testable import BCRFoundation
 
 final class LocalizationTests: XCTestCase {
+    func testExplicitLanguageLookupAcceptsSwiftPMLowercaseDirectory() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".bundle")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = root.appending(path: "zh-hans.lproj")
+        try FileManager.default.createDirectory(at: catalog, withIntermediateDirectories: true)
+        try Data("\"probe\" = \"中文\";".utf8).write(to: catalog.appending(path: "Localizable.strings"))
+        let resources = try XCTUnwrap(Bundle(url: root))
+        let localized = L10n.localizedBundle(.chinese, resources: resources)
+        XCTAssertEqual(localized.localizedString(forKey: "probe", value: nil, table: nil), "中文")
+    }
+
     func testSystemPreferenceOrderAndFallback() {
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN", "en"]), .chinese)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW"]), .chinese)

@@ -285,3 +285,8 @@ Codex 进程管理已补基础生命週期回归：未启动及启动失败后�
 更多说明：[Codex 后端](docs/CODEX.md)、[WebSocket / ROS 2 输出](docs/NETWORK_OUTPUT.md)、
 [MCP 权限及 SSE](docs/MCP.md)。开发版可用 `--startup-smoke --render-ui` 和
 `BCR_UI_SNAPSHOT_DIRECTORY` 生成自身视图的隔离渲染快照，不连接实体 MIDI。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。第三方代码保留各自的版权与许可声明，见
+[vendored validator 说明](configs/_vendor/README.md)。

@@ -64,8 +64,12 @@ public enum L10n {
     private static let englishBundle = localizedBundle(.english)
     private static let chineseBundle = localizedBundle(.chinese)
 
-    static func localizedBundle(_ language: AppLanguage) -> Bundle {
-        guard let url = ProviderResources.bundle.url(forResource: language.rawValue, withExtension: "lproj"),
+    static func localizedBundle(_ language: AppLanguage, resources: Bundle = ProviderResources.bundle) -> Bundle {
+        // SwiftPM toolchains may normalize locale directory names (zh-Hans → zh-hans).
+        // Resolve the shipped spelling explicitly, independent of the host's preferred language.
+        guard let identifier = resources.localizations.first(where: {
+                  $0.caseInsensitiveCompare(language.rawValue) == .orderedSame
+              }), let url = resources.resourceURL?.appending(path: "\(identifier).lproj"),
               let bundle = Bundle(url: url)
         else { preconditionFailure("Missing bundled localization: \(language.rawValue)") }
         return bundle

@@ -189,7 +189,12 @@ def verify_bundle(bundle: Path) -> dict:
     localization = bundle / "Contents/Resources/BCRAgentConsole_BCRFoundation.bundle"
     for language in ("en", "zh-Hans"):
         candidates = [localization / "Contents/Resources", localization]
-        if not any((root / f"{language}.lproj/Localizable.strings").is_file() for root in candidates):
+        if not any(
+            catalog.parent.name.casefold() == f"{language}.lproj".casefold()
+            for root in candidates
+            for catalog in root.glob("*.lproj/Localizable.strings")
+            if catalog.is_file()
+        ):
             raise ValueError(f"Bundled {language} translations are missing.")
     executable = bundle / "Contents/MacOS" / PRODUCT
     if not executable.is_file() or not os.access(executable, os.X_OK):
