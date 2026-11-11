@@ -1,217 +1,232 @@
+<div align="center">
+
+<img src="assets/AppIcon.png" width="128" alt="BCR Agent Console 图标">
+
 # BCR Agent Console
 
-用 Behringer BCR2000 作为双向实体控制器，在 macOS 上观察和控制 8 个 Agent 槽位。
+**把 Behringer BCR2000 变成双向实体控制台的原生 macOS 应用**
 
-首个 Swift MVP 已可运行：它会自动连接 BCR2000 Port 1，用快速学习绑定 8 个实体
-CC/Note 按键，在 SwiftUI 与确定性 Mock Agent 之间共享同一状态机，并把状态值回写到
-同一按键 LED 或编码器灯环。真实 Codex 接入不在本里程碑内。
+转动旋钮改参数，参数再回写灯环；同一套状态同时开放给界面、实体硬件和 AI Agent。
 
-## CI 构建与包含 USB 修复的完整版
+[![CI](https://github.com/NorthBoundWisdom/BCR2000Dev/actions/workflows/ci.yml/badge.svg)](https://github.com/NorthBoundWisdom/BCR2000Dev/actions/workflows/ci.yml)
+![macOS 14+](https://img.shields.io/badge/macOS-14%2B-1f2328?logo=apple)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+![SwiftUI + CoreMIDI](https://img.shields.io/badge/SwiftUI-CoreMIDI-0A84FF)
 
-普通 CI（main/PR）和版本 tag CI 都固定使用无需证书的 ad-hoc 构建，不读取 Apple
-开发者证书、私钥、provisioning profiles、公证 API key 或 GitHub Secrets。
-推送如 `v1.2.3` 的版本 tag 后，测试和 ARM/Intel 包验证通过才创建 GitHub Release，
-上传主程序的 Universal ZIP/DMG、构建记录和 SHA-256；手动触发只构建、不发布。
-发布使用 GitHub 自动提供的 GITHUB_TOKEN，无需另行配置凭证。这些包未经 Apple 公证。
+[快速开始](#快速开始) · [界面一览](#界面一览) · [连接实体设备](#连接实体-bcr2000) · [功能](#功能) · [文档](#文档)
 
-**当前 CI 安装包只含 BCRAgentConsole.app，不包含或自动安装 DriverKit USB 兼容修复。**
-已经在本机安装的开发签署修复可继续使用；新机器仅安装主程序不等于同时安装了该修复。
+<img src="docs/images/console-overview.png" alt="BCR Agent Console 主界面：左侧为 BCR2000 虚拟面板，中间为参数工作区，右侧为检查器">
 
-**含 DriverKit USB 修复的完整安装包需要 Apple 开发者证书和对应授权/profile 签署。**
-自用可使用已验证的付费账号开发签署，在已登记 Mac 上运行；DriverKit 扩展不能改为
-ad-hoc 后在完整 SIP 下正常加载。面向未登记用户公开分发，还需正式 DriverKit USB
-分发授权、Developer ID 签署和公证。目前先不申请，当前 CI 也不执行这条流程。
+</div>
 
-流程说明见 [Tag 发布](docs/TAG_RELEASE_SETUP.md)，实机结果见
-[DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
+## 亮点
 
-## 已实现
+| | |
+| --- | --- |
+| 🎛️ **108 控件虚拟面板** | 按真实面板布局呈现 4 组推钮编码器、2 行按键、3 行编码器与 4 个用户按键；LED 灯环显示的就是软件回写值。 |
+| 🔁 **真正的双向同步** | 软件参数是唯一事实来源：硬件输入改参数，参数决定反馈。滑块、旋钮、Agent 写入走同一条管线。 |
+| 🧪 **不接硬件也能用** | `Mock 设备` 模式下面板本身就是模拟硬件，拖动旋钮、按下按键即可体验完整流程。 |
+| 🎓 **不猜预设，只靠学习** | 实体映射全部来自 Quick Learn 或显式的全台旋钮批量学习，保存在本机，不改写设备预设。 |
+| 🤖 **Agent 槽位与 MCP 接口** | 8 个 Agent 槽位可由实体按键启动 / 中断 / 批准；本机 MCP 服务让任意客户端读写参数。 |
+| 🧩 **按需启用的专业面板** | 机械臂预览、OSC 输出读数默认隐藏，需要时从工作区的“面板”菜单打开。 |
 
-- Swift 6、SwiftUI、macOS 14+；
-- CoreMIDI 热插拔通知、BCR2000 端点发现及 Port 1 优先选择；
-- MIDI 1.0 UMP 的 CC、Note On、Note Off 编解码；
-- 8 槽位快速学习与本地持久化；
-- 实体按键启动/中断/批准 Mock，UI 同步显示；
-- `idle → queued → running → waitingApproval → completed` Mock 时间线；
-- 每次状态变化向已学习控件发送 7-bit MIDI feedback；
-- 独立“硬件镜像”页面，以 32 个 DAW 风格旋钮显示每个已发现 CC 的位置，并区分
-  `IN` 设备值与 `OUT` 软件 feedback；
-- Note On/Off 按键 pad、事件计数和实时 MIDI 事件面板；
-- 输入去抖、短窗口 feedback echo 抑制和原始 MIDI 监视器；
-- 应用图标、原生 `.app`、ZIP/DMG 打包、签名与公证工作流；
-- 可选 FreeCM 插件 Config、Build、Run、Test、Package 接线；
-- 领域、映射、状态机、双向 surface state、MIDI codec 与打包流程测试。
+## 界面一览
 
-## 控制台结构（2026-11 重构）
+| Agent 槽位 | MIDI 监视 |
+| :---: | :---: |
+| <img src="docs/images/workspace-agents.png" alt="Agent 工作区：8 个槽位显示等待批准、运行中与空闲状态"> | <img src="docs/images/workspace-midi-monitor.png" alt="MIDI 监视工作区：实时显示 IN / OUT 消息与对应控件"> |
+| B1 行按键即 Agent 主操作，LED 亮度表示状态 | 区分设备输入、软件回写与 Agent 写入 |
 
-- **BCR2000 虚拟面板**：按真实面板布局显示 108 个控件（推钮编码器 4 组、2 行按键、
-  3 行编码器、4 个用户按键），LED 灯环即软件回写值。
-- **设备源切换**：`Mock 设备` 下面板就是模拟硬件；`实体 BCR2000` 下面板是镜像，
-  操作即软件修改并回写硬件。
-- **检查器**：查看/学习控件的 MIDI 身份，给控件分配参数、Agent 主操作或复位参数组，
-  直接编辑参数名称、单位、范围和默认值。
-- **工作区**：参数滑块（与硬件双向同步）、机械臂示意预览、Agent 槽位、MIDI 监视。
-- **自适应布局**：放大窗口时面板等比放大并居中；空间足够时工作区移到面板右侧。
-- 默认载入“机械臂示例”：P1-1…P1-8 = J1–J6、夹爪、速度；B1 行 = Agent 1–8；
-  B2-1 = 使能；B2-8 = 复位机械臂。
+| 专业面板：机械臂预览（手动启用） |
+| :---: |
+| <img src="docs/images/workspace-arm-preview.png" alt="从面板菜单启用后的机械臂预览：侧视与俯视姿态示意"> |
+| 由 J1–J6、夹爪等软件参数驱动的姿态示意，证明硬件与软件编辑落在同一份参数状态 |
 
-`SurfaceSession` 在 Core 中统一执行效果、设备路由、学习、反馈丢弃计数与 MIDI 日志；
-`SurfaceDevice` 由 Mock 适配器和 App 层的 CoreMIDI 适配器实现。设备断线期间的反馈只计数，
-连接恢复时回写当前软件快照；Mock 模式下实体输入只记录。会话整合测试使用假设备，无需真机。
-UI 保留选中项、跟随触碰与提示文案，Mock Agent 时间线通过会话层触发并回写 LED。
-Agent 按键的当前 LED 反馈先于触发回调执行，确保同步更新后的状态在按住期间立即显示。
+截图取自隔离的 Mock 测试实例，可用下面的命令重新生成（只截取应用自身窗口）：
 
-分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md)。
-
-全台旋钮可从实体当前预设与快照显式批量学习：32 个实体旋钮对应 56 个逻辑位置
-（顶部四组 32 个 + 下方三排 24 个）。保留现有功能，仅为未分配旋钮创建独立参数，
-不猜测 CC、不改写设备预设。开发工具与实测范围见 [全台旋钮学习](docs/CONTROL_MAP.md#全台旋钮批量学习)。
+```bash
+python3 configs/macos_workflow.py build
+python3 tools/mcp_integration.py --configuration-write --script tools/capture_readme_screenshots.py
+```
 
 ## 快速开始
 
+需要 macOS 14+ 与 Swift 6 工具链；构建不依赖第三方包。
+
 ```bash
-python3 configs/setup_local_project.py
-python3 configs/macos_workflow.py run
+python3 configs/setup_local_project.py   # 首次：生成本机配置并启用提交钩子
+python3 configs/macos_workflow.py run    # 构建并在当前终端运行，Ctrl+C 停止
 ```
 
-项目配置同时启用提交时自动格式化钩子；SwiftFormat、Ruff 安装和全仓格式化命令见
-[开发规范](CONTRIBUTING.md#自动格式化)。
-
-也可以直接打开生成的应用：
+或者构建后像普通应用一样打开：
 
 ```bash
 python3 configs/macos_workflow.py build
 open build/app/BCRAgentConsole.app
 ```
 
-`run` 会让应用进程归属当前终端，适合观察日志和用 `Ctrl+C` 停止；`open` 只适合日常使用。
+首次启动默认处于 **Mock 设备** 模式并载入“机械臂示例”配置：`P1-1…P1-8` 对应 J1–J6、夹爪和速度，
+`B1` 行是 Agent 1–8，`B2-1` 为使能，`B2-8` 复位机械臂参数组。全部都可以在检查器里改掉。
 
-窗口保留自定义无标题栏样式：拖动顶部空白区域移动窗口，双击放大/还原；
-旋钮拖动和参数滑块保留各自的输入行为。面板阴影仅作用于机壳背景，避免窗口移动时
-对整棵控件树进行昂贵的阴影合成。量测见 [窗口拖曳分析](docs/WINDOW_DRAG_ANALYSIS.md)。
+## 界面结构
 
-## 第一次连接 BCR2000
+- **顶栏**：设备源切换（`Mock 设备` / `实体 BCR2000`）、跟随触碰、OSC 输出、MCP 与 MIDI 端口状态。
+- **BCR2000 虚拟面板**：Mock 模式下它是模拟硬件；实体模式下它是镜像，操作即软件修改并回写硬件。
+- **工作区**：`参数`（与硬件双向同步的滑块）、`Agent`（8 个槽位）、`MIDI 监视`，以及按需启用的专业面板。
+- **检查器**：查看 / 学习控件的 MIDI 身份，分配参数、Agent 主操作或复位参数组，编辑参数名称、单位、范围和默认值。
+- **自适应布局**：放大窗口时面板等比放大并居中；空间足够时工作区移到面板右侧。拖动顶部空白处移动窗口，双击放大 / 还原。
 
-1. 用 USB 连接 BCR2000。应用应显示
-   `BCR2000 Port 1 → App → BCR2000 Port 1`。
-2. 建议把 BCR2000 设为 USB 模式 U-1：同时按 `EDIT + STORE` 进入 Global Setup，
+### 专业面板
+
+面向特定场景的面板默认不出现在工作区，避免干扰日常使用。点击工作区分页右侧的 **面板** 菜单即可勾选启用，
+再次点击取消；选择保存在本机 `workspace-panels.json`，下次启动保持不变。
+
+| 面板 | 内容 | 默认 |
+| --- | --- | --- |
+| 机械臂预览 | 示例机械臂的侧视 / 俯视姿态示意，由 `arm.*` 参数驱动 | 隐藏 |
+| 输出 | OSC 目标值、受限输出与实际回传读数 | 隐藏；输出运行期间始终显示 |
+
+OSC 输出运行时“输出”面板会自动出现，确保安全门的实时读数不会被藏在菜单后面。
+
+## 连接实体 BCR2000
+
+1. 用 USB 连接 BCR2000，并建议设为 USB 模式 **U-1**：同时按 `EDIT + STORE` 进入 Global Setup，
    用 Push Encoder 1 选择 `U-1`，按 `EXIT`。U-1 支持软件 parameter feedback。
-3. 准备 8 个配置为 momentary 的 CC 或 Note 按键；按下值应为 64–127。
-4. 在 Agent 控制台点击“开始 / 继续学习”，再按界面提示依次按下 8 个按键，分别绑定
-   Agent 1–8。学习是显式开关，进入“硬件镜像”时会自动暂停，避免转旋钮时误绑定。
-5. 再按映射后的实体键：
-   空闲/终态时启动，运行/排队时中断，等待批准时批准。
+2. 在顶栏切换到 `实体 BCR2000`。应用优先连接 **BCR2000 Port 1**；点击右上角设备状态可手动选择 MIDI
+   输入 / 输出端口（含通用 USB-MIDI 接口）。手动选择的端口缺失时不会自动换路由，而是显示未连接。
+3. **学习映射**：在面板上选中控件，在检查器点“从这里开始学习”，然后转动编码器或按下按键。
+   学完自动跳到本区下一个未学习控件，可以连续扫过整排。
+4. 需要一次学完所有旋钮时，可从实体当前预设与快照显式批量学习：32 个实体旋钮对应 56 个逻辑位置，
+   只为未分配旋钮创建参数，不猜测 CC、不改写设备预设。见
+   [全台旋钮批量学习](docs/CONTROL_MAP.md#全台旋钮批量学习)。
 
-切到“硬件镜像”后，转动任意旋钮即可看到按真实 MIDI 通道和 CC 编号排序的 32 旋钮
-surface。青色 `IN` 是 BCR2000 发来的值，紫色 `OUT` 是应用回写的值；未触碰的控件保持
-空位，不会假定当前 Preset 的固定编号。
+学到的映射保存在 `~/Library/Application Support/BCRAgentConsole/hardware-map.json`，不会进入仓库。
+设备断线期间的反馈只计数，连接恢复时回写当前软件快照。
 
-映射保存在用户 Application Support 的
-`BCRAgentConsole/controller-profile.json`，不会进入仓库。切换 BCR Preset 后如果消息编号
-变化，请在界面选择“重置映射”并重新学习。
+> [!NOTE]
+> 部分 Mac 上 BCR2000 的 USB OUT 管道需要 DriverKit 兼容修复才能双向工作。CI 安装包只含主程序，
+> **不包含也不会自动安装该修复**；详情见 [构建、打包与发布](#构建打包与发布)。
 
-## 打包与 FreeCM 插件
+## 功能
 
-构建无需 FreeCM 仓库、Python 安装包或子模块。版本默认值在 `configs/app_build.json`，
-本机环境及签名设置放在被 Git 忽略的 `build.local.json`；Config 仅在缺失时创建它。
+### 参数、步进与批量分配
+
+- 按键可配置参数步进（正负与越界循环）、指定值、按顺序循环预设。
+- 参数可启用步长吸附；软件与设备输入使用同一量化规则，必要时校正来源灯环。
+- 编码器支持绝对、相对 1 / 相对 2 模式与相对步长，灯环始终保持绝对位置；Mock 下可用 14-bit NRPN
+  验证高分辨率。实体的相对模式与 NRPN 编码仍待真机验证，见 [控制映射说明](docs/CONTROL_MAP.md)。
+- 批量分配选择控件区 / 行和参数组，先看差异再确认；预览期间配置变化则需重新预览。
+
+### 配置导入与导出
+
+参数工作区可导入 / 导出版本化 JSON，仅包含参数定义与功能分配，不含实体映射、MCP 凭据或运行值。
+导入先校验、确认后才替换；失败时保留当前配置。加载到非法的本地配置会保留原文件并另存指纹命名的备份，
+同时显示持续提示。当前配置格式为 v3，读取旧版会显示迁移信息并在保存前备份。
+详见 [配置恢复规则](docs/CONTROL_MAP.md) 与 [WP4 验收记录](docs/WP4_HANDOFF.md)。
+
+### Agent 槽位
+
+8 个槽位共享一个状态机：`空闲 → 排队 → 运行 → 等待批准 → 完成`。绑定的实体按键在空闲 / 终态时启动、
+运行 / 排队时中断、等待批准时批准，LED 随状态回写。目前由确定性的 Mock Agent 驱动；
+真实 `codex app-server` 接入见 [TODO](TODO.md)。
+
+### 通用 MCP 控制接口
+
+顶栏 MCP 设置可开启仅绑定 `127.0.0.1` 的 Streamable HTTP 服务（默认端口 8787，默认关闭）。
+Token 首次启用时生成并存入 Keychain；权限、逐参数 `agentWritable`、限速和调用记录都可在应用内查看。
+支持 MCP 2026-07-28 并兼容 2025-11-25 握手，不依赖特定厂商客户端。Agent 写入经过与滑块相同的会话管线，
+在 MIDI 监视中标为 `AGENT`；示例中的 `arm.enabled` 默认不可写。
 
 ```bash
-# Release：为当前机器架构生成 ad-hoc 签名的 DMG + ZIP、SHA-256 校验和与构建记录
+export BCR_MCP_TOKEN=…            # 从 MCP 设置中复制
+python3 tools/mcp_smoke.py           # 现代协议
+python3 tools/mcp_smoke.py --legacy  # 兼容协议
+```
+
+协议、工具 schema 与权限见 [MCP 文档](docs/MCP.md)。
+
+### OSC 仿真输出
+
+```bash
+python3 tools/arm_sim.py --port 9000
+```
+
+在顶栏“输出”中连接本机 9000 端口，检查限位后手动启动，再先关闭、后开启使能（Mock `B2-1`）。
+应用启动不会自动恢复输出；所有写入来源都经过同一安全门。启用“输出”面板可查看目标、限速输出和实际回传。
+协议、安全门与 LED 来源选择见 [OSC 说明](docs/OSC.md)。
+
+### 实机诊断
+
+- 无第三方依赖的 Windows / macOS Python 五段灯环测试，自动学习实际 CC：见 [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md)。
+- 远程接线、只读预检、自动读回矩阵和 GUI 会话入口：见 [Mac 远程测试计划](docs/MAC_REMOTE_TEST_PLAN.md)；
+  `tools/package_macos_diagnostics.py` 生成带校验清单的通用诊断包，默认不写实体 CC。
+
+## 架构
+
+```text
+物理控件 → 硬件映射（学习得到） → 功能分配 → 参数状态（唯一事实来源）
+                                                   ↓
+                        LED / 灯环反馈 ← SurfaceEffect ← SurfaceSession
+```
+
+- `BCRAgentCore`：领域状态、MIDI 值类型、映射与可测试的状态转换，无 UI、无 CoreMIDI。
+- `BCRAgentConsole`：SwiftUI、CoreMIDI 生命周期、持久化与依赖装配；视图只渲染状态并发出意图。
+- `SurfaceSession` 统一执行效果、设备路由、学习、反馈丢弃计数与 MIDI 日志；`SurfaceDevice`
+  由 Mock 适配器和 CoreMIDI 适配器分别实现，会话测试使用假设备，无需真机。
+
+分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md) 与 [开发设计](docs/DEVELOPMENT_DESIGN.md)。
+
+## 构建、打包与发布
+
+版本默认值在 `configs/app_build.json`，本机环境及签名设置放在被 Git 忽略的 `build.local.json`。
+
+```bash
+# 当前机器架构：ad-hoc 签名的 DMG + ZIP、SHA-256 校验和与构建记录
 python3 configs/macos_workflow.py package
 
 # 同时支持 Apple Silicon 和 Intel 的 Universal 安装包
 python3 configs/macos_workflow.py package --architecture universal
 ```
 
-产物位于 `build/package/`。DMG 内有应用及 Applications 快捷方式。
-Developer ID 签名、公证、最终安装包检查和 CI 发布参见 [打包指南](docs/PACKAGING.md)。
-默认 ad-hoc 产物未经 Apple 公证。
+产物位于 `build/package/`。Developer ID 签名、公证与最终安装包检查见 [打包指南](docs/PACKAGING.md)。
 
-`configs/freecm.commands.jsonc` 保留可选 FreeCM 插件入口：Config 准备配置，Build 生成带
-图标的签名 `.app`，Run 在终端运行，Test 执行 Swift 测试，Package 默认生成 Release
-DMG + ZIP，也提供单独 ZIP 和 Developer ID 公证选项。
-`configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。
+**CI**：普通 CI（main / PR）与版本 tag CI 都使用无需证书的 ad-hoc 构建，不读取任何 Apple 凭据或
+GitHub Secrets。推送如 `v1.2.3` 的版本 tag 后，测试与 ARM / Intel 包验证通过才创建 GitHub Release，
+上传 Universal ZIP / DMG、构建记录和 SHA-256；手动触发只构建、不发布。这些包未经 Apple 公证。
+流程见 [Tag 发布](docs/TAG_RELEASE_SETUP.md)。
 
-## 步进、预设与批量分配
+**DriverKit USB 修复**：CI 安装包只含 `BCRAgentConsole.app`。含 DriverKit USB 修复的完整安装包需要
+Apple 开发者证书与对应授权 / profile 签署——自用可用付费账号开发签署并在已登记的 Mac 上运行；
+面向未登记用户公开分发还需正式 DriverKit USB 分发授权、Developer ID 签署和公证，目前不申请。
+已在本机安装的开发签署修复可继续使用。实机结果见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
 
-按键可配置参数步进（正负与越界循环）、指定值、按顺序循环预设。
-检查器可为参数启用步长吸附；软件与设备输入使用同一量化规则，必要时校正来源灯环。
-批量分配选择控件区/行和参数组，先看差异再确认；预览期间配置若变化则需重新预览。
-当前配置格式 v3，读取旧版会显示迁移信息，保存前备份原版。
-
-## 配置导入与导出
-
-参数工作区可导入/导出版本化 JSON，文件仅包含参数定义与功能分配，不包含实体硬件映射、MCP 凭据或运行值。
-导入先校验，确认替换后才保存并应用；失败时不替换当前配置。参数编辑草稿遇到同 ID 的外部修改时，
-未编辑草稿自动刷新，已编辑草稿提示冲突并等待选择。学习中替换配置会明确提示学习已停止。
-
-加载非法本地配置会保留原文件，另存内容指纹命名的备份并显示持续提示；备份失败不会覆盖原文件。
-详见 [配置恢复规则](docs/CONTROL_MAP.md) 和 [WP4 验收记录](docs/WP4_HANDOFF.md)。
-
-## 通用 MCP 控制接口
-
-顶栏 MCP 设置可开启仅绑定 127.0.0.1 的 Streamable HTTP 服务，默认端口 8787、默认关闭。
-Token 首次启用时生成并存入 Keychain；权限、逐参数 agentWritable、限速和调用记录可在 App 查看。
-支持通用 MCP 2026-07-28，并兼容 2025-11-25 标准握手；不依赖某个厂商的客户端。
-
-Agent 写入经过与滑块相同的会话管线，MIDI 监视器显示 AGENT；示例 arm.enabled 默认不可写。
-使用设置中的通用 curl 连接命令，或设置本机 BCR_MCP_TOKEN 环境变量后运行
-tools/mcp_smoke.py（现代版）及 tools/mcp_smoke.py --legacy（兼容版）。
-协议、工具 schema、权限与验收细节见 [MCP 文档](docs/MCP.md)。
+**FreeCM 插件（可选）**：`configs/freecm.commands.jsonc` 保留 Config / Build / Run / Test / Package 入口，
+`configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。构建本身不需要 FreeCM。
 
 ## 验证
 
 ```bash
+python3 configs/format_repo.py --all --check
 python3 -m compileall -q configs
 python3 configs/validate_repo_commands.py .
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
 python3 configs/macos_workflow.py test
 python3 configs/macos_workflow.py build
 python3 configs/macos_workflow.py smoke
-python3 configs/codex_schema.py generate  # 首次锁定/更新 schema 后执行
-python3 configs/codex_schema.py verify
+python3 configs/codex_schema.py verify   # 更新 schema 后先执行 generate
 git diff --check
 ```
 
+提交约定与自动格式化见 [开发规范](CONTRIBUTING.md)。
+
 ## 文档
 
-- [开发设计](docs/DEVELOPMENT_DESIGN.md)
-- [控制器映射与反馈](docs/CONTROL_MAP.md)
-- [打包、签名与 CI 发布](docs/PACKAGING.md)
-- [图标源文件与生成说明](assets/README.md)
-- [Swift/Qt/Rust 选型 ADR](docs/adr/001-native-swift-mvp.md)
-- [后续开发计划](ROADMAP.md)
-- [开发规范](CONTRIBUTING.md)
-- [外部开发任务说明（无真机阶段）](DEV_PROMPT.md)
-- [后续开发 TODO](TODO.md)
+| 主题 | 文档 |
+| --- | --- |
+| 架构与设计 | [开发设计](docs/DEVELOPMENT_DESIGN.md) · [控制器映射与反馈](docs/CONTROL_MAP.md) · [选型 ADR](docs/adr/001-native-swift-mvp.md) |
+| 接口 | [MCP](docs/MCP.md) · [OSC](docs/OSC.md) |
+| 实机与诊断 | [实机验证记录](docs/HARDWARE_VALIDATION.md) · [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md) · [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md) · [窗口拖曳分析](docs/WINDOW_DRAG_ANALYSIS.md) |
+| 构建与发布 | [打包、签名与 CI 发布](docs/PACKAGING.md) · [Tag 发布](docs/TAG_RELEASE_SETUP.md) · [图标说明](assets/README.md) |
+| 协作 | [开发规范](CONTRIBUTING.md) · [路线图](ROADMAP.md) · [TODO](TODO.md) · [Agent 指南](AGENTS.md) |
 
-下一里程碑是把 Mock adapter 扩展为官方 `codex app-server` adapter，并补齐安全审批、重连恢复和发布化，详见 [TODO](TODO.md)。
-
-### OSC 仿真输出
-
-运行 `python3 tools/arm_sim.py --port 9000`，在顶栏“输出”设置中连接本机 9000 端口，
-检查限位后手动启动，再先关闭、后开启 Mock B2-1 使能；App 启动不自动恢复输出。输出页显示目标、限速输出和实际值。
-协议、安全门与 LED 来源选择见 [OSC 说明](docs/OSC.md)。
-
-### 相对模式与 NRPN（Mock）
-
-选择编码器，在检查器设置“相对 1 / 相对 2”和相对步长（例如 0.5）。
-灯环保持绝对位置。打开“Mock 14-bit NRPN”可在本次会话验证高分辨率，默认 CC1–108 预设不变。
-实体学习需要明确选择消息格式；编码与回显仍待 R1 真机验证，见 [控制映射说明](docs/CONTROL_MAP.md)。
-
-### 实机 MIDI 诊断
-
-点击顶栏设备状态可分别选择 MIDI 输入/输出（包括通用 USB-MIDI 接口）；默认 BCR2000 Port 1，手动端口缺失时不自动换路由。
-无第三方依赖的 Windows/macOS Python 五段灯环测试见 [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md)。
-该工具自动学习实际 CC，不需要猜测 Preset。
-
-### 远程 Mac 实机测试包
-
-远程接线、只读预检、自动读回矩阵和 GUI 会话入口见 [Mac 远程测试计划](docs/MAC_REMOTE_TEST_PLAN.md)。
-使用 `tools/package_macos_diagnostics.py` 生成带校验清单的 Apple Silicon/Intel 通用诊断包，默认不写实体 CC。
-
-纯 USB 兼容性研究：当前 Mac 已通过保持 SIP 的 DriverKit 开发签署实验；
-代码、实测范围与正式分发前提见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
-
-当前 tag 发布使用无需凭证的 ad-hoc 构建，见 [发布配置](docs/TAG_RELEASE_SETUP.md)；
-完整 USB 修复的 Apple 签署路径保留为将来独立配置，不在当前 CI 启用。
+后续工作的顺序与状态以 [TODO](TODO.md) 为准。
