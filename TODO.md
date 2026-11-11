@@ -12,8 +12,28 @@
   经 MCP 的 280/280 设备回读一致。按键、旋钮按下、人工转动与视觉验收尚未进行，
   见 [实机记录](docs/HARDWARE_VALIDATION.md)。
 
-执行顺序：1 实机验证 → 2 按实测修正 → 3 反馈调度与 MCP 推送 → 4 Codex 接入 → 5 发布 → 6 远期。
-第 4 项不依赖真机，可在等待现场操作时并行。
+执行顺序：0 仓库整理 → 1 实机验证 → 2 按实测修正 → 3 反馈调度与 MCP 推送 → 4 Codex 接入 → 5 发布 → 6 远期。
+第 0、4 项不依赖真机，可在等待现场操作时并行。
+
+## 0. 仓库整理（2026-11-11 盘点）
+
+Swift 源码无需先行重构：最大文件约 560 行，Core/App 分层清晰，`@unchecked Sendable` 仅两处且均为
+私有传输对象。需要整理的是与当前实现脱节的文档和零散文件：
+
+- [ ] Z1 `README.md` 开头与“已实现”仍描述首版 8 槽位快速学习、“硬件镜像”页面（代码中已不存在），
+  “下一里程碑”仍写 Codex adapter。按 108 控件面板、参数/功能系统、MCP、OSC、DriverKit 现状重写，
+  后续顺序指向本文。
+- [ ] Z2 `docs/CONTROL_MAP.md` 中部保留了重构前的 8 槽位说明（“为什么采用快速学习”至“硬件镜像页面”），
+  且 WP6/WP7 的现行内容排在这段“历史参考”之后。删除或移出历史段落，现行内容前移。
+- [ ] Z3 `docs/DEVELOPMENT_DESIGN.md` §15 的里程碑快照与本文矛盾（M4/M5 仍未勾选，
+  P0-S1…S5 的含义与本文的 P0-S4 不同）。改为指向本文与 ROADMAP，或明确标注为历史设计。
+- [ ] Z4 `tools/verify_{configuration,endpoint,functions,output,precision,review_fixes}_ui.py`
+  六个脚本没有被任何文档、测试或 CI 引用。逐个确认仍可运行：保留的写入验收文档，其余删除。
+- [ ] Z5 根目录 `settings.md` 是零散的 U-1 模式设置笔记：并入 README“第一次连接 BCR2000”或
+  `docs/HARDWARE_VALIDATION.md` 后删除。
+- [ ] Z6（可选）一次性交接文档（`docs/WP1…WP7_HANDOFF.md`、`REVIEW_FIXES.md`、
+  `ENDPOINT_DIAGNOSTICS_HANDOFF.md`、`MAC_TEST_PREPARATION_HANDOFF.md`）与根目录 `DEV_PROMPT.md`
+  移入 `docs/archive/` 并修正链接，让 `docs/` 顶层只留现行参考。
 
 ## 1. 实机验证（R1，进行中）
 
@@ -65,8 +85,12 @@ App 与工具只发送只读查询 SysEx，不改写设备 Preset，不回放备
 
 ## 4. Codex 接入（R6，不依赖真机）
 
-App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已完成；剩余：
+App Server 生命周期、Handshake、Thread/Turn 链路与审批安全门已在 `BCRAgentCore` 完成，
+但 `BCRAgentConsole` 尚未引用任何 Codex 类型（App 仍只跑 Mock Agent），
+`CodexProcessSupervisor` 也没有测试。剩余：
 
+- [ ] P0-S5 把 Codex 会话接入 App：依赖注入、Mock / Codex 切换与可见的失败状态；
+  补 `CodexProcessSupervisor` 测试。
 - [ ] P0-S4 基础集成与稳定性
   - [ ] 关键集成测试：`mock app-server` + 真实 `swift test` 的 protocol/integration 覆盖
   - [ ] App Server 异常路径：提前退出、乱序响应、重复请求、错误响应、Malformed JSONL
