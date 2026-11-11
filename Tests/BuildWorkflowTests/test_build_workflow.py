@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import plistlib
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -99,6 +100,41 @@ class BuildConfigurationTests(unittest.TestCase):
 
 
 class LocalizationPackagingTests(unittest.TestCase):
+    def test_smoke_launches_each_language_via_launch_services_and_requires_app_marker(self):
+        languages = []
+
+        def launch(command, **kwargs):
+            self.assertEqual(command[:3], ["open", "-n", "-W"])
+            self.assertIn("--startup-smoke", command)
+            language = command[-1].strip("()")
+            languages.append(language)
+            output = Path(command[command.index("--stdout") + 1])
+            output.write_text(
+                json.dumps(
+                    {
+                        "type": "bcr.native_startup",
+                        "clientVersion": "0.1.0",
+                        "language": language,
+                        "settings": "Settings" if language == "en" else "设置",
+                    },
+                    separators=(",", ":"),
+                )
+            )
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with (
+            patch.object(macos_workflow, "verify_bundle", return_value={"CFBundleShortVersionString": "0.1.0"}),
+            patch.object(macos_workflow.subprocess, "run", side_effect=launch),
+        ):
+            macos_workflow.smoke(Path("Console.app"))
+        self.assertEqual(languages, ["en", "zh-Hans"])
+        with (
+            patch.object(macos_workflow, "verify_bundle", return_value={"CFBundleShortVersionString": "0.1.0"}),
+            patch.object(macos_workflow.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Native window startup failed"):
+                macos_workflow.smoke(Path("Console.app"))
+
     def test_bundle_verification_accepts_normalized_locales_and_rejects_missing_catalog(self):
         for layout in ("", "Contents/Resources"):
             with self.subTest(layout=layout), tempfile.TemporaryDirectory() as temporary:

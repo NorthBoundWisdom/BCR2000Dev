@@ -213,20 +213,42 @@ def verify_bundle(bundle: Path) -> dict:
 
 def smoke(bundle: Path) -> None:
     info = verify_bundle(bundle)
-    executable = (bundle / "Contents/MacOS" / PRODUCT).resolve()
+    bundle = bundle.resolve()
     for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置")):
         with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
+            # Launch Services supplies normal GUI activation on hosted macOS runners.
+            # -n isolates each language probe; -W waits for its startup check to exit.
             # Argument-domain language overrides never modify user preferences.
+            stdout = Path(temporary) / "stdout.log"
+            stderr = Path(temporary) / "stderr.log"
             result = subprocess.run(
-                [str(executable), "--startup-smoke", "-AppleLanguages", f"({language})"],
+                [
+                    "open",
+                    "-n",
+                    "-W",
+                    "--stdout",
+                    str(stdout),
+                    "--stderr",
+                    str(stderr),
+                    str(bundle),
+                    "--args",
+                    "--startup-smoke",
+                    "-AppleLanguages",
+                    f"({language})",
+                ],
                 cwd=temporary,
                 text=True,
                 capture_output=True,
                 timeout=40,
             )
-        if result.returncode or SMOKE_MARKER not in result.stdout:
-            raise RuntimeError(f"Native window startup failed ({result.returncode}):\n{result.stdout}\n{result.stderr}")
-        marker = next(json.loads(line) for line in result.stdout.splitlines() if SMOKE_MARKER in line)
+            output = stdout.read_text() if stdout.exists() else ""
+            errors = stderr.read_text() if stderr.exists() else ""
+        # open can succeed even when the app exits with an error; require its success marker.
+        if result.returncode or SMOKE_MARKER not in output:
+            raise RuntimeError(
+                f"Native window startup failed ({result.returncode}):\n{output}\n{errors}\n{result.stderr}"
+            )
+        marker = next(json.loads(line) for line in output.splitlines() if SMOKE_MARKER in line)
         if marker.get("clientVersion") != info["CFBundleShortVersionString"]:
             raise RuntimeError("Native client version does not match the packaged app metadata.")
         if marker.get("language") != language or marker.get("settings") != settings_title:
