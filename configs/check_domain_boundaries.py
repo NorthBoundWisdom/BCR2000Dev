@@ -18,7 +18,7 @@ from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 
 ALLOWED = {
     "BCRProfileTool": {"BCRConfigurationAdapter"},
-    "BCRFoundation": set(),
+    "BCRFoundation": {"SimulationContracts"},
     "BCRAgentDomain": {"BCRFoundation", "AgentPlugin"},
     "BCRPluginHost": {
         "BCRFoundation",
@@ -31,9 +31,9 @@ ALLOWED = {
     "BCRCodexAdapter": {"BCRFoundation", "BCRAgentDomain"},
     "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts"},
     "BCROutputDomain": {"BCRFoundation"},
-    "BCRSimulationKernel": {"BCRFoundation"},
-    "BCRRobotDomain": {"BCRFoundation", "BCRSimulationKernel"},
-    "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel"},
+    "BCRSimulationKernel": {"BCRFoundation", "SimulationContracts"},
+    "BCRRobotDomain": {"BCRFoundation", "BCRSimulationKernel", "RobotPlugin"},
+    "BCRChassisDomain": {"BCRFoundation", "BCRSimulationKernel", "ChassisPlugin"},
     "BCRProviderApplication": {"BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"},
     "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain"},
     "BCRConfigurationAdapter": {
@@ -102,7 +102,9 @@ def check():
             internal = {
                 value
                 for value in imports
-                if value.startswith("BCR") or value in {"SurfacePluginContracts", "AgentPlugin"}
+                if value.startswith("BCR")
+                or value
+                in {"SurfacePluginContracts", "AgentPlugin", "SimulationContracts", "RobotPlugin", "ChassisPlugin"}
             }
             if not internal <= allowed:
                 errors.append(f"{path.relative_to(ROOT)} imports a forbidden module")

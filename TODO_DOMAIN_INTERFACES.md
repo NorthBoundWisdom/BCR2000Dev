@@ -302,9 +302,9 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 
 ### S4 其余插件（M2，每个插件独立完成）
 
-- [ ] S4-1 `RobotPlugin`：迁移 `BCRRobotDomain` 和 `BCRSimulationKernel` 的 `DeviceControl`。
+- [x] S4-1 `RobotPlugin`：迁移 `BCRRobotDomain` 和 `BCRSimulationKernel` 的 `DeviceControl`。
   控制权、代次、序号、TTL、过期拒绝、目标值与实际值分离的行为保持不变，明确标记 simulation。
-- [ ] S4-2 `ChassisPlugin`：迁移 `BCRChassisDomain`。与机器人不共享可变状态，只共用控制权工具。
+- [x] S4-2 `ChassisPlugin`：迁移 `BCRChassisDomain`。与机器人不共享可变状态，只共用控制权工具。
 - [ ] S4-3 BCR 的 `ProviderApplication` 改为经注册表驱动，去掉 `domain: String` 分支；Provider 1.0 黑盒场景原样通过。
 - [ ] S4-4 `ParameterOutputPlugin`：先写两份 `MotionSafetyGate` 与 OSC 编码的差异表，再合并为一个纯核心；
   套接字与凭据留在宿主。不一致之处取更保守的行为，并列出每个宿主的变化。

@@ -51,7 +51,9 @@ let package = Package(
     ],
     dependencies: [surfacePlugins],
     targets: [
-        .target(name: "BCRFoundation", resources: [.process("Resources")]),
+        .target(name: "BCRFoundation", dependencies: [
+            .product(name: "SimulationContracts", package: "SurfacePlugins")
+        ], resources: [.process("Resources")]),
         .target(name: "BCRAgentDomain", dependencies: [
             "BCRFoundation", .product(name: "AgentPlugin", package: "SurfacePlugins")
         ]),
@@ -60,9 +62,15 @@ let package = Package(
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
             .product(name: "AgentPlugin", package: "SurfacePlugins")
         ]),
-        .target(name: "BCRSimulationKernel", dependencies: ["BCRFoundation"]),
-        .target(name: "BCRRobotDomain", dependencies: ["BCRFoundation", "BCRSimulationKernel"]),
-        .target(name: "BCRChassisDomain", dependencies: ["BCRFoundation", "BCRSimulationKernel"]),
+        .target(name: "BCRSimulationKernel", dependencies: [
+            "BCRFoundation", .product(name: "SimulationContracts", package: "SurfacePlugins")
+        ]),
+        .target(name: "BCRRobotDomain", dependencies: [
+            "BCRFoundation", "BCRSimulationKernel", .product(name: "RobotPlugin", package: "SurfacePlugins")
+        ]),
+        .target(name: "BCRChassisDomain", dependencies: [
+            "BCRFoundation", "BCRSimulationKernel", .product(name: "ChassisPlugin", package: "SurfacePlugins")
+        ]),
         .target(
             name: "BCRProviderApplication",
             dependencies: ["BCRFoundation", "BCRSurfaceDomain", "BCRRobotDomain", "BCRChassisDomain"]

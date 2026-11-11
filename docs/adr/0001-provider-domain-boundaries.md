@@ -17,7 +17,8 @@
 `BCRFoundation` 承载宿主 JSON/标识/本地化。独立 `SurfacePlugins` 包的合同和插件仅依赖 Foundation，
 不含平台、设备、本地化、套接字或真实后端。`AgentPlugin` 是唯一 Mock 七态/时序实现；
 `BCRAgentDomain` 仅保留共享状态 alias 与 Date/name/Codable/旧错误兼容投影，转换允许规则委托共享状态机。
-机器人和底盘仍拥有独立的本仓库领域状态（后续M2再迁），不依赖控制台参数、MIDI 或 Agent。
+机器人和底盘已各自委托共享插件核心，旧本仓库领域保留typed facade/文案映射，无第二份积分算法或控制权状态机，
+不依赖控制台参数、MIDI或Agent。旧Provider DTO alias共享同形合同，外层生成实例UUID与每grant新opaque token。
 
 ```mermaid
 flowchart BT

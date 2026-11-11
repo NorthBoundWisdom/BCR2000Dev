@@ -1,6 +1,6 @@
 # 共享插件与 BCR 兼容边界
 
-更新：2026-11-12。BCR 已接入共享 Agent；跨宿主 M1 尚待 XTouch 接入同一版本。机器人、底盘、输出与安全门仍在本仓库，属于后续 M2；远程合同共用属于 M3。
+更新：2026-11-12。BCR 已接入共享 Agent；跨宿主 M1 尚待 XTouch 接入同一版本。机器人/底盘已通过旧API薄包装使用共享核心；输出/安全门与远程工具统一仍在进行，M2/M3尚未全部验收。
 
 ## 依赖与本地构建
 
@@ -38,6 +38,7 @@ Package执行只读verify，因此直跑Swift也不能绕过缓存检查，且�
 | --- | --- |
 | `SurfacePluginContracts` | Foundation-only 的参数/动作/指示合同、命名空间、来源、注入时间及结构化错误 |
 | `AgentPlugin` | 唯一的七态转换规则与 Mock 时间线，`Sendable` 值类型、同步确定输入 |
+| `SimulationContracts` / `RobotPlugin` / `ChassisPlugin` | 唯一控制权/机器人积分/Ackermann核心；旧BCR领域仅typed facade与错误文案映射 |
 | `BCRPluginHost` | 事务注册与显式选择插件；MainActor 持有实例、单调时钟驱动、逐事件发布旧宿主快照 |
 | `BCRConfigurationAdapter` | 旧 target 到中性动作/指示 ID 的翻译、设备七位值映射、旧反馈 API 兼容扩展 |
 | `BCRSurfaceDomain` | 控制台引擎、MIDI/学习/反馈管线；按 `IndicatorID` 存反馈，不解释 Agent 命名空间/状态 |
@@ -68,6 +69,13 @@ GUI 与无界面服务都注入 `AgentBindingTranslation.bindings`，生产引�
 `AgentSlotID(_:)` 是旧非 throw 构造，保留 raw 值并不再 precondition 崩溃。
 新调用用 `try AgentSlotID(validating:)`；解码、配置校验及插件绑定边界拒绝越界。
 插件自身的槽位数量可配置，BCR 兼容表仍为 1…8。
+
+机器人/底盘的旧Proof/Grant/Metadata/Source及状态DTO直接alias共享合同，JSON字段不变。
+旧领域包装保留方法签名与自定义模型字段，算法全部委托共享核心。宿主每实例注入UUID命名空间，
+每次grant注入新的opaque UUID token；token不进入快照。generation现在是命名空间加本地代次的opaque字符串，
+消费方不得依赖旧UUID外形。共享reasonKey经完整映射恢复旧ProviderDomainError的code/message。
+新建旧API包装显式start；注入已有plugin时保留其生命周期。插件生命周期stop后旧typed写也被acceptsWrites门禁拒绝，
+advanceSimulation仍可完成制动且不会复活；受控motion-stop与生命周期stop保持不同语义。
 
 ## 验证边界
 
