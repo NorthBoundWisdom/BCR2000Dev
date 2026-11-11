@@ -36,6 +36,9 @@ final class ConsoleViewModel: ObservableObject {
     private let endpointStore: JSONFileStore<MIDIEndpointSelection>
     let canConfigureMIDI: Bool
     @Published private(set) var endpointSelection = MIDIEndpointSelection()
+    private let workspacePanelStore: JSONFileStore<WorkspacePanelSettings>
+    /// Specialist workspace panels the user switched on; core panels are always visible.
+    @Published private(set) var workspacePanels = WorkspacePanelSettings()
     private let session: SurfaceSession
     private let configurationFile: ProtectedJSONFile<SurfaceConfiguration>
     let mcp: MCPController
@@ -86,6 +89,12 @@ final class ConsoleViewModel: ObservableObject {
             if let stored = try endpointStore.load() { try stored.validate(); savedSelection = stored }
         } catch { endpointError = "MIDI 端口设置读取失败：\(error.localizedDescription)" }
         endpointSelection = savedSelection
+        let workspacePanelStore = JSONFileStore<WorkspacePanelSettings>(fileURL:
+            stores.configuration.fileURL.deletingLastPathComponent().appending(path: "workspace-panels.json"))
+        self.workspacePanelStore = workspacePanelStore
+        var panelError: String?
+        do { if let stored = try workspacePanelStore.load() { workspacePanels = stored } }
+        catch { panelError = "面板设置读取失败，专业面板保持隐藏：\(error.localizedDescription)" }
         let midi = midiService ?? CoreMIDIService(selection: savedSelection)
         self.midi = midi
         session = SurfaceSession(
@@ -109,7 +118,12 @@ final class ConsoleViewModel: ObservableObject {
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
         Task { @MainActor [weak output] in output?.restore() }
-        if let endpointError { notice = ConsoleNotice(level: .error, text: endpointError); return }
+        if let panelError { notice = ConsoleNotice(level: .error, text: panelError) }
+        if let endpointError {
+            notice = ConsoleNotice(level: .error, text: [panelError, endpointError].compactMap { $0 }
+                .joined(separator: " "))
+            return
+        }
         guard startsMIDI else { return }
         midi.selectEndpoints(savedSelection)
         do { try midi.start() }
@@ -140,6 +154,23 @@ final class ConsoleViewModel: ObservableObject {
 
     func slot(_ id: AgentSlotID) -> AgentSlot? {
         slots.first { $0.id == id }
+    }
+
+    // MARK: Workspace panels
+
+    /// Shows or hides a specialist panel and remembers the choice. Returns false when it was not saved.
+    @discardableResult
+    func setWorkspacePanel(_ panel: WorkspaceTab, enabled: Bool) -> Bool {
+        do {
+            var updated = workspacePanels
+            try updated.set(panel, enabled: enabled)
+            try workspacePanelStore.save(updated)
+            workspacePanels = updated
+            return true
+        } catch {
+            notice = ConsoleNotice(level: .error, text: "面板设置保存失败：\(error.localizedDescription)")
+            return false
+        }
     }
 
     // MARK: Device source

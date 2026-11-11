@@ -93,8 +93,11 @@ for identifier in ["arm.j1", "arm.j2", "arm.j3", "arm.j4", "arm.j5", "arm.j6", "
     client.call("update_parameter", {"definition": definition})
     client.call("set_parameter", {"id": identifier, "value": 1e300})
 gui("set value of scroll bar 1 of scroll area 1 of group 1 of window 1 to 1.0")
-gui('perform action "AXPress" of radio button 2 of radio group 1 of scroll area 1 of group 1 of window 1')
-time.sleep(0.3)
+# The arm preview is a specialist panel: enable it from the panel menu, which also selects it.
+gui('perform action "AXPress" of menu button 1 of scroll area 1 of group 1 of window 1')
+time.sleep(0.4)
+gui('click menu item "机械臂预览" of menu 1 of menu button 1 of scroll area 1 of group 1 of window 1')
+time.sleep(0.4)
 tree = gui("return entire contents of window 1")
 if "侧视" not in tree and "俯视" not in tree and "已使能" not in tree and "未使能" not in tree:
     raise RuntimeError("arm preview was not rendered")

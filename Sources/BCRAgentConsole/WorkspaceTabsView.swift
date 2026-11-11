@@ -1,44 +1,31 @@
 import BCRAgentCore
 import SwiftUI
 
-enum WorkspaceTab: String, CaseIterable, Identifiable {
-    case parameters, arm, agents, monitor, output
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .parameters: "参数"
-        case .arm: "机械臂预览"
-        case .agents: "Agent"
-        case .monitor: "MIDI 监视"
-        case .output: "输出"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .parameters: "slider.horizontal.3"
-        case .arm: "point.3.connected.trianglepath.dotted"
-        case .agents: "square.grid.2x2"
-        case .monitor: "waveform.path"
-        case .output: "arrow.up.forward.circle"
-        }
-    }
-}
-
 struct WorkspaceTabsView: View {
     @ObservedObject var model: ConsoleViewModel
-    @State private var tab: WorkspaceTab = .parameters
+    @ObservedObject var output: OutputController
+    @State private var selection: WorkspaceTab = .parameters
+
+    init(model: ConsoleViewModel) {
+        self.model = model
+        output = model.output
+    }
 
     var body: some View {
+        let outputActive = output.settings.enabled
+        let tabs = model.workspacePanels.visibleTabs(outputActive: outputActive)
+        let tab = model.workspacePanels.resolved(selection, outputActive: outputActive)
         VStack(alignment: .leading, spacing: 12) {
-            Picker("工作区", selection: $tab) {
-                ForEach(WorkspaceTab.allCases) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+            HStack(spacing: 10) {
+                Picker("工作区", selection: Binding(get: { tab }, set: { selection = $0 })) {
+                    ForEach(tabs) { Label($0.title, systemImage: $0.systemImage).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 520)
+                Spacer(minLength: 0)
+                panelMenu(outputActive: outputActive)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 520)
 
             switch tab {
             case .parameters: ParameterListView(model: model)
@@ -49,6 +36,35 @@ struct WorkspaceTabsView: View {
             }
         }
         .panelStyle()
+    }
+
+    private func panelMenu(outputActive: Bool) -> some View {
+        Menu {
+            Section("专业面板") {
+                ForEach(WorkspaceTab.optional) { panel in
+                    Toggle(isOn: Binding(
+                        get: { model.workspacePanels.isEnabled(panel) },
+                        set: { isOn in
+                            if model.setWorkspacePanel(panel, enabled: isOn), isOn { selection = panel }
+                        }
+                    )) {
+                        Label(panel.title, systemImage: panel.systemImage)
+                        if let summary = panel.optionalSummary { Text(summary) }
+                    }
+                }
+            }
+            if outputActive, !model.workspacePanels.isEnabled(.output) {
+                Text("输出运行期间始终显示“输出”面板")
+            }
+        } label: {
+            Label("面板", systemImage: "rectangle.stack.badge.plus")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .controlSize(.small)
+        .accessibilityLabel("专业面板")
+        .accessibilityIdentifier("workspace.panels")
+        .help("启用或隐藏机械臂预览、输出等专业面板")
     }
 }
 
@@ -62,11 +78,10 @@ private struct ParameterListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack {
-                Text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
                 Button {
                     model.createParameter()
                 } label: {
@@ -104,6 +119,7 @@ private struct ParameterListView: View {
                     } message: {
                         Text("会替换当前全部参数与功能分配；实体硬件映射不受影响。")
                     }
+                Spacer(minLength: 0)
             }
             .controlSize(.small)
 
