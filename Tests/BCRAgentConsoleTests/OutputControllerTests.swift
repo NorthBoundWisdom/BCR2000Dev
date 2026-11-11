@@ -142,6 +142,40 @@ final class OutputControllerTests: XCTestCase {
         XCTAssertThrowsError(try settings.validate(configuration: config))
     }
 
+    func testReloadingIdenticalConfigurationStopsOutputBeforeAnotherMotionFrame() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = OutputTestClock(), transport = OutputFakeTransport()
+        let session = SurfaceSession(
+            hardwareDevice: OutputFakeDevice(), now: { clock.now },
+            saveHardwareMap: { _ in }, saveConfiguration: { _ in }
+        )
+        let controller = OutputController(
+            session: session, store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+            adapter: transport, automaticallyTicks: false, now: { clock.now }
+        )
+        controller.start()
+        defer { controller.stop() }
+        transport.onHeartbeat?(clock.now)
+        transport.onSamples?(session.engine.configuration.parameters.filter { $0.kind == .continuous }.map {
+            .init(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
+        })
+        controller.tick()
+        session.setParameter("arm.enabled", to: 1)
+        controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+
+        try session.replaceConfiguration(session.engine.configuration)
+        // A new enable input can arrive before the next 20 ms output tick.
+        session.setParameter("arm.enabled", to: 1)
+        let sentBeforeTick = transport.frames.count
+        controller.tick()
+
+        XCTAssertFalse(controller.settings.enabled)
+        XCTAssertTrue(controller.error?.contains("配置") == true)
+        XCTAssertFalse(transport.frames.dropFirst(sentBeforeTick).contains { $0.enabled })
+    }
+
     func testSavedEnabledOutputDoesNotAutoRestoreAndStartupHighRequiresNewEdge() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

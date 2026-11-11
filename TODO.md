@@ -6,6 +6,7 @@
 状态（截至 2026-11-11）：
 
 - Mock 下 WP1、WP3–WP7 及审查修正全部完成并已推送；手工端点选择、OSC 幂等帧、细调余量已完成。
+- 默认配置保持领域中性；预置切换的回显策略、已移除 LED 清零与同配置重载停机已补回归测试。
 - 本机通过开发签署的 DriverKit codeless dext 修复 USB OUT 管道后，实体双向可用（SIP 保持启用）。
   这是当前实机验证的前提，见 [DriverKit 实测](docs/DRIVERKIT_USB_PROOF.md)。
 - 实体已确认：固件 1.10、U-1、Preset 8、App 连接 Port 1；已学习 56/108（全部旋钮位置），

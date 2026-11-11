@@ -55,6 +55,7 @@ final class OutputController: ObservableObject {
     private let store: JSONFileStore<OutputSettings>
     private var gate: MotionSafetyGate?
     private var configuration: SurfaceConfiguration
+    private var configurationRevision: UInt64
     private var lastPing: Date?
     private var task: Task<Void, Never>?
     private var isStopping = false
@@ -71,6 +72,7 @@ final class OutputController: ObservableObject {
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
         self.automaticallyTicks = automaticallyTicks
         configuration = session.engine.configuration
+        configurationRevision = session.configurationRevision
         settings = .defaults(for: configuration)
         do { if let stored = try store.load() { settings = stored } }
         catch { self.error = "输出设置读取失败：\(error.localizedDescription)" }
@@ -116,6 +118,7 @@ final class OutputController: ObservableObject {
             settings = candidate
             self.gate = gate
             configuration = session.engine.configuration
+            configurationRevision = session.configurationRevision
             session.setOutputEnableParameter(settings.enableParameter)
             outputs = [:]; actual = [:]; error = nil; lastPing = nil
             try adapter.start(host: settings.host, port: UInt16(settings.port))
@@ -212,7 +215,9 @@ final class OutputController: ObservableObject {
     func tick() {
         guard settings.enabled, var gate else { return }
         let time = now()
-        guard session.engine.configuration == configuration else {
+        guard session.configurationRevision == configurationRevision,
+              session.engine.configuration == configuration
+        else {
             stop(failure: "配置已变化，请确认使能和限位后重新启动输出")
             return
         }

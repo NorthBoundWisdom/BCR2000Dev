@@ -38,7 +38,7 @@ struct ArmPreviewView: View {
                 }
             }
         } else {
-            Text("当前配置不含 arm.j1–arm.j4 参数。可在“参数”页“恢复示例配置”查看机械臂示例。")
+            Text("当前配置不含 arm.j1–arm.j4 参数。可在“参数”页“载入预置…”中选择“机械臂示例”。")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, minHeight: 120)
         }

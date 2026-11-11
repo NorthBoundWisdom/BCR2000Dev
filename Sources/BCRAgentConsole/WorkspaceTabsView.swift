@@ -72,7 +72,7 @@ struct WorkspaceTabsView: View {
 
 private struct ParameterListView: View {
     @ObservedObject var model: ConsoleViewModel
-    @State private var confirmsDemo = false
+    @State private var pendingPreset: ConfigurationPreset?
     @State private var confirmsImport = false
     @State private var pendingImport: SurfaceConfiguration?
 
@@ -113,12 +113,30 @@ private struct ParameterListView: View {
                     .accessibilityLabel("导出配置")
                     .accessibilityIdentifier("configuration.export")
                     .help("导出参数与功能分配，不包含实体映射")
-                Button("恢复示例配置…") { confirmsDemo = true }
-                    .confirmationDialog("恢复机械臂示例配置？", isPresented: $confirmsDemo) {
-                        Button("恢复", role: .destructive) { model.restoreDemoConfiguration() }
-                    } message: {
-                        Text("会替换当前全部参数与功能分配；实体硬件映射不受影响。")
+                Menu("载入预置…") {
+                    ForEach(ConfigurationPreset.allCases) { preset in
+                        Button {
+                            pendingPreset = preset
+                        } label: {
+                            Text(preset.title)
+                            Text(preset.summary)
+                        }
                     }
+                }
+                .fixedSize()
+                .accessibilityLabel("载入预置配置")
+                .accessibilityIdentifier("configuration.preset")
+                .help("用内置的默认配置或示例替换当前配置")
+                .confirmationDialog(
+                    "载入“\(pendingPreset?.title ?? "")”？",
+                    isPresented: Binding(get: { pendingPreset != nil }, set: { if !$0 { pendingPreset = nil } }),
+                    presenting: pendingPreset
+                ) { preset in
+                    Button("载入并替换", role: .destructive) { model.loadPreset(preset) }
+                    Button("取消", role: .cancel) {}
+                } message: { preset in
+                    Text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。")
+                }
                 Spacer(minLength: 0)
             }
             .controlSize(.small)

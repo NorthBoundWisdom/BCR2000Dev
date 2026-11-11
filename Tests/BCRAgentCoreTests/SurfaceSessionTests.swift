@@ -251,6 +251,38 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.events.filter { $0.control == button }.count, 1)
     }
 
+    func testPresetReplacementClearsRemovedEnableLEDThroughFeedbackPipeline() async throws {
+        let f = SessionFixture()
+        let enable = BCRControlID.button(row: 2, 1)
+        f.session.setParameter("arm.enabled", to: 1)
+        XCTAssertEqual(f.session.mock.value(of: enable), 127)
+        f.session.clearMonitor()
+
+        try f.session.replaceConfiguration(.starter())
+
+        XCTAssertEqual(f.session.mock.value(of: enable), 0)
+        XCTAssertEqual(f.session.engine.state(of: enable).value, 0)
+        XCTAssertEqual(f.session.events.filter { $0.control == enable }.map(\.message), [message(enable, 0)])
+        XCTAssertEqual(f.session.engine.configuration, .starter())
+    }
+
+    func testConfigurationReplacementClearsRemovedNRPNOnlyThroughLearnedHardwareIdentity() async throws {
+        var map = HardwareMap()
+        let learned = MIDIControlID(kind: .nrpn, channel: 3, number: 4321)
+        try map.bind(b, to: learned)
+        let f = SessionFixture(map: map, configuration: mirroredConfiguration())
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        f.session.setParameter("j", to: 90)
+        f.device.sent.removeAll()
+
+        try f.session.replaceConfiguration(.starter())
+
+        XCTAssertEqual(f.device.sent, [MIDI1UMPCodec.feedback14(control: learned, value: 0)])
+        XCTAssertEqual(f.session.engine.hardwareMap, map)
+        XCTAssertEqual(f.session.engine.echoWindow, 0.18)
+    }
+
     func testSynchronousAgentFeedbackSurvivesHeldPressIncludingRunningToInterrupted() async {
         let button = BCRControlID.button(row: 1, 1)
         let slot = AgentSlotID(1)

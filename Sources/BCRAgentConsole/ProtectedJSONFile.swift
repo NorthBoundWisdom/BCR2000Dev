@@ -112,9 +112,10 @@ struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
 }
 
 extension ProtectedJSONFile where Value == SurfaceConfiguration {
-    static func configuration(_ store: JSONFileStore<Value>) -> Self {
+    /// `preset` is used only when no valid saved configuration exists.
+    static func configuration(_ store: JSONFileStore<Value>, preset: ConfigurationPreset = .starter) -> Self {
         Self(store: store, title: "功能配置", normalize: { try $0.migrated() },
-             version: { $0.version }, fallback: { .robotArmDemo() })
+             version: { $0.version }, fallback: { preset.makeConfiguration() })
     }
 }
 

@@ -42,7 +42,7 @@
 | <img src="docs/images/workspace-arm-preview.png" alt="从面板菜单启用后的机械臂预览：侧视与俯视姿态示意"> |
 | 由 J1–J6、夹爪等软件参数驱动的姿态示意，证明硬件与软件编辑落在同一份参数状态 |
 
-截图取自隔离的 Mock 测试实例，可用下面的命令重新生成（只截取应用自身窗口）：
+截图取自隔离的 Mock 测试实例并载入了“机械臂示例”预置，可用下面的命令重新生成（只截取应用自身窗口）：
 
 ```bash
 python3 configs/macos_workflow.py build
@@ -65,8 +65,12 @@ python3 configs/macos_workflow.py build
 open build/app/BCRAgentConsole.app
 ```
 
-首次启动默认处于 **Mock 设备** 模式并载入“机械臂示例”配置：`P1-1…P1-8` 对应 J1–J6、夹爪和速度，
-`B1` 行是 Agent 1–8，`B2-1` 为使能，`B2-8` 复位机械臂参数组。全部都可以在检查器里改掉。
+首次启动处于 **Mock 设备** 模式并载入中性的“默认配置”：`P1-1…P1-8` 是 8 个通用参数（0–100 %），
+`B1` 行是 Agent 1–8，`B2-8` 复位参数组。全部都可以在检查器里改掉。
+
+想看一个完整的领域示例，在“参数”页点 **载入预置…** 选择“机械臂示例”（J1–J6、夹爪、速度、使能与复位）；
+同一菜单也可随时回到默认配置。载入预置会替换参数与功能分配，不影响已学习的实体映射。
+已移除的控件会清零反馈；运行中的外部输出会停止，即使重新载入同一配置也需要重新确认并启动。
 
 ## 界面结构
 
@@ -83,7 +87,7 @@ open build/app/BCRAgentConsole.app
 
 | 面板 | 内容 | 默认 |
 | --- | --- | --- |
-| 机械臂预览 | 示例机械臂的侧视 / 俯视姿态示意，由 `arm.*` 参数驱动 | 隐藏 |
+| 机械臂预览 | 示例机械臂的侧视 / 俯视姿态示意，由“机械臂示例”预置的 `arm.*` 参数驱动 | 隐藏 |
 | 输出 | OSC 目标值、受限输出与实际回传读数 | 隐藏；输出运行期间始终显示 |
 
 OSC 输出运行时“输出”面板会自动出现，确保安全门的实时读数不会被藏在菜单后面。
@@ -135,13 +139,15 @@ OSC 输出运行时“输出”面板会自动出现，确保安全门的实时�
 顶栏 MCP 设置可开启仅绑定 `127.0.0.1` 的 Streamable HTTP 服务（默认端口 8787，默认关闭）。
 Token 首次启用时生成并存入 Keychain；权限、逐参数 `agentWritable`、限速和调用记录都可在应用内查看。
 支持 MCP 2026-07-28 并兼容 2025-11-25 握手，不依赖特定厂商客户端。Agent 写入经过与滑块相同的会话管线，
-在 MIDI 监视中标为 `AGENT`；示例中的 `arm.enabled` 默认不可写。
+在 MIDI 监视中标为 `AGENT`；机械臂示例中的 `arm.enabled` 默认不可写。
 
 ```bash
-export BCR_MCP_TOKEN=…            # 从 MCP 设置中复制
-python3 tools/mcp_smoke.py           # 现代协议
-python3 tools/mcp_smoke.py --legacy  # 兼容协议
+export BCR_MCP_TOKEN=…                                  # 从 MCP 设置中复制
+python3 tools/mcp_smoke.py --parameter general.1           # 默认配置，现代协议
+python3 tools/mcp_smoke.py --parameter general.1 --legacy  # 兼容协议
 ```
+
+`--parameter` 缺省为机械臂示例的 `arm.j1`；探针结束后会恢复该参数原值。
 
 协议、工具 schema 与权限见 [MCP 文档](docs/MCP.md)。
 
@@ -151,6 +157,8 @@ python3 tools/mcp_smoke.py --legacy  # 兼容协议
 python3 tools/arm_sim.py --port 9000
 ```
 
+输出需要一个开关类型的使能参数，默认配置没有；先载入“机械臂示例”预置（或自建一个开关参数）。
+切换配置后，在输出设置中选择使能参数，点“重新生成限位草稿…”并检查后应用；原有限位不会自动替换。
 在顶栏“输出”中连接本机 9000 端口，检查限位后手动启动，再先关闭、后开启使能（Mock `B2-1`）。
 应用启动不会自动恢复输出；所有写入来源都经过同一安全门。启用“输出”面板可查看目标、限速输出和实际回传。
 协议、安全门与 LED 来源选择见 [OSC 说明](docs/OSC.md)。

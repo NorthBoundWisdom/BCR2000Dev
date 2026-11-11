@@ -444,10 +444,62 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     }
 }
 
+/// Built-in configurations a user can load. `starter` is what a fresh install opens with;
+/// domain-specific examples are loaded explicitly.
+public enum ConfigurationPreset: String, CaseIterable, Identifiable, Sendable {
+    case starter, robotArm
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .starter: "默认配置"
+        case .robotArm: "机械臂示例"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .starter: "8 个通用参数（P1-1…P1-8）、Agent 1–8（B1 行）、B2-8 复位"
+        case .robotArm: "J1–J6、夹爪、速度（P1-1…P1-8）、Agent 1–8（B1 行）、B2-1 使能、B2-8 复位"
+        }
+    }
+
+    public func makeConfiguration() -> SurfaceConfiguration {
+        switch self {
+        case .starter: .starter()
+        case .robotArm: .robotArmDemo()
+        }
+    }
+}
+
 public extension SurfaceConfiguration {
+    static let starterGroup = "通用"
     static let robotArmGroup = "机械臂"
 
-    /// Starter layout: a 6-axis arm on push encoders group 1, agent slots on button row 1,
+    /// Neutral first-launch layout: eight generic percentage parameters on push encoders group 1,
+    /// agent slots on button row 1 and a group reset on B2-8. Nothing here assumes a use case.
+    static func starter() -> SurfaceConfiguration {
+        let parameters = (1 ... 8).map { index in
+            ParameterDefinition(
+                id: ParameterID("general.\(index)"), name: "参数 \(index)", group: starterGroup,
+                unit: "%", minimum: 0, maximum: 100, defaultValue: 0
+            )
+        }
+        var assignments = parameters.enumerated().map { position, parameter in
+            ControlAssignment(control: .pushEncoder(group: 1, position + 1), target: .parameter(parameter.id))
+        }
+        for slot in 1 ... 8 {
+            assignments.append(
+                ControlAssignment(control: .button(row: 1, slot), target: .agentPrimaryAction(AgentSlotID(slot)))
+            )
+        }
+        assignments.append(ControlAssignment(control: .button(row: 2, 8), target: .resetGroup(starterGroup)))
+        return SurfaceConfiguration(name: ConfigurationPreset.starter.title, parameters: parameters,
+                                    assignments: assignments)
+    }
+
+    /// Example layout: a 6-axis arm on push encoders group 1, agent slots on button row 1,
     /// arm enable / home on button row 2. Users can reassign everything in the inspector.
     static func robotArmDemo() -> SurfaceConfiguration {
         let group = robotArmGroup

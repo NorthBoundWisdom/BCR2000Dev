@@ -73,3 +73,32 @@ final class SurfaceConfigurationTests: XCTestCase {
         XCTAssertThrowsError(try configuration.addParameter(ParameterDefinition(id: "custom.1", name: "B")))
     }
 }
+
+final class ConfigurationPresetCoreTests: XCTestCase {
+    func testStarterIsValidNeutralAndRoundTrips() throws {
+        let starter = SurfaceConfiguration.starter()
+        XCTAssertEqual(starter.name, "默认配置")
+        XCTAssertEqual(starter.parameters.map(\.id.rawValue), (1 ... 8).map { "general.\($0)" })
+        XCTAssertTrue(starter.parameters.allSatisfy { $0.kind == .continuous && $0.group == "通用" })
+        XCTAssertFalse(starter.parameters.contains { $0.id.rawValue.hasPrefix("arm.") })
+        for index in 1 ... 8 {
+            XCTAssertEqual(starter.controls(targetingParameter: ParameterID("general.\(index)")),
+                           [.pushEncoder(group: 1, index)])
+            XCTAssertEqual(starter.controls(targeting: .agentPrimaryAction(AgentSlotID(index))),
+                           [.button(row: 1, index)])
+        }
+        XCTAssertEqual(starter.controls(targeting: .resetGroup("通用")), [.button(row: 2, 8)])
+
+        let decoded = try JSONDecoder().decode(SurfaceConfiguration.self, from: JSONEncoder().encode(starter))
+        XCTAssertEqual(try decoded.migrated(), starter)
+    }
+
+    func testEveryPresetBuildsItsNamedConfiguration() {
+        XCTAssertEqual(ConfigurationPreset.allCases, [.starter, .robotArm])
+        for preset in ConfigurationPreset.allCases {
+            XCTAssertEqual(preset.makeConfiguration().name, preset.title)
+            XCTAssertFalse(preset.summary.isEmpty)
+        }
+        XCTAssertEqual(ConfigurationPreset.robotArm.makeConfiguration(), .robotArmDemo())
+    }
+}

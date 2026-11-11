@@ -62,11 +62,12 @@ final class ConsoleViewModel: ObservableObject {
 
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
-         midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil)
+         midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
+         initialPreset: ConfigurationPreset = .starter)
     {
         slots = AgentStateMachine().slots
 
-        let configurationFile = ProtectedJSONFile.configuration(stores.configuration)
+        let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
         self.configurationFile = configurationFile
         let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)
         let mapRead = hardwareFile.load()
@@ -259,9 +260,12 @@ final class ConsoleViewModel: ObservableObject {
         session.removeParameter(id)
     }
 
-    func restoreDemoConfiguration() {
-        notice = ConsoleNotice(level: .info, text: "已恢复机械臂示例配置。")
-        do { try session.replaceConfiguration(.robotArmDemo()) }
+    /// Replaces all parameters and assignments with a built-in preset; the hardware map is kept.
+    func loadPreset(_ preset: ConfigurationPreset) {
+        let hint = preset == .robotArm && !workspacePanels.isEnabled(.arm)
+            ? "可从工作区“面板”菜单启用机械臂预览。" : ""
+        notice = ConsoleNotice(level: .info, text: "已载入“\(preset.title)”。" + hint)
+        do { try session.replaceConfiguration(preset.makeConfiguration()) }
         catch { report(error) }
     }
 

@@ -29,12 +29,21 @@ final class SurfaceEngineTests: XCTestCase {
         _ = engine.setAgentFeedback(slot, value: 96, at: t0)
         engine.beginLearning(control)
         let configuration = engine.configuration
-        engine.replaceConfiguration(configuration)
+        _ = engine.replaceConfiguration(configuration)
         XCTAssertEqual(engine.value(of: "j"), 0)
         XCTAssertNil(engine.learnTarget)
         XCTAssertEqual(sent(engine.fullFeedback(at: t0)), [
             MIDI1UMPCodec.feedback(control: midi(control), value: 96)
         ])
+    }
+
+    func testConfigurationReplacementPreservesDeviceTimingPolicy() {
+        var engine = makeEngine([])
+        engine.echoWindow = 0
+        engine.triggerDebounce = 0.5
+        _ = engine.replaceConfiguration(engine.configuration)
+        XCTAssertEqual(engine.echoWindow, 0)
+        XCTAssertEqual(engine.triggerDebounce, 0.5)
     }
 
     func testEncoderInputMovesParameterAndMirrorsOnlyToOtherBoundControls() {

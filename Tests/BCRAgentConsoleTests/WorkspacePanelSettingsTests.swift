@@ -80,3 +80,44 @@ final class WorkspacePanelSettingsTests: XCTestCase {
         XCTAssertTrue(model.notice?.text.contains("面板设置保存失败") == true)
     }
 }
+
+@MainActor
+final class ConfigurationPresetTests: XCTestCase {
+    private func stores() -> ConsoleStores {
+        .temporary()
+    }
+
+    func testFreshInstallOpensNeutralStarterAndExampleIsLoadedExplicitly() throws {
+        let stores = stores()
+        defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        XCTAssertEqual(model.configuration, .starter())
+        XCTAssertNil(model.configuration.parameter("arm.j1"))
+        // Without a toggle parameter, output refuses to start and says why.
+        model.output.start()
+        XCTAssertFalse(model.output.settings.enabled)
+        XCTAssertNotNil(model.output.error)
+
+        model.loadPreset(.robotArm)
+        XCTAssertEqual(model.configuration, .robotArmDemo())
+        XCTAssertTrue(model.notice?.text.contains("“面板”菜单") == true)
+
+        XCTAssertTrue(model.setWorkspacePanel(.arm, enabled: true))
+        model.loadPreset(.starter)
+        XCTAssertEqual(model.configuration, .starter())
+        model.loadPreset(.robotArm)
+        XCTAssertEqual(model.notice?.text, "已载入“机械臂示例”。")
+    }
+
+    func testSavedConfigurationWinsOverTheInitialPreset() throws {
+        let stores = stores()
+        defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
+        let first = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm)
+        XCTAssertEqual(first.configuration, .robotArmDemo())
+        first.createParameter()
+        let saved = first.configuration
+
+        let second = ConsoleViewModel(stores: stores, startsMIDI: false)
+        XCTAssertEqual(second.configuration, saved)
+    }
+}

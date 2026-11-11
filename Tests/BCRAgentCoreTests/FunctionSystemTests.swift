@@ -65,6 +65,17 @@ final class FunctionSystemTests: XCTestCase {
         XCTAssertEqual(s.mock.value(of: button), 127)
     }
 
+    func testConfigurationReplacementKeepsMockStepButtonResponsive() async throws {
+        let s = session(target: .stepParameter(id: "x", step: 2, wraps: false),
+                        definition: .init(id: "x", name: "X", minimum: 0, maximum: 10, defaultValue: 9))
+        try s.replaceConfiguration(s.engine.configuration)
+        XCTAssertEqual(s.mock.value(of: button), 127)
+        s.press(button)
+        XCTAssertEqual(s.engine.value(of: "x"), 10)
+        XCTAssertEqual(s.mock.value(of: encoder), 127)
+        XCTAssertEqual(s.mock.value(of: button), 0)
+    }
+
     func testSetPresetLEDTracksSoftwareAndRelease() async {
         let s = session(target: .setParameter(id: "x", value: 30),
                         definition: .init(id: "x", name: "X", minimum: 0, maximum: 100))

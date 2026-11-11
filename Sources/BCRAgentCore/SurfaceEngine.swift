@@ -252,12 +252,21 @@ public struct SurfaceEngine: Sendable {
         actualFeedbackValues[id] = nil
     }
 
-    /// Configuration replacement resets parameters, while Agent state belongs to the session.
-    /// Preserve its LED snapshot so the next full feedback can restore it in a single pass.
-    public mutating func replaceConfiguration(_ configuration: SurfaceConfiguration) {
+    /// Resets parameters while preserving Agent feedback and device timing policy.
+    /// Returned effects clear controls no longer assigned; follow with fullFeedback for the new snapshot.
+    public mutating func replaceConfiguration(_ configuration: SurfaceConfiguration,
+                                              at now: Date = .now) -> [SurfaceEffect]
+    {
         let feedback = agentFeedback
+        let echoWindow = echoWindow
+        let triggerDebounce = triggerDebounce
+        let removed = self.configuration.assignments.map(\.control).filter { configuration.assignment(for: $0) == nil }
         self = SurfaceEngine(hardwareMap: hardwareMap, configuration: configuration)
         agentFeedback = feedback
+        self.echoWindow = echoWindow
+        self.triggerDebounce = triggerDebounce
+        for control in removed { record(control, value: 0, direction: .output) }
+        return self.feedback(to: removed, at: now)
     }
 
     // MARK: Hardware map / learning

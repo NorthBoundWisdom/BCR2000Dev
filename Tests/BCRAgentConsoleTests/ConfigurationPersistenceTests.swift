@@ -26,7 +26,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let read = file.load()
         XCTAssertTrue(read.failed)
         XCTAssertNotNil(read.message)
-        XCTAssertEqual(read.value, .robotArmDemo())
+        XCTAssertEqual(read.value, .starter())
         XCTAssertEqual(try Data(contentsOf: store.fileURL), original)
         let copies = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .filter { $0 != store.fileURL }
@@ -78,7 +78,8 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
-        model.setParameter("arm.j1", to: 42)
+        model.setParameter("general.1", to: 42)
+        XCTAssertEqual(model.engine.value(of: "general.1"), 42)
         let before = model.configuration
         let values = model.engine.parameterValues
         let map = model.engine.hardwareMap
@@ -160,7 +161,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         try Data("file".utf8).write(to: blocked)
         let storage = stores(blocked)
         let model = ConsoleViewModel(stores: storage, startsMIDI: false)
-        model.restoreDemoConfiguration()
+        model.loadPreset(.robotArm)
         XCTAssertEqual(model.notice?.action, .retryConfigurationSave)
         try FileManager.default.removeItem(at: blocked)
         try FileManager.default.createDirectory(at: blocked, withIntermediateDirectories: true)

@@ -41,7 +41,8 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let midi = EndpointFakeMIDI(), output = EndpointFakeOutput()
-        let model = ConsoleViewModel(stores: stores(directory), midiService: midi, outputTransport: output)
+        let model = ConsoleViewModel(stores: stores(directory), midiService: midi, outputTransport: output,
+                                     initialPreset: .robotArm)
         model.setParameter("arm.j1", to: 45)
         model.output.start()
         defer { model.output.stop() }

@@ -33,7 +33,8 @@ initialize → notifications/initialized → 工具调用；初始化返回 Mcp-
 - Host 必须指向当前本机端口。Origin 可缺省（命令行客户端），存在时只能是同端口的
   http://127.0.0.1 或 http://localhost；非本机、不同端口和 null Origin 返回 403。
 - 参数写入默认开启；配置写入默认关闭。关闭参数写入时只读，不能保留配置写入。
-- 参数还必须允许 agentWritable；示例 arm.enabled 默认不允许 Agent 写入。
+- 参数还必须允许 agentWritable；“机械臂示例”预置的 arm.enabled 默认不允许 Agent 写入。
+  本文示例中的 arm.* 参数来自该预置；首次启动的默认配置使用 general.1…general.8。
 - 每秒默认最多写 60 个参数，批量按成员数量计数。超限整批拒绝，返回可读的工具错误。
 - HTTP/1.1 请求需要明确 Content-Length；请求体最多 1 MiB、头部最多 16 KiB、并发连接最多 32；
   接收期限 5 秒。分块传输和管线请求明确拒绝，不对残缺数据进行猜测。

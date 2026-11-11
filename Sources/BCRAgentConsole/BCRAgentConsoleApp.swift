@@ -55,7 +55,9 @@ struct BCRAgentConsoleApp: App {
                     let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
                     _model = StateObject(wrappedValue: ConsoleViewModel(
                         stores: context.stores, startsMIDI: false,
-                        mcpCredentials: context.credentials, integrationTest: true
+                        mcpCredentials: context.credentials, integrationTest: true,
+                        // Native acceptance scripts exercise the arm example's parameters and safety gate.
+                        initialPreset: .robotArm
                     ))
                     return
                 } catch {

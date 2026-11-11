@@ -38,6 +38,8 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
 public final class SurfaceSession {
     public private(set) var source: DeviceSource = .mock
     public private(set) var engine: SurfaceEngine
+    /// Whole-configuration replacement resets live values even when definitions compare equal.
+    public private(set) var configurationRevision: UInt64 = 0
     public var mock: MockBCR2000 { mockDevice.model }
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
@@ -192,11 +194,12 @@ public final class SurfaceSession {
     public func replaceConfiguration(_ configuration: SurfaceConfiguration, persist: Bool = true) throws {
         let configuration = try configuration.migrated()
         let learning = engine.learnTarget
-        engine.replaceConfiguration(configuration)
+        let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
+        configurationRevision &+= 1
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
         if let learning { onEvent?(.learningInterruptedByConfiguration(learning)) }
-        perform(engine.fullFeedback(at: now()))
+        perform(clearedFeedback + engine.fullFeedback(at: now()))
         if persist { persistConfiguration() }
         else { lastConfigurationPersistenceError = nil }
         onChange?()

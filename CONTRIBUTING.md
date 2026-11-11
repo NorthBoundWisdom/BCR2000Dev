@@ -119,6 +119,7 @@ MCP 控制接口（ROADMAP R8）完成后，每轮验收还要在运行中的 Ap
 - 颜色、描边、面板样式统一使用 `Theme` 与 `panelStyle()`；LED 用红色以贴近实物。
 - 面向特定场景的工作区面板（机械臂预览、输出读数等）标记为 `WorkspaceTab.isOptional`，默认隐藏，
   由用户从“面板”菜单启用；涉及安全读数的面板在相关功能运行期间必须保持可见。
+- 首次启动的配置保持领域中性（`ConfigurationPreset.starter`）；领域示例作为预置由用户显式载入。
 - README 截图用 `tools/capture_readme_screenshots.py` 从隔离 Mock 实例重新生成，不手工截取桌面。
 - 界面文字使用简体中文；控件简称沿用 `P组-序号`、`B行-序号`、`E行-序号`、`U序号`。
 - 交互控件提供无障碍标签；可调节控件支持 `accessibilityAdjustableAction`。
