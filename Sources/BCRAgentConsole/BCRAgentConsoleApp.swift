@@ -17,13 +17,19 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
             NSApp.applicationIconImage = icon
         }
         guard CommandLine.arguments.contains("--startup-smoke") else { return }
+        NSApp.activate(ignoringOtherApps: true)
         Task { @MainActor in
             let deadline = Date().addingTimeInterval(25)
             while Date() < deadline {
-                if let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }),
-                   let view = window.contentView, view.bounds.width > 0, view.bounds.height > 0
+                if let window = NSApp.windows.first(where: { $0.canBecomeMain && $0.contentView != nil }),
+                   let view = window.contentView
                 {
                     window.setContentSize(NSSize(width: 1_200, height: 760))
+                    window.makeKeyAndOrderFront(nil)
+                    guard window.isVisible, view.bounds.width > 0, view.bounds.height > 0 else {
+                        try? await Task.sleep(for: .milliseconds(100))
+                        continue
+                    }
                     view.layoutSubtreeIfNeeded()
                     view.displayIfNeeded()
                     guard Bundle.main.url(forResource: "AppIcon", withExtension: "icns") != nil else {
@@ -63,7 +69,13 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                     Darwin.exit(2)
                 }
             }
-            FileHandle.standardError.write(Data("Native startup timed out before displaying a window.\n".utf8))
+            let windows = NSApp.windows.map {
+                "main=\($0.canBecomeMain), visible=\($0.isVisible), frame=\($0.frame), content=\(String(describing: $0.contentView))"
+            }.joined(separator: "\n")
+            FileHandle.standardError.write(Data(
+                "Native startup timed out before displaying a window. active=\(NSApp.isActive) windows=\(NSApp.windows.count)\n\(windows)\n"
+                    .utf8
+            ))
             Darwin.exit(2)
         }
     }
