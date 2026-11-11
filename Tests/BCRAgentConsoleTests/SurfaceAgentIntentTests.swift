@@ -79,4 +79,25 @@ final class SurfaceAgentIntentTests: XCTestCase {
         XCTAssertEqual(model.slots[0].state, .running)
         model.mockTasks.values.forEach { $0.cancel() }
     }
+
+    func testMockPrimaryActionBranchesForEveryState() {
+        let id = AgentSlotID(1)
+        let expected: [(AgentRunState, AgentRunState)] = [
+            (.idle, .queued), (.completed, .queued), (.interrupted, .queued), (.error, .queued),
+            (.queued, .interrupted), (.running, .interrupted), (.waitingApproval, .running)
+        ]
+        XCTAssertEqual(Set(expected.map(\.0)), Set(AgentRunState.allCases))
+        for (initial, next) in expected {
+            let model = model()
+            var slots = AgentSlot.mockSlots()
+            slots[0].state = initial
+            model.agentMachine = AgentStateMachine(slots: slots)
+            model.applyAgentSlots(slots, changed: id)
+            model.performPrimaryAction(id)
+            XCTAssertEqual(model.slots[0].state, next, initial.rawValue)
+            if initial == .waitingApproval { XCTAssertEqual(model.slots[0].progress, 0.64) }
+            if next == .queued { XCTAssertEqual(model.slots[0].progress, 0) }
+            model.mockTasks.values.forEach { $0.cancel() }
+        }
+    }
 }
