@@ -36,8 +36,14 @@ def main():
         assert not Path(name).is_absolute() and ".." not in Path(name).parts
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
-    sys.path.insert(0, str(artifact / "surface-control-sdk-1.0.0.zip"))
+    assert manifest["surface_control_contract"] == "1.1" and manifest["surface_control_sdk"] == "1.1.0"
+    sdk = artifact / "surface-control-sdk-1.1.0.zip"
+    sys.path.insert(0, str(sdk))
+    import surface_control
     from surface_control import Client, CommandCursor, SurfaceError
+
+    # The delivered SDK is the locked shared package source, byte for byte.
+    assert surface_control.__version__ == "1.1.0" and surface_control.__file__.startswith(str(sdk) + "/")
 
     cases = []
     hosts = []
@@ -86,7 +92,11 @@ def main():
             self.ready = json.loads(self.process.stdout.readline())
             assert self.ready["event"] == "provider.ready"
             self.client = Client(
-                self.ready["url"], self.token, "transport." + name.split("-")[0], provider_id=self.ready["provider_id"]
+                self.ready["url"],
+                self.token,
+                "transport." + name.split("-")[0],
+                provider_id=self.ready["provider_id"],
+                provider_header="BCR-Provider-Id",
             )
             self.client.discover()
 
@@ -117,7 +127,33 @@ def main():
             client.feedback("button.1.1", "indicator", "blink")
             assert client.snapshot()["inputs"] == before
             passed("raw_roundtrip_" + protocol)
+        held = client.input("button.1.3", "boolean", True, hold_s=0.4)
+        assert held["disposition"] == "accepted" and held["hold_deadline"] == held["time"] + 0.4
+        sequence = client.latest_sequence
+        renewed = client.renew("button.1.3", 0.4)
+        assert renewed["hold_deadline"] > held["hold_deadline"]
+        assert client.snapshot()["latest_sequence"] == sequence  # renew consumes no sequence
+        time.sleep(1.2)  # no requests: the provider's own scheduler must release the button
+        after = client.snapshot()
+        assert after["inputs"]["button.1.3"] is False and after.get("holds", {}) == {}
+        assert int(after["latest_sequence"]) == int(sequence) + 1
+        page = client.call(
+            "surface_control_events",
+            {
+                "instance_id": client.instance_id,
+                "epoch": client.expected["epoch"],
+                "after_sequence": sequence,
+                "limit": 8,
+            },
+        )
+        expiry = page["events"][0]
+        assert expiry["reason"] == "hold_expired" and expiry["origin"] == "remote" and expiry["value"] is False
+        lag = expiry["time"] - renewed["hold_deadline"]
+        assert 0 <= lag < 0.5, lag  # recorded by the timer near the deadline, not by the later snapshot
+        rejected(lambda: client.renew("button.1.3", 0.4), "hold_expired")
+        passed("real_clock_hold_renew_and_scheduler_expiry", expiry_lag_s=round(lag, 3))
         rejected(lambda: denied.client.input("pushEncoder.1.1", "scalar", 100), "permission_denied")
+        rejected(lambda: denied.client.renew("button.1.3", 0.4), "permission_denied")
         passed("permissions_default_off")
         first.client = client
         b_before = state(second.client)

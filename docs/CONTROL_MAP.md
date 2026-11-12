@@ -291,6 +291,8 @@ Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非�
 BCR 按钮灯不闪烁，`blink` 只是语义状态，Mock 中静态显示为 96，不代表实体闪烁（与可选的 GUI 节奏闪烁设置无关）。
 连续控件只声明 `value`，按其编码范围（0–127 或 NRPN 0–16383）直接显示。覆盖层持续遮蔽该控件的参数反馈，直到 reset、
 切换来源或配置/分配/页面/Mock 编码变化。
+合同 1.1（P2-B）：按钮声明 `hold`（rest false，最长 5 s），租约到期由宿主定时器在 Mock 上释放按钮并记 `hold_expired`；
+私有能力 `x.bcr.indicator_blink_static` 表示上述 blink 静态 96 呈现。
 
 ## 右侧控制列（2026-11-12）
 

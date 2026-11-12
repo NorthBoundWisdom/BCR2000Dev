@@ -24,8 +24,24 @@ def run(*args):
     return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True).strip()
 
 
+# Surface control 1.1 deliverables have exactly one source: the locked shared package.
+SURFACE_CONTRACT = "1.1"
+SURFACE_SDK = "1.1.0"
+SURFACE_FILES = {
+    "surface-control/surface-control-tools.json": "docs/surface-control-tools.json",
+    "surface-control/surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
+    "surface-control/surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
+    "surface-control/surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",
+    "surface-control/surface-control.md": "docs/surface-control.md",
+    "surface-control/surface-control-scenarios.md": "docs/surface-control-scenarios.md",
+}
+SURFACE_SDK_SOURCE = "clients/python/surface_control/__init__.py"
+
+
 def package(output, configuration="release", skip_build=False):
-    ensure_dependency(ROOT, environ=load_build_environment(ROOT))
+    shared = Path(ensure_dependency(ROOT, environ=load_build_environment(ROOT)))
+    if not shared.is_absolute():
+        shared = ROOT / shared
     if output.exists():
         raise ValueError("Use a fresh provider output directory")
     if not skip_build:
@@ -76,14 +92,17 @@ def package(output, configuration="release", skip_build=False):
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, path.read_bytes())
-    surface_sdk = output / "surface-control-sdk-1.0.0.zip"
+    surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     with zipfile.ZipFile(surface_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted((ROOT / "Clients/Python/surface_control").glob("*.py")):
-            info = zipfile.ZipInfo("surface_control/" + path.name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, path.read_bytes())
-    shutil.copytree(ROOT / "Schemas/SurfaceControl/1.0", output / "surface-control")
+        info = zipfile.ZipInfo("surface_control/__init__.py", date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.external_attr = 0o644 << 16
+        archive.writestr(info, (shared / SURFACE_SDK_SOURCE).read_bytes())
+    surface_sources = {surface_sdk.name + "!surface_control/__init__.py": SURFACE_SDK_SOURCE}
+    (output / "surface-control").mkdir()
+    for published, source in SURFACE_FILES.items():
+        shutil.copy2(shared / source, output / published)
+        surface_sources[published] = source
     shutil.copy2(ROOT / "docs/SURFACE_SIMULATION.md", output / "SURFACE_SIMULATION.md")
     shutil.copytree(
         ROOT / "Clients/Python/examples", output / "examples", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
@@ -112,9 +131,15 @@ def package(output, configuration="release", skip_build=False):
         "contract_version": "1.0",
         "sdk_version": "1.0.0",
         "source_commit": run("git", "rev-parse", "HEAD"),
-        "surface_control_contract": "1.0",
-        "surface_control_sdk": "1.0.0",
+        "surface_control_contract": SURFACE_CONTRACT,
+        "surface_control_sdk": SURFACE_SDK,
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
+        "surface_plugins_materialized_revision": run("git", "-C", str(shared), "rev-parse", "HEAD"),
+        # Published path -> path inside the locked SurfacePlugins revision (byte-identical copy).
+        "surface_control_sources": {
+            name: {"shared_path": source, "sha256": hashlib.sha256((shared / source).read_bytes()).hexdigest()}
+            for name, source in sorted(surface_sources.items())
+        },
         "dirty": bool(run("git", "status", "--porcelain")),
         "configuration": configuration,
         "host_architecture": run("uname", "-m"),

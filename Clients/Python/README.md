@@ -21,3 +21,13 @@ uses a heartbeat timeout, independently of the freshness of an individual input 
 
 Published API and models are documented by `PROVIDER_API.md` and `provider.schema.json` in the release.
 Examples use only this SDK and `BCR_PROVIDER_URL` / `BCR_PROVIDER_TOKEN` / `BCR_PROVIDER_ID`.
+
+## Optional Surface control SDK
+
+The generic `surface_control` SDK (1.1.0) is not maintained in this repository. Its only source is the
+locked SurfacePlugins package (`clients/python/surface_control/`, materialized at
+`build/seed/SurfacePlugins`), which also holds its unit tests and the Pipe integration example. The
+provider delivery ships it unchanged as `surface-control-sdk-1.1.0.zip`, with its file hash and
+shared revision recorded in `manifest.json`. To pin this provider's identity, pass both
+`provider_id` and `provider_header="BCR-Provider-Id"` to `surface_control.Client`. See
+`docs/SURFACE_SIMULATION.md`. This Provider SDK (`bcr_provider` 1.0.0) is unchanged.
