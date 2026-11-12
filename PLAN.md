@@ -276,7 +276,8 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 另行安排）。
    python3 configs/format_repo.py --staged（改了文件就重新 add 再跑）；git diff --check --cached；
    python3 configs/macos_workflow.py test（必须显示全部测试包 PASS）；
    python3 configs/check_domain_boundaries.py；python3 -m unittest discover -s Tests/BuildWorkflowTests；
-   改了连接/对齐界面的条目再跑中英文 tools/verify_connection_ui.py。
+   改了连接/对齐界面的条目再跑中英文 tools/verify_connection_ui.py，并给 tools/mcp_integration.py 加 --offscreen
+   （离屏运行，不弹窗、不抢焦点；本机 smoke 已默认离屏）。
 7. 只提交，不 push，不打标签；push 由审查窗口 review 后执行。
 8. 每完成一项，在 PLAN.md 的“执行记录”追加：条目号、提交号、改动文件、测试总数与失败数、未验证之处、
    与 PLAN 的偏离及原因。如实写，失败或没做的也要写。
@@ -314,6 +315,28 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 另行安排）。
   签署排查步骤都保留在本文件与 `HARDWARE_CONNECT_TEST.md`。
 
 未验证：没有设备；英文原生验收与 `verify_builtin_names_ui.py` 我没有重跑，用的是执行记录；黑盒 14 组本轮未涉及。
+
+## Review 结论（E1–E5、E7 与离屏测试，审查窗口，2026-11-13）
+
+审查范围是 rebase 到 `ed213e1` 之后的八个提交。独立复跑：`python3 configs/macos_workflow.py test` 五个模块逐个
+独立进程共 538 项、失败 0；BuildWorkflow 90 项；域边界、全仓格式、命令校验、双语 strings lint 通过；
+离屏 smoke 通过；中英文 `verify_connection_ui.py` 以 `--offscreen` 运行通过。逐提交读了源码差异，看了重拍的截图。
+没有发现需要修正的缺陷。
+
+- **E1**（硬件验证记录）：通过。每条标了“用户目视确认”或“只读测量”，没有写入假设备结果，也没有扩大结论。
+- **E2**（单个按键启用功能）：通过。确认框针对点击时捕获的绑定，绑定变了、换了设备源或正在学习时拒绝；
+  不发 MIDI、不改身份和其他按键，均有测试。执行窗口留在暂存区的取消按钮修正已作为独立提交纳入。
+- **E3**（AGENTS 测试命令说明）：通过。
+- **E4**（修改清单分组）：通过。分组默认折叠，顶部有各类数量汇总；生成与写入逻辑未动。
+- **E5**（在访达中显示备份）：通过。只做文件导航。离屏测试时不打开访达（见下）。
+- **E7**（连接确认默认项）：通过。回车对应不写设备的“按硬件现状连接”，写入类选项没有默认快捷键。
+  该提交没有对应的执行记录条目，内容以提交说明为准。
+- **E8**（测试替身去重）：**未做**，没有对应提交；测试目录里仍有 9 个文件各自手写 BCL 帧头。留待下一轮。
+- **离屏测试**（审查窗口实现）：本机 `smoke` 与不带脚本的 `mcp_integration.py` 默认离屏。实测期间无可见窗口、
+  前台应用不变。其余 7 个验收脚本未做离屏验证，默认仍在前台。
+
+未验证：没有设备；`verify_builtin_names_ui.py` 与其余 7 个原生验收脚本本轮没有重跑；Swift 6.0 工具链下的编译没有验证
+（本机为 6.4.2）。
 
 ## 执行记录
 
