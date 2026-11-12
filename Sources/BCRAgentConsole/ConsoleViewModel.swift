@@ -475,7 +475,7 @@ final class ConsoleViewModel: ObservableObject {
             defer { self.displayReadTask = nil }
             @MainActor func current() -> Bool { self.source == .hardware && self.connection.hasSameRoute(as: route) }
             do {
-                let names = try await self.midi.readPresetNames()
+                let names = try await self.withDisplayTransfer { try await self.midi.readPresetNames() }
                 guard current() else { return }
                 let candidates = names.candidates
                 let cached = self.displayProfile.flatMap { $0.name == names.temporaryName ? $0 : nil }
@@ -1049,7 +1049,7 @@ final class ConsoleViewModel: ObservableObject {
             }
             do {
                 if usingSoftware, let program = prompt.program {
-                    try await self.midi.configureStartup(program)
+                    try await self.withDisplayTransfer { try await self.midi.configureStartup(program) }
                     try Task.checkCancellation()
                     guard self.source == .mock, self.connection.isConnected,
                           self.connection.hasSameRoute(as: route) else { throw MIDIStartupError.noReply }
@@ -1064,7 +1064,8 @@ final class ConsoleViewModel: ObservableObject {
                     )
                 } else {
                     let expected = self.readableEncoders
-                    let messages = try await self.midi.readSnapshot(expected: expected)
+                    let messages = try await self
+                        .withDisplayTransfer { try await self.midi.readSnapshot(expected: expected) }
                     try Task.checkCancellation()
                     guard self.source == .mock, self.connection.isConnected, self.connection.hasSameRoute(as: route),
                           self.session.parameterSnapshot().revision == parameterRevision,

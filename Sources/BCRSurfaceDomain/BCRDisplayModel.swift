@@ -83,9 +83,9 @@ public struct BCRDisplayModel: Equatable, Sendable {
         }
     }
 
-    /// Animation frame while busy: a single lit segment chases around the four digits. The device's
-    /// exact pattern is not documented; this conveys the same "transfer running" state.
-    public static func busyFrame(at time: Double) -> Int { Int((time * 12).rounded(.down)) % 12 }
+    /// Animation frame while busy: a single lit segment chases around the outline of the four
+    /// digits, counterclockwise as observed on the device (frames count clockwise from top left).
+    public static func busyFrame(at time: Double) -> Int { 11 - Int((time * 12).rounded(.down)) % 12 }
 
     private static func pad(_ text: String) -> String {
         String(repeating: " ", count: max(0, 4 - text.count)) + text
