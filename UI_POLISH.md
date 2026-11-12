@@ -25,6 +25,108 @@
 - [ ] 11 MCP 请求切换实体被拒后，可查询“等待用户确认”状态。
 - [ ] 12 README 截图过时（无显示屏与右侧一栏）；重新截图需要屏幕录制权限。
 
+## 移交给执行窗口的任务（3、5、10、11）
+
+分工：执行窗口实现，审查窗口（原开发窗口）逐提交 review 后推送。全部任务不需要设备。
+方案 3A、5A 是审查窗口的推荐方案，用户尚未逐项确认；如用户另有指示，以用户为准。
+
+### 任务 3：内置示例名称跟随界面语言（方案 A，显示时翻译）
+
+现象：英文界面下“J1 底座旋转”“机械臂”“使能”“参数 1”等仍是中文。原因：名称在创建配置时按当时语言写入
+`surface-configuration.json`，之后不变。
+
+做法：
+- 在 `BCRExamples`（`Sources/BCRExamples/ConfigurationPresets.swift`）提供一个纯函数：输入已保存的名称，
+  若它与某个内置名称在**任一受支持语言**下的文本完全相同，返回该内置名称在当前语言下的文本，否则原样返回。
+  覆盖：机械臂 9 个参数名、分组“机械臂”“通用”、配置名“机械臂示例”及 starter 配置名、“参数 N”（N 为 1…8）。
+- 只在**显示层**调用：面板单元格（`SurfacePanelView.swift` 的 `presentation(of:)`）、检查器
+  （`ControlInspectorView.swift`）、标题栏配置名（`ContentView.swift` 的 `HeaderBar`）、“复位 X”标签。
+- 不改文件、不改 `ParameterDefinition`/`SurfaceConfiguration` 的存储值；MCP、导出、`resetGroup` 的分组引用、
+  配置库保持原文。用户改过的名称（与内置文本不完全相同）不翻译。
+
+验收：单元测试覆盖中→英、英→中、用户自定义名称不变、未知名称不变；切换 `L10n.language` 后同一份配置的
+显示文本变化而编码后的 JSON 不变。
+
+### 任务 5：对齐/恢复按钮收进“设备”菜单（方案 A）
+
+现象：实体模式下“对齐设备预设”“恢复原预设”两个按钮占用面板标题行，右侧说明文字被压窄。
+
+做法：在 `SurfacePanelView.swift` 的 `header` 里把两个按钮换成一个小的 `Menu`（图标按钮，带 help 和
+accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原预设”。沿用现有的
+`model.beginPresetAlignment()`、`model.restorePresetBeforeAlignment()`、`model.canAlignPreset`、
+`model.canRestorePreset`、`model.presetRestorePoint`：不可用的项禁用；`presetRestorePoint != nil` 时菜单按钮上
+显示一个小圆点。只在 `source == .hardware` 时显示。不改对齐/恢复的任何逻辑。
+
+验收：现有 `PresetAlignmentFlowTests` 不改且通过；检查 `tools/verify_*_ui.py` 是否按旧按钮文字选择控件，
+有则同步更新选择器。
+
+### 任务 10：Agent 按键灯闪烁开关挪到 Agent 设置页
+
+现状：开关在“设置 → 反馈调度”（`FeedbackSettingsView.swift` 里的“Agent 按键灯”一节），与反馈限速无关。
+
+做法：把该节移到 `CodexAgentSettingsView.swift`（设置的 Agent 标签页），`FeedbackSettingsView` 恢复为不依赖
+`ConsoleViewModel`（改回原构造方式，同步 `BCRAgentConsoleApp.swift` 的两处调用）。在开关下方加一个预览：
+五种状态（空闲、排队、运行、等待审批、出错）各一个小灯，按 `BCRIndicatorBlink.pattern(for:)` 的节奏亮灭
+（用 `TimelineView`，只在该页可见时运行）。不改 `setBlinksAgentLEDs` 与闪烁调度逻辑。
+
+验收：`AgentLEDBlinkTests` 不改且通过；预览用到的节奏来自 `BCRIndicatorBlink`，不另写一份周期。
+
+### 任务 11：MCP 可查询“等待用户确认连接”
+
+现状：`set_device_source` 请求切换实体且会写设备时，`ConsoleViewModel` 的 `mcp.service.onSelectSource` 抛出
+“需要在界面上确认同步方向”，同时弹确认窗。Agent 无法得知用户随后是否已确认，只能再次调用碰运气。
+
+做法：让 `get_status` 能反映这一状态。**先核对约束再动手**：旧 Provider 1.0 的 Schema、错误语义和 14 组黑盒
+不得变化（见 `docs/MCP.md`、`docs/PROVIDER_API.md`、`Schemas/`、`configs/verify_provider_blackbox.py`）。
+- 若 `get_status`（`Sources/BCRMCPAdapter/SurfaceMCPModule.swift`）的结果对象允许新增可选字段且不破坏
+  Schema 与黑盒，则在 `hardwareConnection` 下新增 `confirmation`：`none` / `pending` / `declined`，由宿主注入的
+  回调提供（GUI 读 `pendingHardwareConnection` 与最近一次拒绝；无界面服务恒为 `none`）。
+- 若新增字段会改动 Provider 1.0 Schema 或使黑盒失败：**停止，不实现**，在交接记录里写明冲突点，由用户决定。
+- 不改 `set_device_source` 的拒绝行为与错误文本。
+
+验收：新增测试覆盖 pending → 用户确认后 source 为 hardware、pending → 用户拒绝后 declined；
+`verify_provider_blackbox.py` 14 组与 `Tests/BuildWorkflowTests` 全部通过。
+
+### 不在本次移交范围
+
+- 12 README 截图：需要屏幕录制权限，由用户或有权限的窗口处理。
+- 13 及任何需要设备的验证：设备在远端且驱动未装好，见下节。
+
+### 给执行窗口的提示词
+
+```text
+你在 /Users/ethan/Documents/BCR2000Dev（main 分支，SwiftUI/CoreMIDI 的 BCR2000 控制台）工作。
+先读 AGENTS.md、CONTRIBUTING.md，再读根目录 UI_POLISH.md 的“移交给执行窗口的任务”一节，
+按顺序实现任务 3、5、10、11。每个任务的现象、做法、文件位置和验收标准都写在那一节里，以它为准。
+
+规则：
+1. 只做这四个任务，不做范围外的重构。任务 11 先核对 Provider 1.0 约束，冲突就停下并记录，不要硬做。
+2. 不需要也不要尝试连接设备；不发送任何 MIDI/SysEx。
+3. 不改模拟侧文件：Sources/BCRProviderMCPAdapter/SurfaceControl*.swift、docs/SURFACE_*.md、
+   configs/package_provider.py、Schemas/、Clients/。与其他窗口的冲突热点是 SurfaceSession.swift、
+   SurfaceEngine.swift、docs/CONTROL_MAP.md，除非任务必须，否则不要动。
+4. 所有新界面文字通过 L10n.text，并在 Sources/BCRFoundation/Resources/{en,zh-Hans}.lproj/Localizable.strings
+   成对添加；改完用 plutil -lint 检查两个文件。
+5. 每个任务一个本地提交（Conventional Commits，中文或英文均可），提交前：
+   - git fetch origin；若远端有新提交且你有未推送提交，git rebase origin/main（不 merge、不 force）。
+     远端若改了 configs/surface_plugins.lock.json，运行 python3 configs/surface_plugins_dependency.py update。
+   - python3 configs/format_repo.py --staged（它改了文件就重新 git add 再跑一次）；git diff --check --cached。
+   - 全量测试：swift test --build-path build/swiftpm > /tmp/bcr_test.log 2>&1，然后
+     grep -E "Test Suite '.*\.xctest' (passed|failed)|Test Case .* failed" /tmp/bcr_test.log
+     必须看到 5 个测试包全部 passed、没有 failed 的用例。不要只看输出最后一行，那只是最后一个包。
+   - python3 configs/check_domain_boundaries.py；python3 -m unittest discover -s Tests/BuildWorkflowTests。
+6. 只提交，不要 push，不要打标签。push 由审查窗口在 review 通过后执行。
+7. 每完成一个任务，在 UI_POLISH.md 的“执行记录”一节追加：任务号、提交号、改了哪些文件、测试总数与失败数、
+   没验证或有疑问的地方、与任务书的任何偏离及原因。如实写，失败或没做的也要写。对应清单项先不要打勾，
+   由审查窗口 review 后勾选。
+8. 遇到任务书没覆盖的取舍，选改动最小的做法并在执行记录里说明；涉及改用户数据、改既有测试断言、
+   改公开合同的，停下记录，不要自行决定。
+```
+
+### 执行记录
+
+（执行窗口在此追加）
+
 ## 远端设备（ethanmacair）
 
 设备 2026-11-12 起插在 ethanmacair（SSH 可达，登录用户 henrykang，仓库在 `~/Documents/BCR2000Dev`）。
