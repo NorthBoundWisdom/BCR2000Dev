@@ -102,7 +102,8 @@ def main(argv=None):
         cursor = sdk.CommandCursor(client, mapping)
         initial = cursor.bootstrap()
         require(not any(initial.values()), "new trial requires all-off controls")
-        cfg, flash, _ = trial.prepare(trial.JsonHTTP(), state, args.output / "taskless", args.url)
+        trial_name = "taskless-" + hashlib.sha256(str(args.output.resolve()).encode()).hexdigest()[:16]
+        cfg, flash, _ = trial.prepare(trial.JsonHTTP(), state, args.output / trial_name, args.url)
         gate = trial.ActionGate()
         require(gate.sample(initial) is None, "initial snapshot cannot command")
         descriptors = discovery["profile"]["controls"]
