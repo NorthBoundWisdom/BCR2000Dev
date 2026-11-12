@@ -218,7 +218,7 @@ public extension HardwareMap {
         var controls = Set<BCRControlID>()
         var identities = Set<MIDIControlID>()
         for entry in entries {
-            if entry.visualizationOnly == true && entry.control.isContinuous {
+            if (entry.visualizationOnly == true || entry.pressMode != nil), entry.control.isContinuous {
                 issues.append(.init(.encoderMessageKind, subject: entry.control.shortName,
                                     detail: L10n.text("按压预览绑定只能用于按钮")))
             }

@@ -50,7 +50,11 @@ public enum BCRPresetButtonLearning {
             }
             if let previous = map.midi(for: control) {
                 guard previous == midi else { throw HardwareSnapshotError.invalid }
-            } else { try map.bind(control, to: midi, visualizationOnly: true) }
+            }
+            let preview = map.midi(for: control) == nil || map.isVisualizationOnly(control)
+            let pressMode: HardwarePressMode = words[6] == "toggleoff" && words[4] == "127" && words[5] == "0" ?
+                .momentary : .pulse
+            try map.bind(control, to: midi, visualizationOnly: preview, pressMode: pressMode)
         }
         return Plan(hardwareMap: map, unconfigured: missing, unsupported: unsupported)
     }

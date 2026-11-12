@@ -26,9 +26,13 @@ public protocol MIDIService: SurfaceDevice {
     func selectEndpoints(_ selection: MIDIEndpointSelection)
     var supportsSnapshotReadback: Bool { get }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
+    var supportsStartupConfiguration: Bool { get }
+    func configureStartup(_ program: MIDIStartupProgram) async throws
 }
 
 public extension MIDIService {
+    var supportsStartupConfiguration: Bool { false }
+    func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     var supportsSnapshotReadback: Bool { false }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
         throw HardwareSnapshotError.invalid
@@ -45,6 +49,7 @@ enum CoreMIDIEndpointAvailability {
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
 public final class CoreMIDIService: MIDIService {
+    public var supportsStartupConfiguration: Bool { true }
     static let snapshotRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x43, 0xF7]
     public var supportsSnapshotReadback: Bool { true }
     public private(set) var connection = MIDIConnectionSnapshot()
@@ -58,6 +63,13 @@ public final class CoreMIDIService: MIDIService {
     private var snapshotValues: [MIDIControlID: MIDIVoiceMessage] = [:]
     private var snapshotActivity: Double = 0
     private var snapshotTask: Task<Void, Never>?
+    private var startupID: UUID?
+    private var ackIndex: Int?
+    private var ackID: UUID?
+    private var ackContinuation: CheckedContinuation<Void, any Error>?
+    private var ackTimeout: Task<Void, Never>?
+    private var sysEx = MIDISysEx7Assembler()
+    private var inputGeneration: UInt = 0
 
     public init(selection: MIDIEndpointSelection = .init()) { self.selection = selection }
 
@@ -70,15 +82,23 @@ public final class CoreMIDIService: MIDIService {
         guard transport == nil else { return }
         let transport = CoreMIDITransport(
             selection: selection,
-            onMessages: { [weak self] messages in
-                Task { @MainActor [weak self] in self?.receive(messages) }
+            onMessages: { [weak self] messages, generation in
+                Task { @MainActor [weak self] in self?.receive(messages, generation: generation) }
             },
-            onConnection: { [weak self] snapshot in
+            onSysEx: { [weak self] chunks, generation in
+                Task { @MainActor [weak self] in self?.receiveSysEx(chunks, generation: generation) }
+            },
+            onConnection: { [weak self] snapshot, generation in
                 Task { @MainActor [weak self] in
-                    if self?.connection != snapshot, let id = self?.snapshotID { self?.finishSnapshot(
+                    if self?.inputGeneration != generation, let ack = self?.ackID {
+                        self?.finishAck(ack, result: .failure(CoreMIDIServiceError.outputUnavailable))
+                    }
+                    if self?.inputGeneration != generation, let id = self?.snapshotID { self?.finishSnapshot(
                         id,
                         result: .failure(HardwareSnapshotError.invalid)
                     ) }
+                    self?.inputGeneration = generation
+                    self?.sysEx = MIDISysEx7Assembler()
                     self?.connection = snapshot
                     self?.onConnection?(snapshot)
                 }
@@ -97,11 +117,11 @@ public final class CoreMIDIService: MIDIService {
     public func send(_ message: MIDIVoiceMessage) throws {
         try message.validate()
         guard let transport else { throw CoreMIDIServiceError.outputUnavailable }
-        try transport.send(message)
+        try transport.send(message, expectedGeneration: inputGeneration)
     }
 
     public func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
-        guard snapshotID == nil, connection.isConnected, !expected.isEmpty,
+        guard startupID == nil, snapshotID == nil, connection.isConnected, !expected.isEmpty,
               expected.allSatisfy({ $0.kind == .controlChange }),
               let transport else { throw HardwareSnapshotError.invalid }
         let id = UUID()
@@ -112,7 +132,7 @@ public final class CoreMIDIService: MIDIService {
                 snapshotExpected = expected; snapshotValues = [:]
                 snapshotActivity = ProcessInfo.processInfo.systemUptime
                 let started = snapshotActivity
-                do { try transport.sendBytes(Self.snapshotRequest) }
+                do { try transport.sendBytes(Self.snapshotRequest, expectedGeneration: inputGeneration) }
                 catch { finishSnapshot(id, result: .failure(error)); return }
                 snapshotTask = Task { @MainActor [weak self] in
                     for _ in 0 ..< 60 {
@@ -133,7 +153,9 @@ public final class CoreMIDIService: MIDIService {
         }
     }
 
-    private func receive(_ messages: [MIDIVoiceMessage]) {
+    private func receive(_ messages: [MIDIVoiceMessage], generation: UInt) {
+        guard generation == inputGeneration else { return }
+        guard startupID == nil else { return }
         guard let id = snapshotID else { onMessages?(messages); return }
         snapshotActivity = ProcessInfo.processInfo.systemUptime
         for message in messages where snapshotExpected.contains(message.controlID) {
@@ -152,16 +174,68 @@ public final class CoreMIDIService: MIDIService {
         snapshotExpected = []; snapshotValues = [:]
         continuation?.resume(with: result)
     }
+
+    public func configureStartup(_ program: MIDIStartupProgram) async throws {
+        let frames = try program.frames()
+        guard startupID == nil, snapshotID == nil, connection.isConnected,
+              let transport else { throw CoreMIDIServiceError.outputUnavailable }
+        let id = UUID(), route = connection, generation = inputGeneration
+        startupID = id; sysEx = MIDISysEx7Assembler()
+        defer { startupID = nil; sysEx = MIDISysEx7Assembler() }
+        try Task.checkCancellation()
+        try transport.sendBytes(program.selectBytes, expectedGeneration: generation)
+        try await Task.sleep(for: .milliseconds(150))
+        for (index, frame) in frames.enumerated() {
+            try Task.checkCancellation()
+            guard connection.hasSameRoute(as: route),
+                  inputGeneration == generation else { throw CoreMIDIServiceError.outputUnavailable }
+            let ack = UUID()
+            try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                    ackID = ack; ackIndex = index; ackContinuation = continuation
+                    do { try transport.sendBytes(frame, expectedGeneration: generation) }
+                    catch { finishAck(ack, result: .failure(error)); return }
+                    ackTimeout = Task { @MainActor [weak self] in
+                        do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                        self?.finishAck(ack, result: .failure(MIDIStartupError.noReply))
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.finishAck(ack, result: .failure(CancellationError())) }
+            }
+        }
+    }
+
+    private func receiveSysEx(_ chunks: [MIDISysEx7Chunk], generation: UInt) {
+        guard generation == inputGeneration else { return }
+        for chunk in chunks {
+            guard let frame = sysEx.consume(chunk), frame.count == 11,
+                  frame.prefix(4) == [0xF0, 0, 0x20, 0x32], frame[5] == 0x15, frame[6] == 0x21,
+                  Int(frame[7]) * 128 + Int(frame[8]) == ackIndex, let id = ackID else { continue }
+            finishAck(id, result: frame[9] == 0 ? .success(()) : .failure(MIDIStartupError.rejected(Int(frame[9]))))
+        }
+    }
+
+    private func finishAck(_ id: UUID, result: Result<Void, any Error>) {
+        guard ackID == id else { return }
+        let c = ackContinuation
+        ackID = nil; ackIndex = nil; ackContinuation = nil
+        ackTimeout?.cancel(); ackTimeout = nil
+        c?.resume(with: result)
+    }
 }
 
 /// Owns CoreMIDI objects on a private serial queue. The receive callback only copies/decodes
 /// packet words and immediately hands value types to the application.
 private final class CoreMIDITransport: @unchecked Sendable {
-    typealias MessageHandler = @Sendable ([MIDIVoiceMessage]) -> Void
-    typealias ConnectionHandler = @Sendable (MIDIConnectionSnapshot) -> Void
+    typealias MessageHandler = @Sendable ([MIDIVoiceMessage], UInt) -> Void
+    typealias ConnectionHandler = @Sendable (MIDIConnectionSnapshot, UInt) -> Void
+    typealias SysExHandler = @Sendable ([MIDISysEx7Chunk], UInt) -> Void
 
     private let messageHandler: MessageHandler
     private let connectionHandler: ConnectionHandler
+    private let sysExHandler: SysExHandler
     private let managementQueue = DispatchQueue(label: "dev.bcragentconsole.coremidi")
 
     private var client: MIDIClientRef = 0
@@ -171,14 +245,17 @@ private final class CoreMIDITransport: @unchecked Sendable {
     private var destination: MIDIEndpointRef = 0
     private var isStarted = false
     private var selection: MIDIEndpointSelection
+    private var generation: UInt = 0
 
     init(
         selection: MIDIEndpointSelection,
         onMessages: @escaping MessageHandler,
+        onSysEx: @escaping SysExHandler,
         onConnection: @escaping ConnectionHandler
     ) {
         self.selection = selection
         messageHandler = onMessages
+        sysExHandler = onSysEx
         connectionHandler = onConnection
     }
 
@@ -213,14 +290,16 @@ private final class CoreMIDITransport: @unchecked Sendable {
                 "BCR Agent Console Input" as CFString,
                 ._1_0,
                 &newInputPort
-            ) { [weak self] eventList, _ in
+            ) { [weak self] eventList, context in
                 guard let self else {
                     return
                 }
-                let messages = Self.decode(eventList)
+                let (messages, chunks) = Self.decode(eventList)
+                let generation = context.map { UInt(bitPattern: $0) } ?? 0
                 if !messages.isEmpty {
-                    self.messageHandler(messages)
+                    self.messageHandler(messages, generation)
                 }
+                if !chunks.isEmpty { self.sysExHandler(chunks, generation) }
             }
             do {
                 try Self.check(inputStatus, operation: L10n.text("创建 MIDI Input Port"))
@@ -281,14 +360,14 @@ private final class CoreMIDITransport: @unchecked Sendable {
         }
     }
 
-    public func send(_ message: MIDIVoiceMessage) throws {
+    public func send(_ message: MIDIVoiceMessage, expectedGeneration: UInt) throws {
         try message.validate()
-        try sendBytes(message.midi1Bytes)
+        try sendBytes(message.midi1Bytes, expectedGeneration: expectedGeneration)
     }
 
-    func sendBytes(_ data: [UInt8]) throws {
+    func sendBytes(_ data: [UInt8], expectedGeneration: UInt) throws {
         try managementQueue.sync {
-            guard isStarted, outputPort != 0, destination != 0 else {
+            guard isStarted, outputPort != 0, destination != 0, generation == expectedGeneration else {
                 throw CoreMIDIServiceError.outputUnavailable
             }
 
@@ -327,6 +406,8 @@ private final class CoreMIDITransport: @unchecked Sendable {
         guard isStarted else {
             return
         }
+        generation &+= 1
+        if generation == 0 { generation = 1 }
 
         for source in connectedSources {
             MIDIPortDisconnectSource(inputPort, source)
@@ -359,7 +440,11 @@ private final class CoreMIDITransport: @unchecked Sendable {
         let selectedSource = resolve(sources, selectedID: selection.sourceID)
         let selectedDestination = resolve(destinations, selectedID: selection.destinationID)
         if let selectedSource {
-            let status = MIDIPortConnectSource(inputPort, selectedSource.endpoint, nil)
+            let status = MIDIPortConnectSource(
+                inputPort,
+                selectedSource.endpoint,
+                UnsafeMutableRawPointer(bitPattern: generation)
+            )
             if status == noErr { connectedSources = [selectedSource.endpoint] }
             else {
                 lastError = CoreMIDIServiceError.operation(name: L10n.text("连接 \(selectedSource.name)"), status: status)
@@ -381,7 +466,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
         ) }
         snapshot.connectedSourceID = connectedSources.isEmpty ? nil : selectedSource?.id
         snapshot.connectedDestinationID = destination == 0 ? nil : selectedDestination?.id
-        connectionHandler(snapshot)
+        connectionHandler(snapshot, generation)
     }
 
     private struct NamedEndpoint {
@@ -429,15 +514,16 @@ private final class CoreMIDITransport: @unchecked Sendable {
 
     private static func decode(
         _ eventList: UnsafePointer<MIDIEventList>
-    ) -> [MIDIVoiceMessage] {
+    ) -> ([MIDIVoiceMessage], [MIDISysEx7Chunk]) {
         guard
             let packetOffset = MemoryLayout<MIDIEventList>.offset(of: \.packet),
             let wordsOffset = MemoryLayout<MIDIEventPacket>.offset(of: \.words)
         else {
-            return []
+            return ([], [])
         }
 
         var result: [MIDIVoiceMessage] = []
+        var chunks: [MIDISysEx7Chunk] = []
         var packet = UnsafeRawPointer(eventList)
             .advanced(by: packetOffset)
             .assumingMemoryBound(to: MIDIEventPacket.self)
@@ -453,6 +539,8 @@ private final class CoreMIDITransport: @unchecked Sendable {
                 if let message = MIDI1UMPCodec.decode(word: word) {
                     result.append(message)
                 }
+                if wordIndex + 1 < packetWordCount,
+                   let chunk = MIDISysEx7Chunk(word0: word, word1: words[wordIndex + 1]) { chunks.append(chunk) }
                 wordIndex += min(
                     MIDI1UMPCodec.wordCount(forFirstWord: word),
                     packetWordCount - wordIndex
@@ -460,7 +548,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             }
             packet = UnsafePointer(MIDIEventPacketNext(packet))
         }
-        return result
+        return (result, chunks)
     }
 
     private static func check(_ status: OSStatus, operation: String) throws {

@@ -1,22 +1,27 @@
 import BCRFoundation
 import Foundation
 
+public enum HardwarePressMode: String, Codable, Sendable { case momentary, pulse }
+
 public struct HardwareMapEntry: Hashable, Codable, Sendable {
     public let control: BCRControlID
     public let midi: MIDIControlID
     public let ringMode: LEDRingMode?
     public let visualizationOnly: Bool?
+    public let pressMode: HardwarePressMode?
 
     public init(
         control: BCRControlID,
         midi: MIDIControlID,
         ringMode: LEDRingMode? = nil,
-        visualizationOnly: Bool = false
+        visualizationOnly: Bool = false,
+        pressMode: HardwarePressMode? = nil
     ) {
         self.control = control
         self.midi = midi
         self.ringMode = ringMode
         self.visualizationOnly = visualizationOnly ? true : nil
+        self.pressMode = pressMode
     }
 }
 
@@ -45,7 +50,8 @@ public struct HardwareMap: Equatable, Codable, Sendable {
     /// Version 3 replaces the slot-only `ControllerProfile` with a full physical surface map.
     /// Version 5 preserves explicitly learned LED display modes; old maps retain unknown modes.
     /// Version 6 adds button observations that cannot execute functions or send feedback.
-    public static let currentVersion = 6
+    /// Version 7 records actual press/release versus counter-pulse message behavior.
+    public static let currentVersion = 7
 
     public var version: Int
     public private(set) var entries: [HardwareMapEntry]
@@ -80,13 +86,18 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         entries.first { $0.control == control }?.visualizationOnly == true
     }
 
+    public func pressMode(for control: BCRControlID) -> HardwarePressMode? {
+        entries.first { $0.control == control }?.pressMode
+    }
+
     public func control(for midi: MIDIControlID) -> BCRControlID? {
         entries.first { $0.midi == midi }?.control
     }
 
     /// Binds `control` to `midi`, replacing an earlier binding of the same control.
     public mutating func bind(
-        _ control: BCRControlID, to midi: MIDIControlID, ringMode: LEDRingMode? = nil, visualizationOnly: Bool = false
+        _ control: BCRControlID, to midi: MIDIControlID, ringMode: LEDRingMode? = nil, visualizationOnly: Bool = false,
+        pressMode: HardwarePressMode? = nil
     ) throws(HardwareBindingError) {
         if control.isContinuous, midi.kind == .note {
             throw HardwareBindingError.encoderRequiresControlChange(control)
@@ -97,12 +108,14 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         var candidate = self
         candidate.entries.removeAll { $0.control == control }
         let mode = ringMode ?? (self.midi(for: control) == midi ? self.ringMode(for: control) : nil)
-        if visualizationOnly && control.isContinuous { throw .invalidMap(L10n.text("按压预览绑定只能用于按钮")) }
+        if (visualizationOnly || pressMode != nil),
+           control.isContinuous { throw .invalidMap(L10n.text("按压预览绑定只能用于按钮")) }
         candidate.entries.append(HardwareMapEntry(
             control: control,
             midi: midi,
             ringMode: mode,
-            visualizationOnly: visualizationOnly
+            visualizationOnly: visualizationOnly,
+            pressMode: pressMode ?? (self.midi(for: control) == midi ? self.pressMode(for: control) : nil)
         ))
         candidate.entries.sort { $0.control < $1.control }
         do { try candidate.validate() } catch { throw .invalidMap(error.localizedDescription) }
@@ -125,7 +138,8 @@ public struct HardwareMap: Equatable, Codable, Sendable {
             HardwareMapEntry(
                 control: control,
                 midi: MIDIControlID(kind: .controlChange, channel: 0, number: UInt8(offset + 1)),
-                ringMode: control.isContinuous ? (control.section == .pushEncoder ? .twoDot : .oneDot) : nil
+                ringMode: control.isContinuous ? (control.section == .pushEncoder ? .twoDot : .oneDot) : nil,
+                pressMode: control.isContinuous ? nil : .momentary
             )
         }
         return HardwareMap(entries: entries)

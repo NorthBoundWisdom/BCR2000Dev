@@ -63,7 +63,7 @@ extension ConsoleViewModel {
             value: displayValue(of: control),
             ringLEDs: source == .mock ? mock.ringLEDs(of: control)
                 : engine.hardwareMap.ringMode(for: control)?.litLEDs(value: displayValue(of: control)),
-            hardwarePressed: hardwarePressedControls.contains(control.section == .pushEncoder
+            hardwarePressed: connection.isConnected && hardwarePressedControls.contains(control.section == .pushEncoder
                 ? .pushEncoderButton(group: control.row, control.index) : control),
             label: label,
             detail: detail,
@@ -205,7 +205,9 @@ struct SurfacePanelView: View {
                 .font(m.font(8.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
             if model.source == .hardware {
-                Text(model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") } ?? L10n.text("硬件组未确认"))
+                Text(model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") }
+                    ?? model.startupConfiguredGroup.map { L10n.text("启动设为组 \($0)") }
+                    ?? L10n.text("硬件组未确认"))
                     .font(m.font(8, weight: .medium))
                     .foregroundStyle(.secondary)
             }

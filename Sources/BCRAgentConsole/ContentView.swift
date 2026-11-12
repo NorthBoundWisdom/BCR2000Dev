@@ -33,6 +33,11 @@ struct ContentView: View {
         // The header's first row occupies the title strip instead of leaving it empty.
         .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(.dark)
+        .sheet(item: Binding(get: { model.pendingHardwareConnection }, set: { value in
+            if value == nil, let prompt = model.pendingHardwareConnection { model.declineHardwareConnection(prompt.id) }
+        })) { prompt in
+            HardwareConnectionSheet(prompt: prompt, model: model)
+        }
     }
 }
 
@@ -140,7 +145,7 @@ private struct HeaderBar: View {
             .accessibilityElement(children: .combine)
 
             HStack(spacing: 10) {
-                Picker(L10n.text("设备"), selection: Binding(get: { model.source }, set: { model.selectSource($0) })) {
+                Picker(L10n.text("设备"), selection: Binding(get: { model.source }, set: { model.requestSource($0) })) {
                     ForEach(DeviceSource.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)

@@ -1,6 +1,16 @@
 import XCTest
 @testable import BCRAgentCore
 
+@MainActor
+private final class PreviewDevice: SurfaceDevice {
+    var connection = MIDIConnectionSnapshot(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1")
+    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
+    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
+    var sent: [MIDIVoiceMessage] = []
+    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
+}
+
+@MainActor
 final class ButtonPreviewTests: XCTestCase {
     private func dump(_ lines: [String]) -> Data {
         Data(lines.enumerated().flatMap { i, line in
@@ -20,6 +30,8 @@ final class ButtonPreviewTests: XCTestCase {
         let button = BCRControlID.button(row: 1, 1)
         XCTAssertTrue(plan.hardwareMap.isVisualizationOnly(button))
         XCTAssertNotNil(plan.hardwareMap.midi(for: .userButton(1)))
+        XCTAssertEqual(plan.hardwareMap.pressMode(for: .pushEncoderButton(group: 1, 1)), .momentary)
+        XCTAssertEqual(plan.hardwareMap.pressMode(for: .button(row: 1, 1)), .pulse)
         var engine = SurfaceEngine(hardwareMap: plan.hardwareMap, configuration: .robotArmDemo())
         XCTAssertTrue(engine.handleInput(.controlChange(channel: 15, number: 101, value: 1)).isEmpty)
         XCTAssertTrue(engine.fullFeedback().isEmpty)
@@ -49,6 +61,23 @@ final class ButtonPreviewTests: XCTestCase {
         let plan = try BCRPresetButtonLearning.prepare(dump: dump(lines), existingMap: map)
         XCTAssertEqual(plan.unsupported, [.pushEncoderButton(group: 1, 6)])
         XCTAssertEqual(plan.hardwareMap.entries, map.entries)
+    }
+
+    func testReleaseMatchingRecentFeedbackIsStillReported() throws {
+        var map = HardwareMap()
+        let button = BCRControlID.button(row: 1, 1)
+        try map.bind(button, to: .init(kind: .controlChange, channel: 0, number: 90), pressMode: .momentary)
+        let device = PreviewDevice()
+        let session = SurfaceSession(hardwareDevice: device, hardwareMap: map, configuration: .robotArmDemo(),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        var events: [SurfaceSessionEvent] = []
+        session.onEvent = { events.append($0) }
+        session.selectSource(.hardware)
+        // Hardware mode just sent 0 to this button; a physical release of 0 arrives inside the echo window.
+        XCTAssertEqual(device.sent.last, .controlChange(channel: 0, number: 90, value: 0))
+        events.removeAll()
+        device.onMessages?([.controlChange(channel: 0, number: 90, value: 0)])
+        XCTAssertTrue(events.contains(.buttonActivity(button, pressed: false)))
     }
 
     func testPreviewKeepsSoftwareIndicatorStateWithoutHardwareFeedback() throws {

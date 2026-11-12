@@ -25,6 +25,101 @@ private final class StartupMIDI: MIDIService {
 
 @MainActor
 final class HardwareStartupTests: XCTestCase {
+    private func stores() -> (ConsoleStores, URL) {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        return (ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                              configuration: JSONFileStore(fileURL: directory.appending(path: "config.json"))),
+                directory)
+    }
+
+    private func waitForPrompt(_ model: ConsoleViewModel) async throws -> HardwareConnectionPrompt {
+        for _ in 0 ..< 40 {
+            if let prompt = model.pendingHardwareConnection { return prompt }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        throw XCTSkip("connection prompt did not appear")
+    }
+
+    private func confirmRead(_ model: ConsoleViewModel, settle: Bool = true) async throws {
+        let prompt = try await waitForPrompt(model)
+        XCTAssertTrue(prompt.canRead)
+        model.connectHardware(prompt.id, mode: .read)
+        if settle { try await Task.sleep(for: .milliseconds(80)) }
+    }
+
+    func testFirstRunWithoutLearnedControlsEntersHardwareWithoutWriting() async throws {
+        let (stores, directory) = stores()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let device = StartupMIDI()
+        let model = ConsoleViewModel(stores: stores, midiService: device)
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertNil(model.pendingHardwareConnection)
+        model.requestSource(.hardware)
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertTrue(device.sent.isEmpty)
+    }
+
+    func testControlsLearnedThisRunAreOfferedAfterReconnect() async throws {
+        let (stores, directory) = stores()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let device = StartupMIDI()
+        let model = ConsoleViewModel(stores: stores, midiService: device)
+        model.requestSource(.hardware)
+        model.beginLearning(at: .pushEncoder(group: 1, 1))
+        device.onMessages?([.controlChange(channel: 0, number: 20, value: 5)])
+        XCTAssertEqual(model.learnedCount, 1)
+        let route = device.connection
+        device.connection = MIDIConnectionSnapshot()
+        device.onConnection?(device.connection)
+        XCTAssertEqual(model.source, .mock)
+        device.connection = route
+        device.onConnection?(route)
+        let prompt = try await waitForPrompt(model)
+        XCTAssertTrue(prompt.canRead)
+        XCTAssertTrue(prompt.canWrite)
+    }
+
+    func testWriteOptionEntersHardwareOnlyAfterConfirmation() async throws {
+        let (stores, directory) = stores()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try stores.hardwareMap.save(.mockPreset())
+        let device = StartupMIDI()
+        let model = ConsoleViewModel(stores: stores, midiService: device)
+        let prompt = try await waitForPrompt(model)
+        XCTAssertTrue(device.sent.isEmpty)
+        model.connectHardware(prompt.id, mode: .write)
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertFalse(device.sent.isEmpty)
+    }
+
+    func testNoticeActionAndPickerRequireConfirmationInsteadOfWriting() async throws {
+        let (stores, directory) = stores()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try stores.hardwareMap.save(.mockPreset())
+        let device = StartupMIDI()
+        let model = ConsoleViewModel(stores: stores, midiService: device)
+        let first = try await waitForPrompt(model)
+        model.declineHardwareConnection(first.id)
+        model.performNoticeAction(.switchToHardware)
+        _ = try await waitForPrompt(model)
+        XCTAssertEqual(model.source, .mock)
+        XCTAssertTrue(device.sent.isEmpty)
+    }
+
+    func testRemoteHardwareSwitchIsRefusedAndAsksTheUser() async throws {
+        let (stores, directory) = stores()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try stores.hardwareMap.save(.mockPreset())
+        let device = StartupMIDI()
+        let model = ConsoleViewModel(stores: stores, midiService: device)
+        let first = try await waitForPrompt(model)
+        model.declineHardwareConnection(first.id)
+        XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.hardware))
+        _ = try await waitForPrompt(model)
+        XCTAssertEqual(model.source, .mock)
+        XCTAssertTrue(device.sent.isEmpty)
+    }
+
     func testRequestIsTheReadOnlyBCRSnapshotCommand() {
         XCTAssertEqual(CoreMIDIService.snapshotRequest, [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x43, 0xF7])
     }
@@ -43,6 +138,9 @@ final class HardwareStartupTests: XCTestCase {
         device.snapshot = [MIDI1UMPCodec.feedback(control: midi, value: 3)]
         let model = ConsoleViewModel(stores: stores, midiService: device)
         try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(model.source, .mock)
+        XCTAssertTrue(device.sent.isEmpty)
+        try await confirmRead(model)
         XCTAssertEqual(model.source, .hardware)
         XCTAssertEqual(model.displayValue(of: control), 3)
         XCTAssertNil(model.observedHardwareGroup)
@@ -61,7 +159,7 @@ final class HardwareStartupTests: XCTestCase {
         try stores.hardwareMap.save(.mockPreset())
         let device = StartupMIDI(); device.failure = true
         let model = ConsoleViewModel(stores: stores, midiService: device)
-        try await Task.sleep(for: .milliseconds(80))
+        try await confirmRead(model)
         XCTAssertEqual(model.source, .mock)
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertTrue(device.sent.isEmpty)
@@ -78,6 +176,7 @@ final class HardwareStartupTests: XCTestCase {
             MIDI1UMPCodec.feedback(control: $0.midi, value: 0)
         }
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        try await confirmRead(model, settle: false)
         try await Task.sleep(for: .milliseconds(20))
         model.setParameter("arm.j1", to: 45)
         try await Task.sleep(for: .milliseconds(160))

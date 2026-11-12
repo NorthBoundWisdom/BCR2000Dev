@@ -33,6 +33,16 @@ struct ConsoleNotice: Equatable {
     var action: Action?
 }
 
+struct HardwareConnectionPrompt: Identifiable {
+    enum Mode: Equatable { case initialize, write, read }
+    let id = UUID()
+    let route: MIDIConnectionSnapshot
+    let program: MIDIStartupProgram?
+    let canRead: Bool
+    /// Without a startup program the user may still choose to write software values into the loaded preset.
+    var canWrite: Bool { program == nil }
+}
+
 @MainActor
 final class ConsoleViewModel: ObservableObject {
     private let midi: any MIDIService
@@ -62,13 +72,19 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var notice: ConsoleNotice?
     @Published private(set) var persistenceNotice: ConsoleNotice?
     @Published private(set) var visibleGroup = 1
+    @Published private(set) var pendingHardwareConnection: HardwareConnectionPrompt?
+    private(set) var startupConfiguredGroup: Int?
+    private var startupProgram: MIDIStartupProgram?
+    private var startupProgramError: String?
+    private var connectionOfferTask: Task<Void, Never>?
+    private var startupTaskID: UUID?
+    private var startupRoute: MIDIConnectionSnapshot?
     private(set) var observedHardwareGroup: Int?
-    @Published private(set) var readingStartupSnapshot = false
+    @Published private(set) var connectingHardware = false
     @Published private(set) var hardwarePressedControls: Set<BCRControlID> = []
     private var pressTasks: [BCRControlID: Task<Void, Never>] = [:]
-    private var startupSnapshotTask: Task<Void, Never>?
-    private var attemptedStartupSnapshot = false
-    private let startupHardwareMap: HardwareMap
+    private var pressStarted: [BCRControlID: Double] = [:]
+    private var hardwareConnectionTask: Task<Void, Never>?
     @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
     /// Select whichever control was last touched on the device.
     @Published var followsTouch = true
@@ -99,7 +115,10 @@ final class ConsoleViewModel: ObservableObject {
         let mapRead = hardwareFile.load()
         let configRead = configurationFile.load()
         let loadedMap = mapRead.value
-        startupHardwareMap = loadedMap
+        let startupURL = stores.configuration.fileURL.deletingLastPathComponent()
+            .appending(path: "hardware-startup.json")
+        do { startupProgram = try JSONFileStore<MIDIStartupProgram>(fileURL: startupURL).load() }
+        catch { startupProgramError = error.localizedDescription }
         let configuration = configRead.value
         let messages = [mapRead.message, configRead.message].compactMap { $0 }
         if !messages.isEmpty {
@@ -128,6 +147,7 @@ final class ConsoleViewModel: ObservableObject {
         session = SurfaceSession(
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
             pluginBindings: AgentBindingTranslation.bindings,
+            requiresHardwareConfirmation: true,
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
         )
@@ -176,7 +196,12 @@ final class ConsoleViewModel: ObservableObject {
         mcp.service.onSelectSource = { [weak self] source in
             guard let self else { throw MCPToolFailure(L10n.text("设备切换服务不可用")) }
             if source == .hardware, !self.canConfigureMIDI { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
-            self.selectSource(source)
+            guard source == .hardware, self.source == .mock, self.hardwareSwitchWrites else {
+                self.selectSource(source); return
+            }
+            // Remote callers cannot choose the sync direction; the user confirms in the window.
+            self.offerHardwareConnection()
+            throw MCPToolFailure(L10n.text("连接实体设备需要在界面上确认同步方向；确认前保持 Mock。"))
         }
         codex.onStopMock = { [weak self] in
             guard let self else { return }
@@ -187,7 +212,9 @@ final class ConsoleViewModel: ObservableObject {
             for slot in slots { self.applyAgentSlots(slots, changed: slot.id) }
         }
         session.onChange = { [weak self] in
-            guard let self, self.uiPublishTask == nil else { return }
+            guard let self else { return }
+            self.validateConnectionWork()
+            guard self.uiPublishTask == nil else { return }
             self.uiPublishTask = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
                 guard let self else { return }
@@ -249,7 +276,7 @@ final class ConsoleViewModel: ObservableObject {
         midi.selectEndpoints(savedSelection)
         do {
             try midi.start()
-            if connection.isConnected { readHardwareAtStartup() }
+            if connection.isConnected { offerHardwareConnection() }
         } catch { notice = ConsoleNotice(level: .error, text: L10n.text("CoreMIDI 启动失败：\(error.localizedDescription)"))
         }
     }
@@ -317,13 +344,21 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func selectSource(_ newSource: DeviceSource) {
-        for task in pressTasks.values { task.cancel() }
-        pressTasks.removeAll(); hardwarePressedControls.removeAll()
-        startupSnapshotTask?.cancel()
-        startupSnapshotTask = nil
-        readingStartupSnapshot = false
+        connectionOfferTask?.cancel(); connectionOfferTask = nil
+        pendingHardwareConnection = nil; startupConfiguredGroup = nil
+        clearHardwarePresses()
+        hardwareConnectionTask?.cancel()
+        hardwareConnectionTask = nil
+        startupTaskID = nil; startupRoute = nil
+        connectingHardware = false
         observedHardwareGroup = nil
         session.selectSource(newSource)
+    }
+
+    private func clearHardwarePresses() {
+        for task in pressTasks.values { task.cancel() }
+        pressTasks.removeAll(); pressStarted.removeAll()
+        if !hardwarePressedControls.isEmpty { hardwarePressedControls.removeAll() }
     }
 
     func selectGroup(_ group: Int) {
@@ -495,7 +530,7 @@ final class ConsoleViewModel: ObservableObject {
     func performNoticeAction(_ action: ConsoleNotice.Action) {
         switch action {
         case .switchToHardware:
-            selectSource(.hardware)
+            requestSource(.hardware)
         case .retryConfigurationSave:
             session.retryConfigurationPersistence()
             if session.lastConfigurationPersistenceError == nil {
@@ -583,33 +618,133 @@ final class ConsoleViewModel: ObservableObject {
 
     // MARK: Session presentation
 
-    private func readHardwareAtStartup() {
-        guard canConfigureMIDI, midi.supportsSnapshotReadback, !attemptedStartupSnapshot,
-              source == .mock, startupHardwareMap.entries.contains(where: { $0.control.isContinuous }) else { return }
-        attemptedStartupSnapshot = true
-        readingStartupSnapshot = true
+    private func validateConnectionWork() {
+        if let prompt = pendingHardwareConnection,
+           !connection.isConnected || !connection.hasSameRoute(as: prompt.route)
+        {
+            pendingHardwareConnection = nil
+        }
+        if let route = startupRoute, !connection.isConnected || !connection.hasSameRoute(as: route) {
+            hardwareConnectionTask?.cancel()
+        }
+    }
+
+    /// Whether entering hardware mode would send any feedback to the device.
+    private var hardwareSwitchWrites: Bool {
+        session.learnedHardwareMap.entries.contains { $0.visualizationOnly != true }
+    }
+
+    private var readableEncoders: Set<MIDIControlID> {
+        Set(session.learnedHardwareMap.entries.filter { $0.control.isContinuous }.map(\.midi))
+    }
+
+    private func offerHardwareConnection() {
+        guard canConfigureMIDI, source == .mock, connection.isConnected, hardwareSwitchWrites,
+              !connectingHardware else { return }
+        connectionOfferTask?.cancel()
         let route = connection
+        notice = ConsoleNotice(level: .info, text: L10n.text("检测到硬件，等待连接稳定…"))
+        connectionOfferTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+            guard let self else { return }
+            defer { self.connectionOfferTask = nil }
+            guard self.source == .mock, self.connection.isConnected,
+                  self.connection.hasSameRoute(as: route) else { return }
+            guard self.hardwareSwitchWrites else { return }
+            let program = self.midi.supportsStartupConfiguration ? self.startupProgram : nil
+            self.pendingHardwareConnection = HardwareConnectionPrompt(
+                route: self.connection, program: program,
+                canRead: self.midi.supportsSnapshotReadback && !self.readableEncoders.isEmpty
+            )
+            self.notice = ConsoleNotice(level: self.startupProgramError == nil ? .info : .error,
+                                        text: self.startupProgramError.map { L10n.text("硬件初始化设置不可用：\($0)") }
+                                            ?? L10n.text("请选择如何连接硬件；确认前不会写入设备。"))
+        }
+    }
+
+    func requestSource(_ newSource: DeviceSource) {
+        guard newSource == .hardware, source == .mock else { selectSource(newSource); return }
+        guard hardwareSwitchWrites else {
+            // Nothing learned can receive feedback, so entering hardware mode (e.g. to learn) writes nothing.
+            selectSource(.hardware); return
+        }
+        guard canConfigureMIDI, connection.isConnected else {
+            notice = ConsoleNotice(level: .warning, text: L10n.text("尚未找到 BCR2000 Port 1，连接后需确认同步方向。"))
+            return
+        }
+        offerHardwareConnection()
+    }
+
+    func declineHardwareConnection(_ id: UUID) {
+        guard pendingHardwareConnection?.id == id else { return }
+        pendingHardwareConnection = nil
+        notice = ConsoleNotice(level: .info, text: L10n.text("保持 Mock，未进行本次硬件同步。"))
+    }
+
+    func connectHardware(_ id: UUID, mode: HardwareConnectionPrompt.Mode) {
+        guard let prompt = pendingHardwareConnection, prompt.id == id,
+              source == .mock, connection.isConnected, connection.hasSameRoute(as: prompt.route) else { return }
+        switch mode {
+        case .initialize: guard prompt.program != nil else { return }
+        case .write: guard prompt.canWrite else { return }
+        case .read: guard prompt.canRead else { return }
+        }
+        let usingSoftware = mode == .initialize
+        pendingHardwareConnection = nil
+        let operation = UUID(), route = connection
+        startupTaskID = operation; startupRoute = route
+        connectingHardware = true
         let parameterRevision = session.parameterSnapshot().revision
         let configurationRevision = session.configurationRevision
-        notice = ConsoleNotice(level: .info, text: L10n.text("正在读取硬件当前值，请暂勿操作旋钮…"))
-        let expected = Set(startupHardwareMap.entries.filter { $0.control.isContinuous }.map(\.midi))
-        startupSnapshotTask = Task { @MainActor [weak self] in
+        if mode == .write {
+            startupTaskID = nil; startupRoute = nil; connectingHardware = false
+            session.selectSource(.hardware)
+            return
+        }
+        notice = ConsoleNotice(level: .info, text: usingSoftware ? L10n.text("正在初始化预设和分组，请暂勿操作设备…")
+            : L10n.text("正在读取硬件当前值，请暂勿操作旋钮…"))
+        hardwareConnectionTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.readingStartupSnapshot = false; self.startupSnapshotTask = nil }
+            defer {
+                if self.startupTaskID == operation {
+                    self.connectingHardware = false; self.hardwareConnectionTask = nil
+                    self.startupTaskID = nil; self.startupRoute = nil
+                }
+            }
             do {
-                let messages = try await self.midi.readSnapshot(expected: expected)
-                try Task.checkCancellation()
-                guard self.source == .mock, self.connection == route,
-                      self.session.parameterSnapshot().revision == parameterRevision,
-                      self.session.configurationRevision == configurationRevision
-                else { throw HardwareSnapshotError.invalid }
-                try self.session.adoptHardwareSnapshot(messages)
-                self.observedHardwareGroup = nil
-                self.notice = ConsoleNotice(level: .info, text: L10n.text("已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。"))
+                if usingSoftware, let program = prompt.program {
+                    try await self.midi.configureStartup(program)
+                    try Task.checkCancellation()
+                    guard self.source == .mock, self.connection.isConnected,
+                          self.connection.hasSameRoute(as: route) else { throw MIDIStartupError.noReply }
+                    self.visibleGroup = 1; self.session.selectGroup(1)
+                    self.session.selectSource(.hardware)
+                    self.observedHardwareGroup = nil; self.startupConfiguredGroup = 1
+                    self.notice = ConsoleNotice(
+                        level: .info,
+                        text: L10n.text("预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。")
+                    )
+                } else {
+                    let expected = self.readableEncoders
+                    let messages = try await self.midi.readSnapshot(expected: expected)
+                    try Task.checkCancellation()
+                    guard self.source == .mock, self.connection.isConnected, self.connection.hasSameRoute(as: route),
+                          self.session.parameterSnapshot().revision == parameterRevision,
+                          self.session.configurationRevision == configurationRevision
+                    else { throw HardwareSnapshotError.invalid }
+                    try self.session.adoptHardwareSnapshot(messages)
+                    self.observedHardwareGroup = nil; self.startupConfiguredGroup = nil
+                    self.notice = ConsoleNotice(level: .info, text: L10n.text("已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。"))
+                }
             } catch is CancellationError {
-                return
+                if self.connection.isConnected == false {
+                    self.notice = ConsoleNotice(level: .warning, text: L10n.text("设备已断开，硬件同步已取消；重连后请重新确认。"))
+                }
             } catch {
-                self.notice = ConsoleNotice(level: .error, text: L10n.text("启动读取硬件失败：\(error.localizedDescription)"))
+                let recovery = usingSoftware
+                    ? L10n.text(" 设备可能停在部分设置的临时预设；永久存储未改动，重新载入预设或重启设备即可恢复。") : ""
+                self.notice = ConsoleNotice(level: .error,
+                                            text: L10n.text("硬件连接失败：\(error.localizedDescription)") + recovery)
             }
         }
     }
@@ -620,6 +755,8 @@ final class ConsoleViewModel: ObservableObject {
             if notice?.level != .error, let warning = configuration
                 .pageNavigationWarning { notice = ConsoleNotice(level: .warning, text: warning) }
         case let .sourceChanged(source):
+            // The session may leave hardware on its own (e.g. route loss); no held press survives that.
+            clearHardwarePresses()
             switch source {
             case .mock:
                 notice = ConsoleNotice(level: .info, text: L10n.text("已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。"))
@@ -630,8 +767,10 @@ final class ConsoleViewModel: ObservableObject {
             }
         case let .connected(snapshot):
             observedHardwareGroup = nil
-            readHardwareAtStartup()
-            if readingStartupSnapshot { return }
+            startupConfiguredGroup = nil
+            clearHardwarePresses()
+            offerHardwareConnection()
+            if connectionOfferTask != nil || connectingHardware { return }
             if source == .hardware {
                 notice = ConsoleNotice(
                     level: .info,
@@ -650,10 +789,27 @@ final class ConsoleViewModel: ObservableObject {
             }
             guard followsTouch else { return }
             pendingTouchedControl = control
-        case let .buttonActivity(control):
+        case let .buttonActivity(control, pressed):
             guard source == .hardware else { return }
             pressTasks[control]?.cancel()
+            pressTasks[control] = nil
+            if pressed == false {
+                guard hardwarePressedControls.contains(control) else { return }
+                let remaining = max(0, 0.08 - (ProcessInfo.processInfo.systemUptime - (pressStarted[control] ?? 0)))
+                pressStarted[control] = nil
+                if remaining == 0 { hardwarePressedControls.remove(control); return }
+                pressTasks[control] = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+                    self?.hardwarePressedControls.remove(control)
+                    self?.pressTasks[control] = nil
+                }
+                return
+            }
             hardwarePressedControls.insert(control)
+            if pressed == true {
+                pressStarted[control] = ProcessInfo.processInfo.systemUptime
+                return
+            }
             pressTasks[control] = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
                 self?.hardwarePressedControls.remove(control)

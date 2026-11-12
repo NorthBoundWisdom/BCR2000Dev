@@ -35,6 +35,12 @@ public struct MIDIConnectionSnapshot: Equatable, Sendable {
     public var isConnected: Bool {
         connectedSource != nil && connectedDestination != nil
     }
+
+    public func hasSameRoute(as other: Self) -> Bool {
+        isConnected == other.isConnected && connectedSourceID == other.connectedSourceID
+            && connectedDestinationID == other.connectedDestinationID
+            && connectedSource == other.connectedSource && connectedDestination == other.connectedDestination
+    }
 }
 
 /// One session owns these callbacks. Adapters hand decoded values to the main actor.

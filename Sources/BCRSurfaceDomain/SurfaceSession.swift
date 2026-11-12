@@ -27,7 +27,7 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
     case pageChanged
     case connected(MIDIConnectionSnapshot)
     case touched(BCRControlID)
-    case buttonActivity(BCRControlID)
+    case buttonActivity(BCRControlID, pressed: Bool?)
     case learningInterruptedByConfiguration(BCRControlID)
     case learned(BCRControlID, MIDIControlID, next: BCRControlID?)
     case learnRejected(BCRControlID, HardwareBindingError)
@@ -121,6 +121,7 @@ public final class SurfaceSession {
     public func removeAcceptedInputObserver(_ token: UUID) { acceptedInputObservers[token] = nil }
 
     private let hardwareDevice: any SurfaceDevice
+    private let requiresHardwareConfirmation: Bool
     private let mockDevice: MockSurfaceDevice
     private let now: @MainActor () -> Date
     private let saveHardwareMap: @MainActor (HardwareMap) throws -> Void
@@ -151,11 +152,13 @@ public final class SurfaceSession {
         hardwareMap: HardwareMap = HardwareMap(),
         configuration: SurfaceConfiguration = .neutral(),
         pluginBindings: SurfacePluginBindings = .init(),
+        requiresHardwareConfirmation: Bool = false,
         now: @escaping @MainActor () -> Date = { .now },
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
     ) {
         self.hardwareDevice = hardwareDevice
+        self.requiresHardwareConfirmation = requiresHardwareConfirmation
         self.mockDevice = mockDevice
         self.hardwareMap = hardwareMap
         self.now = now
@@ -448,6 +451,9 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    /// The persisted physical map, independent of which source is active.
+    public var learnedHardwareMap: HardwareMap { hardwareMap }
+
     public func resetHardwareMap() {
         guard source == .hardware else { return }
         engine.resetHardwareMap()
@@ -495,10 +501,12 @@ public final class SurfaceSession {
                 if (learnFormat == .nrpn14) != isNRPN { continue }
             }
             let control = map.control(for: message.controlID)
-            if engine.learnTarget == nil, let control, !control.isContinuous,
-               !engine.isFeedbackEcho(message, at: now())
-            {
-                onEvent?(.buttonActivity(control))
+            if engine.learnTarget == nil, let control, !control.isContinuous {
+                let pressed = map.pressMode(for: control) == .momentary ? message.isPositiveActivation : nil
+                // A release must never be lost to echo suppression, or a held button stays drawn as pressed.
+                if pressed == false || !engine.isFeedbackEcho(message, at: now()) {
+                    onEvent?(.buttonActivity(control, pressed: pressed))
+                }
             }
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
             guard inputGeneration == inputEvents.generation else { continue }
@@ -600,6 +608,9 @@ public final class SurfaceSession {
         }
         if routeChanged || !snapshot.isConnected { clearFeedbackQueue() }
         connection = snapshot
+        if requiresHardwareConfirmation, source == .hardware, routeChanged || !snapshot.isConnected {
+            selectSource(.mock)
+        }
         if snapshot.isConnected, !wasConnected || routeChanged {
             onEvent?(.connected(snapshot))
             if source == .hardware {
