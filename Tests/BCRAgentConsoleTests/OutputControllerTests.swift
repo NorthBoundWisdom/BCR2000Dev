@@ -456,4 +456,68 @@ final class OutputControllerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Double(wire), 0)
         XCTAssertEqual(Double(wire), value)
     }
+
+    func testDisabledOutputWithNoContinuousParametersStartsWithoutAnOutputError() throws {
+        for configuration in [SurfaceConfiguration(name: "empty"),
+                              SurfaceConfiguration(name: "only-toggle", parameters: [
+                                  .init(id: "enable", name: "Enable", minimum: 0, maximum: 1, kind: .toggle)
+                              ])]
+        {
+            try configuration.validate()
+            let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration,
+                                         saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+            let adapter = OutputFakeTransport()
+            let controller = OutputController(session: session,
+                                              store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                              adapter: adapter,
+                                              automaticallyTicks: false)
+            XCTAssertFalse(controller.settings.enabled)
+            XCTAssertFalse(adapter.isConnected)
+            XCTAssertEqual(controller.status, .disconnected)
+            XCTAssertNil(controller.error, configuration.name)
+            controller.start()
+            XCTAssertFalse(controller.settings.enabled)
+            XCTAssertNotNil(controller.error, "Explicit start must report the invalid output configuration")
+            XCTAssertFalse(adapter.isConnected)
+        }
+    }
+
+    func testDisabledSavedInvalidLimitsArePreservedWithoutANewStartupError() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configuration = SurfaceConfiguration.robotArmDemo()
+        let store = JSONFileStore<OutputSettings>(fileURL: directory.appending(path: "settings.json"))
+        var invalid = OutputSettings.defaults(for: configuration)
+        invalid.limits[0].maximum = invalid.limits[0].minimum
+        try store.save(invalid)
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration,
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let controller = OutputController(
+            session: session,
+            store: store,
+            adapter: OutputFakeTransport(),
+            automaticallyTicks: false
+        )
+        XCTAssertEqual(controller.settings, invalid)
+        XCTAssertNil(controller.error)
+        controller.start()
+        XCTAssertNotNil(controller.error)
+        XCTAssertFalse(controller.settings.enabled)
+    }
+
+    func testOutputSettingsDecodeFailureRemainsVisibleEvenWithNoContinuousParameters() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let file = directory.appending(path: "settings.json")
+        try Data("not-json".utf8).write(to: file)
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: .init(name: "empty"),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let controller = OutputController(session: session, store: JSONFileStore(fileURL: file),
+                                          adapter: OutputFakeTransport(), automaticallyTicks: false)
+        XCTAssertNotNil(controller.error)
+        XCTAssertFalse(controller.settings.enabled)
+    }
 }

@@ -108,10 +108,20 @@ final class OutputController: ObservableObject {
         do { if let stored = try store.load() { settings = stored } }
         catch { self.error = L10n.text("输出设置读取失败：\(error.localizedDescription)") }
         session.setOutputEnableParameter(settings.enableParameter)
-        do { try storeGate(
-            MotionSafetyGate(limits: settings.limits, precision: settings.transport == .osc ? .float32 : .double),
-            operation: "configure"
-        ) } catch { self.error = error.localizedDescription }
+        // Output is physically inactive on construction. Valid settings may prepare a
+        // discoverable policy, but invalid/unconfigured limits are reported only when
+        // the operator explicitly starts output. A real settings read failure stays visible.
+        let preparedGate: MotionSafetyGate?
+        do {
+            preparedGate = try MotionSafetyGate(
+                limits: settings.limits, precision: settings.transport == .osc ? .float32 : .double
+            )
+        } catch is MotionSafetyError { preparedGate = nil }
+        catch { preparedGate = nil; self.error = error.localizedDescription }
+        if let preparedGate {
+            do { try storeGate(preparedGate, operation: "configure") }
+            catch { self.error = error.localizedDescription }
+        }
         observer = self.runtime.observe { [weak self] change in
             guard let self, change.instanceID == Self.instanceID, change.isRemote else { return }
             self.applyRemoteDecision()

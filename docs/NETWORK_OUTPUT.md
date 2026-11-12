@@ -68,3 +68,6 @@ GUI安全门与新远程工具使用同一runtime单调时域。旧transport Dat
 OSC使用Float32 wire：初始/重武装实际值必须精确可表示，否则停帧并提示参数，不做epsilon或偷偷改实际值。
 WebSocket/rosbridge JSON使用Double，不因非Float32实际值（例如0.1）无故拒绝。远程disable与GUI参数共用同一policy值，
 关闭后轮询不会重新开启；须实际观察到使能off/on。新远程enable默认拒绝授权，详见 [共享远程工具](SHARED_REMOTE_TOOLS.md)。
+
+输出未启用时，空配置、仅开关配置或已保存但尚未修正的限位不会在启动阶段制造输出错误；不安装无效安全门，也不连接传输。
+显式启动仍完整校验并报告失败。设置文件本身的读取/解码失败继续立即可见。
