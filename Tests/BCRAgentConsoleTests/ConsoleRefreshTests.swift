@@ -26,8 +26,12 @@ final class ConsoleRefreshTests: XCTestCase {
         let map = HardwareMap.mockPreset()
         try stores.hardwareMap.save(map)
         let midi = RefreshMIDI()
-        let model = ConsoleViewModel(stores: stores, midiService: midi)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, midiService: midi,
+                                     automaticallyAdvancesMock: false)
+        // Session initialization installs the spy input callback without starting MIDI or the Mock clock.
+        XCTAssertNotNil(midi.onMessages)
         model.selectSource(.hardware)
+        XCTAssertEqual(model.source, .hardware)
         model.followsTouch = false
         try await Task.sleep(for: .milliseconds(40))
         var publications = 0
@@ -42,6 +46,8 @@ final class ConsoleRefreshTests: XCTestCase {
         model.followsTouch = true
         let oldSelection = model.selectedControl
         midi.onMessages?([MIDI1UMPCodec.feedback(control: identity, value: 110)])
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertEqual(model.observedHardwareGroup, 2)
         XCTAssertEqual(model.selectedControl, oldSelection)
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(model.selectedControl, control)
