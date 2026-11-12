@@ -24,6 +24,15 @@ enum CoreMIDIServiceError: Error, LocalizedError {
 public protocol MIDIService: SurfaceDevice {
     func start() throws
     func selectEndpoints(_ selection: MIDIEndpointSelection)
+    var supportsSnapshotReadback: Bool { get }
+    func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
+}
+
+public extension MIDIService {
+    var supportsSnapshotReadback: Bool { false }
+    func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
+        throw HardwareSnapshotError.invalid
+    }
 }
 
 enum CoreMIDIEndpointAvailability {
@@ -36,11 +45,19 @@ enum CoreMIDIEndpointAvailability {
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
 public final class CoreMIDIService: MIDIService {
+    static let snapshotRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x43, 0xF7]
+    public var supportsSnapshotReadback: Bool { true }
     public private(set) var connection = MIDIConnectionSnapshot()
     public var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     public var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     private var transport: CoreMIDITransport?
     private var selection: MIDIEndpointSelection
+    private var snapshotID: UUID?
+    private var snapshotContinuation: CheckedContinuation<[MIDIVoiceMessage], any Error>?
+    private var snapshotExpected: Set<MIDIControlID> = []
+    private var snapshotValues: [MIDIControlID: MIDIVoiceMessage] = [:]
+    private var snapshotActivity: Double = 0
+    private var snapshotTask: Task<Void, Never>?
 
     public init(selection: MIDIEndpointSelection = .init()) { self.selection = selection }
 
@@ -54,10 +71,14 @@ public final class CoreMIDIService: MIDIService {
         let transport = CoreMIDITransport(
             selection: selection,
             onMessages: { [weak self] messages in
-                Task { @MainActor [weak self] in self?.onMessages?(messages) }
+                Task { @MainActor [weak self] in self?.receive(messages) }
             },
             onConnection: { [weak self] snapshot in
                 Task { @MainActor [weak self] in
+                    if self?.connection != snapshot, let id = self?.snapshotID { self?.finishSnapshot(
+                        id,
+                        result: .failure(HardwareSnapshotError.invalid)
+                    ) }
                     self?.connection = snapshot
                     self?.onConnection?(snapshot)
                 }
@@ -77,6 +98,59 @@ public final class CoreMIDIService: MIDIService {
         try message.validate()
         guard let transport else { throw CoreMIDIServiceError.outputUnavailable }
         try transport.send(message)
+    }
+
+    public func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
+        guard snapshotID == nil, connection.isConnected, !expected.isEmpty,
+              expected.allSatisfy({ $0.kind == .controlChange }),
+              let transport else { throw HardwareSnapshotError.invalid }
+        let id = UUID()
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                snapshotID = id; snapshotContinuation = continuation
+                snapshotExpected = expected; snapshotValues = [:]
+                snapshotActivity = ProcessInfo.processInfo.systemUptime
+                let started = snapshotActivity
+                do { try transport.sendBytes(Self.snapshotRequest) }
+                catch { finishSnapshot(id, result: .failure(error)); return }
+                snapshotTask = Task { @MainActor [weak self] in
+                    for _ in 0 ..< 60 {
+                        do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                        guard let self, self.snapshotID == id else { return }
+                        let now = ProcessInfo.processInfo.systemUptime
+                        // Snapshot has no end marker. Drain trailing button messages too, without executing them.
+                        if Set(self.snapshotValues.keys).isSuperset(of: expected), now - self.snapshotActivity >= 0.3 {
+                            self.finishSnapshot(id, result: .success(Array(self.snapshotValues.values))); return
+                        }
+                        if now - started >= 6 { break }
+                    }
+                    self?.finishSnapshot(id, result: .failure(HardwareSnapshotError.invalid))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.finishSnapshot(id, result: .failure(CancellationError())) }
+        }
+    }
+
+    private func receive(_ messages: [MIDIVoiceMessage]) {
+        guard let id = snapshotID else { onMessages?(messages); return }
+        snapshotActivity = ProcessInfo.processInfo.systemUptime
+        for message in messages where snapshotExpected.contains(message.controlID) {
+            if let previous = snapshotValues[message.controlID], previous != message {
+                finishSnapshot(id, result: .failure(HardwareSnapshotError.invalid)); return
+            }
+            snapshotValues[message.controlID] = message
+        }
+    }
+
+    private func finishSnapshot(_ id: UUID, result: Result<[MIDIVoiceMessage], any Error>) {
+        guard snapshotID == id else { return }
+        let continuation = snapshotContinuation
+        snapshotID = nil; snapshotContinuation = nil
+        snapshotTask?.cancel(); snapshotTask = nil
+        snapshotExpected = []; snapshotValues = [:]
+        continuation?.resume(with: result)
     }
 }
 
@@ -209,6 +283,10 @@ private final class CoreMIDITransport: @unchecked Sendable {
 
     public func send(_ message: MIDIVoiceMessage) throws {
         try message.validate()
+        try sendBytes(message.midi1Bytes)
+    }
+
+    func sendBytes(_ data: [UInt8]) throws {
         try managementQueue.sync {
             guard isStarted, outputPort != 0, destination != 0 else {
                 throw CoreMIDIServiceError.outputUnavailable
@@ -216,7 +294,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
 
             var packetList = MIDIPacketList()
             let packet = MIDIPacketListInit(&packetList)
-            let addedPacket = message.midi1Bytes.withUnsafeBufferPointer { bytes -> UnsafeMutablePointer<MIDIPacket>? in
+            let addedPacket = data.withUnsafeBufferPointer { bytes -> UnsafeMutablePointer<MIDIPacket>? in
                 guard let baseAddress = bytes.baseAddress else {
                     return nil
                 }

@@ -199,6 +199,25 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    /// GUI startup adopts a complete hardware observation before enabling the hardware source.
+    public func adoptHardwareSnapshot(_ messages: [MIDIVoiceMessage]) throws {
+        guard source == .mock, connection.isConnected, engine.learnTarget == nil,
+              motionSafety == nil || motionSafety?.status == .disconnected else { throw HardwareSnapshotError.invalid }
+        var candidate = engine
+        candidate.replaceHardwareMap(hardwareMap)
+        try candidate.adoptHardwareSnapshot(messages)
+        clearFeedbackQueue()
+        engine = candidate
+        source = .hardware
+        engine.echoWindow = 0.18
+        diagnosticReadbackActive = false; diagnosticToken = nil
+        nrpnAssembler.reset()
+        invalidateInputEpoch("startup_snapshot")
+        droppedFeedbackCount = 0
+        onEvent?(.sourceChanged(.hardware))
+        publishChange()
+    }
+
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
         clearFeedbackQueue()

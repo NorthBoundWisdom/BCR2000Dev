@@ -198,9 +198,14 @@ struct SurfacePanelView: View {
 
     private var sideColumn: some View {
         VStack(spacing: m(10)) {
-            Text("GROUP")
+            Text(model.source == .hardware ? L10n.text("查看分组") : "GROUP")
                 .font(m.font(8.5, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary)
+            if model.source == .hardware {
+                Text(model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") } ?? L10n.text("硬件组未确认"))
+                    .font(m.font(8, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
             LazyVGrid(columns: [GridItem(.fixed(m(34))), GridItem(.fixed(m(34)))], spacing: m(6)) {
                 ForEach(BCRLayout.encoderGroups, id: \.self) { group in
                     Button {

@@ -62,6 +62,11 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var notice: ConsoleNotice?
     @Published private(set) var persistenceNotice: ConsoleNotice?
     @Published private(set) var visibleGroup = 1
+    private(set) var observedHardwareGroup: Int?
+    @Published private(set) var readingStartupSnapshot = false
+    private var startupSnapshotTask: Task<Void, Never>?
+    private var attemptedStartupSnapshot = false
+    private let startupHardwareMap: HardwareMap
     @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
     /// Select whichever control was last touched on the device.
     @Published var followsTouch = true
@@ -92,6 +97,7 @@ final class ConsoleViewModel: ObservableObject {
         let mapRead = hardwareFile.load()
         let configRead = configurationFile.load()
         let loadedMap = mapRead.value
+        startupHardwareMap = loadedMap
         let configuration = configRead.value
         let messages = [mapRead.message, configRead.message].compactMap { $0 }
         if !messages.isEmpty {
@@ -239,8 +245,11 @@ final class ConsoleViewModel: ObservableObject {
         }
         guard startsMIDI else { return }
         midi.selectEndpoints(savedSelection)
-        do { try midi.start() }
-        catch { notice = ConsoleNotice(level: .error, text: L10n.text("CoreMIDI 启动失败：\(error.localizedDescription)")) }
+        do {
+            try midi.start()
+            if connection.isConnected { readHardwareAtStartup() }
+        } catch { notice = ConsoleNotice(level: .error, text: L10n.text("CoreMIDI 启动失败：\(error.localizedDescription)"))
+        }
     }
 
     // MARK: Read model
@@ -306,6 +315,10 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func selectSource(_ newSource: DeviceSource) {
+        startupSnapshotTask?.cancel()
+        startupSnapshotTask = nil
+        readingStartupSnapshot = false
+        observedHardwareGroup = nil
         session.selectSource(newSource)
     }
 
@@ -566,6 +579,37 @@ final class ConsoleViewModel: ObservableObject {
 
     // MARK: Session presentation
 
+    private func readHardwareAtStartup() {
+        guard canConfigureMIDI, midi.supportsSnapshotReadback, !attemptedStartupSnapshot,
+              source == .mock, startupHardwareMap.entries.contains(where: { $0.control.isContinuous }) else { return }
+        attemptedStartupSnapshot = true
+        readingStartupSnapshot = true
+        let route = connection
+        let parameterRevision = session.parameterSnapshot().revision
+        let configurationRevision = session.configurationRevision
+        notice = ConsoleNotice(level: .info, text: L10n.text("正在读取硬件当前值，请暂勿操作旋钮…"))
+        let expected = Set(startupHardwareMap.entries.filter { $0.control.isContinuous }.map(\.midi))
+        startupSnapshotTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.readingStartupSnapshot = false; self.startupSnapshotTask = nil }
+            do {
+                let messages = try await self.midi.readSnapshot(expected: expected)
+                try Task.checkCancellation()
+                guard self.source == .mock, self.connection == route,
+                      self.session.parameterSnapshot().revision == parameterRevision,
+                      self.session.configurationRevision == configurationRevision
+                else { throw HardwareSnapshotError.invalid }
+                try self.session.adoptHardwareSnapshot(messages)
+                self.observedHardwareGroup = nil
+                self.notice = ConsoleNotice(level: .info, text: L10n.text("已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。"))
+            } catch is CancellationError {
+                return
+            } catch {
+                self.notice = ConsoleNotice(level: .error, text: L10n.text("启动读取硬件失败：\(error.localizedDescription)"))
+            }
+        }
+    }
+
     private func handleSessionEvent(_ event: SurfaceSessionEvent) {
         switch event {
         case .pageChanged:
@@ -581,6 +625,9 @@ final class ConsoleViewModel: ObservableObject {
                     : ConsoleNotice(level: .warning, text: L10n.text("已切换到实体模式，但尚未找到 BCR2000 Port 1。"))
             }
         case let .connected(snapshot):
+            observedHardwareGroup = nil
+            readHardwareAtStartup()
+            if readingStartupSnapshot { return }
             if source == .hardware {
                 notice = ConsoleNotice(
                     level: .info,
@@ -594,6 +641,9 @@ final class ConsoleViewModel: ObservableObject {
                 )
             }
         case let .touched(control):
+            if source == .hardware, control.section == .pushEncoder || control.section == .pushEncoderButton {
+                observedHardwareGroup = control.row
+            }
             guard followsTouch else { return }
             pendingTouchedControl = control
         case let .learningInterruptedByConfiguration(control):

@@ -24,6 +24,11 @@ public enum MIDIObservationDirection: String, Equatable, Sendable {
     case output
 }
 
+public enum HardwareSnapshotError: Error, LocalizedError {
+    case invalid
+    public var errorDescription: String? { L10n.text("硬件快照无效、不完整或不支持当前映射") }
+}
+
 public enum SurfaceEffect: Equatable, Sendable {
     /// Feedback to write to the device (LED ring / button LED).
     case send(MIDIVoiceMessage)
@@ -110,6 +115,47 @@ public struct SurfaceEngine: Sendable {
     }
 
     // MARK: Device input
+
+    /// Observations only: never run button actions, infer a selected group, or generate feedback.
+    public mutating func adoptHardwareSnapshot(_ messages: [MIDIVoiceMessage]) throws {
+        var values: [MIDIControlID: UInt8] = [:]
+        for message in messages {
+            try message.validate()
+            guard case .controlChange = message else { continue }
+            if let previous = values[message.controlID],
+               previous != message.value { throw HardwareSnapshotError.invalid }
+            values[message.controlID] = message.value
+        }
+        let encoders = hardwareMap.entries.filter { $0.control.isContinuous }
+        guard !encoders.isEmpty else { throw HardwareSnapshotError.invalid }
+        var candidate = self
+        var parameters: [ParameterID: Double] = [:]
+        for entry in encoders {
+            guard entry.midi.kind == .controlChange,
+                  let raw = values[entry.midi] else { throw HardwareSnapshotError.invalid }
+            let assignment = configuration.assignment(for: entry.control)
+            guard assignment == nil || assignment?.encoderMode == .absolute else { throw HardwareSnapshotError.invalid }
+            var state = SurfaceControlState()
+            state.value = raw; state.rawValue = UInt16(raw); state.lastInput = raw; state.lastDirection = .input
+            candidate.controls[entry.control] = state
+            if let assignment, case let .parameter(id) = assignment.target,
+               let definition = configuration.parameter(id), definition.kind == .continuous
+            {
+                let value = definition.value(fromMIDI: assignment.inverted ? 127 - raw : raw)
+                if let previous = parameters[id], previous != value { throw HardwareSnapshotError.invalid }
+                parameters[id] = value
+                candidate.absoluteInputs[entry.control] = AbsoluteInput(
+                    logical: Double(raw),
+                    reference: Double(raw),
+                    maximum: 127
+                )
+            }
+        }
+        candidate.parameterValues.merge(parameters) { _, value in value }
+        candidate.recentFeedback.removeAll()
+        candidate.incrementRemainders.removeAll()
+        self = candidate
+    }
 
     public func isFeedbackEcho(_ message: MIDIVoiceMessage, at time: Date) -> Bool {
         let mode = hardwareMap.control(for: message.controlID).flatMap { configuration.assignment(for: $0) }?

@@ -8,6 +8,8 @@
 
 状态（截至 2026-11-12）：
 
+- GUI 启动硬件值回读完成，56/56 实机值同步；激活组/当前预设号未从协议取得，保留明确的未知状态。
+
 - BCR/XTouch同SHA的M1/M2/M3软件接入与新旧接口验证已完成；远端发布/CI和实机仍待处理，见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 - FreeCM Config 已接到 `build/seed` 依赖获取与编译，Build 构建主仓库；依赖锁参与配置就绪检查。
 - 仓库整理 Z2–Z6 已完成；六项隔离 Mock UI 验收均通过，入口见 [原生 UI 验收](docs/UI_ACCEPTANCE.md)。

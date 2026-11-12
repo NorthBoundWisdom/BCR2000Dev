@@ -717,3 +717,10 @@
 "外部接收队列已满" = "External receive queue is full";
 "当前适配器不支持单调接收时间" = "The selected adapter does not support monotonic receipt time";
 "灯环模式未知或尚未校准，请读取当前预设" = "Ring mode is unknown or uncalibrated; read the current preset";
+"硬件快照无效、不完整或不支持当前映射" = "Hardware snapshot is invalid, incomplete or unsupported for this mapping";
+"正在读取硬件当前值，请暂勿操作旋钮…" = "Reading current hardware values; leave the encoders still…";
+"已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。" = "Hardware values loaded. The selected group is unconfirmed; turn a top encoder to follow it.";
+"启动读取硬件失败：{0}" = "Startup hardware read failed: {0}";
+"查看分组" = "VIEW GROUP";
+"最后输入组 {0}" = "Last input group {0}";
+"硬件组未确认" = "Hardware group unknown";
