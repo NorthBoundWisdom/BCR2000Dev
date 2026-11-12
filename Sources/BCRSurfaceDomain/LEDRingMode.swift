@@ -15,6 +15,8 @@ public enum LEDRingMode: String, Codable, Sendable, CaseIterable {
 
     /// Zero-based LEDs, clockwise from the lower left. Nil means not yet calibrated.
     /// Firmware 1.10 samples: 12dot 2→[0], 3→[0,1], 7→[1], 12→[1,2]; 1dot 5→[1].
+    /// Bar and pan were compared against the device at 24 values on 2026-11-12, including each
+    /// side of the boundaries 4/5, 13/14, 49/50, 58/59, 68/69 and 122/123: all matched.
     public func litLEDs(value: UInt8) -> Set<Int>? {
         let value = min(Int(value), 127)
         let dot = (value * 14 + 63) / 127
@@ -27,7 +29,8 @@ public enum LEDRingMode: String, Codable, Sendable, CaseIterable {
             let position = (value * 28 + 63) / 127
             let first = position / 2
             return position.isMultiple(of: 2) ? [first] : [first, first + 1]
-        // Bar and pan follow the user manual (§ LED display); boundaries are not hardware-calibrated.
+        // Bar fills from the lower left to the position dot; pan spans the top LED and the dot.
+        // bar/off is not hardware-checked (the device preset doesn't use it).
         case .bar, .barOff:
             if self == .barOff, value == 0 { return [] }
             return Set(0 ... dot)

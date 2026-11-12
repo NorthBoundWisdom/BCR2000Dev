@@ -24,6 +24,25 @@ final class LEDRingTests: XCTestCase {
         }
     }
 
+    /// Values sent to the device on 2026-11-12 (firmware 1.10) and the LEDs the user read back,
+    /// one-based from the lower left, clockwise.
+    func testBarAndPanMatchHardwareSamples() {
+        let pan: [(UInt8, ClosedRange<Int>)] = [
+            (0, 1 ... 8), (4, 1 ... 8), (5, 2 ... 8), (13, 2 ... 8), (14, 3 ... 8), (32, 5 ... 8), (49, 6 ... 8),
+            (50, 7 ... 8), (58, 7 ... 8), (59, 8 ... 8), (60, 8 ... 8), (64, 8 ... 8), (68, 8 ... 8), (69, 8 ... 9),
+            (96, 8 ... 12), (122, 8 ... 14), (123, 8 ... 15), (127, 8 ... 15)
+        ]
+        for (value, leds) in pan {
+            XCTAssertEqual(LEDRingMode.pan.litLEDs(value: value), Set(leds.map { $0 - 1 }), "pan \(value)")
+        }
+        let bar: [(UInt8, ClosedRange<Int>)] = [
+            (0, 1 ... 1), (4, 1 ... 1), (5, 1 ... 2), (64, 1 ... 8), (122, 1 ... 14), (127, 1 ... 15)
+        ]
+        for (value, leds) in bar {
+            XCTAssertEqual(LEDRingMode.bar.litLEDs(value: value), Set(leds.map { $0 - 1 }), "bar \(value)")
+        }
+    }
+
     func testMockUsesItsExplicitRingProfileAndFeedback() throws {
         var mock = MockBCR2000()
         let control = BCRControlID.pushEncoder(group: 4, 1)
