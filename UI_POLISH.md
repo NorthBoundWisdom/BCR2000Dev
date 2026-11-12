@@ -138,7 +138,6 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
   验证中英显示变化与 JSON 完全不变，未改全局语言机制。额外覆盖检查器触发参数选择器，避免同一检查器残留中文。
   复用已有翻译键，无需新增 UI 文案。清单留待审查窗口勾选。
 
-
 #### 任务 5 — `93cd325`（rebase 前 `e65d05e`）
 
 - 改动：`SurfacePanelView.swift` 将对齐/恢复合并为实体源下的图标菜单，备份圆点、help、无障碍标签和稳定标识齐备；
@@ -148,7 +147,6 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
   通过 App 自身的原生视图缓存渲染检查 1200×760 Mock 布局（未截取桌面）。
 - 未验证：没有连接实体，没有实际打开实体源菜单操作设备。
 - 偏离：无功能/策略变更。清单留待审查窗口勾选。
-
 
 #### 任务 10 — `a9e46f0`（rebase 前 `1e2b84f`）
 
@@ -160,6 +158,37 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
 - 未验证：没有真机灯验证，未手动测量切走设置页后的刷新次数；实现以 TimelineView 的 paused 与页面出现/消失控制。
 - 偏离：为避免预览被原表单挤到滚动区下方，将该节放在 Agent 页首；复用既有文案，无新增翻译键。
   未修改闪烁调度、开关持久化或既有测试。清单留待审查窗口勾选。
+
+#### 任务 11 — `7ae006b`
+
+- 合同核对：`MCPModels.swift` 的旧工具 outputSchema 仅要求 `data`，其内部 schema 为 `{}`；
+  Provider 1.0 发布/内置 schema 均不定义 `get_status` 的内部结果。允许此项加法字段，无需改变任何 schema。
+  未修改 `Schemas/`、`Clients/`、模拟侧实现或 `set_device_source` 的拒绝文本与语义。
+- 改动：`MCPApplicationGateway.swift` 提供宿主确认状态回调（无界面默认 none）；`SurfaceMCPModule.swift`
+  只读返回 confirmation；`ConsoleViewModel.swift` 记录当前端口的拒绝并在新请求、确认、换源或路由失效时清除。
+  `docs/MCP.md` 说明轮询方式；新增 `HardwareConnectionStatusTests.swift`、`HardwareConfirmationGatewayTests.swift`。
+- 验证：新增 4 项聚焦测试全部通过；最终 Swift 五包共 516 项、失败 0
+  （ProviderDomain 26、ProviderAdapter 57、PluginHost 11、AgentCore 270、AgentConsole 152）。
+  `verify_provider_blackbox.py` 14 组全部通过，输出在忽略目录 `build/ui-polish-blackbox11-final`；
+  本地自包含验收件在 `build/ui-polish-provider11-final`（Debug/dirty 工作区验收件，未发布）。
+  BuildWorkflow 71 项、Python SDK 6 项，失败均 0；域边界、命令、全仓格式、strings lint、
+  App build、双语 1200×760 startup smoke、隔离 Mock MCP 双版本冒烟通过。
+- 同步：提交前发现远端新增 4 个模拟侧提交，已将前三个本地提交 rebase 到 `caceb4c`，无冲突；
+  按远端锁更新本地 SurfacePlugins 到 `8a9f3b31f6fe2d5c3bde171da305dc7059060de0`，并重跑全部最终验收。
+  上述任务 3/5/10 的 506 项为各自提交前的原始基线结果；最终 516 项覆盖所有改动及远端合入内容。
+- 未验证/疑问：没有实体连接、MIDI/SysEx 发送或实际 GUI 确认点击；连接流程使用全隔离假 MIDI 验证。
+  编译时保留远端已有的 `Tests/BCRProviderAdapterTests/SharedSurfaceScenarioTests.swift:196` 多余 try 警告，
+  本次未修改该模拟侧测试，也未引入新的编译警告。
+- 偏离：pending 包含原有 300 ms 连接稳定等待期，避免拒绝调用后立即查询暂时返回 none；
+  none 不代表同步成功，文档明确要求结合 source 查询。无新用户数据格式，无公开 schema/旧测试断言变更。
+  清单未打勾，等待审查窗口确认。
+
+#### 交接状态
+
+- 任务 3、5、10、11 已实现并各有一个本地提交；另用文档提交补齐最后一个实现提交的编号与本记录。
+  因提交号无法写入其自身提交，前几项记录随下一项提交追加；此为执行记录入库时机的唯一调整。
+- 所有提交均在 main；未 push、未打 tag。审查窗口按上述四个实现提交 review 后决定勾选与推送。
+- 任务 12 README 截图、任务 13 设备实测仍按本文件约定不在本次范围；未删除本清单。
 
 ## 远端设备（ethanmacair）
 
