@@ -9,6 +9,22 @@ public enum SimulationSurfaceConfiguration {
         public var errorDescription: String? { reason }
     }
 
+    // Shared with drift tests so the strict decoder and its assertions inspect the same policy.
+    static let configurationFields: Set<String> = ["version", "name", "parameters", "assignments", "pages", "macros"]
+    static let parameterFields: Set<String> = ["id", "name", "group", "unit", "minimum", "maximum", "defaultValue",
+                                               "kind", "agentWritable", "externallyProtected", "step"]
+    static let assignmentFields: Set<String> = [
+        "control",
+        "target",
+        "buttonBehavior",
+        "inverted",
+        "encoderMode",
+        "encoderStep"
+    ]
+    static let controlFields: Set<String> = ["section", "row", "index"]
+    static let targetFields: Set<String> = ["parameter"]
+    static let parameterTargetFields: Set<String> = ["_0"]
+
     public static func decode(_ data: Data) throws -> SurfaceConfiguration {
         func object(_ value: Any, keys: Set<String>, path: String) throws -> [String: Any] {
             guard let value = value as? [String: Any] else {
@@ -21,7 +37,7 @@ public enum SimulationSurfaceConfiguration {
             return value
         }
         let root = try object(JSONSerialization.jsonObject(with: data),
-                              keys: ["version", "name", "parameters", "assignments", "pages", "macros"],
+                              keys: configurationFields,
                               path: "configuration")
         guard let version = root["version"] as? NSNumber,
               CFGetTypeID(version) != CFBooleanGetTypeID(), version.intValue == SurfaceConfiguration.currentVersion,
@@ -38,20 +54,19 @@ public enum SimulationSurfaceConfiguration {
             throw ValidationError(reason: "configuration: parameters and assignments arrays are required")
         }
         for (index, parameter) in parameters.enumerated() {
-            _ = try object(parameter, keys: ["id", "name", "group", "unit", "minimum", "maximum", "defaultValue",
-                                             "kind", "agentWritable", "externallyProtected", "step"],
+            _ = try object(parameter, keys: parameterFields,
                            path: "parameters[\(index)]")
         }
         for (index, assignment) in assignments.enumerated() {
             let path = "assignments[\(index)]"
             let row = try object(
                 assignment,
-                keys: ["control", "target", "buttonBehavior", "inverted", "encoderMode", "encoderStep"],
+                keys: assignmentFields,
                 path: path
             )
-            _ = try object(row["control"] as Any, keys: ["section", "row", "index"], path: path + ".control")
-            let target = try object(row["target"] as Any, keys: ["parameter"], path: path + ".target")
-            _ = try object(target["parameter"] as Any, keys: ["_0"], path: path + ".target.parameter")
+            _ = try object(row["control"] as Any, keys: controlFields, path: path + ".control")
+            let target = try object(row["target"] as Any, keys: targetFields, path: path + ".target")
+            _ = try object(target["parameter"] as Any, keys: parameterTargetFields, path: path + ".target.parameter")
         }
         let configuration: SurfaceConfiguration
         do { configuration = try JSONDecoder().decode(SurfaceConfiguration.self, from: data) }

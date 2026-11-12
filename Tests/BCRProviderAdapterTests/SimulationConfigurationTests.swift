@@ -1,7 +1,7 @@
 import BCRFoundation
 import BCRSurfaceDomain
 import BCRMCPAdapter
-import BCRProviderMCPAdapter
+@testable import BCRProviderMCPAdapter
 import Foundation
 import XCTest
 import SurfaceControlContracts
@@ -11,6 +11,36 @@ final class SimulationConfigurationTests: XCTestCase {
     var example: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appending(path: "examples/simulation/chassis-controls.json")
+    }
+
+    func testStrictFieldAllowlistsMatchCompleteCodableEncoding() throws {
+        let parameter = ParameterDefinition(id: "drift", name: "Drift", group: "Group", unit: "unit",
+                                            minimum: 0, maximum: 127, defaultValue: 64, kind: .continuous,
+                                            agentWritable: true, externallyProtected: false, step: 1)
+        let assignment = ControlAssignment(control: .encoder(row: 1, 1), target: .parameter(parameter.id),
+                                           buttonBehavior: .momentary, inverted: true,
+                                           encoderMode: .relative1, encoderStep: 2)
+        let configuration = SurfaceConfiguration(name: "All fields", parameters: [parameter], assignments: [assignment])
+        let data = try JSONEncoder().encode(configuration)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let encodedParameter = try XCTUnwrap((root["parameters"] as? [[String: Any]])?.first)
+        let encodedAssignment = try XCTUnwrap((root["assignments"] as? [[String: Any]])?.first)
+        let control = try XCTUnwrap(encodedAssignment["control"] as? [String: Any])
+        let target = try XCTUnwrap(encodedAssignment["target"] as? [String: Any])
+        let parameterTarget = try XCTUnwrap(target["parameter"] as? [String: Any])
+        for (path, object, allowed) in [
+            ("configuration", root, SimulationSurfaceConfiguration.configurationFields),
+            ("parameter", encodedParameter, SimulationSurfaceConfiguration.parameterFields),
+            ("assignment", encodedAssignment, SimulationSurfaceConfiguration.assignmentFields),
+            ("control", control, SimulationSurfaceConfiguration.controlFields),
+            ("target", target, SimulationSurfaceConfiguration.targetFields),
+            ("target.parameter", parameterTarget, SimulationSurfaceConfiguration.parameterTargetFields)
+        ] {
+            let actual = Set(object.keys)
+            XCTAssertEqual(actual, allowed,
+                           "\(path): encoded but not allowed=\(actual.subtracting(allowed).sorted()); allowed but not encoded=\(allowed.subtracting(actual).sorted())")
+        }
+        XCTAssertEqual(try SimulationSurfaceConfiguration.decode(data), configuration)
     }
 
     func testExampleProducesUsableInputsAndOnlyMomentaryHold() throws {
