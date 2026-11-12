@@ -28,6 +28,8 @@ private struct Options {
     var exportContract: URL?
     var tokenStdin = false
     var simulationProfile = false
+    var simulationConfiguration: URL?
+    var usesSimulationConfiguration: Bool { simulationProfile || simulationConfiguration != nil }
     var describeSurface = false
     var surfaceInstanceID: String?
     var surfacePermissions = BCRSurfaceControlAdapter.Permissions()
@@ -61,6 +63,8 @@ private struct Options {
             case "--allow-simulation-control": result.permissions.simulationControl = true
             case "--token-stdin": result.tokenStdin = true
             case "--simulation-profile": result.simulationProfile = true
+            case "--simulation-configuration": result.simulationConfiguration = URL(fileURLWithPath: try value())
+                .standardizedFileURL
             case "--describe-surface": result.describeSurface = true
             case "--surface-instance-id":
                 let id = try value()
@@ -90,12 +94,15 @@ private struct Options {
         else { throw BootError(reason: "Read-only mode cannot grant configuration writes") }
         guard result.console || (result.source == .mock && result.configuration == nil && result.hardwareMap == nil)
         else { throw BootError(reason: "Console options require an enabled console") }
-        guard !result
-            .simulationProfile ||
-            (result.console && result.source == .mock && result.configuration == nil && result.dataDirectory == nil)
+        guard !(result.simulationProfile && result.simulationConfiguration != nil) else {
+            throw BootError(reason: "--simulation-profile and --simulation-configuration are mutually exclusive")
+        }
+        guard !result.usesSimulationConfiguration ||
+            (result.console && result.source == .mock && result.configuration == nil && result
+                .dataDirectory == nil && (result.simulationConfiguration == nil || result.hardwareMap == nil))
         else {
             throw BootError(
-                reason: "Simulation profile requires a memory-only Mock console without a configuration seed"
+                reason: "Simulation profile/configuration requires a memory-only Mock console without configuration, hardware-map or data-dir"
             )
         }
         guard !(result.surfacePermissions.input || result.surfacePermissions.feedback || result.surfacePermissions
@@ -146,6 +153,7 @@ private struct BCRProviderService {
     --export-contract DIR         Export Schema and tool definitions, then exit (no devices opened)
     --token-stdin                 Read a 64-byte lowercase hex token from an anonymous pipe
     --simulation-profile          Explicit ordinary-input simulation fixture; memory-only Mock
+    --simulation-configuration PATH Strict simulation-only SurfaceConfiguration v7; implies memory-only Mock
     --describe-surface            Print the simulation profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
     --allow-surface-input --allow-surface-feedback --allow-surface-reset
@@ -169,14 +177,23 @@ private struct BCRProviderService {
                 chassis: options.chassis,
                 clock: options.clock
             )
+            let simulationConfiguration: SurfaceConfiguration?
+            if let path = options.simulationConfiguration {
+                do { simulationConfiguration = try SimulationSurfaceConfiguration.decode(Data(contentsOf: path)) }
+                catch { throw BootError(reason: "Simulation configuration: \(error.localizedDescription)") }
+            } else { simulationConfiguration = nil }
             if options.describeSurface {
                 // Static description of the --simulation-profile configuration; no device, port or token.
                 let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
-                                             configuration: SurfaceControlMCPModule.simulationConfiguration(),
+                                             configuration: simulationConfiguration ?? SurfaceControlMCPModule
+                                                 .simulationConfiguration(),
                                              saveHardwareMap: { _ in }, saveConfiguration: { _ in })
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(
-                    encoder.encode(BCRSurfaceControlAdapter.publishedContract(surface: session)) + Data("\n".utf8)
+                    encoder.encode(BCRSurfaceControlAdapter.publishedContract(
+                        surface: session,
+                        momentaryHoldsOnly: options.simulationConfiguration != nil
+                    )) + Data("\n".utf8)
                 )
                 return
             }
@@ -236,6 +253,7 @@ private struct BCRProviderService {
             }
             var profile = SurfaceConfiguration.neutral()
             if options.simulationProfile { profile = SurfaceControlMCPModule.simulationConfiguration() }
+            if let simulationConfiguration { profile = simulationConfiguration }
             if let path = options.configuration ?? profileURL {
                 let read = profileStore(path).load()
                 guard !read.failed
@@ -283,12 +301,13 @@ private struct BCRProviderService {
             gateway.onRestrictConfigurationWrite = {}
             let application = ProviderApplication(configuration: configuration)
             try ProviderMCPModule.install(on: gateway, application: application,
-                                          enableSurfaceControl: options.simulationProfile || options
+                                          enableSurfaceControl: options.usesSimulationConfiguration || options
                                               .surfaceInstanceID != nil ||
                                               options.surfacePermissions.input || options.surfacePermissions
                                               .feedback || options.surfacePermissions.reset,
                                           surfaceInstanceID: options.surfaceInstanceID,
-                                          surfacePermissions: options.surfacePermissions)
+                                          surfacePermissions: options.surfacePermissions,
+                                          surfaceMomentaryHoldsOnly: options.simulationConfiguration != nil)
             try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),

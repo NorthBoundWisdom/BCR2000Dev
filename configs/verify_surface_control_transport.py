@@ -62,7 +62,7 @@ def main():
             raise AssertionError("Expected a stable rejection")
 
     class Host:
-        def __init__(self, name, *, port=0, allow=True):
+        def __init__(self, name, *, port=0, allow=True, configuration=None):
             self.token = secrets.token_hex(32)
             self.error = (args.output / (name + ".stderr.log")).open("w")
             self.process = subprocess.Popen(
@@ -70,7 +70,11 @@ def main():
                     str(artifact / "BCRProviderService"),
                     "--port",
                     str(port),
-                    "--simulation-profile",
+                    *(
+                        ["--simulation-configuration", str(configuration)]
+                        if configuration
+                        else ["--simulation-profile"]
+                    ),
                     "--surface-instance-id",
                     "transport." + name.split("-")[0],
                     "--allow-device-control",
@@ -117,6 +121,50 @@ def main():
 
     mapping = {name: "simulation." + name for name in ("arm", "start", "pause", "cancel")}
     try:
+        example = Path(__file__).resolve().parents[1] / "examples/simulation/chassis-controls.json"
+        configured = Host("configured", configuration=example)
+        profile = configured.client.discover()["profile"]
+        rows = {row["id"]: row for row in profile["controls"]}
+        assert rows["button.1.1"]["hold"]["rest_value"] is False
+        assert "hold" not in rows["button.1.2"]
+        held = configured.client.input("button.1.1", "boolean", True, hold_s=0.2)
+        configured.client.input("pushEncoder.1.1", "scalar", 90)
+        configured.client.input("pushEncoder.1.2", "scalar", 80)
+        configured.client.input("button.1.2", "boolean", True)
+        time.sleep(0.35)
+        snapshot = configured.client.snapshot()
+        assert snapshot["inputs"]["button.1.1"] is False
+        assert snapshot["inputs"]["button.1.2"] is True
+        assert snapshot["inputs"]["pushEncoder.1.1"] == 90
+        assert snapshot["inputs"]["pushEncoder.1.2"] == 80
+        configured.client.feedback("encoder.1.1", "value", 70)
+        configured.client.feedback("encoder.1.2", "value", 60)
+        configured.client.feedback("button.1.3", "indicator", "on")
+        assert configured.client.snapshot()["inputs"] == snapshot["inputs"]
+        configured.stop()
+        for forbidden in (
+            ["--simulation-profile"],
+            ["--source", "hardware"],
+            ["--data-dir", str(args.output / "must-not-exist")],
+            ["--configuration", str(example)],
+            ["--hardware-map", str(example)],
+            ["--no-console"],
+        ):
+            result = subprocess.run(
+                [
+                    str(artifact / "BCRProviderService"),
+                    "--simulation-configuration",
+                    str(example),
+                    "--describe-surface",
+                    *forbidden,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            assert result.returncode == 2 and result.stderr.strip()
+        assert not (args.output / "must-not-exist").exists()
+        passed("configurable_mock_inputs_feedback_holds_and_startup_fences")
         first, second, denied = Host("a"), Host("b"), Host("denied", allow=False)
         for protocol in ("2025-11-25", "2026-07-28"):
             client = Client(first.ready["url"], first.token, "transport.a", protocol=protocol)

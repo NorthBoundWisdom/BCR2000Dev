@@ -1,0 +1,199 @@
+{
+  "version": 7,
+  "name": "Simulation held enable and axes",
+  "parameters": [
+    {
+      "id": "simulation.enable",
+      "name": "enable",
+      "minimum": 0,
+      "maximum": 1,
+      "defaultValue": 0,
+      "kind": "toggle",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.speed",
+      "name": "speed",
+      "minimum": 0,
+      "maximum": 127,
+      "defaultValue": 64,
+      "kind": "continuous",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.steer",
+      "name": "steer",
+      "minimum": 0,
+      "maximum": 127,
+      "defaultValue": 64,
+      "kind": "continuous",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.stop",
+      "name": "stop",
+      "minimum": 0,
+      "maximum": 1,
+      "defaultValue": 0,
+      "kind": "toggle",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.speed_feedback",
+      "name": "speed_feedback",
+      "minimum": 0,
+      "maximum": 127,
+      "defaultValue": 0,
+      "kind": "continuous",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.steer_feedback",
+      "name": "steer_feedback",
+      "minimum": 0,
+      "maximum": 127,
+      "defaultValue": 0,
+      "kind": "continuous",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    },
+    {
+      "id": "simulation.stopped",
+      "name": "stopped",
+      "minimum": 0,
+      "maximum": 1,
+      "defaultValue": 0,
+      "kind": "toggle",
+      "agentWritable": true,
+      "externallyProtected": false,
+      "step": 1
+    }
+  ],
+  "assignments": [
+    {
+      "control": {
+        "section": "button",
+        "row": 1,
+        "index": 1
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.enable"
+        }
+      },
+      "buttonBehavior": "momentary",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "pushEncoder",
+        "row": 1,
+        "index": 1
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.speed"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "pushEncoder",
+        "row": 1,
+        "index": 2
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.steer"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "button",
+        "row": 1,
+        "index": 2
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.stop"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "encoder",
+        "row": 1,
+        "index": 1
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.speed_feedback"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "encoder",
+        "row": 1,
+        "index": 2
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.steer_feedback"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    },
+    {
+      "control": {
+        "section": "button",
+        "row": 1,
+        "index": 3
+      },
+      "target": {
+        "parameter": {
+          "_0": "simulation.stopped"
+        }
+      },
+      "buttonBehavior": "toggle",
+      "inverted": false,
+      "encoderMode": "absolute",
+      "encoderStep": 1
+    }
+  ],
+  "pages": [],
+  "macros": []
+}

@@ -100,6 +100,18 @@ and a terminated process drops the simulated control entirely. A consumer that n
 must therefore also apply its own deadline from `hold_deadline` and treat a missing fresh
 observation as released; the lease is a deadman input, not a device stop acknowledgment.
 
+## Configurable simulation parameters
+
+Use `--simulation-configuration <file>` to replace the default demonstration parameters with a
+strict simulation-only SurfaceConfiguration v7. It implies the memory-only Mock restrictions and
+cannot be combined with `--simulation-profile`, a configuration seed, hardware map, data directory,
+hardware source or a disabled console. `--describe-surface` uses the supplied file without opening
+devices or listening on a port. Invalid files fail before credentials or user persistence are read.
+
+See [the held-enable, axes and feedback example](../examples/simulation/README.md) and its pinned
+consumer role mapping. Only momentary button bindings declare holds in this mode; the historical
+`--simulation-profile` configuration, capabilities and mapping revision remain unchanged.
+
 ## Input, feedback and recovery
 
 Every mutation pins all five identity fields plus `expected_sequence`. Accepted and ignored

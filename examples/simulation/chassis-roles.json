@@ -1,0 +1,68 @@
+{
+  "schema": "pipe.surface-sim.chassis-roles",
+  "version": 1,
+  "scope": "simulation-only",
+  "contract_versions": [
+    "1.1"
+  ],
+  "allowed_origins": [
+    "interface",
+    "remote"
+  ],
+  "timing": {
+    "max_event_age_s": 0.5,
+    "stream_timeout_s": 0.5
+  },
+  "profiles": [
+    {
+      "profile_id": "bcr2000.mock",
+      "profile_version": "1.1",
+      "mapping_revision": "2b2ae6638f08af35",
+      "roles": {
+        "enable": {
+          "control_id": "button.1.1",
+          "max_lease_s": 1.0
+        },
+        "linear": {
+          "control_id": "pushEncoder.1.1",
+          "input_kind": "absolute",
+          "range": {
+            "minimum": 0,
+            "maximum": 127
+          },
+          "center": 64,
+          "deadband": 3
+        },
+        "steer": {
+          "control_id": "pushEncoder.1.2",
+          "input_kind": "absolute",
+          "range": {
+            "minimum": 0,
+            "maximum": 127
+          },
+          "center": 64,
+          "deadband": 3
+        },
+        "stop": {
+          "control_id": "button.1.2"
+        }
+      },
+      "feedback": {
+        "speed": {
+          "control_id": "encoder.1.1",
+          "kind": "value",
+          "bipolar": true
+        },
+        "steer": {
+          "control_id": "encoder.1.2",
+          "kind": "value",
+          "bipolar": true
+        },
+        "stopped": {
+          "control_id": "button.1.3",
+          "kind": "indicator"
+        }
+      }
+    }
+  ]
+}

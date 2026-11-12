@@ -62,6 +62,7 @@ public final class BCRSurfaceControlAdapter {
     /// before the Mock is reseeded, so a revoked button never stays held (deadman stays safe).
     private var deferredRests: [ControlHoldExpiry] = []
     private var core: SurfaceControlSession
+    private let momentaryHoldsOnly: Bool
     private var contextRevision: UInt64
     private var generation: String
     private var handlingRemote = false
@@ -75,14 +76,19 @@ public final class BCRSurfaceControlAdapter {
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
                 holdScheduler: @escaping HoldScheduler = BCRSurfaceControlAdapter.defaultHoldScheduler,
-                automaticHoldExpiry: Bool = true) throws
+                automaticHoldExpiry: Bool = true, momentaryHoldsOnly: Bool = false) throws
     {
+        self.momentaryHoldsOnly = momentaryHoldsOnly
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
         diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
         core = try Self.seeded(
-            SurfaceControlSession(instanceID: instanceID, epoch: UUID().uuidString, profile: Self.profile(surface),
-                                  eventCapacity: eventCapacity),
+            SurfaceControlSession(
+                instanceID: instanceID,
+                epoch: UUID().uuidString,
+                profile: Self.profile(surface, momentaryHoldsOnly: momentaryHoldsOnly),
+                eventCapacity: eventCapacity
+            ),
             surface: surface,
             at: monotonic()
         )
@@ -107,9 +113,14 @@ public final class BCRSurfaceControlAdapter {
     /// revision) plus the tool descriptors. The instance and epoch are placeholders; a live
     /// instance is always pinned through `surface_control_discover`. Opens no device.
     public static func publishedContract(surface: SurfaceSession, instanceID: String = "example.simulation",
-                                         epoch: String = "discovery-only") throws -> JSONValue
+                                         epoch: String = "discovery-only",
+                                         momentaryHoldsOnly: Bool = false) throws -> JSONValue
     {
-        let session = try SurfaceControlSession(instanceID: instanceID, epoch: epoch, profile: profile(surface))
+        let session = try SurfaceControlSession(
+            instanceID: instanceID,
+            epoch: epoch,
+            profile: profile(surface, momentaryHoldsOnly: momentaryHoldsOnly)
+        )
         return try .object(["discovery": .encoded(session.discovery()),
                             "tools": .array(SurfaceControlTools.descriptors.map { try .encoded($0) })])
     }
@@ -119,7 +130,7 @@ public final class BCRSurfaceControlAdapter {
         (error as? ControlContractError)?.code ?? (error as? ProviderDomainError)?.code ?? "invalid_argument"
     }
 
-    private static func profile(_ surface: SurfaceSession) -> ControlProfile {
+    private static func profile(_ surface: SurfaceSession, momentaryHoldsOnly: Bool) -> ControlProfile {
         let controls = BCRLayout.allControls.map { control -> ControlDescriptor in
             let assignment = surface.engine.configuration.assignment(for: control)
             let relative = control.isContinuous && assignment?.encoderMode != nil && assignment?
@@ -141,8 +152,12 @@ public final class BCRSurfaceControlAdapter {
                 feedbackKinds: control.isContinuous ? [.value] : [.indicator],
                 mapping: mapping,
                 // Contract 1.1 lease: an expired button lease returns to released (deadman rest).
-                hold: control.isContinuous ? nil : ControlHold(restValue: .bool(false),
-                                                               maxHoldSeconds: maximumButtonHoldSeconds)
+                hold: control
+                    .isContinuous || (momentaryHoldsOnly && assignment?.buttonBehavior != .momentary) ? nil :
+                    ControlHold(
+                        restValue: .bool(false),
+                        maxHoldSeconds: maximumButtonHoldSeconds
+                    )
             )
         }
         var capabilities = ["simulation", "controls.stable_ids"]
@@ -194,7 +209,7 @@ public final class BCRSurfaceControlAdapter {
             expected: next.expected,
             expectedSequence: next.discovery().latest_sequence,
             epoch: UUID().uuidString,
-            profile: Self.profile(surface),
+            profile: Self.profile(surface, momentaryHoldsOnly: momentaryHoldsOnly),
             at: now
         )
         if surface.source == .mock {
