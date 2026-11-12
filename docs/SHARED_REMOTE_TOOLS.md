@@ -2,7 +2,7 @@
 
 更新：2026-11-12。两宿主固定共享提交 `add3c2404e4d2dbe3f9d0861bbda01c013018669`。
 准确 inputSchema/outputSchema 从各宿主 `tools/list` 发现，完整typed合同随共享依赖的
-`build/dependencies/SurfacePlugins/docs/remote-tools.md` 提供。所有新输出Schema为object，兼容当前和2025-11-25 MCP。
+`build/seed/SurfacePlugins/docs/remote-tools.md` 提供。所有新输出Schema为object，兼容当前和2025-11-25 MCP。
 
 ## 一份状态、一个事件游标
 

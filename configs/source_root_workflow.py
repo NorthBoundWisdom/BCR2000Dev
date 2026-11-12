@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 from configs.setup_local_project import main as setup_main  # noqa: E402
 
 # Excludes Codex schemas, runtime data and the retired local checkout.
-CLEAN_TARGETS = ("configured.json", "swiftpm", "app", "package", "package-staging", "icons", "smoke")
+CLEAN_TARGETS = ("configured.json", "seed-build", "swiftpm", "app", "package", "package-staging", "icons", "smoke")
 
 
 def main(argv: list[str] | None = None) -> int:

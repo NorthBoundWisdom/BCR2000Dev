@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import plistlib
 import subprocess
@@ -15,6 +16,7 @@ from configs.ci_release import release_version, validate_assets
 from configs import macos_workflow, setup_local_project, source_root_workflow
 from configs._vendor.freecm.errors import RepoCommandManifestError
 from configs._vendor.freecm.repo_commands import validate_repo_command_manifest
+from configs.surface_plugins_dependency import DependencyError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -61,8 +63,21 @@ class BuildConfigurationTests(unittest.TestCase):
             patch.object(setup_local_project, "ensure_dependency") as dependency,
             patch.object(setup_local_project.subprocess, "run") as command,
         ):
+            dependency.return_value = self.root / "build/seed/SurfacePlugins"
             self.assertEqual(setup_local_project.main(), 0)
             dependency.assert_called_once_with(self.root)
+            command.assert_any_call(
+                [
+                    "swift",
+                    "build",
+                    "--package-path",
+                    str(dependency.return_value),
+                    "--build-path",
+                    str(self.root / "build/seed-build/SurfacePlugins"),
+                ],
+                cwd=self.root,
+                check=True,
+            )
             command.assert_any_call(
                 ["git", "config", "--local", "core.hooksPath", "configs/githooks"], cwd=self.root, check=True
             )
@@ -78,6 +93,32 @@ class BuildConfigurationTests(unittest.TestCase):
                 )
                 with self.assertRaises(ValueError):
                     load_app_build_settings(self.root)
+
+    def test_failed_seed_build_does_not_publish_configuration(self):
+        marker = self.root / "build/configured.json"
+        with (
+            patch.object(setup_local_project, "REPO_ROOT", self.root),
+            patch.object(
+                setup_local_project, "ensure_dependency", return_value=self.root / "build/seed/SurfacePlugins"
+            ),
+            patch.object(setup_local_project, "validate_commands", return_value=0),
+            patch.object(setup_local_project.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "swift")),
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            self.assertEqual(setup_local_project.main(), 1)
+        self.assertFalse(marker.exists())
+        self.assertIn("Local configuration failed", stderr.getvalue())
+
+    def test_dependency_failure_is_reported_without_starting_swift(self):
+        with (
+            patch.object(setup_local_project, "REPO_ROOT", self.root),
+            patch.object(setup_local_project, "ensure_dependency", side_effect=DependencyError("fetch failed")),
+            patch.object(setup_local_project.subprocess, "run") as command,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            self.assertEqual(setup_local_project.main(), 1)
+        command.assert_not_called()
+        self.assertIn("fetch failed", stderr.getvalue())
 
     def test_build_number_must_be_positive_integer_string(self):
         for value in ("0", "-1", "1.2", "١", "1\n", 1):
@@ -321,6 +362,14 @@ class ReleaseIntegrityTests(unittest.TestCase):
 
 
 class PluginAndCleanupTests(unittest.TestCase):
+    def test_plugin_readiness_tracks_locked_seed_and_build_product(self):
+        document = json.loads((REPO_ROOT / "configs/freecm.commands.jsonc").read_text())
+        readiness = document["commands"]["config"][0]["readiness"]
+        self.assertIn("configs/surface_plugins.lock.json", readiness["inputs"])
+        self.assertIn("configs/surface_plugins_dependency.py", readiness["inputs"])
+        self.assertIn("build/seed/SurfacePlugins/Package.swift", readiness["outputs"])
+        self.assertIn("build/seed-build/SurfacePlugins/debug", readiness["outputs"])
+
     def test_plugin_manifest_validates_without_freecm_checkout(self):
         self.assertFalse((REPO_ROOT / "FreeCM").exists())
         summary = validate_repo_command_manifest(REPO_ROOT)
@@ -340,13 +389,15 @@ class PluginAndCleanupTests(unittest.TestCase):
     def test_cleanup_preserves_runtime_data_and_retired_checkout(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            for name in ("app", "swiftpm", "retired-FreeCM", "codex"):
+            for name in ("app", "swiftpm", "seed", "seed-build", "retired-FreeCM", "codex"):
                 (root / "build" / name).mkdir(parents=True)
             with patch.object(source_root_workflow, "REPO_ROOT", root):
                 source_root_workflow.main(["--cleanbuild", "--dry-run"])
                 self.assertTrue((root / "build/app").exists())
                 source_root_workflow.main(["--cleanbuild"])
             self.assertFalse((root / "build/app").exists())
+            self.assertFalse((root / "build/seed-build").exists())
+            self.assertTrue((root / "build/seed").exists())
             self.assertTrue((root / "build/retired-FreeCM").exists())
             self.assertTrue((root / "build/codex").exists())
 

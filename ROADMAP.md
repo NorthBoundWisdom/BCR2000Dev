@@ -13,7 +13,7 @@
 BCR/XTouch已以同一固定commit装配Agent/参考模拟器/输出安全门/示例数据及统一surface_工具；
 共享七态/注入时间/注册表，控制台引擎与硬件适配各自保留。跨宿主M1同参考序列和M2/M3软件验收通过，
 BCR旧配置与Provider1.0保持兼容；正式发布/硬件仍按独立边界处理。
-当前远端版本未发布，仅本地提交；详见 [共享插件接入](docs/SHARED_PLUGINS.md)。
+共享依赖锁定提交已推送；Config 获取并编译 `build/seed` 依赖，Build 构建主应用。正式版本发布另行授权；详见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 
 ## 当前基线
 

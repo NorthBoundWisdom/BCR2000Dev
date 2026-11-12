@@ -25,7 +25,7 @@ do {
         fatalError(message + "\nRun python3 configs/surface_plugins_dependency.py ensure first.")
     }
 } catch { fatalError("Cannot verify locked SurfacePlugins dependency: \(error)") }
-let surfacePlugins: Package.Dependency = .package(path: "build/dependencies/SurfacePlugins")
+let surfacePlugins: Package.Dependency = .package(path: "build/seed/SurfacePlugins")
 
 let package = Package(
     name: "BCRAgentConsole",

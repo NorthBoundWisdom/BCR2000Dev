@@ -54,6 +54,7 @@ class SurfacePluginsDependencyTests(unittest.TestCase):
         (self.source / "new.txt").write_text("uncommitted")
         destination = self.ensure()
         self.assertEqual(destination, self.root / dependency.CACHE_PATH)
+        self.assertEqual(destination, self.root / "build/seed/SurfacePlugins")
         self.assertEqual((destination / "Package.swift").read_text(), "// committed package\n")
         self.assertFalse((destination / "new.txt").exists())
         self.assertEqual((self.source / "Package.swift").read_text(), "// dirty change must stay outside build\n")
@@ -134,7 +135,7 @@ class SurfacePluginsDependencyTests(unittest.TestCase):
         self.assertEqual(self.git(destination, "rev-parse", "HEAD"), actual)
 
     def test_unmanaged_or_symlink_destination_is_preserved(self):
-        parent = self.root / "build/dependencies"
+        parent = self.root / "build/seed"
         parent.mkdir(parents=True)
         destination = parent / "SurfacePlugins"
         destination.mkdir()

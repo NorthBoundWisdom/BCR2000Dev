@@ -66,12 +66,12 @@ GUI 通过 `--robot-sim` / `--chassis-sim` 显式启用可选模块，默认不�
 ## 快速开始
 
 需要 macOS 14+ 与 Swift 6 工具链；Mock Agent 依赖同源共享包 `SurfacePlugins`，由JSON锁固定完整commit。
-共享提交尚未推送，先在 shell 设置 `export SURFACE_PLUGINS_SOURCE=../SurfacePlugins`（或给工作流配置 ignored `build.local.json`）。
-工作流先用Git获取已提交对象到 `build/dependencies/SurfacePlugins`，只从该固定目录编译；不拷未提交改动、不依赖FreeCM。
+Config 从锁定的 HTTPS 远端获取依赖并编译；如需本地获取源，可设置 `SURFACE_PLUGINS_SOURCE`（或配置 ignored `build.local.json`）。
+工作流先用Git获取已提交对象到 `build/seed/SurfacePlugins`，只从该固定目录编译；不拷未提交改动、不依赖FreeCM。
 直接Swift命令前先运行 `python3 configs/surface_plugins_dependency.py ensure`。依赖、时序与旧 API 边界见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 
 ```bash
-python3 configs/setup_local_project.py   # 首次：生成本机配置并启用提交钩子
+python3 configs/setup_local_project.py   # Config：获取/编译依赖、生成本机配置并启用提交钩子
 python3 configs/macos_workflow.py run    # 构建并在当前终端运行，Ctrl+C 停止
 ```
 
@@ -245,7 +245,7 @@ Apple 开发者证书与对应授权 / profile 签署——自用可用付费账
 已在本机安装的开发签署修复可继续使用。实机结果见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
 
 **FreeCM 插件（可选）**：`configs/freecm.commands.jsonc` 保留 Config / Build / Run / Test / Package 入口，
-`configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。构建本身不需要 FreeCM。
+`configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。Config 编译依赖，Build 构建主仓库应用；构建本身不需要 FreeCM。
 
 ## 验证
 

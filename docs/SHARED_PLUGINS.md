@@ -6,14 +6,14 @@
 ## 依赖与本地构建
 
 `configs/surface_plugins.lock.json` 提交 HTTPS remote 与完整40位 commit revision。
-`Package.swift` 只引用固定 `build/dependencies/SurfacePlugins`，不通过 SwiftPM 解析远端或标签。
+`Package.swift` 只引用固定 `build/seed/SurfacePlugins`，不通过 SwiftPM 解析远端或标签。
 Python stdlib + Git 的 `configs/surface_plugins_dependency.py` 将锁定提交物化到该路径；不依赖 FreeCM。
 
-远端仓库已有初始 main，业务提交未推送；当前从已有并列 Git 副本获取已提交的锁定对象：
+锁定提交已推送到 HTTPS 远端。Config 将其获取到 `build/seed/SurfacePlugins`，并将依赖编译产物写入
+`build/seed-build/SurfacePlugins`，避免污染受管源码。Build 构建主仓库应用：
 
 ```bash
-export SURFACE_PLUGINS_SOURCE=../SurfacePlugins
-python3 configs/surface_plugins_dependency.py ensure
+python3 configs/setup_local_project.py
 swift test --build-path build/swiftpm
 python3 configs/check_domain_boundaries.py
 python3 configs/macos_workflow.py build
@@ -28,9 +28,9 @@ python3 configs/macos_workflow.py build
 缓存命中只检查本地对象/HEAD/dirty，不再次联网。物化使用独立staging、文件锁和原子rename；
 Package执行只读verify，因此直跑Swift也不能绕过缓存检查，且清单验证不获取依赖/不联网。
 所有编译都从build内锁定提交进行，不直接编译并列副本。两个宿主复制同一helper与锁格式，各自独立物化；
-不依赖另一个宿主源码。CI构建入口先ensure，未推送SHA的远端获取仍未验证。
+不依赖另一个宿主源码。CI构建入口先ensure；本机已验证从HTTPS远端获取当前锁定SHA。
 
-当前只作本地提交，不推送或创建远端/标签。用户决定共享实现与版本发布时机；
+共享库当前锁定提交已按用户授权推送；宿主修复仍只作本地提交，不创建标签。用户决定版本发布时机；
 锁定commit不依赖标签是否存在，不提交虚构的 `Package.resolved`。
 
 ## 归属与运行

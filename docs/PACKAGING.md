@@ -2,7 +2,7 @@
 
 构建参考 SonaFolio 的原生应用流程：应用版本配置、本机环境、SwiftPM 构建、`.app`
 组装、签名、公证、DMG、构建记录，以及独立 runner 上的最终产物启动检查。
-本仓库没有 FreeCM 子模块、依赖下载或 source-root lock。可选插件仅调用这些脚本。
+本仓库没有 FreeCM 子模块或 source-root lock。共享依赖由独立 Git 管理器获取，可选插件仅调用仓库脚本。
 
 ## 环境与配置
 
@@ -137,9 +137,12 @@ python3 configs/source_root_workflow.py --cleanbuild
 ```
 
 插件命令在 `configs/freecm.commands.jsonc` 中，包含 Config/Build/Run/Test/Package。
+Config（`setup_local_project.py`）获取锁定提交到 `build/seed/SurfacePlugins`，并编译到
+`build/seed-build/SurfacePlugins`；完成依赖编译和主清单验证后才更新就绪标记。
+Build（`macos_workflow.py build`）构建主仓库应用。修改依赖锁会使插件要求重新 Config。
 Package 默认 DMG + ZIP，保留原 `release-zip` ID，并新增 Developer ID 选项。
 仅内置插件清单验证器的 MIT 源码快照，来源与许可证见 `configs/_vendor/`。
-清理只删除明确列出的构建输出，不触碰运行数据、schema、本机配置或保留的历史 checkout。
+清理只删除明确列出的构建输出（含 `seed-build`），保留 `build/seed` 的依赖源码、运行数据、schema、本机配置和历史 checkout。
 
 参考：[Apple 公证流程](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)、
 [GitHub runner 标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。

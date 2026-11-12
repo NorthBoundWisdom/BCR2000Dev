@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 LOCK_FILE = "configs/surface_plugins.lock.json"
-CACHE_PATH = "build/dependencies/SurfacePlugins"
+CACHE_PATH = "build/seed/SurfacePlugins"
 MARKER = "surface-plugins-manager.json"
 SOURCE_ENV = "SURFACE_PLUGINS_SOURCE"
 LEGACY_SOURCE_ENV = "SURFACE_PLUGINS_PATH"
@@ -76,14 +76,14 @@ def _spec(root: Path) -> dict[str, object]:
 
 
 def _parent(root: Path, *, create: bool) -> Path:
-    for path in (root / "build", root / "build/dependencies"):
+    for path in (root / "build", root / "build/seed"):
         if path.is_symlink() or (path.exists() and not path.is_dir()):
             raise DependencyError(f"Refusing non-directory or symlink dependency parent: {path.name}")
         if create:
             path.mkdir(exist_ok=True)
         elif not path.is_dir():
             raise DependencyError("SurfacePlugins cache is missing; run the ensure command")
-    return root / "build/dependencies"
+    return root / "build/seed"
 
 
 @contextmanager
@@ -168,7 +168,14 @@ def _materialize(parent: Path, spec: dict[str, object], source: str, environ: di
     try:
         _git(stage, "init", "--quiet", environ=environ)
         _git(stage, "remote", "add", "origin", str(spec["remote"]), environ=environ)
-        _git(stage, "fetch", "--no-tags", "--depth=1", "--", source, str(spec["revision"]), environ=environ)
+        try:
+            _git(stage, "fetch", "--no-tags", "--depth=1", "--", source, str(spec["revision"]), environ=environ)
+        except DependencyError as error:
+            raise DependencyError(
+                f"Cannot fetch locked SurfacePlugins commit {spec['revision']}. "
+                "Check source access and that this commit has been pushed, or set SURFACE_PLUGINS_SOURCE "
+                "in the shell or build.local.json environment to an existing Git repository containing it."
+            ) from error
         _git(stage, "checkout", "--quiet", "--detach", str(spec["revision"]), environ=environ)
         (stage / ".git" / MARKER).write_text(json.dumps(spec, sort_keys=True) + "\n")
         _owned(stage, environ)

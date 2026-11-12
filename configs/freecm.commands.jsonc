@@ -5,7 +5,7 @@
       {
         "id": "local-swift",
         "label": "Local Swift",
-        "description": "Prepare local build settings and validate Swift package and plugin commands without downloading dependencies",
+        "description": "Fetch the locked SurfacePlugins seed into build/seed, compile it and configure the host",
         "command": "python3",
         "args": [
           "configs/setup_local_project.py"
@@ -26,6 +26,10 @@
             "configs/app_build.json",
             "configs/build.local.example.json",
             "configs/setup_local_project.py",
+            "configs/surface_plugins.lock.json",
+            "configs/surface_plugins_dependency.py",
+            "configs/freecm.commands.jsonc",
+            "configs/validate_repo_commands.py",
             "configs/build_environment.py",
             "configs/app_build.py",
             "configs/macos_workflow.py",
@@ -33,7 +37,9 @@
             "build.local.json"
           ],
           "outputs": [
-            "build/configured.json"
+            "build/configured.json",
+            "build/seed/SurfacePlugins/Package.swift",
+            "build/seed-build/SurfacePlugins/debug"
           ]
         }
       },

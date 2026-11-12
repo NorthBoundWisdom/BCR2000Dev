@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure the Swift application and ensure its locked source dependency."""
+"""Fetch and compile the locked seed, then configure the Swift application."""
 
 from __future__ import annotations
 
@@ -15,16 +15,28 @@ if str(REPO_ROOT) not in sys.path:
 from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import ensure_local_build_environment, use_build_environment  # noqa: E402
 from configs.validate_repo_commands import main as validate_commands  # noqa: E402
-from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.surface_plugins_dependency import DependencyError, ensure_dependency  # noqa: E402
 
 
-def main() -> int:
+def configure() -> int:
     ensure_local_build_environment(REPO_ROOT)
     with use_build_environment(REPO_ROOT):
-        ensure_dependency(REPO_ROOT)
+        dependency = ensure_dependency(REPO_ROOT)
         settings = load_app_build_settings(REPO_ROOT)
         if validate_commands([str(REPO_ROOT)]) != 0:
             return 1
+        subprocess.run(
+            [
+                "swift",
+                "build",
+                "--package-path",
+                str(dependency),
+                "--build-path",
+                str(REPO_ROOT / "build/seed-build/SurfacePlugins"),
+            ],
+            cwd=REPO_ROOT,
+            check=True,
+        )
         subprocess.run(["swift", "package", "dump-package"], cwd=REPO_ROOT, check=True, stdout=subprocess.DEVNULL)
         marker = REPO_ROOT / "build/configured.json"
         marker.parent.mkdir(parents=True, exist_ok=True)
@@ -32,6 +44,14 @@ def main() -> int:
     subprocess.run(["git", "config", "--local", "core.hooksPath", "configs/githooks"], cwd=REPO_ROOT, check=True)
     print("BCR Agent Console local configuration is ready.")
     return 0
+
+
+def main() -> int:
+    try:
+        return configure()
+    except (DependencyError, OSError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"Local configuration failed: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
