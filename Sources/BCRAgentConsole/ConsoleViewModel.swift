@@ -448,7 +448,7 @@ final class ConsoleViewModel: ObservableObject {
     var displayBusy: Bool { display.transfers > 0 }
 
     /// Runs one BCL transfer with the panel display animating like the device's.
-    private func withDisplayTransfer<T>(_ body: () async throws -> T) async rethrows -> T {
+    private func withDisplayTransfer<T>(_ body: @MainActor () async throws -> T) async rethrows -> T {
         display.beginTransfer(); objectWillChange.send()
         defer { display.endTransfer(); objectWillChange.send() }
         return try await body()
