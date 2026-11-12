@@ -15,11 +15,11 @@ held-enable/axes configuration has profile `bcr2000.mock` version `1.2`, mapping
 ```sh
 RUN=$(mktemp -d)
 chmod 700 "$RUN"
-python3 -c 'import os,secrets,sys; fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600); os.write(fd,(secrets.token_hex(32)+"\n").encode()); os.close(fd)' "$RUN/token"
-./BCRProviderService --simulation-configuration examples/simulation/chassis-controls.json \
+python3 -c 'import os,secrets,sys; fd=os.open(sys.argv[1],os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600); os.write(fd,secrets.token_hex(32).encode()); os.close(fd)' "$RUN/token"
+cat "$RUN/token" | ./BCRProviderService --simulation-configuration examples/simulation/chassis-controls.json \
   --surface-instance-id chain.chassis.A --port 0 --write-limit 60 \
   --allow-device-control --allow-surface-input --allow-surface-feedback \
-  --token-stdin < "$RUN/token" > "$RUN/provider.log" 2>&1 &
+  --token-stdin > "$RUN/provider.log" 2>&1 &
 PROVIDER_PID=$!
 ```
 
