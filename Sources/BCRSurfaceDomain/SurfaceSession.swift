@@ -505,6 +505,7 @@ public final class SurfaceSession {
     public func installHardwareMap(_ map: HardwareMap) throws {
         try map.validate()
         invalidateInputEpoch("mapping_changed")
+        noteMappingContextChanged()
         if engine.learnTarget != nil { engine.stopLearning() }
         hardwareMap = map
         if source == .hardware { engine.replaceHardwareMap(map) }

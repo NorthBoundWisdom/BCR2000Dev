@@ -209,6 +209,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
                 try session.selectPage("p2")
             }),
             ("mockNRPN", { try $0.setMockNRPN(true, for: .pushEncoder(group: 1, 3)) }),
+            ("installHardwareMap", { try $0.installHardwareMap(.mockPreset()) }),
             ("sourceRoundTrip", { $0.selectSource(.hardware); $0.selectSource(.mock) })
         ]
         for (name, change) in paths {
