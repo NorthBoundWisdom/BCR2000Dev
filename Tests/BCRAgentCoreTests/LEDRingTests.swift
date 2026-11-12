@@ -53,7 +53,10 @@ final class LEDRingTests: XCTestCase {
         XCTAssertEqual(map.ringMode(for: control), .oneDot)
         try map.bind(control, to: .init(kind: .controlChange, channel: 0, number: 2))
         XCTAssertNil(map.ringMode(for: control))
-        XCTAssertNil(LEDRingMode.pan.litLEDs(value: 64))
+        // Pan is drawn from the manual since the preset alignment work; modes without a
+        // documented or measured pattern still report unknown instead of a guess.
+        XCTAssertEqual(LEDRingMode.pan.litLEDs(value: 64), [7])
+        for mode in [LEDRingMode.spread, .qual, .cut, .damp] { XCTAssertNil(mode.litLEDs(value: 64)) }
         XCTAssertEqual(LEDRingMode.oneDotOff.litLEDs(value: 0), [])
         XCTAssertEqual(LEDRingMode.twoDotOff.litLEDs(value: 0), [])
     }
