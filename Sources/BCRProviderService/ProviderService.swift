@@ -28,6 +28,7 @@ private struct Options {
     var exportContract: URL?
     var tokenStdin = false
     var simulationProfile = false
+    var describeSurface = false
     var surfaceInstanceID: String?
     var surfacePermissions = BCRSurfaceControlAdapter.Permissions()
     var permissions = MCPPermissions()
@@ -60,6 +61,7 @@ private struct Options {
             case "--allow-simulation-control": result.permissions.simulationControl = true
             case "--token-stdin": result.tokenStdin = true
             case "--simulation-profile": result.simulationProfile = true
+            case "--describe-surface": result.describeSurface = true
             case "--surface-instance-id":
                 let id = try value()
                 guard !id.isEmpty, id.utf8.count <= 128,
@@ -144,6 +146,7 @@ private struct BCRProviderService {
     --export-contract DIR         Export Schema and tool definitions, then exit (no devices opened)
     --token-stdin                 Read a 64-byte lowercase hex token from an anonymous pipe
     --simulation-profile          Explicit ordinary-input simulation fixture; memory-only Mock
+    --describe-surface            Print the simulation profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
     --allow-surface-input --allow-surface-feedback --allow-surface-reset
                                   Separate simulation permissions; default OFF, never hardware
@@ -166,6 +169,17 @@ private struct BCRProviderService {
                 chassis: options.chassis,
                 clock: options.clock
             )
+            if options.describeSurface {
+                // Static description of the --simulation-profile configuration; no device, port or token.
+                let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
+                                             configuration: SurfaceControlMCPModule.simulationConfiguration(),
+                                             saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                try FileHandle.standardOutput.write(
+                    encoder.encode(BCRSurfaceControlAdapter.publishedContract(surface: session)) + Data("\n".utf8)
+                )
+                return
+            }
             if let directory = options.exportContract {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 try ProviderContractSchema.data.write(

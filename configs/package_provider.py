@@ -27,14 +27,17 @@ def run(*args):
 # Surface control 1.1 deliverables have exactly one source: the locked shared package.
 SURFACE_CONTRACT = "1.1"
 SURFACE_SDK = "1.1.0"
+# Same root-level names as the other host's delivery, so one consumer loader fits both.
 SURFACE_FILES = {
-    "surface-control/surface-control-tools.json": "docs/surface-control-tools.json",
-    "surface-control/surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
-    "surface-control/surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
-    "surface-control/surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",
-    "surface-control/surface-control.md": "docs/surface-control.md",
-    "surface-control/surface-control-scenarios.md": "docs/surface-control-scenarios.md",
+    "control-tools.json": "docs/surface-control-tools.json",
+    "surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
+    "surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
+    "surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",
+    "surface-control.md": "docs/surface-control.md",
+    "surface-control-scenarios.md": "docs/surface-control-scenarios.md",
 }
+SURFACE_ARTIFACT = "surface-control-simulator"
+SURFACE_MANIFEST = "surface-control-manifest.json"
 SURFACE_SDK_SOURCE = "clients/python/surface_control/__init__.py"
 
 
@@ -98,11 +101,14 @@ def package(output, configuration="release", skip_build=False):
         info.compress_type = zipfile.ZIP_DEFLATED
         info.external_attr = 0o644 << 16
         archive.writestr(info, (shared / SURFACE_SDK_SOURCE).read_bytes())
-    surface_sources = {surface_sdk.name + "!surface_control/__init__.py": SURFACE_SDK_SOURCE}
-    (output / "surface-control").mkdir()
     for published, source in SURFACE_FILES.items():
         shutil.copy2(shared / source, output / published)
-        surface_sources[published] = source
+    # Static description of the --simulation-profile configuration, printed by the delivered binary.
+    contract = subprocess.run(
+        [str(output / "BCRProviderService"), "--describe-surface"], check=True, capture_output=True, cwd=output
+    ).stdout
+    (output / "control-contract.json").write_bytes(contract)
+    discovery = json.loads(contract)["discovery"]
     shutil.copy2(ROOT / "docs/SURFACE_SIMULATION.md", output / "SURFACE_SIMULATION.md")
     shutil.copytree(
         ROOT / "Clients/Python/examples", output / "examples", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
@@ -122,25 +128,49 @@ def package(output, configuration="release", skip_build=False):
     shutil.copy2(ROOT / "docs/PROVIDER_QUICKSTART.md", output / "README.md")
     if (ROOT / "LICENSE").is_file():
         shutil.copy2(ROOT / "LICENSE", output / "LICENSE")
-    files = {}
-    for path in sorted(output.rglob("*")):
-        if path.is_file():
-            files[str(path.relative_to(output))] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def hashes():
+        return {
+            str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(output.rglob("*"))
+            if path.is_file()
+        }
+
+    source_commit, dirty = run("git", "rev-parse", "HEAD"), bool(run("git", "status", "--porcelain"))
+    # Common surface delivery fields (SurfacePlugins docs/surface-control-delivery.md). They describe
+    # the optional surface control simulation only, never the provider's hardware source.
+    surface = {
+        "schema_version": 1,
+        "source": "simulation",
+        "source_commit": source_commit,
+        "source_dirty": dirty,
+        "surface_control_contract": SURFACE_CONTRACT,
+        "surface_control_sdk": SURFACE_SDK,
+        "profile_id": discovery["profile"]["id"],
+        "profile_version": discovery["profile"]["version"],
+        "mapping_revision": discovery["expected"]["mapping_revision"],
+        "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
+        "surface_plugins_files_sha256": {
+            source: hashlib.sha256((shared / source).read_bytes()).hexdigest()
+            for source in sorted([*SURFACE_FILES.values(), SURFACE_SDK_SOURCE])
+        },
+    }
+    # `artifact` is the one common field that collides with Provider 1.0 (its consumers require
+    # "BCRProviderService"), so a surface-only manifest carries the neutral value. It lists every
+    # delivered file except the two manifests; manifest.json below also pins this file.
+    (output / SURFACE_MANIFEST).write_text(
+        json.dumps({"artifact": SURFACE_ARTIFACT, **surface, "files_sha256": hashes()}, indent=2, sort_keys=True) + "\n"
+    )
+    files = hashes()
     manifest = {
         "artifact": "BCRProviderService",
         "contract_version": "1.0",
         "sdk_version": "1.0.0",
-        "source_commit": run("git", "rev-parse", "HEAD"),
-        "surface_control_contract": SURFACE_CONTRACT,
-        "surface_control_sdk": SURFACE_SDK,
-        "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
+        **surface,
+        "surface_artifact": SURFACE_ARTIFACT,
+        "surface_manifest": SURFACE_MANIFEST,
         "surface_plugins_materialized_revision": run("git", "-C", str(shared), "rev-parse", "HEAD"),
-        # Published path -> path inside the locked SurfacePlugins revision (byte-identical copy).
-        "surface_control_sources": {
-            name: {"shared_path": source, "sha256": hashlib.sha256((shared / source).read_bytes()).hexdigest()}
-            for name, source in sorted(surface_sources.items())
-        },
-        "dirty": bool(run("git", "status", "--porcelain")),
+        "dirty": dirty,
         "configuration": configuration,
         "host_architecture": run("uname", "-m"),
         "files_sha256": files,

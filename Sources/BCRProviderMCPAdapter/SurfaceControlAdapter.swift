@@ -32,10 +32,20 @@ public final class BCRSurfaceControlAdapter {
     /// Upper bound for a button lease (`hold.max_hold_s`). A consumer renews well within it.
     public static let maximumButtonHoldSeconds = 5.0
 
+    /// Timer slack requested from the system for a lease deadline. Without an explicit tolerance the
+    /// runtime may coalesce a sleep by a fraction of its duration, which would grow with `hold_s`.
+    public static let holdTimerTolerance: Duration = .milliseconds(2)
+
+    /// Sleeps on the suspending clock (the same time base as `systemUptime`) with a fixed small
+    /// tolerance, then runs on the main actor. Expiry lag is therefore the tolerance plus the time
+    /// the main actor needs to finish the jobs already queued ahead of the timer.
     public static let defaultHoldScheduler: HoldScheduler = { delay, action in
         let task = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000) + 1_000_000)
-            if !Task.isCancelled { action() }
+            do {
+                try await Task.sleep(for: .seconds(max(0, delay)) + .milliseconds(1),
+                                     tolerance: holdTimerTolerance, clock: .suspending)
+            } catch { return }
+            action()
         }
         return { task.cancel() }
     }
@@ -91,6 +101,17 @@ public final class BCRSurfaceControlAdapter {
 
     public static func controlID(_ control: BCRControlID) -> String {
         "\(control.section.rawValue).\(control.row).\(control.index)"
+    }
+
+    /// Static published description of a configuration: discovery (profile, capabilities, mapping
+    /// revision) plus the tool descriptors. The instance and epoch are placeholders; a live
+    /// instance is always pinned through `surface_control_discover`. Opens no device.
+    public static func publishedContract(surface: SurfaceSession, instanceID: String = "example.simulation",
+                                         epoch: String = "discovery-only") throws -> JSONValue
+    {
+        let session = try SurfaceControlSession(instanceID: instanceID, epoch: epoch, profile: profile(surface))
+        return try .object(["discovery": .encoded(session.discovery()),
+                            "tools": .array(SurfaceControlTools.descriptors.map { try .encoded($0) })])
     }
 
     /// Host error codes pass through unchanged; only unknown errors become `invalid_argument`.
@@ -227,6 +248,16 @@ public final class BCRSurfaceControlAdapter {
         }
         rescheduleHoldTimer()
         return events
+    }
+
+    /// Request preflight: releases leases that are already due. Failures stay fail closed through
+    /// the ordinary path (the following surface call reports them); other tools are unaffected.
+    public func processDueHoldsBeforeRequest() {
+        guard automaticHoldExpiry, !handlingRemote, surface.source == .mock,
+              let deadline = core.nextHoldDeadline, deadline <= monotonic() else { return }
+        do { try processHoldExpiries() } catch {
+            if pendingRotation == nil { failClosed("hold_preflight_failed", error: error) }
+        }
     }
 
     /// The earliest active lease deadline (host monotonic seconds), if any.
