@@ -293,6 +293,7 @@ BCR 按钮灯不闪烁，`blink` 只是语义状态，Mock 中静态显示为 96
 切换来源或配置/分配/页面/Mock 编码变化。
 合同 1.1（P2-B）：按钮声明 `hold`（rest false，最长 5 s），租约到期由宿主定时器在 Mock 上释放按钮并记 `hold_expired`；
 私有能力 `x.bcr.indicator_blink_static` 表示上述 blink 静态 96 呈现。
+到期释放相对 deadline 的延迟上界为 0.5 s（实测数毫秒），条件与实测见 SURFACE_SIMULATION.md“Expiry latency bound”。
 
 ## 右侧控制列（2026-11-12）
 

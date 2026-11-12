@@ -4,7 +4,7 @@ The `surface_control_*` tools are a separate, optional software control contract
 its Schema, SDK `bcr_provider`, console journal, errors and business plugin tools retain their
 existing behavior. A simulation event never qualifies as a physical operator input.
 
-The profile `bcr2000.mock` version `1.1` (contract `1.1`, SurfacePlugins `68b7a5c`) describes stable
+The profile `bcr2000.mock` version `1.1` (contract `1.1`, SurfacePlugins `e527bd0`) describes stable
 controls such as `pushEncoder.1.1`; clients discover mappings instead of interpreting the ID geometry.
 The contract, generic Python SDK, schemas and fixtures have one source, the locked SurfacePlugins
 package; this host only adapts its Mock and session to them.
@@ -72,6 +72,34 @@ processed (only possible in in-process fault probes with automatic expiry disabl
 explicit simulation profile maps `button.1.3` to `simulation.hold` (momentary) for the shared 1.1
 fixture `hold_input` role.
 
+### Expiry latency bound
+
+A due lease is released no later than **0.5 s after its deadline**, independent of client
+behavior. Measured on the delivered process the lag is a few milliseconds: 0.004–0.010 s both
+idle and with 24 stalled connections plus unauthenticated and authenticated request floods
+(`configs/verify_surface_control_transport.py`, case
+`hold_expiry_within_half_second_under_stalled_connections_and_request_floods`, which fails above
+0.5 s). The lag has three parts:
+
+- **Timer slack.** The MainActor timer sleeps on the suspending clock, the same time base as the
+  deadline, with an explicit 2 ms tolerance plus 1 ms margin. The slack does not grow with `hold_s`.
+- **Main-actor queue.** The timer job waits for jobs already queued on the main actor. Network
+  reads are asynchronous callbacks, so a slow or stalled connection occupies no main-actor time:
+  it holds one of at most 32 connection slots and is closed after 5 s. Each queued request runs
+  synchronously and briefly (parse at most 1 MiB, one tool call, one reply).
+- **Request preflight.** Every tool call, surface or legacy, valid or not, first releases leases
+  that are already due. A backlog of requests therefore delays an expiry by at most the one
+  request in flight, never by the length of the backlog.
+
+The bound holds while the provider process is scheduled and its main actor is not blocked by
+host code. In the headless provider nothing else runs there. In a GUI host that installs the
+optional contract, a long synchronous main-thread operation (for example a modal file panel or a
+blocking device call) delays the timer by its duration; the release then happens on the first
+main-actor turn afterwards. A stopped or suspended process releases nothing until it runs again,
+and a terminated process drops the simulated control entirely. A consumer that needs a hard stop
+must therefore also apply its own deadline from `hold_deadline` and treat a missing fresh
+observation as released; the lease is a deadman input, not a device stop acknowledgment.
+
 ## Input, feedback and recovery
 
 Every mutation pins all five identity fields plus `expected_sequence`. Accepted and ignored
@@ -131,13 +159,33 @@ old context. No input is replayed after reset/restart or an event gap.
 
 `configs/package_provider.py` creates a self-contained local artifact with the unchanged legacy
 Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.1
-delivery copied byte for byte from the materialized `build/seed/SurfacePlugins`:
-`surface-control-sdk-1.1.0.zip` (`surface_control/__init__.py`), and under `surface-control/` the tool
-descriptors, scenario schema, v1 and v1.1 fixtures and the contract/scenario documents.
-`manifest.json` records `surface_control_contract: 1.1`, `surface_control_sdk: 1.1.0`, the locked and
-materialized shared revision, the shared source path and SHA-256 of every Surface file, plus
-SHA-256 of every delivered file, host source commit and dirty state. Pin the manifest SHA-256
-before importing any delivered SDK. No tag/release is implied.
+delivery. Surface files sit at the delivery root under the same names as the XTouch delivery,
+copied byte for byte from the materialized `build/seed/SurfacePlugins`:
+`surface-control-sdk-1.1.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
+`surface-control-scenario.schema.json`, `surface-control-software-v1.json`,
+`surface-control-software-v1.1.json`, `surface-control.md` and `surface-control-scenarios.md`.
+`control-contract.json` is the static published discovery and tool descriptors of the
+`--simulation-profile` configuration, printed by the delivered binary's `--describe-surface`
+(placeholder instance and epoch; a live instance is still pinned through discovery).
+
+The delivery has two manifests that describe the same files:
+
+- `manifest.json` is the pin. It keeps every Provider 1.0 field unchanged (`artifact:
+  BCRProviderService`, `contract_version`, `sdk_version`, `source_commit`, `dirty`, `files_sha256`, …)
+  and adds the common surface fields of SurfacePlugins `docs/surface-control-delivery.md`:
+  `schema_version`, `source: simulation`, `source_dirty`, `surface_control_contract`,
+  `surface_control_sdk`, `profile_id`, `profile_version`, `mapping_revision`,
+  `surface_plugins_revision` and `surface_plugins_files_sha256` (shared path to SHA-256). `source`
+  describes the optional surface simulation only. Its `files_sha256` covers every delivered file,
+  including the surface manifest.
+- `surface-control-manifest.json` carries the same common fields with the neutral
+  `artifact: surface-control-simulator`. It exists only because the common `artifact` field
+  collides with the Provider 1.0 value that existing Provider consumers require. Its
+  `files_sha256` covers every delivered file except the two manifests.
+
+Pin the SHA-256 of `manifest.json` out of band before importing any delivered SDK; a consumer
+that needs the neutral `artifact` value reads the surface manifest after verifying it through
+that pin. No tag/release is implied.
 
 `examples/surface_roundtrip.py` is a minimal generic consumer: it verifies the pin, imports only the
 delivered SDK, and pins the provider identity with `provider_header="BCR-Provider-Id"` when given
