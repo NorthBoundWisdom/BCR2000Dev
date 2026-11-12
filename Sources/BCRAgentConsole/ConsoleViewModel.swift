@@ -27,6 +27,8 @@ struct ConsoleNotice: Equatable {
     enum Action: Equatable {
         case switchToHardware
         case retryConfigurationSave
+        /// Write migrated files back (the originals are backed up first) so the notice stops recurring.
+        case saveMigration
     }
 
     let level: Level
@@ -98,7 +100,17 @@ final class ConsoleViewModel: ObservableObject {
     var events: [MonitorEvent] { session.events }
     var droppedFeedbackCount: Int { session.droppedFeedbackCount }
     @Published private(set) var slots: [AgentSlot]
-    @Published private(set) var notice: ConsoleNotice?
+    @Published private(set) var notice: ConsoleNotice? {
+        didSet { scheduleNoticeDismissal() }
+    }
+
+    private var noticeDismissTask: Task<Void, Never>?
+    /// Informational notices without an action clear themselves; warnings, errors and
+    /// anything the user can act on stay until dismissed.
+    static let infoNoticeSeconds: Double = 6
+    private var migratedHardwareMap: HardwareMap?
+    private var migratedConfiguration = false
+    private let hardwareFile: ProtectedJSONFile<HardwareMap>
     @Published private(set) var persistenceNotice: ConsoleNotice?
     @Published private(set) var visibleGroup = 1
     @Published private(set) var pendingHardwareConnection: HardwareConnectionPrompt?
@@ -171,6 +183,7 @@ final class ConsoleViewModel: ObservableObject {
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
         self.configurationFile = configurationFile
         let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)
+        self.hardwareFile = hardwareFile
         let mapRead = hardwareFile.load()
         let configRead = configurationFile.load()
         let loadedMap = mapRead.value
@@ -181,8 +194,15 @@ final class ConsoleViewModel: ObservableObject {
         let configuration = configRead.value
         let messages = [mapRead.message, configRead.message].compactMap { $0 }
         if !messages.isEmpty {
-            persistenceNotice = ConsoleNotice(level: mapRead.failed || configRead.failed ? .error : .info,
-                                              text: messages.joined(separator: " "))
+            let failed = mapRead.failed || configRead.failed
+            // A message without a failure is a version migration held in memory only.
+            if !failed {
+                migratedHardwareMap = mapRead.message == nil ? nil : loadedMap
+                migratedConfiguration = configRead.message != nil
+            }
+            persistenceNotice = ConsoleNotice(level: failed ? .error : .info,
+                                              text: messages.joined(separator: " "),
+                                              action: failed ? nil : .saveMigration)
         }
 
         let endpointStore = JSONFileStore<MIDIEndpointSelection>(fileURL:
@@ -427,6 +447,26 @@ final class ConsoleViewModel: ObservableObject {
         display.beginTransfer(); objectWillChange.send()
         defer { display.endTransfer(); objectWillChange.send() }
         return try await body()
+    }
+
+    /// Whether the device's preset locks PRESET and the function keys (they then act as plain,
+    /// unassigned buttons). Nil when the preset has not been read or in mock mode.
+    var deviceKeysLocked: Bool? { source == .hardware ? displayProfile?.locked : nil }
+
+    /// Lit briefly after any message arrives from the device, like its MIDI IN activity LED.
+    private(set) var deviceActivity = false
+    private var activityTask: Task<Void, Never>?
+
+    /// Turning on rides the session's coalesced frame refresh (input bursts must publish once per
+    /// frame); only turning off publishes on its own, after the burst has ended.
+    private func noteDeviceActivity() {
+        activityTask?.cancel()
+        deviceActivity = true
+        activityTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+            self?.objectWillChange.send()
+            self?.deviceActivity = false
+        }
     }
 
     /// The device's preset name, when it has been read; shown beside the 4-digit display.
@@ -689,6 +729,32 @@ final class ConsoleViewModel: ObservableObject {
         notice = nil
     }
 
+    private func scheduleNoticeDismissal() {
+        noticeDismissTask?.cancel(); noticeDismissTask = nil
+        guard let current = notice, current.level == .info, current.action == nil else { return }
+        noticeDismissTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(Self.infoNoticeSeconds)) } catch { return }
+            guard let self, self.notice == current else { return }
+            self.notice = nil
+        }
+    }
+
+    /// Writes the migrated map and configuration back. `ProtectedJSONFile.save` backs up the old
+    /// version byte-for-byte first, so nothing is lost and the notice does not come back.
+    private func saveMigration() {
+        do {
+            if let map = migratedHardwareMap { try hardwareFile.save(map) }
+            if migratedConfiguration { try configurationFile.save(configuration) }
+            migratedHardwareMap = nil; migratedConfiguration = false
+            persistenceNotice = nil
+            notice = ConsoleNotice(level: .info, text: L10n.text("已保存升级后的文件，原文件已备份在同一目录。"))
+        } catch {
+            persistenceNotice = ConsoleNotice(level: .error,
+                                              text: L10n.text("保存升级失败：\(error.localizedDescription)"),
+                                              action: .saveMigration)
+        }
+    }
+
     func clearPersistenceNotice() {
         persistenceNotice = nil
     }
@@ -697,6 +763,8 @@ final class ConsoleViewModel: ObservableObject {
         switch action {
         case .switchToHardware:
             requestSource(.hardware)
+        case .saveMigration:
+            saveMigration()
         case .retryConfigurationSave:
             session.retryConfigurationPersistence()
             if session.lastConfigurationPersistenceError == nil {
@@ -1133,6 +1201,7 @@ final class ConsoleViewModel: ObservableObject {
             guard followsTouch else { return }
             pendingTouchedControl = control
         case let .deviceInput(control, rawValue, pressed):
+            if source == .hardware { noteDeviceActivity() }
             showDeviceInput(control, rawValue: rawValue, pressed: pressed)
         case let .buttonActivity(control, pressed):
             guard source == .hardware else { return }

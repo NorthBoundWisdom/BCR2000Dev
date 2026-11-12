@@ -227,7 +227,7 @@ struct SurfacePanelView: View {
     /// programming keys, the four user keys and the preset keys. Device-local keys are drawn but
     /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
-        VStack(spacing: m(8)) {
+        VStack(spacing: m(7)) {
             LEDDisplay(text: model.displayText, busy: model.displayBusy)
                 .help(L10n.text("按设备规则重现：操作开启“显示数值”的控件时短暂显示其数值或 on/oFF，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
             if let name = model.displayPresetName {
@@ -240,47 +240,61 @@ struct SurfacePanelView: View {
             }
             statusLEDs
             sideLabel(model.source == .hardware ? L10n.text("查看分组") : "ENCODER GROUP")
-            if model.source == .hardware {
-                Text(model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") }
-                    ?? model.startupConfiguredGroup.map { L10n.text("启动设为组 \($0)") }
-                    ?? L10n.text("硬件组未确认"))
-                    .font(m.font(7.5, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
             keyGrid {
                 ForEach(BCRLayout.encoderGroups, id: \.self) { group in
                     Button {
                         model.selectGroup(group)
                     } label: {
-                        DeviceKey(label: "\(group)", lit: group == model.visibleGroup)
+                        DeviceKey(label: "\(group)", lit: group == model.visibleGroup,
+                                  marked: model.source == .hardware && group == deviceGroup)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .help(model.source == .mock
-                ? L10n.text("切换 Mock 设备的编码器组（与实体一样不发送 MIDI）")
-                : L10n.text("实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。"))
+            .help(groupHelp)
+            sideLabel(L10n.text("设备键"))
             keyGrid {
-                ForEach(["STORE", "LEARN", "EDIT", "EXIT"], id: \.self) { DeviceKey(label: $0, enabled: false) }
+                ForEach(["STORE", "LEARN", "EDIT", "EXIT"], id: \.self) {
+                    DeviceKey(label: $0, enabled: false, locked: model.deviceKeysLocked == true)
+                }
             }
-            .help(L10n.text("设备本机编程键：不发送也不接收 MIDI，软件无法读取或操作，仅作对照显示。"))
-
-            Spacer(minLength: m(12))
-
+            .help(deviceKeyHelp)
             sideLabel("USER")
             keyGrid {
                 ForEach(1 ... 4, id: \.self) { index in userKey(.userButton(index)) }
             }
             sideLabel("PRESET")
             keyGrid {
-                DeviceKey(systemImage: "arrowtriangle.left.fill", enabled: false)
-                DeviceKey(systemImage: "arrowtriangle.right.fill", enabled: false)
+                DeviceKey(systemImage: "arrowtriangle.left.fill", enabled: false,
+                          locked: model.deviceKeysLocked == true)
+                DeviceKey(systemImage: "arrowtriangle.right.fill", enabled: false,
+                          locked: model.deviceKeysLocked == true)
             }
-            .help(L10n.text("实体预设切换只在设备本机生效，不通知软件；请在设备上操作。"))
+            .help(model.deviceKeysLocked == true
+                ? L10n.text("当前预设已锁定：PRESET 键不再切换预设，也未分配功能。恢复原预设或重新载入预设即解除。")
+                : L10n.text("实体预设切换只在设备本机生效，不通知软件；请在设备上操作。"))
+            Spacer(minLength: 0)
         }
         .frame(width: m(80))
+    }
+
+    /// The encoder group the device is believed to show: the last one an input came from, or the
+    /// one this app set at startup. Nil when unknown.
+    private var deviceGroup: Int? { model.observedHardwareGroup ?? model.startupConfiguredGroup }
+
+    private var groupHelp: String {
+        guard model.source == .hardware else { return L10n.text("切换 Mock 设备的编码器组（与实体一样不发送 MIDI）") }
+        let known = model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") }
+            ?? model.startupConfiguredGroup.map { L10n.text("启动设为组 \($0)") }
+            ?? L10n.text("硬件组未确认")
+        return known + L10n.text("。") + L10n.text("实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。")
+            + L10n.text(" 圆点标出设备所在的组。")
+    }
+
+    private var deviceKeyHelp: String {
+        model.deviceKeysLocked == true
+            ? L10n.text("当前预设已锁定：STORE、LEARN、EDIT、EXIT 不再进入设备编程模式，也未分配功能。恢复原预设或重新载入预设即解除。")
+            : L10n.text("设备本机编程键：不发送也不接收 MIDI，软件无法读取或操作，仅作对照显示。")
     }
 
     private var statusLEDs: some View {
@@ -288,8 +302,10 @@ struct SurfacePanelView: View {
         return HStack(spacing: m(6)) {
             StatusLED(label: "USB", lit: usb)
                 .help(L10n.text("实体 Port 1 已连接时点亮"))
-            ForEach(["IN", "A", "B"], id: \.self) { StatusLED(label: $0, lit: false) }
-                .help(L10n.text("MIDI IN / OUT A / OUT B 指示 DIN 接口流量，设备不向软件报告，仅作对照显示。"))
+            StatusLED(label: "IN", lit: model.deviceActivity)
+                .help(L10n.text("收到设备消息时闪烁（设备自己的 MIDI IN 灯指示 DIN 接口，软件无法读取）。"))
+            ForEach(["A", "B"], id: \.self) { StatusLED(label: $0, lit: false) }
+                .help(L10n.text("MIDI OUT A / OUT B 指示 DIN 接口流量，设备不向软件报告，仅作对照显示。"))
         }
     }
 
@@ -428,6 +444,10 @@ private struct DeviceKey: View {
     var systemImage: String?
     var lit = false
     var enabled = true
+    /// A small dot: the encoder group the device itself is on.
+    var marked = false
+    /// The preset locks this key: show a lock instead of leaving it merely dimmed.
+    var locked = false
     @Environment(\.panelMetrics) private var m
 
     var body: some View {
@@ -450,6 +470,16 @@ private struct DeviceKey: View {
         .background(Color.black.opacity(enabled ? 0.35 : 0.2), in: RoundedRectangle(cornerRadius: m(6)))
         .overlay { RoundedRectangle(cornerRadius: m(6)).stroke(Color.white.opacity(enabled ? 0.08 : 0.04)) }
         .opacity(enabled ? 1 : 0.4)
+        .overlay(alignment: .topTrailing) {
+            if marked {
+                Circle().fill(Theme.selection).frame(width: m(4.5), height: m(4.5)).padding(m(3))
+            } else if !enabled {
+                Image(systemName: locked ? "lock.fill" : "nosign")
+                    .font(m.font(5.5, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .padding(m(2.5))
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label ?? systemImage ?? "")
         .accessibilityAddTraits(enabled ? .isButton : [])
@@ -473,16 +503,19 @@ private struct UserKeyCell: View {
                 .frame(width: m(16), height: m(3))
                 .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 3)
             Text(presentation.control.shortName)
-                .font(m.font(8, weight: .bold, design: .monospaced))
-            Text(presentation.label ?? L10n.text("未分配"))
-                .font(m.font(6.5, weight: .semibold))
+                .font(m.font(7, weight: .bold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+            // An unassigned key shows a dash; a real name gets the room and wraps to two lines.
+            Text(presentation.label ?? "—")
+                .font(m.font(8.5, weight: .semibold))
                 .foregroundStyle(presentation
                     .label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.75)
         }
         .padding(.horizontal, m(2))
-        .frame(width: m(36), height: m(40))
+        .frame(width: m(36), height: m(46))
         .background(
             down ? Color.white.opacity(0.2) : Color.black.opacity(0.35),
             in: RoundedRectangle(cornerRadius: m(6))

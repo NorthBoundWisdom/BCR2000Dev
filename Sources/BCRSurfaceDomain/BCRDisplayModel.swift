@@ -153,6 +153,9 @@ public struct BCRDisplayProfile: Codable, Equatable, Sendable {
     /// slow dumps run once rather than on every connection.
     public var resolvedPreset: Int?
     public var resolvedCandidates: [Int]?
+    /// `.lock on` in the preset: PRESET and the function keys act as plain buttons 63–64 / 53–56
+    /// instead of changing presets or entering the device's programming modes. Nil when unread.
+    public var locked: Bool?
 
     public init(name: String? = nil, silentControls: Set<BCRControlID> = []) {
         self.name = name; self.silentControls = silentControls
@@ -182,6 +185,8 @@ public struct BCRDisplayProfile: Codable, Equatable, Sendable {
                         : number <= 48 ? .button(row: (number - 33) / 8 + 1, (number - 33) % 8 + 1)
                         : .userButton(number - 48)
                 }
+            } else if line == ".lock on" || line == ".lock off", control == nil {
+                profile.locked = line == ".lock on"
             } else if line.hasPrefix(".name '"), line.hasSuffix("'"), control == nil {
                 let name = line.dropFirst(7).dropLast().trimmingCharacters(in: .whitespaces)
                 profile.name = name.isEmpty ? nil : name

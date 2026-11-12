@@ -94,6 +94,11 @@ final class BCRDisplayModelTests: XCTestCase {
             [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
         })
         let profile = try BCRDisplayProfile.read(fromPresetDump: dump)
+        XCTAssertNil(profile.locked)
+        let locked = try BCRDisplayProfile.read(fromPresetDump: self.dump(
+            ["$rev R1", "$preset", ".name 'A'", ".lock on", "$end"]
+        ))
+        XCTAssertEqual(locked.locked, true)
         XCTAssertEqual(profile.name, "Reason Redrum 1")
         XCTAssertTrue(profile.showsValue(.pushEncoder(group: 1, 1)))
         // `.easypar` without a later `.showvalue on` leaves the display off, as on the device.
@@ -189,8 +194,14 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayPresetName, "Redrum")
         XCTAssertEqual(device.writes, 0)
         // P1 PUSH has ShowValue off on the device: nothing changes.
+        XCTAssertFalse(model.deviceActivity)
         device.onMessages?([.controlChange(channel: 15, number: 0, value: 127)])
         XCTAssertEqual(model.displayText, "P- 1")
+        // The IN indicator flashes for any device message, then clears.
+        XCTAssertTrue(model.deviceActivity)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertFalse(model.deviceActivity)
+        XCTAssertNil(model.deviceKeysLocked)
         device.onMessages?([.controlChange(channel: 0, number: 8, value: 64)])
         XCTAssertEqual(model.displayText, "  64")
         try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds + 0.1))

@@ -262,11 +262,18 @@ private struct NoticeBanner: View {
                 .foregroundStyle(color)
             Text(notice.text)
                 .font(.callout)
+                .lineLimit(2)
                 .textSelection(.enabled)
+                .help(notice.text)
             Spacer()
             if notice.action == .switchToHardware {
                 Button(L10n.text("切换到实体")) { model.performNoticeAction(.switchToHardware) }
                     .controlSize(.small)
+            }
+            if notice.action == .saveMigration {
+                Button(L10n.text("保存升级")) { model.performNoticeAction(.saveMigration) }
+                    .controlSize(.small)
+                    .help(L10n.text("把升级后的内容写回文件；原文件会先原样备份在同一目录。保存后此提示不再出现。"))
             }
             if notice.action == .retryConfigurationSave {
                 Button(L10n.text("重试保存")) { model.performNoticeAction(.retryConfigurationSave) }

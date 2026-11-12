@@ -89,6 +89,40 @@ final class ConfigurationPersistenceTests: XCTestCase {
         XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == data })
     }
 
+    func testMigrationNoticeOffersSaveThatBacksUpAndStopsRecurring() throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = stores(directory).configuration
+        var old = SurfaceConfiguration.robotArmDemo()
+        old.version = 1
+        let data = try JSONEncoder().encode(old)
+        try data.write(to: store.fileURL)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        XCTAssertEqual(model.persistenceNotice?.action, .saveMigration)
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), data)
+        model.performNoticeAction(.saveMigration)
+        XCTAssertNil(model.persistenceNotice)
+        let backups = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.contains(".backup.") }
+        XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == data })
+        // The next launch reads the current version: no notice.
+        let reopened = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        XCTAssertNil(reopened.persistenceNotice)
+        XCTAssertEqual(reopened.configuration.version, SurfaceConfiguration.currentVersion)
+    }
+
+    func testOnlyPlainInfoNoticesDismissThemselves() async throws {
+        let directory = try directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        XCTAssertGreaterThan(ConsoleViewModel.infoNoticeSeconds, 3)
+        model.selectSource(.hardware) // warning: no device
+        XCTAssertEqual(model.notice?.level, .warning)
+        model.selectSource(.mock) // plain info
+        XCTAssertEqual(model.notice?.level, .info)
+        XCTAssertNil(model.notice?.action)
+    }
+
     func testInvalidImportDoesNotReplaceConfigurationParametersOrMapping() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
