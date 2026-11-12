@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "fixtures": {
+    "surface-control-software-v1.1": {
+      "roles": {
+        "input_a": "pushEncoder.1.1",
+        "input_b": "pushEncoder.1.2",
+        "input_c": "pushEncoder.1.3",
+        "input_d": "pushEncoder.1.4",
+        "feedback_state": "button.1.1",
+        "feedback_progress": "pushEncoder.1.5",
+        "feedback_link": "button.1.2",
+        "hold_input": "button.1.3"
+      }
+    },
+    "surface-control-software-v1.2": {
+      "roles": {
+        "input_a": "pushEncoder.1.1",
+        "input_b": "pushEncoder.1.2",
+        "input_c": "pushEncoder.1.3",
+        "input_d": "pushEncoder.1.4",
+        "feedback_state": "button.1.1",
+        "feedback_progress": "pushEncoder.1.5",
+        "feedback_link": "button.1.2",
+        "hold_input": "button.1.3",
+        "blocked_input": "pushEncoder.1.6"
+      }
+    },
+    "surface-control-software-v1.3": {
+      "roles": {
+        "input_a": "pushEncoder.1.1",
+        "input_b": "pushEncoder.1.2",
+        "input_c": "pushEncoder.1.3",
+        "input_d": "pushEncoder.1.4",
+        "feedback_state": "button.1.1",
+        "feedback_progress": "pushEncoder.1.5",
+        "feedback_link": "button.1.2",
+        "hold_input": "button.1.3",
+        "blocked_input": "pushEncoder.1.6"
+      }
+    },
+    "surface-control-software-v1": {
+      "roles": {
+        "input_a": "pushEncoder.1.1",
+        "input_b": "pushEncoder.1.2",
+        "input_c": "pushEncoder.1.3",
+        "input_d": "pushEncoder.1.4",
+        "feedback_state": "button.1.1",
+        "feedback_progress": "pushEncoder.1.5",
+        "feedback_link": "button.1.2"
+      }
+    }
+  }
+}

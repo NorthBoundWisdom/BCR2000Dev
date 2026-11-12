@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from configs.build_environment import load_build_environment  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.surface_delivery_index import publish  # noqa: E402
 
 
 def run(*args):
@@ -37,10 +38,14 @@ SURFACE_FILES = {
     "surface-control-software-v1.3.json": "fixtures/surface-control-software-v1.3.json",
     "surface-control.md": "docs/surface-control.md",
     "surface-control-scenarios.md": "docs/surface-control-scenarios.md",
+    "surface-control-conformance.md": "docs/surface-control-conformance.md",
+    "surface-control-conformance-report.schema.json": "docs/surface-control-conformance-report.schema.json",
+    "versioning.md": "docs/versioning.md",
+    "CHANGELOG.md": "CHANGELOG.md",
+    "release-checklist.md": "docs/release-checklist.md",
 }
 SURFACE_ARTIFACT = "surface-control-simulator"
 SURFACE_MANIFEST = "surface-control-manifest.json"
-SURFACE_SDK_SOURCE = "clients/python/surface_control/__init__.py"
 
 
 def package(output, configuration="release", skip_build=False):
@@ -98,11 +103,20 @@ def package(output, configuration="release", skip_build=False):
             info.external_attr = 0o644 << 16
             archive.writestr(info, path.read_bytes())
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
+    sdk_sources = sorted(
+        path
+        for name in ("surface_control", "surface_conformance")
+        for path in (shared / "clients/python" / name).rglob("*.py")
+    )
+    if not any(path.parent.name == "surface_conformance" for path in sdk_sources):
+        raise ValueError("Locked shared package has no conformance checker")
     with zipfile.ZipFile(surface_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        info = zipfile.ZipInfo("surface_control/__init__.py", date_time=(1980, 1, 1, 0, 0, 0))
-        info.compress_type = zipfile.ZIP_DEFLATED
-        info.external_attr = 0o644 << 16
-        archive.writestr(info, (shared / SURFACE_SDK_SOURCE).read_bytes())
+        for path in sdk_sources:
+            info = zipfile.ZipInfo(str(path.relative_to(shared / "clients/python")), date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
+    shutil.copy2(ROOT / "configs/surface_conformance_roles.json", output / "conformance-roles.json")
     for published, source in SURFACE_FILES.items():
         shutil.copy2(shared / source, output / published)
     # Static description of the --simulation-profile configuration, printed by the delivered binary.
@@ -195,7 +209,7 @@ def package(output, configuration="release", skip_build=False):
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "surface_plugins_files_sha256": {
             source: hashlib.sha256((shared / source).read_bytes()).hexdigest()
-            for source in sorted([*SURFACE_FILES.values(), SURFACE_SDK_SOURCE])
+            for source in sorted([*SURFACE_FILES.values(), *(str(path.relative_to(shared)) for path in sdk_sources)])
         },
     }
     # `artifact` is the one common field that collides with Provider 1.0 (its consumers require
@@ -225,11 +239,19 @@ def package(output, configuration="release", skip_build=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True, type=Path)
+    destination = parser.add_mutually_exclusive_group(required=True)
+    destination.add_argument("--output", type=Path, help="Fresh directory (original behavior)")
+    destination.add_argument("--output-root", type=Path, help="Shared delivery root with atomic INDEX.json")
     parser.add_argument("--configuration", choices=("debug", "release"), default="release")
     parser.add_argument("--skip-build", action="store_true")
     args = parser.parse_args()
-    manifest = package(args.output.resolve(), args.configuration, args.skip_build)
+    if args.output_root:
+        manifest, output, _ = publish(
+            args.output_root, lambda stage: package(stage, args.configuration, args.skip_build)
+        )
+    else:
+        output = args.output.resolve()
+        manifest = package(output, args.configuration, args.skip_build)
     print(
         json.dumps(
             {
@@ -237,6 +259,7 @@ def main():
                 "contract_version": manifest["contract_version"],
                 "files": len(manifest["files_sha256"]),
                 "dirty": manifest["dirty"],
+                **({"output": str(output)} if args.output_root else {}),
             }
         )
     )

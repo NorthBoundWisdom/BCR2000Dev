@@ -4,7 +4,7 @@ The `surface_control_*` tools are a separate, optional software control contract
 its Schema, SDK `bcr_provider`, console journal, errors and business plugin tools retain their
 existing behavior. A simulation event never qualifies as a physical operator input.
 
-The profile `bcr2000.mock` version `1.3` (contract `1.3`, SurfacePlugins `cc37282`) describes stable
+The profile `bcr2000.mock` version `1.3` (contract `1.3`, SurfacePlugins `c6b3083`) describes stable
 controls such as `pushEncoder.1.1`; clients discover mappings instead of interpreting the ID geometry.
 The contract, generic Python SDK, schemas and fixtures have one source, the locked SurfacePlugins
 package; this host only adapts its Mock and session to them.
@@ -293,6 +293,39 @@ when surface category mode is selected. The host checks identity, clock, counter
 permissions before consuming quota or applying input/display effects.
 
 
+## Unified output and live checks
+
+The original `--output <fresh-directory>` packaging mode is unchanged. To publish under the
+workspace's common root, use `python3 configs/package_provider.py --output-root ../deliveries`.
+The directory is `bcr2000-surface-1.3-<commit7>`; `INDEX.json` records its full source/shared
+commits, root manifest hash, profile, SDK and UTC generation time. A rebuild replaces the
+same host/full-commit/contract entry. Another full commit with the same short prefix, an invalid
+index or lock contention fails visibly. Packagers share `.index.lock`; directory publication
+and index update are serialized. A failed publication restores the previous artifact; if the
+filesystem also prevents restoration, the error names the preserved backup for operator recovery.
+Readers always verify the pinned root manifest hash and fail closed during replacement.
+
+The SDK zip contains `surface_control` and `surface_conformance`. The delivery's
+`conformance-roles.json` selects the same logical control roles as `SharedSurfaceScenarioTests`,
+with a separate entry for each fixture. `blocked_input` uses an unbound descriptor that explicitly
+declares `accepts_input: false`. Run the bundled checker against an isolated delivered provider
+with input, feedback and reset permission, using a private token file:
+
+```sh
+PYTHONPATH=surface-control-sdk-1.3.0.zip python3 -m surface_conformance \
+  --url http://127.0.0.1:PORT/mcp --token-file /private/token \
+  --instance-id trial-A --fixture surface-control-software-v1.3.json \
+  --roles conformance-roles.json --report /tmp/conformance-v1.3.json
+```
+
+Repeat for all four fixtures. See `surface-control-conformance.md` and the report schema in the
+delivery. Live checks validate public observations; injected clocks, private-engine atomicity,
+process replacement and unavailable writer identity expectations are explicitly skipped, never
+counted as passing. The static role map contains no runtime principal IDs. Optional strict writer
+checks require a separate external role map populated from trusted host configuration; event
+origin alone cannot identify a writer. Reports belong outside the immutable delivery.
+
+
 ## Client compatibility
 
 The transport acceptance script checks the original frozen SDK archives from the historical local
@@ -311,7 +344,8 @@ archives are unavailable.
 
 The shared package owns the [version rules](../build/seed/SurfacePlugins/docs/versioning.md)
 for contract, SDK, profile and mapping revision. This path resolves through the managed locked
-dependency after materialization; the version rules also accompany the delivery after the T lock upgrade.
+dependency after materialization. The delivery includes `versioning.md`, `CHANGELOG.md` and
+`release-checklist.md` at its root.
 
 ## 历史
 
