@@ -1,5 +1,6 @@
 """PID-scoped native accessibility helpers for isolated acceptance scripts."""
 
+import json
 from pathlib import Path
 import subprocess
 import time
@@ -42,6 +43,27 @@ end tell"""
         print("AXPress", identifier, flush=True)
         if not self.command("press", identifier):
             raise RuntimeError(f"Accessibility identifier missing: {identifier}")
+
+    def capture(self, path, width=1680):
+        # Capture only the isolated main window. Other applications and desktop pixels are excluded.
+        script = (
+            'ObjC.import("CoreGraphics");'
+            "var all=ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(0,0)));"
+            f"JSON.stringify(all.filter(w=>w.kCGWindowOwnerPID=={self.pid}&&w.kCGWindowLayer==0"
+            f"&&w.kCGWindowBounds.Width=={width}).map(w=>w.kCGWindowNumber))"
+        )
+        result = subprocess.run(
+            ["osascript", "-l", "JavaScript", "-e", script], capture_output=True, text=True, check=True, timeout=15
+        )
+        identifiers = json.loads(result.stdout)
+        if len(identifiers) != 1:
+            raise RuntimeError(f"Expected one isolated main window, found {len(identifiers)}")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        time.sleep(0.5)
+        subprocess.run(["screencapture", "-x", "-o", f"-l{identifiers[0]}", str(path)], check=True)
+        subprocess.run(["sips", "--resampleWidth", str(width), str(path)], capture_output=True, check=True)
+        print("Captured", path.name, flush=True)
 
     @staticmethod
     def wait(check, message, timeout=12):

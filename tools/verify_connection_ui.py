@@ -36,10 +36,15 @@ def open_preview():
 
 
 def run():
-    ui.run("set frontmost to true\nset position of mainWindow to {40, 40}\nset size of mainWindow to {1200, 760}")
+    capture = os.environ.get("BCR_CAPTURE_README") == "1"
+    size = "{1680, 900}" if capture else "{1200, 760}"
+    images = Path(__file__).resolve().parent.parent / "docs/images"
+    ui.run(f"set frontmost to true\nset position of mainWindow to {{40, 40}}\nset size of mainWindow to {size}")
     ui.wait(lambda: ui.exists("connection.dialog"), "Initial connection confirmation did not appear")
     assert state()["voiceWrites"] == state()["presetWrites"] == 0
     assert status()["hardwareConnection"]["confirmation"] == "pending"
+    if capture:
+        ui.capture(images / "connection-confirmation.png")
     ui.press("connection.decline")
     ui.wait(lambda: status()["hardwareConnection"]["confirmation"] == "declined", "Decline was not observable")
     assert status()["source"] == "mock" and state()["voiceWrites"] == 0
@@ -49,8 +54,10 @@ def run():
     ui.wait(lambda: status()["source"] == "hardware", "Read connection did not complete")
     assert status()["hardwareConnection"]["confirmation"] == "none"
     assert state()["voiceWrites"] == state()["presetWrites"] == 0
-    for _ in range(3):
+    for iteration in range(3):
         open_preview()
+        if capture and iteration == 0:
+            ui.capture(images / "preset-alignment.png")
         ui.press("preset.option.enableButtonFunctions")
         ui.press("preset.option.enableButtonFunctions")
         ui.press("preset.close")

@@ -63,4 +63,5 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 新增非硬件验收入口：CodexSessionIntegrationTests、CodexAgentControllerTests、SurfaceProgramsTests、
 FeedbackSchedulerTests、JSONParameterLinkTests、WebSocketParameterAdapterTests，以及
 `tools/verify_parameter_events.py` / `tools/verify_stdio_bridge.py`。
-原生 Debug 视图快照输出到忽略的 build/ui-validation，不替换 README 的已有截图。
+原生 Debug 视图快照输出到忽略的 build/ui-validation。2026-11-12 已通过屏幕录制权限更新 README 的四张 Mock 截图，
+并以 `BCR_CAPTURE_README=1` 运行连接验收脚本生成两张假设备截图；具体复现命令见 README。
