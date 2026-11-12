@@ -40,10 +40,12 @@ public final class BCRSurfaceControlAdapter {
     /// tolerance, then runs on the main actor. Expiry lag is therefore the tolerance plus the time
     /// the main actor needs to finish the jobs already queued ahead of the timer.
     public static let defaultHoldScheduler: HoldScheduler = { delay, action in
+        let clock = SuspendingClock()
+        // Capture before enqueuing: waiting for the first actor turn is already part of the delay.
+        let deadline = clock.now.advanced(by: .seconds(max(0, delay)) + .milliseconds(1))
         let task = Task { @MainActor in
             do {
-                try await Task.sleep(for: .seconds(max(0, delay)) + .milliseconds(1),
-                                     tolerance: holdTimerTolerance, clock: .suspending)
+                try await clock.sleep(until: deadline, tolerance: holdTimerTolerance)
             } catch { return }
             action()
         }

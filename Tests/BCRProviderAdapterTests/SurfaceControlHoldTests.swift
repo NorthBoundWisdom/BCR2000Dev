@@ -275,6 +275,27 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(expiry["time"]?.finiteNumber, 10.5) // recorded at the preflight, not later
     }
 
+    private func occupyMainActor(for seconds: TimeInterval) {
+        // Synchronous by design: delay the new scheduler Task before its first actor turn.
+        Thread.sleep(forTimeInterval: seconds)
+    }
+
+    func testSchedulerDeadlineIncludesTimeQueuedBeforeItsTaskStarts() async throws {
+        let delay = 0.2
+        let start = ProcessInfo.processInfo.systemUptime
+        var firedAt: Double?
+        let cancel = BCRSurfaceControlAdapter.defaultHoldScheduler(delay) {
+            firedAt = ProcessInfo.processInfo.systemUptime
+        }
+        defer { cancel() }
+        // The actor is free 50 ms before the original deadline; it must not start a fresh 200 ms wait.
+        occupyMainActor(for: 0.15)
+        try await Task.sleep(for: .milliseconds(300))
+        let fired = try XCTUnwrap(firedAt)
+        XCTAssertGreaterThanOrEqual(fired, start + delay)
+        XCTAssertLessThan(fired - (start + delay), 0.1)
+    }
+
     func testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases() async throws {
         // The timer uses an explicit small tolerance, so lag does not scale with the lease length.
         for seconds in [0.2, 2.0] {
