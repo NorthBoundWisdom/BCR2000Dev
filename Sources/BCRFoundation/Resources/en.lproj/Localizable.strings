@@ -804,3 +804,5 @@
 "按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。" = "Button LEDs are only on or off: idle off, running steady, queued slow blink, awaiting approval fast blink, error rapid blink. When off, the original levels are sent; whether the device distinguishes them is not yet verified.";
 "恢复原预设" = "Restore original preset";
 "把最近一次对齐前备份的临时预设写回设备，并恢复当时的本机映射。" = "Write back the temporary preset backed up before the last alignment and restore the local mapping from then.";
+"按设备规则重现：操作开启“显示数值”的控件时短暂显示其数值或 on/oFF，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。" = "Reconstructed from device rules: operating a control with value display on briefly shows its value or on/oFF; otherwise the preset number. The device does not report its preset, so it appears only after this app loads one.";
+"设备当前预设名称（读取预设时获得）" = "Device's current preset name (from the last preset read)";

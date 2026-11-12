@@ -107,7 +107,10 @@ final class ConsoleViewModel: ObservableObject {
     private(set) var startupConfiguredPreset: Int?
     /// The control whose value the panel's LED display shows, as the device does while a control moves.
     /// Not `@Published`: input bursts publish through the session's coalesced frame refresh.
-    private(set) var displayedControl: BCRControlID?
+    private(set) var display = BCRDisplayModel()
+    /// `.showvalue` settings and preset name of the device's current preset, when last read.
+    @Published private(set) var displayProfile: BCRDisplayProfile?
+    private let displayProfileStore: JSONFileStore<BCRDisplayProfile>
     private var displayRevertTask: Task<Void, Never>?
     private var startupProgram: MIDIStartupProgram?
     private var startupProgramError: String?
@@ -159,6 +162,8 @@ final class ConsoleViewModel: ObservableObject {
         slots = AgentStateMachine().slots
 
         supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
+        displayProfileStore = JSONFileStore(fileURL: supportDirectory.appending(path: "display-profile.json"))
+        displayProfile = try? displayProfileStore.load()
         restorePointStore = JSONFileStore(fileURL: supportDirectory.appending(path: "preset-alignment-restore.json"))
         presetRestorePoint = try? restorePointStore.load()
         blinkPreference = JSONFileStore(fileURL: supportDirectory.appending(path: "agent-led-blink.json"))
@@ -398,6 +403,7 @@ final class ConsoleViewModel: ObservableObject {
     func selectSource(_ newSource: DeviceSource) {
         connectionOfferTask?.cancel(); connectionOfferTask = nil
         pendingHardwareConnection = nil; startupConfiguredGroup = nil; startupConfiguredPreset = nil
+        setDisplayPreset(nil)
         clearDisplayedValue()
         clearHardwarePresses()
         hardwareConnectionTask?.cancel()
@@ -408,26 +414,46 @@ final class ConsoleViewModel: ObservableObject {
         session.selectSource(newSource)
     }
 
-    /// Text of the 4-digit LED display: the moving control's value, else the preset number if known.
+    /// Text of the 4-digit LED display, as the device would show it right now.
     var displayText: String {
-        if let control = displayedControl { return String(displayValue(of: control)) }
-        return startupConfiguredPreset.map(String.init) ?? "----"
+        BCRDisplayModel.text(for: display.content(at: ProcessInfo.processInfo.systemUptime))
     }
 
-    private func showDisplayedValue(of control: BCRControlID) {
-        displayedControl = control
+    /// The device's preset name, when it has been read; shown beside the 4-digit display.
+    var displayPresetName: String? { source == .hardware ? displayProfile?.name : nil }
+
+    private func showDeviceInput(_ control: BCRControlID, rawValue: UInt16, pressed: Bool?) {
+        // The mock's preset shows every value; the device follows its own `.showvalue` settings.
+        let shows = source == .mock || (displayProfile?.showsValue(control) ?? true)
+        let now = ProcessInfo.processInfo.systemUptime
+        if control.isContinuous {
+            display.encoderMoved(rawValue: Int(rawValue), showsValue: shows, at: now)
+        } else {
+            display.buttonChanged(pressed: pressed, rawValue: Int(rawValue), showsValue: shows, at: now)
+        }
+        guard shows else { return }
         displayRevertTask?.cancel()
         displayRevertTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(1_500)) } catch { return }
+            do { try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds)) } catch { return }
             self?.objectWillChange.send()
-            self?.displayedControl = nil
             self?.displayRevertTask = nil
         }
     }
 
     private func clearDisplayedValue() {
         displayRevertTask?.cancel(); displayRevertTask = nil
-        if displayedControl != nil { objectWillChange.send(); displayedControl = nil }
+        if display.transient != nil { objectWillChange.send(); display.clearTransient() }
+    }
+
+    private func setDisplayPreset(_ preset: Int?) {
+        display.setPreset(preset)
+        objectWillChange.send()
+    }
+
+    private func updateDisplayProfile(from dump: Data) {
+        guard let profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
+        displayProfile = profile
+        do { try displayProfileStore.save(profile) } catch { report(error) }
     }
 
     private func clearHardwarePresses() {
@@ -714,6 +740,7 @@ final class ConsoleViewModel: ObservableObject {
                 try Task.checkCancellation()
                 guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
                 self.presetDump = dump
+                self.updateDisplayProfile(from: dump)
                 self.presetAlignment?.backup = try self.saveBackup(dump)
                 self.presetAlignment?.phase = .preview
                 self.recomputeAlignment()
@@ -773,6 +800,7 @@ final class ConsoleViewModel: ObservableObject {
                 let check = try BCRPresetAlignment.prepare(dump: readback, hardwareMap: plan.hardwareMap,
                                                            configuration: self.configuration, options: options)
                 guard check.isEmpty else { throw BCRPresetAlignment.Failure.invalid(L10n.text("回读与写入内容不一致")) }
+                self.updateDisplayProfile(from: readback)
                 try self.session.installHardwareMap(plan.hardwareMap)
                 // Rewritten encoder sections reset to their defaults; the software values are authoritative.
                 self.session.synchronize()
@@ -821,6 +849,7 @@ final class ConsoleViewModel: ObservableObject {
             guard let self else { return }
             do {
                 try await self.midi.sendPresetFrames(frames) { _ in }
+                self.updateDisplayProfile(from: dump)
                 try self.session.installHardwareMap(point.hardwareMap)
                 self.session.synchronize()
                 self.saveRestorePoint(nil)
@@ -961,6 +990,7 @@ final class ConsoleViewModel: ObservableObject {
                     self.session.selectSource(.hardware)
                     self.observedHardwareGroup = nil; self.startupConfiguredGroup = 1
                     self.startupConfiguredPreset = program.preset
+                    self.setDisplayPreset(program.preset)
                     self.notice = ConsoleNotice(
                         level: .info,
                         text: L10n.text("预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。")
@@ -1010,6 +1040,7 @@ final class ConsoleViewModel: ObservableObject {
         case let .connected(snapshot):
             observedHardwareGroup = nil
             startupConfiguredGroup = nil; startupConfiguredPreset = nil
+            setDisplayPreset(nil)
             clearDisplayedValue()
             clearHardwarePresses()
             offerHardwareConnection()
@@ -1027,12 +1058,13 @@ final class ConsoleViewModel: ObservableObject {
                 )
             }
         case let .touched(control):
-            if control.isContinuous { showDisplayedValue(of: control) }
             if source == .hardware, control.section == .pushEncoder || control.section == .pushEncoderButton {
                 observedHardwareGroup = control.row
             }
             guard followsTouch else { return }
             pendingTouchedControl = control
+        case let .deviceInput(control, rawValue, pressed):
+            showDeviceInput(control, rawValue: rawValue, pressed: pressed)
         case let .buttonActivity(control, pressed):
             guard source == .hardware else { return }
             pressTasks[control]?.cancel()

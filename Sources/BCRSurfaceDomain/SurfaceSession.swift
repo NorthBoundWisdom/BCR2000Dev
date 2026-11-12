@@ -28,6 +28,8 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
     case connected(MIDIConnectionSnapshot)
     case touched(BCRControlID)
     case buttonActivity(BCRControlID, pressed: Bool?)
+    /// A control was operated on the device itself (not an echo of feedback), with the raw value it sent.
+    case deviceInput(BCRControlID, rawValue: UInt16, pressed: Bool?)
     case learningInterruptedByConfiguration(BCRControlID)
     case learned(BCRControlID, MIDIControlID, next: BCRControlID?)
     case learnRejected(BCRControlID, HardwareBindingError)
@@ -521,6 +523,11 @@ public final class SurfaceSession {
                 }
             }
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
+            if let control, !engine.isFeedbackEcho(message, at: now()) {
+                let pressed = control.isContinuous || map.pressMode(for: control) != .momentary
+                    ? nil : message.isPositiveActivation
+                onEvent?(.deviceInput(control, rawValue: message.dataValue, pressed: pressed))
+            }
             guard inputGeneration == inputEvents.generation else { continue }
             let previousCount = control.map { engine.state(of: $0).eventCount }
             let effects = engine.handleInput(message, at: now())

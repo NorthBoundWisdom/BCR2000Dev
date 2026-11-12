@@ -229,7 +229,15 @@ struct SurfacePanelView: View {
     private var sideColumn: some View {
         VStack(spacing: m(8)) {
             LEDDisplay(text: model.displayText)
-                .help(L10n.text("实体在转动控件时显示数值，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
+                .help(L10n.text("按设备规则重现：操作开启“显示数值”的控件时短暂显示其数值或 on/oFF，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
+            if let name = model.displayPresetName {
+                Text(name)
+                    .font(m.font(7.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .help(L10n.text("设备当前预设名称（读取预设时获得）"))
+            }
             statusLEDs
             sideLabel(model.source == .hardware ? L10n.text("查看分组") : "ENCODER GROUP")
             if model.source == .hardware {
