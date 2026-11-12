@@ -4,8 +4,9 @@ import Foundation
 /// What the BCR2000's 4-digit, 7-segment display shows, reconstructed from what the host can
 /// observe. The device never reports its display, so this follows the documented firmware rules:
 ///
-/// - Play mode shows the preset number (rendered " P 8"; exact device format unverified); the host
-///   only knows it after loading one itself.
+/// - Play mode shows the preset number as `P- 1` … `P-32` (observed on firmware 1.10). The device
+///   doesn't report it; the host knows it after loading a preset or matching the temporary preset
+///   against the memory presets.
 /// - Moving an element with ShowValue on briefly shows its raw MIDI value (4 digits, so 10000+ loses
 ///   its leading 1).
 /// - Buttons with ShowValue on show "on" while pressed and "oFF" on release (toggleoff); a counter
@@ -20,8 +21,9 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case unknown
     }
 
-    /// How long the device keeps a value before returning to the preset number.
-    public static let holdSeconds: Double = 1.5
+    /// How long the device keeps a value before returning to the preset number. The device returns
+    /// noticeably faster than 1.5 s (observed); not measured precisely.
+    public static let holdSeconds: Double = 0.8
 
     public private(set) var preset: Int?
     public private(set) var transient: (content: Content, until: Double)?
@@ -65,7 +67,7 @@ public struct BCRDisplayModel: Equatable, Sendable {
     /// The four characters as the 7-segment display would render them.
     public static func text(for content: Content) -> String {
         switch content {
-        case let .preset(number): pad("P" + (number < 10 ? " " : "") + String(number))
+        case let .preset(number): number < 10 ? "P- \(number)" : "P-\(number)"
         case let .value(value): pad(String(String(max(value, 0)).suffix(4)))
         case .on: pad("on")
         case .off: pad("oFF")
@@ -78,11 +80,39 @@ public struct BCRDisplayModel: Equatable, Sendable {
     }
 }
 
+/// Finds which memory preset the temporary preset was recalled from. The device never reports its
+/// preset number, so the element definitions are compared; temporary edits made afterwards (for
+/// example by alignment) make the match fail and leave the number unknown instead of guessing.
+public enum BCRPresetIdentification {
+    /// Comparable content of one preset: element sections with their statements, without values
+    /// (`.default`) that the device keeps per element rather than per preset.
+    public static func signature(of dump: Data) throws -> [String] {
+        let lines = try BCRPresetEncoderLearning.decodeLines(dump)
+        guard lines.first == "$rev R1", lines.last == "$end" else {
+            throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设"))
+        }
+        return lines.filter {
+            $0 != "$rev R1" && $0 != "$end" && !$0.hasPrefix(".default ") && !$0.hasPrefix("$store ")
+                && !$0.hasPrefix("$recall ")
+        }
+    }
+
+    /// The single memory preset (1…32) equal to the temporary preset, or nil when none or several match.
+    public static func match(temporary: Data, memory: [Int: Data]) throws -> Int? {
+        let target = try signature(of: temporary)
+        let matches = try memory.filter { try signature(of: $0.value) == target }.map(\.key)
+        return matches.count == 1 ? matches[0] + 1 : nil
+    }
+}
+
 /// Per-control `.showvalue` settings and the preset name, read from a device preset dump.
 /// Kept apart from the hardware map: it describes the display, not MIDI identities.
 public struct BCRDisplayProfile: Codable, Equatable, Sendable {
     public var name: String?
     public var silentControls: Set<BCRControlID>
+    /// Memory preset last identified for this content; kept across temporary edits (alignment
+    /// changes elements but not the number the device shows).
+    public var presetNumber: Int?
 
     public init(name: String? = nil, silentControls: Set<BCRControlID> = []) {
         self.name = name; self.silentControls = silentControls

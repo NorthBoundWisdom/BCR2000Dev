@@ -30,6 +30,8 @@ public protocol MIDIService: SurfaceDevice {
     func configureStartup(_ program: MIDIStartupProgram) async throws
     /// Read-only dump of the current temporary preset (BCL frames, `$rev` … `$end`).
     func readCurrentPreset() async throws -> Data
+    /// Read-only dump of memory preset `index` (0…31); empty presets reply with only `$rev`…`$end`.
+    func readMemoryPreset(_ index: Int) async throws -> Data
     /// Sends BCL frames one at a time, each acknowledged by the device. No store unless a frame says so.
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws
 }
@@ -38,6 +40,7 @@ public extension MIDIService {
     var supportsStartupConfiguration: Bool { false }
     func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
+    func readMemoryPreset(_ index: Int) async throws -> Data { throw MIDIStartupError.invalidProgram }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         throw MIDIStartupError.invalidProgram
     }
@@ -211,8 +214,16 @@ public final class CoreMIDIService: MIDIService {
         }
     }
 
-    public func readCurrentPreset() async throws -> Data {
-        try await exclusiveSysEx { transport, generation in
+    public func readCurrentPreset() async throws -> Data { try await readPreset(selector: 0x7F) }
+
+    public func readMemoryPreset(_ index: Int) async throws -> Data {
+        guard (0 ... 31).contains(index) else { throw MIDIStartupError.invalidProgram }
+        return try await readPreset(selector: UInt8(index))
+    }
+
+    private func readPreset(selector: UInt8) async throws -> Data {
+        let request: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x40, selector, 0xF7]
+        return try await exclusiveSysEx { transport, generation in
             let id = UUID()
             return try await withTaskCancellationHandler {
                 try Task.checkCancellation()
@@ -223,7 +234,7 @@ public final class CoreMIDIService: MIDIService {
                     self.dumpID = id; self.dumpFrames = []; self.dumpContinuation = continuation
                     self.dumpActivity = ProcessInfo.processInfo.systemUptime
                     let started = self.dumpActivity
-                    do { try transport.sendBytes(Self.presetDumpRequest, expectedGeneration: generation) }
+                    do { try transport.sendBytes(request, expectedGeneration: generation) }
                     catch { self.finishDump(id, result: .failure(error)); return }
                     self.dumpTask = Task { @MainActor [weak self] in
                         while true {

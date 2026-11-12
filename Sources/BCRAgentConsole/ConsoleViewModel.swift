@@ -450,8 +450,53 @@ final class ConsoleViewModel: ObservableObject {
         objectWillChange.send()
     }
 
+    private var displayReadTask: Task<Void, Never>?
+
+    /// Read-only: the current preset's display settings, and its number when exactly one memory
+    /// preset has the same content. Runs once per hardware connection; failures only leave the
+    /// display at its previous knowledge.
+    private func refreshDisplayFromDevice() {
+        guard canConfigureMIDI, midi.supportsStartupConfiguration, source == .hardware, connection.isConnected,
+              displayReadTask == nil, presetAlignment?.phase.isBusy != true else { return }
+        let route = connection
+        displayReadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.displayReadTask = nil }
+            do {
+                let temporary = try await self.midi.readCurrentPreset()
+                guard self.source == .hardware, self.connection.hasSameRoute(as: route) else { return }
+                let previous = self.displayProfile
+                self.updateDisplayProfile(from: temporary)
+                guard self.startupConfiguredPreset == nil else { return }
+                // An aligned temporary preset matches no memory preset; its number is the one last seen
+                // for the same preset name, provided no restore point says it has been changed since.
+                var memory: [Int: Data] = [:]
+                for index in 0 ... 31 {
+                    try Task.checkCancellation()
+                    guard self.source == .hardware, self.connection.hasSameRoute(as: route),
+                          self.presetAlignment?.phase.isBusy != true else { return }
+                    memory[index] = try await self.midi.readMemoryPreset(index)
+                }
+                var number = try BCRPresetIdentification.match(temporary: temporary, memory: memory)
+                if number == nil, self.presetRestorePoint != nil, let previous,
+                   previous.name == self.displayProfile?.name
+                {
+                    number = previous.presetNumber
+                }
+                guard self.source == .hardware, self.connection.hasSameRoute(as: route) else { return }
+                self.setDisplayPreset(number)
+                self.displayProfile?.presetNumber = number
+                if let profile = self.displayProfile { try? self.displayProfileStore.save(profile) }
+            } catch {
+                return
+            }
+        }
+    }
+
     private func updateDisplayProfile(from dump: Data) {
-        guard let profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
+        guard var profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
+        profile.presetNumber = display
+            .preset ?? (displayProfile?.name == profile.name ? displayProfile?.presetNumber : nil)
         displayProfile = profile
         do { try displayProfileStore.save(profile) } catch { report(error) }
     }
@@ -1029,6 +1074,7 @@ final class ConsoleViewModel: ObservableObject {
         case let .sourceChanged(source):
             // The session may leave hardware on its own (e.g. route loss); no held press survives that.
             clearHardwarePresses()
+            if source == .hardware { refreshDisplayFromDevice() } else { displayReadTask?.cancel() }
             switch source {
             case .mock:
                 notice = ConsoleNotice(level: .info, text: L10n.text("已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。"))
