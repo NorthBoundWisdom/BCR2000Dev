@@ -153,7 +153,9 @@ struct ControlInspectorView: View {
                 model.setHardwareButtonFunctions(entry, enabled: entry.visualizationOnly == true)
             }
             .accessibilityIdentifier("hardware.buttonFunctions.confirm")
-            Button(L10n.text("取消"), role: .cancel) {}
+            Button(L10n.text("取消"), role: .cancel) { pendingButtonFunctionChange = nil }
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("hardware.buttonFunctions.cancel")
         } message: { entry in
             if entry.visualizationOnly == true {
                 Text(L10n
