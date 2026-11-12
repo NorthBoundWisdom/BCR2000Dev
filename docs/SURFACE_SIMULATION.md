@@ -54,7 +54,7 @@ Ordinary GUI/Provider startup does not validate legacy configurations against it
 install the new tools. When explicitly installed, the adapter observes Mock input through the same
 SurfaceSession; a GUI does not implicitly enable the optional contract.
 
-## Button holds (contract 1.1)
+## Button holds
 
 Both simulation modes declare `hold: {rest_value: false, max_hold_s: 5}` only for buttons that
 accept input and have a momentary binding: releasing them restores the parameter to rest. Toggle
@@ -122,13 +122,9 @@ cannot be combined with `--simulation-profile`, a configuration seed, hardware m
 hardware source or a disabled console. `--describe-surface` uses the supplied file without opening
 devices or listening on a port. Invalid files fail before credentials or user persistence are read.
 
-See [the held-enable, axes and feedback example](../examples/simulation/README.md) and optional consumer mappings under its `integrations/<consumer>/` directory. Both modes use the same accepted-input/momentary rule for holds. The current contract 1.3
-mapping revision (unchanged from the corrected 1.2 profile) is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
-overly broad holds, and the previous 1.1 revision `2813b4891860c6da` remains
-verified by reconstructing its historical button hold declarations and removing the later
-`accepts_input` fields in a compatibility test.
+See [the held-enable, axes and feedback example](../examples/simulation/README.md) and optional consumer mappings under its `integrations/<consumer>/` directory. Both modes use the same accepted-input/momentary rule for holds. The current contract 1.3 mapping revision is `ef0e106767594759`. Historical profile pins are recorded below.
 
-## Contract 1.2 input declarations and feedback concurrency
+## Input declarations and feedback concurrency
 
 Every descriptor declares `accepts_input`: true only when its current assignment references an
 existing writable parameter that is not externally protected or reserved as the output enable
@@ -146,8 +142,10 @@ including silent renewals; the field is omitted when no lease exists.
 
 ## Input, feedback and recovery
 
-Every mutation pins all five identity fields plus `expected_sequence`. Accepted and ignored
-writes each consume one sequence. Replaying the same request is rejected as `stale_sequence`.
+Every mutation pins all five identity fields. Input chooses an input or global sequence fence; reset uses
+global CAS, while feedback can omit its sequence as described above. Accepted and ignored
+writes each consume one journal sequence. Replaying an input is rejected as `stale_sequence`
+or `stale_input_sequence`, according to its selected fence.
 Repeated absolute/button input with the same raw value is ignored; same-side dial ticks never
 renew an old business intent in the sample consumer. Relative detents remain separate inputs.
 
@@ -202,7 +200,7 @@ old context. No input is replayed after reset/restart or an event gap.
 ## Public delivery and examples
 
 `configs/package_provider.py` creates a self-contained local artifact with the unchanged legacy
-Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.2
+Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.3
 delivery. Surface files sit at the delivery root under the same names as the XTouch delivery,
 copied byte for byte from the materialized `build/seed/SurfacePlugins`:
 `surface-control-sdk-1.3.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
@@ -293,3 +291,38 @@ With no new flag, the existing default aggregate 60 writes/s and `--write-limit 
 Provider 1.0 and business plugin tool schemas, errors and aggregate budgeting are unchanged even
 when surface category mode is selected. The host checks identity, clock, counters, encoding and
 permissions before consuming quota or applying input/display effects.
+
+
+## Client compatibility
+
+The transport acceptance script checks the original frozen SDK archives from the historical local
+handoffs, verifying their SHA-256 before importing each in a fresh interpreter. SDK 1.1.0 and
+1.2.0 reject the current 1.3 discovery with `unsupported_contract`: their strict version allowlists
+do not implement 1.3. They cannot complete a roundtrip against this host. No SDK source or host
+version is changed for the test. Missing historical ZIPs are explicit skips (including on a clean
+CI checkout); a hash mismatch is a failure.
+
+Separate real-process tests send JSON-RPC directly without importing an SDK. The 1.1 request
+shape uses global CAS for input and feedback; the 1.2 shape also exercises feedback without a
+sequence. Both cover discovery, snapshot, input, display feedback, journal reads, held input,
+silent renewal and release. These prove protocol compatibility, not compatibility of the old
+SDK's discovery policy. The normal transport CI still runs these wire cases when historical
+archives are unavailable.
+
+The shared package owns the [version rules](../build/seed/SurfacePlugins/docs/versioning.md)
+for contract, SDK, profile and mapping revision. This path resolves through the managed locked
+dependency after materialization; the version rules also accompany the delivery after the T lock upgrade.
+
+## 历史
+
+### Contract 1.1 and 1.2 profile transitions
+
+The current contract 1.3
+mapping revision (unchanged from the corrected 1.2 profile) is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
+overly broad holds, and the previous 1.1 revision `2813b4891860c6da` remains
+verified by reconstructing its historical button hold declarations and removing the later
+`accepts_input` fields in a compatibility test.
+
+Button holds were introduced in contract 1.1; input declarations and unsequenced feedback were
+introduced in 1.2. The public delivery previously carried the optional Surface 1.2 assets.
+The current sections describe the cumulative 1.3 behavior.
