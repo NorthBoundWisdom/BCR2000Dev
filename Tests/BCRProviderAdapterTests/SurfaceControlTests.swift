@@ -206,8 +206,24 @@ final class SurfaceControlTests: XCTestCase {
                 "expected": discovery["expected"]!, "expected_sequence": .string("0"),
                 "control_id": .string("pushEncoder.1.1"), "encoding": .string("scalar"), "value": .number(127)
             ]))
-            XCTAssertEqual(stale.value.objectValue?["code"], .string("stale_epoch"), change)
+            // Contract 1.1 validates mapping before epoch: each of these changes the mapping document.
+            XCTAssertEqual(stale.value.objectValue?["code"], .string("stale_mapping"), change)
+            XCTAssertNotEqual(snapshot["discovery"]?.objectValue?["expected"]?.objectValue?["mapping_revision"],
+                              discovery["expected"]?.objectValue?["mapping_revision"], change)
         }
+        // A context change that leaves the mapping intact keeps the revision and reports stale_epoch.
+        let (gateway, _) = try fixture()
+        let discovery = try call(gateway, "discover").objectValue!
+        gateway.session.selectSource(.hardware)
+        gateway.session.selectSource(.mock)
+        let current = try call(gateway, "discover").objectValue!
+        XCTAssertEqual(current["expected"]?.objectValue?["mapping_revision"],
+                       discovery["expected"]?.objectValue?["mapping_revision"])
+        let stale = gateway.call("surface_control_input", arguments: .object([
+            "expected": discovery["expected"]!, "expected_sequence": .string("0"),
+            "control_id": .string("pushEncoder.1.1"), "encoding": .string("scalar"), "value": .number(127)
+        ]))
+        XCTAssertEqual(stale.value.objectValue?["code"], .string("stale_epoch"))
     }
 
     func testNewToolsReportRateLimitWithoutConsumingInputSequence() throws {

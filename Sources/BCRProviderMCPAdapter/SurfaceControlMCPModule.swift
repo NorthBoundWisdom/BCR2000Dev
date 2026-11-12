@@ -11,7 +11,9 @@ public enum SurfaceControlMCPModule {
     public static func install(on gateway: MCPApplicationGateway, instanceID: String,
                                permissions: BCRSurfaceControlAdapter.Permissions = .init(), eventCapacity: Int = 1024,
                                monotonic: @escaping @MainActor ()
-                                   -> Double = { ProcessInfo.processInfo.systemUptime }) throws
+                                   -> Double = { ProcessInfo.processInfo.systemUptime },
+                               holdScheduler: @escaping BCRSurfaceControlAdapter.HoldScheduler =
+                                   BCRSurfaceControlAdapter.defaultHoldScheduler) throws
         -> BCRSurfaceControlAdapter?
     {
         guard let surface = gateway.surfaceSession else { return nil }
@@ -21,10 +23,12 @@ public enum SurfaceControlMCPModule {
             diagnostic: { [weak gateway] value in
                 // Existing audit trail; the context itself is revoked by the adapter (fail closed).
                 gateway?.record("surface_control.context", succeeded: false, detail: value.reason + ": " + value.code)
-            }
+            },
+            holdScheduler: holdScheduler
         )
         let tools = SurfaceControlTools.descriptors.map { descriptor in JSONValue.object([
-            "name": .string(descriptor.name), "description": .string("Optional simulation surface control 1.0"),
+            "name": .string(descriptor.name),
+            "description": .string("Optional simulation surface control " + ControlDiscovery.contractVersion),
             "inputSchema": descriptor.inputSchema, "outputSchema": descriptor.outputSchema,
             "annotations": .object(["readOnlyHint": .bool(!descriptor.isMutation), "openWorldHint": .bool(false)])
         ]) }
@@ -41,6 +45,7 @@ public enum SurfaceControlMCPModule {
     /// An explicitly selected, ordinary-input fixture. No business operation is implemented here.
     public static func simulationConfiguration() -> SurfaceConfiguration {
         let commands = ["arm", "start", "pause", "cancel", "progress"]
+        // Momentary: on only while pressed, so an expired 1.1 lease (release) returns it to 0.
         let parameters = commands.map { name in ParameterDefinition(id: ParameterID("simulation." + name),
                                                                     name: name, minimum: 0, maximum: 127, step: 1) } + [
             ParameterDefinition(
@@ -56,6 +61,13 @@ public enum SurfaceControlMCPModule {
                 minimum: 0,
                 maximum: 1,
                 kind: .toggle
+            ),
+            ParameterDefinition(
+                id: "simulation.hold",
+                name: "Hold",
+                minimum: 0,
+                maximum: 1,
+                kind: .toggle
             )
         ]
         let assignments = commands.enumerated().map { index, name in
@@ -64,9 +76,11 @@ public enum SurfaceControlMCPModule {
                 target: .parameter(ParameterID("simulation." + name))
             )
         } + [ControlAssignment(control: .button(row: 1, 1), target: .parameter("simulation.state")),
-             ControlAssignment(control: .button(row: 1, 2), target: .parameter("simulation.link"))]
+             ControlAssignment(control: .button(row: 1, 2), target: .parameter("simulation.link")),
+             ControlAssignment(control: .button(row: 1, 3), target: .parameter("simulation.hold"),
+                               buttonBehavior: .momentary)]
         return SurfaceConfiguration(
-            name: "Simulation control trial 1.0",
+            name: "Simulation control trial 1.1",
             parameters: parameters,
             assignments: assignments
         )

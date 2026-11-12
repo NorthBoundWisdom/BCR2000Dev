@@ -25,10 +25,32 @@ public final class BCRSurfaceControlAdapter {
         public init(reason: String, code: String) { self.reason = reason; self.code = code }
     }
 
+    /// Schedules `action` after `delay` seconds on the main actor and returns its cancellation.
+    public typealias HoldScheduler = @MainActor (_ delay: Double, _ action: @escaping @MainActor () -> Void)
+        -> @MainActor () -> Void
+
+    /// Upper bound for a button lease (`hold.max_hold_s`). A consumer renews well within it.
+    public static let maximumButtonHoldSeconds = 5.0
+
+    public static let defaultHoldScheduler: HoldScheduler = { delay, action in
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, delay) * 1_000_000_000) + 1_000_000)
+            if !Task.isCancelled { action() }
+        }
+        return { task.cancel() }
+    }
+
     private let surface: SurfaceSession
     private let monotonic: @MainActor () -> Double
     private let permissions: Permissions
     private let diagnose: @MainActor (Diagnostic) -> Void
+    private let scheduler: HoldScheduler
+    /// When false, due leases are processed only through `processHoldExpiries()` (in-process fault probes).
+    private let automaticHoldExpiry: Bool
+    private var cancelHoldTimer: (@MainActor () -> Void)?
+    /// Leases revoked while the Mock was not the active source. Their rest values are applied
+    /// before the Mock is reseeded, so a revoked button never stays held (deadman stays safe).
+    private var deferredRests: [ControlHoldExpiry] = []
     private var core: SurfaceControlSession
     private var contextRevision: UInt64
     private var generation: String
@@ -41,14 +63,15 @@ public final class BCRSurfaceControlAdapter {
     public init(surface: SurfaceSession, instanceID: String, permissions: Permissions = .init(),
                 eventCapacity: Int = 1024,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
-                diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in }) throws
+                diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
+                holdScheduler: @escaping HoldScheduler = BCRSurfaceControlAdapter.defaultHoldScheduler,
+                automaticHoldExpiry: Bool = true) throws
     {
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
-        diagnose = diagnostic
+        diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
         core = try Self.seeded(
-            SurfaceControlSession(instanceID: instanceID, epoch: UUID().uuidString,
-                                  mappingRevision: UUID().uuidString, profile: Self.profile(surface),
+            SurfaceControlSession(instanceID: instanceID, epoch: UUID().uuidString, profile: Self.profile(surface),
                                   eventCapacity: eventCapacity),
             surface: surface,
             at: monotonic()
@@ -59,8 +82,11 @@ public final class BCRSurfaceControlAdapter {
     }
 
     deinit {
-        let surface = surface; let token = inputObserver
-        Task { @MainActor in if let token { surface.removeAcceptedInputObserver(token) } }
+        let surface = surface; let token = inputObserver; let cancel = cancelHoldTimer
+        Task { @MainActor in
+            cancel?()
+            if let token { surface.removeAcceptedInputObserver(token) }
+        }
     }
 
     public static func controlID(_ control: BCRControlID) -> String {
@@ -92,16 +118,25 @@ public final class BCRSurfaceControlAdapter {
                 feedbackRange: control.isContinuous ? .init(minimum: 0, maximum: maximum, step: 1) : nil,
                 // A BCR button has one LED display slot, so it declares only the semantic indicator.
                 feedbackKinds: control.isContinuous ? [.value] : [.indicator],
-                mapping: mapping
+                mapping: mapping,
+                // Contract 1.1 lease: an expired button lease returns to released (deadman rest).
+                hold: control.isContinuous ? nil : ControlHold(restValue: .bool(false),
+                                                               maxHoldSeconds: maximumButtonHoldSeconds)
             )
         }
-        return ControlProfile(id: "bcr2000.mock", version: "1.0", controls: controls,
-                              capabilities: [
-                                  "simulation",
-                                  "stable_control_ids",
-                                  "display_only_feedback",
-                                  "explicit_input_permissions"
-                              ])
+        var capabilities = ["simulation", "controls.stable_ids"]
+        let inputs = Set(controls.map(\.input_kind))
+        for kind in [ControlInputKind.absolute, .relative, .button] where inputs.contains(kind) {
+            capabilities.append("input." + kind.rawValue)
+        }
+        if controls.contains(where: { $0.hold != nil }) { capabilities.append("input.hold") }
+        let feedback = Set(controls.flatMap(\.feedback_kinds))
+        for kind in [ControlFeedbackKind.value, .indicator] where feedback.contains(kind) {
+            capabilities.append("feedback." + kind.rawValue)
+        }
+        capabilities += ["x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
+                         "x.bcr.indicator_blink_static"]
+        return ControlProfile(id: "bcr2000.mock", version: "1.1", controls: controls, capabilities: capabilities)
     }
 
     private static func seeded(_ session: SurfaceControlSession, surface: SurfaceSession,
@@ -129,18 +164,85 @@ public final class BCRSurfaceControlAdapter {
             generation != surface.inputEvents.generation else { return }
         let now = monotonic()
         var next = core
+        // Every lease is revoked with the old context. Due ones are closed in the discarded journal so
+        // the reset clock checks still apply; all held Mock controls return to rest before reseeding.
+        let leases = core.dueHoldExpiries(at: .infinity)
+        for lease in leases
+            where lease.deadline <= now { try next.recordHoldExpiry(controlID: lease.controlID, at: now) }
         try next.reset(
-            expected: core.expected,
-            expectedSequence: core.discovery().latest_sequence,
+            expected: next.expected,
+            expectedSequence: next.discovery().latest_sequence,
             epoch: UUID().uuidString,
-            mappingRevision: UUID().uuidString,
             profile: Self.profile(surface),
             at: now
         )
+        if surface.source == .mock {
+            for lease in deferredRests + leases { try applyRest(lease) }
+            deferredRests.removeAll()
+        } else {
+            deferredRests += leases
+        }
         next = try Self.seeded(next, surface: surface, at: now)
         core = next
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
         pendingRotation = nil
+        rescheduleHoldTimer()
+    }
+
+    /// Applies a lease rest value to the Mock through the ordinary simulated input path. Mock only.
+    private func applyRest(_ lease: ControlHoldExpiry) throws {
+        let control = try control(lease.controlID)
+        guard surface.source == .mock else { throw ControlContractError("unsupported_source") }
+        let wasHandling = handlingRemote
+        handlingRemote = true
+        defer { handlingRemote = wasHandling }
+        surface.withWriteOrigin(.agent) {
+            if let pressed = lease.restValue.boolValue {
+                if pressed { surface.press(control) } else { surface.release(control) }
+            } else if let raw = lease.restValue.finiteNumber {
+                surface.simulateAbsoluteInput(control, rawValue: UInt16(raw))
+            }
+        }
+    }
+
+    private func mappedValue(_ control: BCRControlID) -> JSONValue? {
+        surface.engine.configuration.assignment(for: control)?.target.parameterID
+            .flatMap { surface.engine.value(of: $0) }.map(JSONValue.double)
+    }
+
+    /// Processes every lease due at the current host time: rest value to the Mock first, then the
+    /// journal event. This is what the scheduler runs; requests call it before doing anything else.
+    @discardableResult
+    public func processHoldExpiries() throws -> [ControlEvent] {
+        try refresh()
+        let now = monotonic()
+        let due = core.dueHoldExpiries(at: now)
+        var events: [ControlEvent] = []
+        for lease in due {
+            try applyRest(lease)
+            do {
+                try events.append(core.recordHoldExpiry(controlID: lease.controlID,
+                                                        mappedValue: mappedValue(control(lease.controlID)), at: now))
+            } catch { failClosed("hold_expiry_record_failed", error: error); throw error }
+        }
+        rescheduleHoldTimer()
+        return events
+    }
+
+    /// The earliest active lease deadline (host monotonic seconds), if any.
+    public var nextHoldDeadline: Double? { core.nextHoldDeadline }
+
+    private func rescheduleHoldTimer() {
+        cancelHoldTimer?(); cancelHoldTimer = nil
+        guard automaticHoldExpiry, let deadline = core.nextHoldDeadline else { return }
+        cancelHoldTimer = scheduler(max(0, deadline - monotonic())) { [weak self] in
+            guard let self else { return }
+            self.cancelHoldTimer = nil
+            do { try self.processHoldExpiries() } catch {
+                if self.pendingRotation == nil { self.failClosed("hold_timer_failed", error: error) }
+                self.rescheduleHoldTimer()
+            }
+        }
     }
 
     private func failClosed(_ reason: String, error: (any Error)? = nil) {
@@ -170,13 +272,6 @@ public final class BCRSurfaceControlAdapter {
         return value
     }
 
-    /// Numeric representation (`.number` vs `.double`) does not make an input different.
-    private static func sameInput(_ lhs: JSONValue?, _ rhs: JSONValue) -> Bool {
-        guard let lhs else { return false }
-        if let left = lhs.finiteNumber, let right = rhs.finiteNumber { return left == right }
-        return lhs == rhs
-    }
-
     private func observe(
         _ control: BCRControlID,
         message: MIDIVoiceMessage,
@@ -189,6 +284,12 @@ public final class BCRSurfaceControlAdapter {
         guard origin == .software else { failClosed("unexpected_input_origin_" + origin.rawValue); return }
         do {
             try refresh()
+            if automaticHoldExpiry, !core.dueHoldExpiries(at: monotonic()).isEmpty {
+                // Due leases are recorded before the operator input that follows them.
+                handlingRemote = true
+                defer { handlingRemote = false }
+                try processHoldExpiries()
+            }
             let descriptor = core.profile.controls.first { $0.id == Self.controlID(control) }!
             let mode = surface.engine.configuration.assignment(for: control)?.encoderMode ?? .absolute
             let value: JSONValue = control.isContinuous ? (mode == .absolute ? .double(Double(message.dataValue)) :
@@ -202,8 +303,7 @@ public final class BCRSurfaceControlAdapter {
                 value: value
             )
             let now = monotonic()
-            let prior = try core.snapshot(at: now).inputs[descriptor.id]
-            let changed = descriptor.encoding == .signedDelta || !Self.sameInput(prior, value)
+            let changed = !core.isUnchanged(input)
             try core.recordInput(
                 input,
                 disposition: changed ? .accepted : .ignored,
@@ -212,6 +312,7 @@ public final class BCRSurfaceControlAdapter {
                 origin: .interface,
                 at: now
             )
+            rescheduleHoldTimer()
         } catch { failClosed("observation_failed", error: error) }
     }
 
@@ -223,12 +324,14 @@ public final class BCRSurfaceControlAdapter {
         do {
             let event = try core.recordInput(input, disposition: disposition, mappedValue: mappedValue,
                                              reason: reason, origin: .remote, at: now)
+            rescheduleHoldTimer()
             return try .encoded(event)
         } catch { failClosed("input_record_failed", error: error); throw error }
     }
 
     public func execute(_ request: ControlToolRequest, gateway: MCPApplicationGateway) throws -> JSONValue {
         try refresh()
+        if automaticHoldExpiry, !handlingRemote, surface.source == .mock { try processHoldExpiries() }
         switch request {
         case .discover:
             try requireMock(); return try .encoded(core.discovery())
@@ -256,8 +359,7 @@ public final class BCRSurfaceControlAdapter {
             guard let id = surface.engine.configuration.assignment(for: control)?.target.parameterID,
                   let definition = surface.engine.configuration.parameter(id), definition.agentWritable,
                   !surface.isMCPProtectedParameter(id) else { throw ControlContractError("permission_denied") }
-            let prior = try core.snapshot(at: now).inputs[input.control_id]
-            let unchanged = descriptor.encoding != .signedDelta && Self.sameInput(prior, input.value)
+            let unchanged = core.isUnchanged(input)
             try consume(gateway)
             if unchanged {
                 return try commitInput(input, disposition: .ignored,
@@ -304,6 +406,18 @@ public final class BCRSurfaceControlAdapter {
             try surface.setSimulationDisplayFeedback(control, rawValue: raw)
             core = next
             return result
+        case let .renew(request):
+            try requireMock()
+            guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
+            guard permissions.input, gateway.permissions.parameterWrite, gateway.permissions.deviceControl else {
+                throw ControlContractError("permission_denied")
+            }
+            let now = monotonic()
+            try core.validateRenew(request, at: now)
+            try consume(gateway)
+            let result = try core.renew(request, at: now)
+            rescheduleHoldTimer()
+            return try .encoded(result)
         case let .reset(expected, expectedSequence):
             try requireMock()
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
@@ -312,13 +426,7 @@ public final class BCRSurfaceControlAdapter {
             }
             let now = monotonic()
             var next = core
-            try next.reset(
-                expected: expected,
-                expectedSequence: expectedSequence,
-                epoch: UUID().uuidString,
-                mappingRevision: UUID().uuidString,
-                at: now
-            )
+            try next.reset(expected: expected, expectedSequence: expectedSequence, epoch: UUID().uuidString, at: now)
             try surface.validateSimulationReset()
             try consume(gateway)
             handlingRemote = true
@@ -330,6 +438,7 @@ public final class BCRSurfaceControlAdapter {
             core = next
             contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
             pendingRotation = nil
+            rescheduleHoldTimer()
             return try .encoded(core.discovery())
         }
     }
