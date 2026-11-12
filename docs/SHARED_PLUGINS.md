@@ -19,6 +19,18 @@ python3 configs/check_domain_boundaries.py
 python3 configs/macos_workflow.py build
 ```
 
+不安装 FreeCM 的直接入口（2026-11-12 在无 `freecm` 可执行文件的环境核实）：
+
+```bash
+python3 configs/surface_plugins_dependency.py ensure   # 只用 stdlib+Git 物化到 build/seed/SurfacePlugins
+swift build --package-path build/seed/SurfacePlugins --build-path build/seed-build/SurfacePlugins
+swift test --build-path build/swiftpm                  # Package.swift 只读 verify，不获取/不联网
+```
+
+`python3 configs/setup_local_project.py` 等价地执行上述 ensure 与 seed 编译，并写 `build/configured.json`；
+它只用到仓库内 vendored 的 MIT 命令清单校验器，不调用 FreeCM。`configs/freecm.commands.jsonc` 的 Config 命令
+仅是把同一脚本暴露给可选的 FreeCM 插件，不是必经入口。`macos_workflow.py build/test/package` 也自行先 ensure。
+
 `SURFACE_PLUGINS_SOURCE` 仅是 Git 获取源，不是编译路径；不会复制工作树中的未提交改动。
 旧 `SURFACE_PLUGINS_PATH` 兼容解释为获取源，两个变量不一致时报错。也可在 ignored `build.local.json`
 的 `environment` 中配置 SOURCE，构建/测试/配置/Provider打包入口会加载后先ensure；直接helper CLI使用shell环境。

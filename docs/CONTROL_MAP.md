@@ -287,6 +287,11 @@ Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非�
 通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
 接入与边界见 [SURFACE_SIMULATION.md](SURFACE_SIMULATION.md)。
 
+模拟显示反馈呈现（P1-B）：按钮只声明 `indicator` 反馈，off/on/blink 依次写入 Mock 按钮灯原始值 0/127/96。
+BCR 按钮灯不闪烁，`blink` 只是语义状态，Mock 中静态显示为 96，不代表实体闪烁（与可选的 GUI 节奏闪烁设置无关）。
+连续控件只声明 `value`，按其编码范围（0–127 或 NRPN 0–16383）直接显示。覆盖层持续遮蔽该控件的参数反馈，直到 reset、
+切换来源或配置/分配/页面/Mock 编码变化。
+
 ## 右侧控制列（2026-11-12）
 
 面板右列按实体顺序绘制：4 位 LED 显示、USB/MIDI 状态灯、ENCODER GROUP 1–4、STORE/LEARN/EDIT/EXIT、
