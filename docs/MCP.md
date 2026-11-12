@@ -81,6 +81,13 @@ buttonBehavior（toggle/momentary）、inverted，以及可选 encoderMode（abs
 
 准确的枚举分支与字段范围也由 tools/list 的嵌套 oneOf schema 提供。
 
+`get_status.hardwareConnection.confirmation` 是宿主提供的连接确认状态：`none`（没有待确认请求）、
+`pending`（等待用户在 GUI 确认同步方向，含连接稳定等待期）、`declined`（用户拒绝了当前端口的最近一次连接提示）。
+新连接请求清除旧拒绝，确认、换源、断开或端口变化清除对应确认记录；无界面服务恒为 `none`。
+`none` 不表示连接成功，确认后的同步可能仍在进行，应同时查询 `source` 与连接字段。
+`set_device_source` 的权限、拒绝行为和错误文本保持不变。此字段位于旧工具未限定结构的 `data` 内，
+不修改 Provider 1.0 的 schema 或错误格式。
+
 `get_status.learningControl` 是当前等待学习的控件或 null。学习工具不制造输入；实际消息仍来自
 CoreMIDI，经原 SurfaceSession 路径保存。自动跳到下一未学习控件后应显式 stop，不能把设备快照
 回读与等待实体按键学习同时运行。来源切换和学习均不会开启 OSC 输出，也不会写设备预设。

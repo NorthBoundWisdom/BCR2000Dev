@@ -114,6 +114,7 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var persistenceNotice: ConsoleNotice?
     @Published private(set) var visibleGroup = 1
     @Published private(set) var pendingHardwareConnection: HardwareConnectionPrompt?
+    private var declinedHardwareConnectionRoute: MIDIConnectionSnapshot?
     private(set) var startupConfiguredGroup: Int?
     /// Only known after this app loaded the preset itself; the device never reports its preset number.
     private(set) var startupConfiguredPreset: Int?
@@ -272,6 +273,9 @@ final class ConsoleViewModel: ObservableObject {
                 self.start(slot, origin: .remote)
             } else { self.interrupt(slot) }
         }
+        mcp.service.onReadHardwareConnectionConfirmation = { [weak self] in
+            self?.hardwareConnectionConfirmation ?? .none
+        }
         mcp.service.onSelectSource = { [weak self] source in
             guard let self else { throw MCPToolFailure(L10n.text("设备切换服务不可用")) }
             if source == .hardware, !self.canConfigureMIDI { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
@@ -422,7 +426,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func selectSource(_ newSource: DeviceSource) {
         connectionOfferTask?.cancel(); connectionOfferTask = nil
-        pendingHardwareConnection = nil; startupConfiguredGroup = nil; startupConfiguredPreset = nil
+        pendingHardwareConnection = nil; declinedHardwareConnectionRoute = nil
+        startupConfiguredGroup = nil; startupConfiguredPreset = nil
         setDisplayPreset(nil)
         clearDisplayedValue()
         clearHardwarePresses()
@@ -1022,7 +1027,19 @@ final class ConsoleViewModel: ObservableObject {
 
     // MARK: Session presentation
 
+    private var hardwareConnectionConfirmation: HardwareConnectionConfirmation {
+        guard source == .mock, connection.isConnected else { return .none }
+        // Include the existing stabilization delay so a just-refused MCP call can immediately be polled.
+        if pendingHardwareConnection != nil || connectionOfferTask != nil { return .pending }
+        return declinedHardwareConnectionRoute?.hasSameRoute(as: connection) == true ? .declined : .none
+    }
+
     private func validateConnectionWork() {
+        if let route = declinedHardwareConnectionRoute,
+           !connection.isConnected || !connection.hasSameRoute(as: route)
+        {
+            declinedHardwareConnectionRoute = nil
+        }
         if let prompt = pendingHardwareConnection,
            !connection.isConnected || !connection.hasSameRoute(as: prompt.route)
         {
@@ -1046,6 +1063,7 @@ final class ConsoleViewModel: ObservableObject {
         guard canConfigureMIDI, source == .mock, connection.isConnected, hardwareSwitchWrites,
               !connectingHardware else { return }
         connectionOfferTask?.cancel()
+        declinedHardwareConnectionRoute = nil
         let route = connection
         notice = ConsoleNotice(level: .info, text: L10n.text("检测到硬件，等待连接稳定…"))
         connectionOfferTask = Task { @MainActor [weak self] in
@@ -1080,7 +1098,8 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func declineHardwareConnection(_ id: UUID) {
-        guard pendingHardwareConnection?.id == id else { return }
+        guard let prompt = pendingHardwareConnection, prompt.id == id else { return }
+        declinedHardwareConnectionRoute = prompt.route
         pendingHardwareConnection = nil
         notice = ConsoleNotice(level: .info, text: L10n.text("保持 Mock，未进行本次硬件同步。"))
     }
@@ -1094,6 +1113,7 @@ final class ConsoleViewModel: ObservableObject {
         case .read: guard prompt.canRead else { return }
         }
         let usingSoftware = mode == .initialize
+        declinedHardwareConnectionRoute = nil
         pendingHardwareConnection = nil
         let operation = UUID(), route = connection
         startupTaskID = operation; startupRoute = route

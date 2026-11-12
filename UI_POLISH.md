@@ -125,7 +125,7 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
 
 ### 执行记录
 
-#### 任务 3 — `81f376d`
+#### 任务 3 — `56c4aa7`（rebase 前 `81f376d`）
 
 - 改动：`Sources/BCRExamples/ConfigurationPresets.swift` 提供精确匹配中英文内置名称的纯显示函数；
   `SurfacePanelView.swift`、`ControlInspectorView.swift`、`ContentView.swift` 及检查器子视图
@@ -139,7 +139,7 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
   复用已有翻译键，无需新增 UI 文案。清单留待审查窗口勾选。
 
 
-#### 任务 5 — `e65d05e`
+#### 任务 5 — `93cd325`（rebase 前 `e65d05e`）
 
 - 改动：`SurfacePanelView.swift` 将对齐/恢复合并为实体源下的图标菜单，备份圆点、help、无障碍标签和稳定标识齐备；
   两个语言 strings 成对补文案。现有 `tools/verify_*_ui.py` 没有使用旧按钮文字定位，无需修改。
@@ -148,6 +148,18 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
   通过 App 自身的原生视图缓存渲染检查 1200×760 Mock 布局（未截取桌面）。
 - 未验证：没有连接实体，没有实际打开实体源菜单操作设备。
 - 偏离：无功能/策略变更。清单留待审查窗口勾选。
+
+
+#### 任务 10 — `a9e46f0`（rebase 前 `1e2b84f`）
+
+- 改动：`CodexAgentSettingsView.swift` 接入原开关与五态灯预览；`FeedbackSettingsView.swift` 移除 model 依赖并恢复
+  350 高度；`BCRAgentConsoleApp.swift` 同步设置页与原生渲染调用。
+- 验证：Swift 五包 506 项、失败 0（`AgentLEDBlinkTests` 原样通过）；BuildWorkflow 71 项、失败 0；
+  域边界、命令、格式、双语 strings lint、App build、双语 startup smoke、隔离 Mock MCP 双版本冒烟通过。
+  检查中英文 Agent 页及反馈页原生渲染；五种灯与标签均完整显示。
+- 未验证：没有真机灯验证，未手动测量切走设置页后的刷新次数；实现以 TimelineView 的 paused 与页面出现/消失控制。
+- 偏离：为避免预览被原表单挤到滚动区下方，将该节放在 Agent 页首；复用既有文案，无新增翻译键。
+  未修改闪烁调度、开关持久化或既有测试。清单留待审查窗口勾选。
 
 ## 远端设备（ethanmacair）
 

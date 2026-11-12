@@ -3,6 +3,11 @@ import BCRFoundation
 import Foundation
 import enum SurfacePluginContracts.JSONValue
 
+/// Host-supplied UI consent state; no device access or approval is performed by the gateway.
+public enum HardwareConnectionConfirmation: String, Sendable {
+    case none, pending, declined
+}
+
 /// Client-neutral tool execution. Transport credentials never enter this service or its log.
 @MainActor
 public final class MCPApplicationGateway {
@@ -26,6 +31,8 @@ public final class MCPApplicationGateway {
     public var onChange: (@MainActor () -> Void)?
     public var onReadAgents: (@MainActor () throws -> JSONValue)?
     public var onAgentAction: (@MainActor (String, AgentSlotID?) throws -> Void)?
+    /// Headless hosts leave this unset and report `none`.
+    public var onReadHardwareConnectionConfirmation: (@MainActor () -> HardwareConnectionConfirmation)?
     public var onSelectSource: (@MainActor (DeviceSource) throws -> Void)?
     public var onRestrictConfigurationWrite: (@MainActor () throws -> Void)?
     private let now: @MainActor () -> Date

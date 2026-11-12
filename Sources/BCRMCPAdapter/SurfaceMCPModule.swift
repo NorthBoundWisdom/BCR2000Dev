@@ -36,6 +36,7 @@ extension AgentControlService {
                 "pending_feedback_count": .number(session.pendingFeedbackCount),
                 "motionSafety": motionSafetyInfo(),
                 "hardwareConnection": .object([
+                    "confirmation": .string((onReadHardwareConnectionConfirmation?() ?? .none).rawValue),
                     "connected": .bool(session.connection.isConnected),
                     "source": session.connection.connectedSource.map(JSONValue.string) ?? .null,
                     "destination": session.connection.connectedDestination.map(JSONValue.string) ?? .null,
