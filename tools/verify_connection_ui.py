@@ -120,7 +120,8 @@ def run():
     assert status()["source"] == "mock" and state()["voiceWrites"] == 0
     client.call("set_device_source", {"source": "hardware"}, expect_error=True)
     ui.wait(lambda: ui.exists("connection.read"), "Read connection option did not reappear")
-    ui.press("connection.read")
+    # Return must choose the read-only option; writing and initialization have no default shortcut.
+    ui.run("set frontmost to true\nkey code 36")
     ui.wait(lambda: status()["source"] == "hardware", "Read connection did not complete")
     assert status()["hardwareConnection"]["confirmation"] == "none"
     assert state()["voiceWrites"] == state()["presetWrites"] == 0

@@ -842,3 +842,4 @@
 "备份文件已不存在。" = "The backup file no longer exists.";
 "尚无预设备份。" = "No preset backups yet.";
 "无法打开备份文件夹。" = "Could not open the backups folder.";
+"硬件 → 软件（不改动设备）" = "Hardware → Software (no device changes)";

@@ -18,7 +18,7 @@ struct HardwareConnectionSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("初始化并连接")) { model.connectHardware(prompt.id, mode: .initialize) }
                         .accessibilityIdentifier("connection.initialize")
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).panelStyle()
             }
@@ -35,12 +35,13 @@ struct HardwareConnectionSheet: View {
             }
             if prompt.canRead {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.text("硬件 → 软件")).font(.headline)
+                    Text(L10n.text("硬件 → 软件（不改动设备）")).font(.headline)
                     Text(L10n.text("读取控制器当前旋钮值，不切换预设或改动设备；分组在顶部输入后确认。"))
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("按硬件现状连接")) { model.connectHardware(prompt.id, mode: .read) }
                         .accessibilityIdentifier("connection.read")
-                        .buttonStyle(.bordered)
+                        .keyboardShortcut(.defaultAction)
+                        .buttonStyle(.borderedProminent)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).panelStyle()
             }
