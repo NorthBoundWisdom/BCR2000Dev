@@ -24,13 +24,21 @@ extension OutputTransport {
 /// The connected UDP socket only accepts replies from the configured peer. Decoding and receipt
 /// timestamps happen on its serial queue; callbacks hand immutable values to the main actor.
 @MainActor
-final class OSCParameterAdapter: OutputTransport {
+final class OSCParameterAdapter: MonotonicOutputTransport {
     private(set) var isConnected = false
     var onSamples: (@MainActor ([ParameterSample]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
+    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
+    var onPolicyPeerReset: (@MainActor (Double) -> Void)?
+    private let monotonic: @Sendable () -> Double
+    private let wallClock: @Sendable () -> Date
+    private let receiveCapacity: Int
+    private var receiver: Task<Void, Never>?
+    private var incoming: AsyncThrowingStream<OutputReceivedOSC, any Error>.Continuation?
     private var serverEpoch: String?
     private var lastHeartbeatEcho: UInt32?
     var onFailure: (@MainActor (String) -> Void)?
@@ -38,14 +46,21 @@ final class OSCParameterAdapter: OutputTransport {
     private var generation = UUID()
     private var sequence: UInt32 = 0
     private var heartbeatSequence: UInt32 = 0
-    private var pendingHeartbeats: [Int32: Date] = [:]
+    private var pendingHeartbeats: [Int32: Double] = [:]
     private var lastStateSequence: UInt32?
     private let queue = DispatchQueue(label: "dev.bcragentconsole.osc")
 
-    deinit { connection?.cancel() }
+    init(monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+         wallClock: @escaping @Sendable () -> Date = { .now }, receiveCapacity: Int = 64)
+    {
+        self.monotonic = monotonic; self.wallClock = wallClock; self.receiveCapacity = receiveCapacity
+    }
+
+    deinit { receiver?.cancel(); incoming?.finish(); connection?.cancel() }
 
     func start(host: String, port: UInt16) throws {
         stop()
+        guard (1 ... 1024).contains(receiveCapacity) else { throw MotionSafetyError(L10n.text("外部接收队列已满")) }
         guard !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, port > 0 else {
             throw MotionSafetyError(L10n.text("OSC 目标地址或端口无效"))
         }
@@ -67,20 +82,43 @@ final class OSCParameterAdapter: OutputTransport {
             }
         }
         connection.start(queue: queue)
-        Self.receiveLoop(connection) { [weak self] result, receivedAt in
-            Task { @MainActor [weak self] in
-                guard let self, self.generation == generation else { return }
-                switch result {
-                case let .success(messages): self.handle(messages, at: receivedAt)
-                case let .failure(reason): self.onFailure?(reason.reason)
+        let inbox = AsyncThrowingStream<OutputReceivedOSC, any Error>
+            .makeStream(bufferingPolicy: .bufferingOldest(receiveCapacity))
+        incoming = inbox.continuation
+        receiver = Task { @MainActor [weak self] in
+            do {
+                for try await packet in inbox.stream {
+                    guard let self, self.generation == generation else { return }
+                    self.handle(packet.messages, at: packet.stamp)
                 }
+            } catch {
+                guard let self, self.generation == generation else { return }
+                if error is OutputReceiveOverflow { self.onDroppedPacket?() }
+                let reason = error is OutputReceiveOverflow ? L10n.text("外部接收队列已满") : error.localizedDescription
+                self.stop()
+                self.onFailure?(reason)
+            }
+        }
+        let continuation = inbox.continuation
+        Self.receiveLoop(connection, monotonic: monotonic, wallClock: wallClock) { result, stamp in
+            switch result {
+            case let .success(messages):
+                switch continuation.yield(.init(messages: messages, stamp: stamp)) {
+                case .enqueued: return true
+                case .dropped: continuation.finish(throwing: OutputReceiveOverflow()); return false
+                case .terminated: return false
+                @unknown default: continuation.finish(throwing: OutputReceiveOverflow()); return false
+                }
+            case let .failure(error): continuation.finish(throwing: error); return false
             }
         }
     }
 
-    func ping(at now: Date) throws {
+    func ping(at now: Date) throws { try ping(atMonotonic: monotonic()) }
+    func ping(atMonotonic now: Double) throws {
         guard isConnected else { return }
-        pendingHeartbeats = pendingHeartbeats.filter { now.timeIntervalSince($0.value) < 1 }
+        guard now.isFinite else { throw MotionSafetyError(L10n.text("心跳时间异常，禁止输出")) }
+        pendingHeartbeats = pendingHeartbeats.filter { now - $0.value < 1 }
         heartbeatSequence &+= 1
         let id = Int32(bitPattern: heartbeatSequence)
         pendingHeartbeats[id] = now
@@ -93,6 +131,7 @@ final class OSCParameterAdapter: OutputTransport {
 
     func stop() {
         generation = UUID()
+        receiver?.cancel(); receiver = nil; incoming?.finish(); incoming = nil
         guard let connection else { isConnected = false; return }
         self.connection = nil
         pendingHeartbeats.removeAll()
@@ -144,7 +183,8 @@ final class OSCParameterAdapter: OutputTransport {
         })
     }
 
-    private func handle(_ messages: [OSCMessage], at receivedAt: Date) {
+    private func handle(_ messages: [OSCMessage], at stamp: OutputReceiptStamp) {
+        let receivedAt = stamp.monotonic
         do {
             if messages.count == 1, messages[0].address == "/bcr/heartbeat",
                messages[0].arguments.count == 2, case let .int(id) = messages[0].arguments[0],
@@ -154,16 +194,16 @@ final class OSCParameterAdapter: OutputTransport {
                 if let previous = lastHeartbeatEcho,
                    Int32(bitPattern: echo &- previous) <= 0 { onDroppedPacket?(); return }
                 if let sent = pendingHeartbeats.removeValue(forKey: id),
-                   receivedAt >= sent, receivedAt.timeIntervalSince(sent) <= 0.3
+                   receivedAt >= sent, receivedAt - sent <= 0.3
                 {
                     let previousEpoch = serverEpoch
                     serverEpoch = epoch
                     if let previous = previousEpoch, previous != epoch {
                         lastStateSequence = nil
-                        onPeerReset?(receivedAt)
+                        onPolicyPeerReset?(receivedAt); onPeerReset?(stamp.wall)
                     }
                     lastHeartbeatEcho = echo
-                    onHeartbeat?(receivedAt)
+                    onPolicyHeartbeat?(receivedAt); onHeartbeat?(stamp.wall)
                 } else { onDroppedPacket?() }
                 return
             }
@@ -178,7 +218,7 @@ final class OSCParameterAdapter: OutputTransport {
             let sequence = UInt32(bitPattern: rawSequence)
             if let previous = lastStateSequence,
                Int32(bitPattern: sequence &- previous) <= 0 { onDroppedPacket?(); return }
-            var samples: [ParameterSample] = []
+            var samples: [SharedParameterSample] = []
             var seen = Set<ParameterID>()
             for message in messages.dropFirst(2) {
                 let id = try OSCCodec.parameterID(message.address)
@@ -191,26 +231,30 @@ final class OSCParameterAdapter: OutputTransport {
             }
             guard !samples.isEmpty else { throw MotionSafetyError(L10n.text("OSC 状态帧为空")) }
             lastStateSequence = sequence
-            onSamples?(samples)
+            onPolicySamples?(samples)
+            onSamples?(samples.map { .init(id: $0.id, value: $0.value, receivedAt: stamp.wall) })
         } catch { onFailure?(error.localizedDescription) }
     }
 
     private nonisolated static func receiveLoop(
         _ connection: NWConnection,
-        handler: @escaping @Sendable (Result<[OSCMessage], MotionSafetyError>, Date) -> Void
+        monotonic: @escaping @Sendable () -> Double,
+        wallClock: @escaping @Sendable () -> Date,
+        handler: @escaping @Sendable (Result<[OSCMessage], MotionSafetyError>, OutputReceiptStamp) -> Bool
     ) {
         connection.receiveMessage { data, _, _, error in
-            let received = Date.now
+            let received = OutputReceiptStamp(monotonic: monotonic(), wall: wallClock())
             if let error {
-                handler(
+                _ = handler(
                     .failure(MotionSafetyError(L10n.text("OSC 接收失败：\(error.localizedDescription)"))),
                     received
                 ); return
             }
-            guard let data else { handler(.failure(MotionSafetyError(L10n.text("OSC 接收端已关闭"))), received); return }
-            do { handler(.success(try OSCCodec.immediateMessages(OSCCodec.decode(data))), received) }
-            catch { handler(.failure(MotionSafetyError(error.localizedDescription)), received) }
-            receiveLoop(connection, handler: handler)
+            guard let data else { _ = handler(.failure(MotionSafetyError(L10n.text("OSC 接收端已关闭"))), received); return }
+            do {
+                guard handler(.success(try OSCCodec.immediateMessages(OSCCodec.decode(data))), received) else { return }
+            } catch { guard handler(.failure(MotionSafetyError(error.localizedDescription)), received) else { return } }
+            receiveLoop(connection, monotonic: monotonic, wallClock: wallClock, handler: handler)
         }
     }
 }

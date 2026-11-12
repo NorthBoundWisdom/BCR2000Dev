@@ -14,7 +14,7 @@
 - `BCRCodexAdapter`, `BCRCoreMIDIDriver`, persistence, MCP and HTTP/SSE are outer adapters. `BCRProviderApplication` owns explicit composition, not transport or UI.
 - `BCRAgentCore` is a source-compatibility export facade only; new domains must not import it. Run `python3 configs/check_domain_boundaries.py` to enforce direction.
 - `BCRAgentConsole` is the GUI composition host; `BCRProviderService` is the headless host. Both use the same domain and application services.
-- OSC policy uses float32 with exact representable actual seeds; JSON/WebSocket/rosbridge use Double. Output callbacks preserve observation age when mapping legacy Date into the common monotonic domain. Invalid host clocks reject ordinary writes; only explicit safety close/fault paths use the last trusted time.
+- OSC policy uses float32 with exact representable actual seeds; JSON/WebSocket/rosbridge use Double. Production OSC/WS/rosbridge stamp monotonic time at actual IO receipt and use bounded handoff; gate/cadence/RTT consume only that channel once. Date remains audit/fixture compatibility, never a production freshness clock. Invalid host clocks reject ordinary writes; only explicit safety close/fault paths use the last trusted time.
 - Views render state and emit user intent; they do not own MIDI or Mock business logic.
 - Do not guess a user's BCR2000 preset. Keep physical controls behind the persisted Quick Learn profile.
 - Port 1 is the preferred BCR2000 control-surface endpoint, with a visible disconnected/error state.

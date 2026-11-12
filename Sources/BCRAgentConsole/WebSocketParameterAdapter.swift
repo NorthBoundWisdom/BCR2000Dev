@@ -3,7 +3,7 @@ import Foundation
 
 /// ROS 2 uses rosbridge and std_msgs/msg/String envelopes carrying the same validated link frames.
 @MainActor
-final class WebSocketParameterAdapter: OutputTransport {
+final class WebSocketParameterAdapter: MonotonicOutputTransport {
     private(set) var isConnected = false
     var onSamples: (@MainActor ([ParameterSample]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
@@ -11,10 +11,18 @@ final class WebSocketParameterAdapter: OutputTransport {
     var onFailure: (@MainActor (String) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
+    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
+    var onPolicyPeerReset: (@MainActor (Double) -> Void)?
+    private let monotonic: @Sendable () -> Double
+    private let wallClock: @Sendable () -> Date
+    private var producer: Task<Void, Never>?
+    private var incoming: AsyncThrowingStream<OutputReceivedBytes, any Error>.Continuation?
     private let rosbridge: Bool
     private let queueLimit: Int
+    private let receiveCapacity: Int
     private let writeMessage: @MainActor (URLSessionWebSocketTask, String) async throws -> Void
-    private var link = JSONParameterLink()
+    private var link = SharedJSONParameterLink(session: UUID().uuidString)
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var receiver: Task<Void, Never>?
@@ -22,11 +30,14 @@ final class WebSocketParameterAdapter: OutputTransport {
     private var outgoing: AsyncStream<String>.Continuation?
     private var queued = 0
     private var generation = UUID()
-    init(rosbridge: Bool = false, queueLimit: Int = 64,
-         writeMessage: (@MainActor (URLSessionWebSocketTask, String) async throws -> Void)? = nil)
+    init(rosbridge: Bool = false, queueLimit: Int = 64, receiveCapacity: Int = 64,
+         writeMessage: (@MainActor (URLSessionWebSocketTask, String) async throws -> Void)? = nil,
+         monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
+         wallClock: @escaping @Sendable () -> Date = { .now })
     {
+        self.monotonic = monotonic; self.wallClock = wallClock
         self.rosbridge = rosbridge
-        self.queueLimit = queueLimit
+        self.queueLimit = queueLimit; self.receiveCapacity = receiveCapacity
         self.writeMessage = writeMessage ?? { socket, message in try await socket.send(.string(message)) }
     }
 
@@ -36,13 +47,17 @@ final class WebSocketParameterAdapter: OutputTransport {
     }
 
     deinit {
-        receiver?.cancel(); sender?.cancel(); socket?.cancel(with: .goingAway, reason: nil); session?
+        producer?.cancel(); incoming?.finish(); receiver?.cancel(); sender?.cancel(); socket?.cancel(
+            with: .goingAway,
+            reason: nil
+        ); session?
             .invalidateAndCancel()
     }
 
     func start(host: String, port: UInt16) throws {
         stop()
         guard (1 ... 1024).contains(queueLimit) else { throw MotionSafetyError(L10n.text("外部输出队列已满")) }
+        guard (1 ... 1024).contains(receiveCapacity) else { throw MotionSafetyError(L10n.text("外部接收队列已满")) }
         var components = URLComponents()
         components.scheme = "ws"; components.host = host; components.port = Int(port); components.path = "/"
         guard port > 0, let url = components.url, !host.isEmpty else {
@@ -55,7 +70,7 @@ final class WebSocketParameterAdapter: OutputTransport {
         let socket = session.webSocketTask(with: url)
         socket.maximumMessageSize = 1_048_576
         self.socket = socket
-        link = JSONParameterLink()
+        link = SharedJSONParameterLink(session: UUID().uuidString)
         let revision = generation
         let stream = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingOldest(queueLimit))
         outgoing = stream.continuation
@@ -74,6 +89,32 @@ final class WebSocketParameterAdapter: OutputTransport {
             }
         }
         socket.resume()
+        let inbox = AsyncThrowingStream<OutputReceivedBytes, any Error>
+            .makeStream(bufferingPolicy: .bufferingOldest(receiveCapacity))
+        incoming = inbox.continuation
+        let monotonic = monotonic, wallClock = wallClock
+        // URLSession messages are read continuously off the main actor. Capture age before
+        // the bounded handoff; waiting for MainActor before stamping would make backlog fresh.
+        producer = Task.detached {
+            do {
+                while !Task.isCancelled {
+                    let message = try await socket.receive()
+                    let stamp = OutputReceiptStamp(monotonic: monotonic(), wall: wallClock())
+                    let data: Data
+                    switch message {
+                    case let .string(text): data = Data(text.utf8)
+                    case let .data(bytes): data = bytes
+                    @unknown default: throw MotionSafetyError(L10n.text("外部状态消息无效"))
+                    }
+                    switch inbox.continuation.yield(.init(data: data, stamp: stamp)) {
+                    case .enqueued: break
+                    case .dropped: inbox.continuation.finish(throwing: OutputReceiveOverflow()); return
+                    case .terminated: return
+                    @unknown default: inbox.continuation.finish(throwing: OutputReceiveOverflow()); return
+                    }
+                }
+            } catch { inbox.continuation.finish(throwing: error) }
+        }
         receiver = Task { [weak self] in
             do {
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
@@ -108,15 +149,9 @@ final class WebSocketParameterAdapter: OutputTransport {
                     }
                     self.onConnection?(true, nil)
                 }
-                while !Task.isCancelled {
-                    let message = try await socket.receive()
+                for try await packet in inbox.stream {
                     guard let self, self.generation == revision else { return }
-                    let data: Data
-                    switch message {
-                    case let .string(text): data = Data(text.utf8)
-                    case let .data(value): data = value
-                    @unknown default: throw MotionSafetyError(L10n.text("外部状态消息无效"))
-                    }
+                    let data = packet.data
                     var value = try JSONDecoder().decode(JSONValue.self, from: data)
                     if self.rosbridge {
                         guard let object = value.objectValue, object["op"] == .string("publish"),
@@ -127,24 +162,30 @@ final class WebSocketParameterAdapter: OutputTransport {
                         }
                         value = try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
                     }
-                    let now = Date()
-                    switch try self.link.receive(value, at: now) {
+                    switch try self.link.receive(value, at: packet.stamp.monotonic) {
                     case let .heartbeat(time, reset):
-                        if reset { self.onPeerReset?(time) }
-                        self.onHeartbeat?(time)
-                    case let .samples(samples): self.onSamples?(samples)
+                        if reset { self.onPolicyPeerReset?(time); self.onPeerReset?(packet.stamp.wall) }
+                        self.onPolicyHeartbeat?(time); self.onHeartbeat?(packet.stamp.wall)
+                    case let .samples(samples):
+                        self.onPolicySamples?(samples)
+                        self
+                            .onSamples?(samples
+                                .map { .init(id: $0.id, value: $0.value, receivedAt: packet.stamp.wall) })
                     case .ignored: self.onDroppedPacket?()
                     }
                 }
             } catch {
                 guard let self, self.generation == revision else { return }
-                self.fail(error)
+                if error is OutputReceiveOverflow { self.onDroppedPacket?() }
+                self.fail(error is OutputReceiveOverflow ? MotionSafetyError(L10n.text("外部接收队列已满")) : error)
             }
         }
     }
 
-    func ping(at now: Date) throws {
+    func ping(at now: Date) throws { try ping(atMonotonic: monotonic()) }
+    func ping(atMonotonic now: Double) throws {
         guard isConnected else { return }
+        guard now.isFinite else { throw MotionSafetyError(L10n.text("心跳时间异常，禁止输出")) }
         try enqueue(link.ping(at: now))
     }
 
@@ -191,6 +232,7 @@ final class WebSocketParameterAdapter: OutputTransport {
         isConnected = false
         outgoing?.finish(); outgoing = nil
         sender?.cancel(); sender = nil
+        producer?.cancel(); producer = nil; incoming?.finish(); incoming = nil
         receiver?.cancel(); receiver = nil
         self.socket = nil; self.session = nil; queued = 0
         guard let socket else { session?.invalidateAndCancel(); return }

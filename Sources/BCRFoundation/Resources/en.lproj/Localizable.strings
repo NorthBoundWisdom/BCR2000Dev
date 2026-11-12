@@ -714,3 +714,5 @@
 "心跳时间倒退，需重新连接安全门" = "Heartbeat time moved backwards; reconnect the safety gate";
 "安全门尚未初始化" = "The safety gate is not initialized";
 "OSC 实际值不能精确表示为 Float32，请确认实际值并关闭再开启使能：{0}" = "OSC actual value is not exactly Float32; confirm actual data and switch enable off/on: {0}";
+"外部接收队列已满" = "External receive queue is full";
+"当前适配器不支持单调接收时间" = "The selected adapter does not support monotonic receipt time";

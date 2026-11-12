@@ -94,14 +94,14 @@ B2 与 B3 的自包含 Provider 产物分别通过原样 14 组黑盒验收，�
 逐任务实际测试数量及日志由工作区 `reports/B.md` 追加记录。
 
 这些均是软件/Mock 证据。硬件没有连接；C03、C05、真实控件/断插/灯环和人工 GUI 布局未验证。
-两宿主JSON锁和实际物化缓存同为 `649a7066d372c6f2a978f9126f3ed175858bf3f7`。
-BCR 最终396个Swift测试、66个工作流测试、6个客户端测试；既有Provider14组黑盒以及新工具现代/2025协议HTTP验收通过。
-Root独立Linux对共享最终87测试、XTouch Core/L10n 81测试及共同Gitmanager11测试验证通过，证据在工作区reports/REVIEW。
+两宿主JSON锁和实际物化缓存同为 `add3c2404e4d2dbe3f9d0861bbda01c013018669`。
+BCR 最终408个Swift测试、66个工作流测试、6个客户端测试；既有Provider14组黑盒以及新工具现代/2025协议HTTP验收通过。
+Root独立Linux对共享最终103测试、XTouch Core/L10n 84测试及共同Gitmanager11测试验证通过，证据在工作区reports/REVIEW。
 GitHub远端CI/尚未推送SHA获取与真实硬件未验，不把本地Docker结果称为远端CI。真实执行器从未连接。
 
 统一工具、权限、游标与时间域详见 [共享远程工具](SHARED_REMOTE_TOOLS.md)。
 
 
 输出精度：仅OSC使用float32。首次/重武装actual必须精确Float可表示，否则invalidActual+参数诊断，禁止epsilon放宽或改写actual；
-JSON/WebSocket/rosbridge保留Double。旧Date观察时间经保守anchor映射到共同runtime单调域，保持排队age；
-transport RTT仍沿原Date API，未把两种时间直接混进同一安全门。坏clock下普通写失败，安全撤权/fault使用最后可信时间并记录诊断。
+JSON/WebSocket/rosbridge保留Double。生产OSC/WS/rosbridge在实际IO接收处采monotonic时间，经有界缓冲原样交MainActor；Controller只消费Mono通道，保持排队age。
+生产ping cadence与RTT也全为Mono，不受墙钟跳变；Date仅legacy facade/审计兼容，旧Date-only夹具仍走原投影。坏clock下普通写失败，安全撤权/fault使用最后可信时间并记录诊断。

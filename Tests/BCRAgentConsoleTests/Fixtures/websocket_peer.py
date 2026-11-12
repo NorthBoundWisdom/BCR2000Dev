@@ -6,6 +6,7 @@ import json
 import socket
 import struct
 import sys
+import time
 
 rosbridge = sys.argv[1] == "rosbridge"
 listener = socket.socket()
@@ -87,6 +88,10 @@ try:
             assert value["op"] == "publish"
             value = json.loads(value["msg"]["data"])
         if value["type"] == "ping":
+            if "--receipt-marker" in sys.argv:
+                print("PING", flush=True)
+            if "--delay-reply" in sys.argv:
+                time.sleep(0.08)
             if "--malformed" in sys.argv:
                 send(b"{invalid-json", opcode=2)
                 continue
@@ -96,17 +101,18 @@ try:
                 {"type": "pong", "epoch": epoch, "session": value["session"], "sequence": value["sequence"]},
                 "/bcr/heartbeat",
             )
-            sequence += 1
-            event(
-                {
-                    "type": "state",
-                    "epoch": epoch,
-                    "session": value["session"],
-                    "sequence": str(sequence),
-                    "values": {"arm.j1": 0},
-                },
-                "/bcr/state",
-            )
+            for _ in range(128 if "--burst" in sys.argv else 1):
+                sequence += 1
+                event(
+                    {
+                        "type": "state",
+                        "epoch": epoch,
+                        "session": value["session"],
+                        "sequence": str(sequence),
+                        "values": {"arm.j1": 0},
+                    },
+                    "/bcr/state",
+                )
         elif value["type"] == "command":
             assert value["epoch"] == epoch
             assert value["enabled"] or not value["values"]

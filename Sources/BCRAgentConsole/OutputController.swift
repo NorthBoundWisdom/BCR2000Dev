@@ -83,7 +83,7 @@ final class OutputController: ObservableObject {
 
     private var configuration: SurfaceConfiguration
     private var configurationRevision: UInt64
-    private var lastPing: Date?
+    private var lastPing: Double?
     private var task: Task<Void, Never>?
     private var isStopping = false
     private let automaticallyTicks: Bool
@@ -98,8 +98,10 @@ final class OutputController: ObservableObject {
         runtime: BCRPluginRuntime? = nil
     ) {
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
-        do { self.runtime = try runtime ?? BCRPluginRuntime(clock: { now().timeIntervalSinceReferenceDate }) }
-        catch { preconditionFailure("Invalid built-in output runtime: \(error)") }
+        let productionClock = (adapter as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true
+        do { self.runtime = try runtime ?? BCRPluginRuntime(clock: {
+            productionClock ? ProcessInfo.processInfo.systemUptime : now().timeIntervalSinceReferenceDate
+        }) } catch { preconditionFailure("Invalid built-in output runtime: \(error)") }
         policyAnchor = self.runtime.now; wallAnchor = now()
         self.automaticallyTicks = automaticallyTicks
         configuration = session.engine.configuration
@@ -130,28 +132,38 @@ final class OutputController: ObservableObject {
             guard let self, !self.isStopping else { return }
             if let failure { self.stop(failure: failure); return }
             if connected {
-                self.policyAnchor = self.runtime.now; self.wallAnchor = self.now(); self.observedEnable = nil
+                if !self.usesMonotonicReceipts { self.policyAnchor = self.runtime.now; self.wallAnchor = self.now() }
+                self.observedEnable = nil
             }
-            do { try self.mutateGate("connection") { $0.setConnected(connected, at: self.policyNow) } }
+            do { try self.mutateGate("connection") { $0.plugin.setConnected(connected, at: self.runtime.now) } }
             catch { self.stop(failure: error.localizedDescription); return }
             self.tick()
         }
         adapter.onHeartbeat = { [weak self] received in
-            guard let self, self.settings.enabled, !self.isStopping else { return }
+            guard let self, !self.usesMonotonicReceipts, self.settings.enabled, !self.isStopping else { return }
             do {
                 try self.mutateGate("heartbeat", journal: false) { $0.receiveHeartbeat(at: self.policyTime(received)) }
             } catch { self.stop(failure: error.localizedDescription) }
         }
-        adapter.onSamples = { [weak self] in self?.receive($0) }
+        adapter.onSamples = { [weak self] samples in
+            guard let self, !self.usesMonotonicReceipts else { return }; self.receive(samples)
+        }
         adapter.onDroppedPacket = { [weak self] in self?.droppedPackets += 1 }
-        adapter.onPeerReset = { [weak self] received in
-            guard let self else { return }
-            do {
-                try self.mutateGate("peer.disconnect") { $0.setConnected(false, at: self.policyNow) }
-                self.tick()
-                self.policyAnchor = self.runtime.now; self.wallAnchor = self.now(); self.observedEnable = nil
-                try self.mutateGate("peer.connect") { $0.setConnected(true, at: self.policyNow) }
-            } catch { self.stop(failure: error.localizedDescription) }
+        adapter.onPeerReset = { [weak self] _ in
+            guard let self, !self.usesMonotonicReceipts else { return }; self.resetPeerPolicy()
+        }
+        if let policy = adapter as? any MonotonicOutputTransport {
+            policy.onPolicyHeartbeat = { [weak self] received in
+                guard let self, self.usesMonotonicReceipts, self.settings.enabled, !self.isStopping else { return }
+                do { try self.mutateGate("heartbeat", journal: false) { $0.plugin.receiveHeartbeat(at: received) } }
+                catch { self.stop(failure: error.localizedDescription) }
+            }
+            policy.onPolicySamples = { [weak self] samples in
+                guard let self, self.usesMonotonicReceipts else { return }; self.receiveMonotonic(samples)
+            }
+            policy.onPolicyPeerReset = { [weak self] _ in
+                guard let self, self.usesMonotonicReceipts else { return }; self.resetPeerPolicy()
+            }
         }
         adapter.onFailure = { [weak self] in self?.stop(failure: $0) }
         publishSnapshot()
@@ -275,26 +287,53 @@ final class OutputController: ObservableObject {
             return
         }
         do {
-            var values: [ParameterID: Double] = [:]
-            for sample in samples {
-                guard session.engine.configuration.parameter(sample.id) != nil, sample.value.isFinite else {
-                    throw MotionSafetyError(L10n.text("实际回传包含未知参数或非法数值"))
-                }
-                values[sample.id] = sample.value
-            }
-            let policySamples = samples.map { ParameterSample(
+            try commitActual(samples.map { .init(
                 id: $0.id,
                 value: $0.value,
-                receivedAt: policyTime($0.receivedAt)
-            ) }
-            try mutateGate("actual", journal: false) { $0.receiveActual(policySamples) }
-            if values.contains(where: { actual[$0.key] != $0.value }) {
-                actual.merge(values) { _, new in new }
-                try session.setActualFeedback(values)
+                receivedAt: policyTime($0.receivedAt).timeIntervalSinceReferenceDate
+            ) })
+        } catch { stop(failure: error.localizedDescription) }
+    }
+
+    private var usesMonotonicReceipts: Bool {
+        (adapter as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true
+    }
+
+    private func receiveMonotonic(_ samples: [SharedParameterSample]) {
+        guard settings.enabled else { return }
+        let time = runtime.now
+        guard samples.allSatisfy({ $0.receivedAt.isFinite && $0.receivedAt <= time && time - $0.receivedAt < 0.3 })
+        else {
+            droppedPackets += 1; return
+        }
+        do { try commitActual(samples) } catch { stop(failure: error.localizedDescription) }
+    }
+
+    private func commitActual(_ samples: [SharedParameterSample]) throws {
+        var values: [ParameterID: Double] = [:]
+        for sample in samples {
+            guard session.engine.configuration.parameter(sample.id) != nil, sample.value.isFinite else {
+                throw MotionSafetyError(L10n.text("实际回传包含未知参数或非法数值"))
             }
-            if settings.ledSource == .actual, session.engine.ledFeedbackSource != .actual {
-                session.setLEDFeedbackSource(.actual)
-            }
+            values[sample.id] = sample.value
+        }
+        try mutateGate("actual", journal: false) { $0.plugin.receiveActual(samples) }
+        if values.contains(where: { actual[$0.key] != $0.value }) {
+            actual.merge(values) { _, new in new }
+            try session.setActualFeedback(values)
+        }
+        if settings.ledSource == .actual,
+           session.engine.ledFeedbackSource != .actual { session.setLEDFeedbackSource(.actual) }
+    }
+
+    private func resetPeerPolicy() {
+        guard settings.enabled, !isStopping else { return }
+        do {
+            try mutateGate("peer.disconnect") { $0.plugin.setConnected(false, at: runtime.now) }
+            tick()
+            if !usesMonotonicReceipts { policyAnchor = runtime.now; wallAnchor = now() }
+            observedEnable = nil
+            try mutateGate("peer.connect") { $0.plugin.setConnected(true, at: runtime.now) }
         } catch { stop(failure: error.localizedDescription) }
     }
 
@@ -313,9 +352,12 @@ final class OutputController: ObservableObject {
             return
         }
         do {
-            if adapter.isConnected, lastPing == nil || time.timeIntervalSince(lastPing!) >= 0.1 {
-                try adapter.ping(at: time)
-                lastPing = time
+            let policyTime = runtime.now
+            if adapter.isConnected, lastPing == nil || policyTime - lastPing! >= 0.1 {
+                if usesMonotonicReceipts, let policy = adapter as? any MonotonicOutputTransport {
+                    try policy.ping(atMonotonic: policyTime)
+                } else { try adapter.ping(at: time) }
+                lastPing = policyTime
             }
             let definition = session.engine.configuration.parameter(settings.enableParameter)!
             let enabled = (session.engine.value(of: definition.id) ?? definition.minimum) >= definition.midpoint
@@ -326,7 +368,7 @@ final class OutputController: ObservableObject {
             // disable therefore persists until an actual off/on; polling cannot undo it.
             if observedEnable != enabled { try gate.setRequestedEnabled(enabled); observedEnable = enabled }
             let previous = gate.plugin.decision
-            let decision = gate.evaluateRequested(targets: targets, at: policyNow)
+            let decision = MotionSafetyDecision(shared: gate.plugin.evaluate(targets: targets, at: runtime.now))
             let current = gate.plugin.decision
             let changed = previous?.status != current?.status || previous?.reason != current?.reason ||
                 previous?.parameterID != current?.parameterID || previous?.limited != current?.limited
@@ -342,7 +384,6 @@ final class OutputController: ObservableObject {
         } catch { stop(failure: error.localizedDescription) }
     }
 
-    private var policyNow: Date { Date(timeIntervalSinceReferenceDate: runtime.now) }
     private func policyTime(_ date: Date) -> Date {
         // Preserve the original trusted timestamp/queue age, rather than marking delayed
         // callbacks fresh. Rebase only on a new connection or explicit configuration.

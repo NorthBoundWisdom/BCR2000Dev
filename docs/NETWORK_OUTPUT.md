@@ -59,8 +59,9 @@ state 使用独立单调递增序号。旧 session、epoch、重复/乱序状态
 失效清理不依赖上层回调：非法 JSON、发送失败或队列溢出都会立即取消 socket、收发任务与 session，
 上层安全门同时停止输出。主动停止仍尝试有界停止幀。路由选择通过 OutputTransport 协议执行，
 注入不支持所选协议的适配器时明确报错；切换/停止后旧回调失效，重新启动重新挂接。
-GUI安全门与新远程工具使用同一runtime单调时域。旧transport Date时间戳按连接anchor保守映射、保留排队age；
-网络ping/pong RTT仍沿Date接口，系统校时可能导致偏安全的超时/拒绝，需重连并重新确认使能。
+GUI安全门与新远程工具使用同一runtime单调时域。生产OSC/WS/rosbridge直接在真实IO收包处采Mono，
+经有界队列携带原时刻交MainActor，保持排队age；ping cadence、JSONLink及OSC RTT也只用Mono。
+墙钟跳变不再污染生产gate，Date仅审计/兼容；旧Date-only测试夹具保留原域。
 
 共享核心迁移后，心跳间隔达到超时期限即撤销武装，即使新心跳先于下一次评估到达也须关闭/开启使能；
 回退/非有限心跳时间会锁定clockError。旧Date API只在宿主投影为注入秒数，网络包、session/epoch/序号与地址格式不变。
@@ -71,3 +72,6 @@ WebSocket/rosbridge JSON使用Double，不因非Float32实际值（例如0.1）�
 
 输出未启用时，空配置、仅开关配置或已保存但尚未修正的限位不会在启动阶段制造输出错误；不安装无效安全门，也不连接传输。
 显式启动仍完整校验并报告失败。设置文件本身的读取/解码失败继续立即可见。
+
+接收队列默认最多64包，WS接收容量与原发送queueLimit独立；overflow明确增加drop并failure关连接，不静默刷新旧buffer时间。
+生产同时提供兼容Date回调时，Controller只消费Mono通道一次；真实queued telemetry过期仍关闭输出。

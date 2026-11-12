@@ -4,13 +4,17 @@ import Foundation
 enum OutputTransportKind: String, Codable, CaseIterable { case osc, webSocket, rosbridge }
 
 @MainActor
-final class OutputTransportRouter: OutputTransport {
+final class OutputTransportRouter: MonotonicOutputTransport {
     var onSamples: (@MainActor ([ParameterSample]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
+    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
+    var onPolicyPeerReset: (@MainActor (Double) -> Void)?
+    var supportsMonotonicReceipts: Bool { (active as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true }
     var isConnected: Bool { active.isConnected }
     private var active: any OutputTransport
     private let factory: @MainActor (OutputTransportKind) -> any OutputTransport
@@ -44,6 +48,9 @@ final class OutputTransportRouter: OutputTransport {
     private func detach() {
         active.onSamples = nil; active.onHeartbeat = nil; active.onConnection = nil
         active.onFailure = nil; active.onPeerReset = nil; active.onDroppedPacket = nil
+        if let policy = active as? any MonotonicOutputTransport {
+            policy.onPolicySamples = nil; policy.onPolicyHeartbeat = nil; policy.onPolicyPeerReset = nil
+        }
     }
 
     private func attach() {
@@ -75,6 +82,17 @@ final class OutputTransportRouter: OutputTransport {
             .onDroppedPacket = { [weak self] in
                 guard let self, self.generation == revision else { return }; self.onDroppedPacket?()
             }
+        if let policy = active as? any MonotonicOutputTransport {
+            policy.onPolicySamples = { [weak self] samples in
+                guard let self, self.generation == revision else { return }; self.onPolicySamples?(samples)
+            }
+            policy.onPolicyHeartbeat = { [weak self] time in
+                guard let self, self.generation == revision else { return }; self.onPolicyHeartbeat?(time)
+            }
+            policy.onPolicyPeerReset = { [weak self] time in
+                guard let self, self.generation == revision else { return }; self.onPolicyPeerReset?(time)
+            }
+        }
     }
 
     func start(host: String, port: UInt16) throws {
@@ -84,6 +102,13 @@ final class OutputTransportRouter: OutputTransport {
     }
 
     func ping(at now: Date) throws { try active.ping(at: now) }
+    func ping(atMonotonic time: Double) throws {
+        guard let policy = active as? any MonotonicOutputTransport, policy.supportsMonotonicReceipts else {
+            throw MotionSafetyError(L10n.text("当前适配器不支持单调接收时间"))
+        }
+        try policy.ping(atMonotonic: time)
+    }
+
     func send(_ frame: ParameterOutputFrame) throws { try active.send(frame) }
     func stop() { generation = UUID(); detach(); active.stop() }
 }

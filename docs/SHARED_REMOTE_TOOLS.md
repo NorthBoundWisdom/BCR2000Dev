@@ -1,6 +1,6 @@
 # 共享远程工具与旧 Provider 兼容
 
-更新：2026-11-12。两宿主固定共享提交 `649a7066d372c6f2a978f9126f3ed175858bf3f7`。
+更新：2026-11-12。两宿主固定共享提交 `add3c2404e4d2dbe3f9d0861bbda01c013018669`。
 准确 inputSchema/outputSchema 从各宿主 `tools/list` 发现，完整typed合同随共享依赖的
 `build/dependencies/SurfacePlugins/docs/remote-tools.md` 提供。所有新输出Schema为object，兼容当前和2025-11-25 MCP。
 
@@ -46,8 +46,8 @@ registry context统一systemUptime/注入单调秒；typed仿真dt独立于host�
 Provider按注册路由推进，不按domain字符串switch。时钟回退/NaN/异常间隔会真实撤权并呈现host_clock_gap，
 安全fault/stop可用最后可信时刻提交诊断；普通写仍拒绝坏时间。持续回升但未追上可信水位不会推进或崩溃。
 
-输出trusted Date观察按连接anchor映射到同一单调域，并保留原排队age，不把延迟callback标成新鲜。
-legacy传输ping/pong RTT仍使用原Date接口。新disable不能被UI轮询的旧enable=true覆盖，必须真实off/on才重武装。
+生产输出在OSC串行receive queue与WS独立reader的真实收包处直接采Mono，带时戳经过有界handoff，保留排队age。
+Controller只消费一套Mono通道，ping cadence/JSONLink与OSC RTT也全Mono；墙钟仅兼容/审计，Date-only夹具保留旧域。新disable不能被UI轮询的旧enable=true覆盖，必须真实off/on才重武装。
 仅OSC使用Float32；首次/重武装actual若不精确可表示则invalidActual+参数诊断，无epsilon、无改写actual。
 JSON/WebSocket/rosbridge使用Double，0.1可按Double原样输出。
 
@@ -60,7 +60,7 @@ JSON/WebSocket/rosbridge使用Double，0.1可按Double原样输出。
 
 ## 可复核软件证据
 
-BCR最终396项Swift测试保留旧断言，包含同一owner/旧新API状态、时间桥、权限、Int.max精确解析、clock故障安全撤权，
+BCR最终408项Swift测试保留旧断言，包含同一owner/旧新API状态、时间桥、权限、Int.max精确解析、clock故障安全撤权，
 以及与XTouch相同Agent序列（start0、remote primary1、advance1.45/2/3.7、remote primary4拒绝）对独立共享注册表完全相符。
 当前Provider产物14组原黑盒通过。独立HTTP探针在native App发现8个新工具，在机器人/底盘headless产物发现24个，
 均通过2026-07-28和2025-11-25的raw对象Schema/授权/控制/trace与逐条分页验证。
@@ -71,7 +71,7 @@ python3 tools/mcp_integration.py --script tools/verify_shared_plugins.py
 ```
 
 这是隔离软件/Mock/参考模拟证据；真实硬件、C03/C05、真实执行器和人工GUI布局未验证。
-Root另用独立官方Linux容器验证共享87、XTouch Core/L10n81、manager11；远端CI与尚未推送SHA的HTTPS获取未执行。
+Root另用独立官方Linux容器验证共享103、XTouch Core/L10n84、manager11；远端CI与尚未推送SHA的HTTPS获取未执行。
 
 ## 发布前事件策略修正
 
@@ -84,3 +84,10 @@ typed旧Provider也调用共享simulationEvent策略，不另写过滤规则，�
 
 四个默认instanceID统一由binding constants提供：agent.mock、robot.reference、chassis.reference、output.parameters。
 客户端仍应先发现能力。旧Provider device_id不变。新整数解析使用exact helper；旧v1调用显式roundedIntValue保持其历史舍入语义。
+
+## 生产接收时钟与缓冲
+
+WS/rosbridge reader连续在MainActor之外接收，OSC在已有NW queue接收；每包先采systemUptime再解码/交接，
+bufferingOldest默认64（WS独立于原outgoing queueLimit）。满后明确drop/failure并关连接，旧buffer可drain但其采收时间不重写。
+生产Controller忽略同时发出的Date兼容回调，不存在重复HB提交或wallAnchor污染。真实loopback测试以peer PING marker确保请求已发、
+80ms后reply期间阻塞MainActor650ms，恢复后HB仍失鲜/actual被丢弃；另测墙钟±小时跳变、双回调与burst overflow。
