@@ -174,6 +174,29 @@ class BuildConfigurationTests(unittest.TestCase):
                 self.assertEqual(observed[-2:], [("build", expected), ("test", expected)])
 
 
+class LocalDistributionDefaultTests(unittest.TestCase):
+    def _distribution(self, argv, environ):
+        observed = []
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.dict(os.environ, environ, clear=True),
+            patch.object(macos_workflow, "REPO_ROOT", Path(directory)),
+            patch.object(macos_workflow, "build", side_effect=lambda *a: observed.append(a[2]) or Path(directory)),
+        ):
+            macos_workflow.main(argv)
+        return observed[0]
+
+    def test_local_setting_applies_only_when_flag_is_omitted(self):
+        self.assertEqual(self._distribution(["build"], {}), "ad-hoc")
+        self.assertEqual(self._distribution(["build"], {"BCR_DISTRIBUTION": "development"}), "development")
+        explicit = ["build", "--distribution", "ad-hoc"]
+        self.assertEqual(self._distribution(explicit, {"BCR_DISTRIBUTION": "development"}), "ad-hoc")
+
+    def test_invalid_local_setting_is_rejected(self):
+        with self.assertRaises(SystemExit), patch("sys.stderr", io.StringIO()):
+            self._distribution(["build"], {"BCR_DISTRIBUTION": "signed"})
+
+
 class LocalizationPackagingTests(unittest.TestCase):
     def test_smoke_launches_each_language_via_launch_services_and_requires_app_marker(self):
         languages = []

@@ -101,6 +101,9 @@ def _build_icon() -> Path:
     return output
 
 
+DISTRIBUTIONS = ("ad-hoc", "development", "developer-id")
+
+
 def _sign(bundle: Path, distribution: str, identity: str | None, *, hardened: bool = True) -> None:
     if distribution == "ad-hoc":
         command = ["codesign", "--force", "--sign", "-", "--timestamp=none"]
@@ -517,7 +520,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("action", choices=("build", "test", "run", "package", "smoke", "check-package"))
     parser.add_argument("--configuration", choices=("debug", "release"), default="debug")
     parser.add_argument("--architecture", choices=("native", "arm64", "x86_64", "universal"), default="native")
-    parser.add_argument("--distribution", choices=("ad-hoc", "development", "developer-id"), default="ad-hoc")
+    parser.add_argument(
+        "--distribution",
+        choices=DISTRIBUTIONS,
+        help="Signing mode; otherwise BCR_DISTRIBUTION from build.local.json, else ad-hoc.",
+    )
     parser.add_argument("--identity", help="Signing certificate name or SHA-1; otherwise BCR_SIGNING_IDENTITY.")
     parser.add_argument("--notary-profile", help="notarytool Keychain profile; otherwise BCR_NOTARY_KEYCHAIN_PROFILE.")
     parser.add_argument("--format", choices=("zip", "dmg", "both"), default="both")
@@ -526,6 +533,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--driverkit-host", type=Path, help="Approved Developer ID compatibility companion to include.")
     args = parser.parse_args(argv)
     with use_build_environment(REPO_ROOT):
+        if args.distribution is None:
+            # A stable local identity keeps Keychain grants valid across rebuilds; CI passes ad-hoc explicitly.
+            args.distribution = os.environ.get("BCR_DISTRIBUTION") or "ad-hoc"
+            if args.distribution not in DISTRIBUTIONS:
+                parser.error(f"BCR_DISTRIBUTION must be one of {', '.join(DISTRIBUTIONS)}")
         if sys.platform != "darwin":
             parser.error("This workflow requires macOS and Xcode's Swift 6 toolchain.")
         if args.action == "test":

@@ -24,6 +24,7 @@ python3 configs/setup_local_project.py
 | --- | --- |
 | `MARKETING_VERSION` | 覆盖应用版本及产物名称 |
 | `ARCHIVE_ID` | 覆盖 CFBundleVersion 及产物名称 |
+| `BCR_DISTRIBUTION` | 未传 `--distribution` 时的签名方式；空值为 `ad-hoc` |
 | `BCR_SIGNING_IDENTITY` | Keychain 内签名证书的完整名称或 SHA-1 |
 | `BCR_NOTARY_KEYCHAIN_PROFILE` | `notarytool` 的 Keychain 凭证 profile 名称 |
 
@@ -53,6 +54,11 @@ iconset 尺寸，再转换为 ICNS 放入 Resources，并写入 Info.plist；应
 默认 `--distribution ad-hoc` 不需要开发者账号。生成的本地安装包未经 Apple 公证；
 正式网站分发应使用下述 Developer ID 流程。`--distribution development --identity ...`
 可使用明确选择的 Apple Development 证书。多个匹配证书时脚本报错，要求指定唯一 SHA-1。
+
+ad-hoc 签名每次构建都会变化，Keychain 因此不再信任新构建，每次启动都会要求输入密码才能读取
+MCP 令牌。日常开发可在 `build.local.json` 设置 `BCR_DISTRIBUTION=development` 和
+`BCR_SIGNING_IDENTITY=<SHA-1>`，固定使用同一张 Apple Development 证书；首次启动选择“始终允许”后
+不再询问。CI 与发布命令显式传 `--distribution ad-hoc`，不受此设置影响。
 
 `build/package/` 中的每次打包输出：
 
