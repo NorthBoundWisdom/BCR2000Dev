@@ -143,6 +143,13 @@ public enum ProviderMCPModule {
                                                             after: args["after_sequence"]?.roundedIntValue ?? 0,
                                                             limit: args["limit"]?.roundedIntValue ?? 256)
             case "console_mock_input":
+                // With the optional surface contract installed, all simulated input must pass its
+                // permission and CAS fences. Without it, Provider 1.0 behavior is unchanged.
+                try ProviderValidation.require(
+                    !enableSurfaceControl,
+                    "permission_denied",
+                    "Surface control is enabled; use surface_control_input for simulated input"
+                )
                 let session = service.session
                 try ProviderValidation.require(
                     permissions.parameterWrite && permissions.deviceControl,

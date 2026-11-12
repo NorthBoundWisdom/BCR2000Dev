@@ -48,6 +48,12 @@ public final class SurfaceSession {
     public private(set) var engine: SurfaceEngine
     /// Whole-configuration replacement resets live values even when definitions compare equal.
     public private(set) var configurationRevision: UInt64 = 0
+    /// Increments on every change that can alter a control's mapping or input interpretation:
+    /// configuration, parameter definitions, assignments, page, source, hardware/Mock map, learning
+    /// and Mock wire encoding. Optional simulation adapters compare it instead of encoding the
+    /// whole configuration; it does not change on ordinary input, parameter or feedback writes.
+    public private(set) var mappingContextRevision: UInt64 = 0
+    private func noteMappingContextChanged() { mappingContextRevision &+= 1 }
     public var mock: MockBCR2000 { mockDevice.model }
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
@@ -229,6 +235,7 @@ public final class SurfaceSession {
         diagnosticReadbackActive = false; diagnosticToken = nil
         nrpnAssembler.reset()
         invalidateInputEpoch("startup_snapshot")
+        noteMappingContextChanged()
         droppedFeedbackCount = 0
         onEvent?(.sourceChanged(.hardware))
         publishChange()
@@ -241,6 +248,7 @@ public final class SurfaceSession {
         source = newSource
         diagnosticReadbackActive = false; diagnosticToken = nil
         invalidateInputEpoch("source_changed")
+        noteMappingContextChanged()
         nrpnAssembler.reset()
         engine.echoWindow = newSource == .mock ? 0 : 0.18
         engine.replaceHardwareMap(newSource == .mock ? mock.preset : hardwareMap)
@@ -332,6 +340,7 @@ public final class SurfaceSession {
 
     public func addParameter(_ definition: ParameterDefinition, assigningTo control: BCRControlID? = nil) throws {
         try engine.addParameter(definition)
+        noteMappingContextChanged()
         if let control {
             perform(try engine.assign(
                 ControlAssignment(control: control, target: .parameter(definition.id)),
@@ -344,12 +353,14 @@ public final class SurfaceSession {
 
     public func updateParameter(_ definition: ParameterDefinition) throws {
         perform(try engine.updateParameter(definition, at: now()))
+        noteMappingContextChanged()
         persistConfiguration()
         publishChange()
     }
 
     public func removeParameter(_ id: ParameterID) {
         engine.removeParameter(id)
+        noteMappingContextChanged()
         persistConfiguration()
         publishChange()
     }
@@ -360,6 +371,7 @@ public final class SurfaceSession {
         let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
         clearFeedbackQueue()
         configurationRevision &+= 1
+        noteMappingContextChanged()
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
         if let learning { onEvent?(.learningInterruptedByConfiguration(learning)) }
@@ -375,11 +387,16 @@ public final class SurfaceSession {
         if !effects.isEmpty { onChange?() }
     }
 
-    /// Explicit simulation display route. It never writes a parameter or injects input.
-    public func setSimulationDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
+    /// Side-effect-free check of every condition `setSimulationDisplayFeedback` can reject.
+    public func validateSimulationDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
         guard source == .mock, let midi = engine.hardwareMap.midi(for: control),
               rawValue <= (midi.kind == .nrpn ? 16383 : 127)
         else { throw ProviderDomainError("unsupported", "Simulation display feedback requires a valid Mock control") }
+    }
+
+    /// Explicit simulation display route. It never writes a parameter or injects input.
+    public func setSimulationDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
+        try validateSimulationDisplayFeedback(control, rawValue: rawValue)
         let effects = try engine.setDisplayFeedback(control, rawValue: rawValue, at: now())
         withWriteOrigin(.external) { perform(effects) }
         publishChange()
@@ -395,8 +412,32 @@ public final class SurfaceSession {
     /// A fresh simulator context starts with its own all-off raw controls, without operator events.
     public func resetSimulationInputs() throws {
         guard source == .mock else { throw ProviderDomainError("unsupported", "Simulation reset requires Mock source") }
+        let configuration = try engine.configuration.migrated() // Validate before the Mock reset.
         mockDevice.resetInputState()
-        try replaceConfiguration(engine.configuration, persist: false)
+        try replaceConfiguration(configuration, persist: false)
+    }
+
+    /// Side-effect-free check of every condition `resetSimulationContext` can reject.
+    public func validateSimulationReset() throws {
+        guard source == .mock else { throw ProviderDomainError("unsupported", "Simulation reset requires Mock source") }
+        _ = try engine.configuration.migrated()
+    }
+
+    /// Clears the simulation display overlay and Mock input state as one operation. Every
+    /// fallible check runs before the first change.
+    public func resetSimulationContext() throws {
+        try validateSimulationReset()
+        perform(engine.clearDisplayFeedback(at: now()))
+        try resetSimulationInputs()
+    }
+
+    /// Simulation-only absolute input: moves a Mock absolute encoder to `rawValue` regardless of
+    /// the position currently shown by display feedback. Hardware sources are never touched.
+    public func simulateAbsoluteInput(_ control: BCRControlID, rawValue: UInt16) {
+        guard source == .mock else { return }
+        engine.resetAbsoluteInputTracking(for: control)
+        mockDevice.move(control, to: rawValue)
+        publishChange()
     }
 
     public func setLEDFeedbackSource(_ source: LEDFeedbackSource) {
@@ -416,6 +457,7 @@ public final class SurfaceSession {
     public func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) throws {
         if let assignment { perform(try engine.assign(assignment, at: now())) }
         else { perform(engine.clearAssignment(for: control, at: now())) }
+        noteMappingContextChanged()
         mockDevice.configureModes(engine.configuration)
         persistConfiguration()
         publishChange()
@@ -423,6 +465,7 @@ public final class SurfaceSession {
 
     public func applyBulkAssignment(_ plan: BulkAssignmentPlan) throws {
         perform(try engine.apply(plan, at: now()))
+        noteMappingContextChanged()
         mockDevice.configureModes(engine.configuration)
         persistConfiguration()
         publishChange()
@@ -432,6 +475,7 @@ public final class SurfaceSession {
     public func beginLearning(at control: BCRControlID, format: MIDILearnFormat = .voice) -> Bool {
         guard source == .hardware else { return false }
         invalidateInputEpoch("learning_started")
+        noteMappingContextChanged()
         learnFormat = format
         nrpnAssembler.reset()
         engine.beginLearning(control)
@@ -440,7 +484,7 @@ public final class SurfaceSession {
     }
 
     public func stopLearning() {
-        if engine.learnTarget != nil { invalidateInputEpoch("learning_stopped") }
+        if engine.learnTarget != nil { invalidateInputEpoch("learning_stopped"); noteMappingContextChanged() }
         engine.stopLearning()
         nrpnAssembler.reset()
         publishChange()
@@ -449,6 +493,7 @@ public final class SurfaceSession {
     public func unbind(_ control: BCRControlID) {
         guard source == .hardware else { return }
         engine.unbind(control)
+        noteMappingContextChanged()
         persistHardwareMap()
         publishChange()
     }
@@ -471,6 +516,7 @@ public final class SurfaceSession {
     public func resetHardwareMap() {
         guard source == .hardware else { return }
         engine.resetHardwareMap()
+        noteMappingContextChanged()
         persistHardwareMap()
         publishChange()
     }
@@ -478,6 +524,7 @@ public final class SurfaceSession {
     public func setMockNRPN(_ enabled: Bool, for control: BCRControlID) throws {
         guard source == .mock else { return }
         invalidateInputEpoch("mock_encoding_changed")
+        noteMappingContextChanged()
         try mockDevice.setNRPN(enabled, for: control)
         engine.replaceHardwareMap(mock.preset)
         nrpnAssembler.reset()
@@ -561,11 +608,13 @@ public final class SurfaceSession {
             switch effect {
             case .pageChanged:
                 invalidateInputEpoch("page_changed")
+                noteMappingContextChanged()
                 clearFeedbackQueue()
                 nrpnAssembler.reset()
                 mockDevice.configureModes(engine.configuration)
                 onEvent?(.pageChanged)
             case .programsChanged:
+                noteMappingContextChanged()
                 clearFeedbackQueue()
                 nrpnAssembler.reset()
                 mockDevice.configureModes(engine.configuration)
@@ -575,6 +624,7 @@ public final class SurfaceSession {
             case let .triggerAgent(slot): onTriggerAgent?(slot)
             case let .triggerAction(action): onTriggerAction?(action)
             case let .learned(control, midi):
+                noteMappingContextChanged()
                 onEvent?(.learned(control, midi, next: engine.learnTarget))
                 persistHardwareMap()
             case let .learnRejected(control, error): onEvent?(.learnRejected(control, error))

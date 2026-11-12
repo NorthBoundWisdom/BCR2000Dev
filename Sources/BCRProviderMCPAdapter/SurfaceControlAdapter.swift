@@ -17,26 +17,42 @@ public final class BCRSurfaceControlAdapter {
         }
     }
 
+    /// A fail-closed observation or recording problem. The adapter changes epoch on the next
+    /// call instead of keeping a sticky error, so discovery recovers once the cause is gone.
+    public struct Diagnostic: Equatable, Sendable {
+        public let reason: String
+        public let code: String
+        public init(reason: String, code: String) { self.reason = reason; self.code = code }
+    }
+
     private let surface: SurfaceSession
     private let monotonic: @MainActor () -> Double
     private let permissions: Permissions
+    private let diagnose: @MainActor (Diagnostic) -> Void
     private var core: SurfaceControlSession
-    private var context: Data
+    private var contextRevision: UInt64
     private var generation: String
     private var handlingRemote = false
     private var inputObserver: UUID?
-    private var observationError: ControlContractError?
+    private var pendingRotation: String?
+    public private(set) var diagnostics: [Diagnostic] = []
+    public private(set) var diagnosticCount = 0
 
     public init(surface: SurfaceSession, instanceID: String, permissions: Permissions = .init(),
                 eventCapacity: Int = 1024,
-                monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime }) throws
+                monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+                diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in }) throws
     {
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
-        context = try Self.context(surface); generation = surface.inputEvents.generation
-        core = try SurfaceControlSession(instanceID: instanceID, epoch: UUID().uuidString,
-                                         mappingRevision: UUID().uuidString, profile: Self.profile(surface),
-                                         eventCapacity: eventCapacity)
-        try seed()
+        diagnose = diagnostic
+        contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+        core = try Self.seeded(
+            SurfaceControlSession(instanceID: instanceID, epoch: UUID().uuidString,
+                                  mappingRevision: UUID().uuidString, profile: Self.profile(surface),
+                                  eventCapacity: eventCapacity),
+            surface: surface,
+            at: monotonic()
+        )
         inputObserver = surface.observeAcceptedInput { [weak self] control, message, mapped, origin in
             self?.observe(control, message: message, mapped: mapped, origin: origin)
         }
@@ -51,9 +67,9 @@ public final class BCRSurfaceControlAdapter {
         "\(control.section.rawValue).\(control.row).\(control.index)"
     }
 
-    private static func context(_ surface: SurfaceSession) throws -> Data {
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        return try encoder.encode(surface.engine.configuration)
+    /// Host error codes pass through unchanged; only unknown errors become `invalid_argument`.
+    public static func failureCode(_ error: any Error) -> String {
+        (error as? ControlContractError)?.code ?? (error as? ProviderDomainError)?.code ?? "invalid_argument"
     }
 
     private static func profile(_ surface: SurfaceSession) -> ControlProfile {
@@ -74,7 +90,8 @@ public final class BCRSurfaceControlAdapter {
                 encoding: control.isContinuous ? (relative ? .signedDelta : .scalar) : .boolean,
                 range: range,
                 feedbackRange: control.isContinuous ? .init(minimum: 0, maximum: maximum, step: 1) : nil,
-                feedbackKinds: control.isContinuous ? [.value] : [.value, .indicator],
+                // A BCR button has one LED display slot, so it declares only the semantic indicator.
+                feedbackKinds: control.isContinuous ? [.value] : [.indicator],
                 mapping: mapping
             )
         }
@@ -87,10 +104,13 @@ public final class BCRSurfaceControlAdapter {
                               ])
     }
 
-    private func seed() throws {
+    private static func seeded(_ session: SurfaceControlSession, surface: SurfaceSession,
+                               at time: Double) throws -> SurfaceControlSession
+    {
+        var session = session
         var values: [String: JSONValue] = [:]
         for control in BCRLayout.allControls {
-            let descriptor = core.profile.controls.first { $0.id == Self.controlID(control) }!
+            let descriptor = session.profile.controls.first { $0.id == Self.controlID(control) }!
             let raw = surface.mock.inputDataValues[control]
             switch descriptor.encoding {
             case .boolean: if let raw { values[descriptor.id] = .bool(raw > 0) }
@@ -98,30 +118,44 @@ public final class BCRSurfaceControlAdapter {
             case .signedDelta: break // A relative tick is an event, not an absolute initial position.
             }
         }
-        try core.seedInputs(values, at: monotonic())
+        try session.seedInputs(values, at: time)
+        return session
     }
 
+    /// Changes epoch when the mapping context, the legacy input generation, or a fail-closed
+    /// diagnostic requires it. The new session is built on a copy and committed only when complete.
     private func refresh() throws {
-        let next = try Self.context(surface)
-        if next != context || generation != surface.inputEvents.generation {
-            try core.reset(
-                expected: core.expected,
-                expectedSequence: core.discovery().latest_sequence,
-                epoch: UUID().uuidString,
-                mappingRevision: UUID().uuidString,
-                profile: Self.profile(surface),
-                at: monotonic()
-            )
-            try seed()
-            context = next; generation = surface.inputEvents.generation; observationError = nil
-        }
+        guard pendingRotation != nil || contextRevision != surface.mappingContextRevision ||
+            generation != surface.inputEvents.generation else { return }
+        let now = monotonic()
+        var next = core
+        try next.reset(
+            expected: core.expected,
+            expectedSequence: core.discovery().latest_sequence,
+            epoch: UUID().uuidString,
+            mappingRevision: UUID().uuidString,
+            profile: Self.profile(surface),
+            at: now
+        )
+        next = try Self.seeded(next, surface: surface, at: now)
+        core = next
+        contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+        pendingRotation = nil
+    }
+
+    private func failClosed(_ reason: String, error: (any Error)? = nil) {
+        let diagnostic = Diagnostic(reason: reason, code: error.map(Self.failureCode) ?? "invalid_state")
+        pendingRotation = reason
+        diagnosticCount += 1
+        diagnostics.append(diagnostic)
+        if diagnostics.count > 64 { diagnostics.removeFirst(diagnostics.count - 64) }
+        diagnose(diagnostic)
     }
 
     public func discovery() throws -> ControlDiscovery { try refresh(); return core.discovery() }
     private func requireMock() throws {
         guard surface.source == .mock,
               !surface.diagnosticReadbackActive else { throw ControlContractError("unsupported_source") }
-        if let observationError { throw observationError }
     }
 
     private func consume(_ gateway: MCPApplicationGateway) throws {
@@ -136,6 +170,13 @@ public final class BCRSurfaceControlAdapter {
         return value
     }
 
+    /// Numeric representation (`.number` vs `.double`) does not make an input different.
+    private static func sameInput(_ lhs: JSONValue?, _ rhs: JSONValue) -> Bool {
+        guard let lhs else { return false }
+        if let left = lhs.finiteNumber, let right = rhs.finiteNumber { return left == right }
+        return lhs == rhs
+    }
+
     private func observe(
         _ control: BCRControlID,
         message: MIDIVoiceMessage,
@@ -143,6 +184,9 @@ public final class BCRSurfaceControlAdapter {
         origin: SurfaceWriteOrigin
     ) {
         guard !handlingRemote, surface.source == .mock else { return }
+        // Only local interface input is recorded. Any other writer (for example a legacy Provider
+        // mock input) is not a fenced surface_control input: revoke the context instead.
+        guard origin == .software else { failClosed("unexpected_input_origin_" + origin.rawValue); return }
         do {
             try refresh()
             let descriptor = core.profile.controls.first { $0.id == Self.controlID(control) }!
@@ -159,17 +203,28 @@ public final class BCRSurfaceControlAdapter {
             )
             let now = monotonic()
             let prior = try core.snapshot(at: now).inputs[descriptor.id]
-            let changed = descriptor.encoding == .signedDelta || prior != value
+            let changed = descriptor.encoding == .signedDelta || !Self.sameInput(prior, value)
             try core.recordInput(
                 input,
                 disposition: changed ? .accepted : .ignored,
                 mappedValue: mapped.map(JSONValue.double),
                 reason: changed ? nil : "no_change",
-                origin: origin == .agent ? .remote : .interface,
+                origin: .interface,
                 at: now
             )
-        } catch let error as ControlContractError { observationError = error }
-        catch { observationError = ControlContractError("invalid_state") }
+        } catch { failClosed("observation_failed", error: error) }
+    }
+
+    /// Records the outcome of an engine change that has already happened. A failure here cannot
+    /// be undone, so the context is revoked (new epoch on the next call) before reporting it.
+    private func commitInput(_ input: ControlInput, disposition: ControlDisposition, mappedValue: JSONValue?,
+                             reason: String?, at now: Double) throws -> JSONValue
+    {
+        do {
+            let event = try core.recordInput(input, disposition: disposition, mappedValue: mappedValue,
+                                             reason: reason, origin: .remote, at: now)
+            return try .encoded(event)
+        } catch { failClosed("input_record_failed", error: error); throw error }
     }
 
     public func execute(_ request: ControlToolRequest, gateway: MCPApplicationGateway) throws -> JSONValue {
@@ -190,6 +245,7 @@ public final class BCRSurfaceControlAdapter {
                 at: monotonic()
             ))
         case let .input(input):
+            // Every fallible check precedes the write budget and the first engine change.
             try requireMock()
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
             guard permissions.input, gateway.permissions.parameterWrite, gateway.permissions.deviceControl else {
@@ -200,13 +256,13 @@ public final class BCRSurfaceControlAdapter {
             guard let id = surface.engine.configuration.assignment(for: control)?.target.parameterID,
                   let definition = surface.engine.configuration.parameter(id), definition.agentWritable,
                   !surface.isMCPProtectedParameter(id) else { throw ControlContractError("permission_denied") }
+            let prior = try core.snapshot(at: now).inputs[input.control_id]
+            let unchanged = descriptor.encoding != .signedDelta && Self.sameInput(prior, input.value)
             try consume(gateway)
-            if descriptor.encoding != .signedDelta,
-               try core.snapshot(at: now).inputs[input.control_id] == input.value
-            {
-                return try .encoded(core.recordInput(input, disposition: .ignored,
-                                                     mappedValue: surface.engine.value(of: id).map(JSONValue.double),
-                                                     reason: "no_change", origin: .remote, at: now))
+            if unchanged {
+                return try commitInput(input, disposition: .ignored,
+                                       mappedValue: surface.engine.value(of: id).map(JSONValue.double),
+                                       reason: "no_change", at: now)
             }
             let before = surface.engine.state(of: control).eventCount
             handlingRemote = true
@@ -217,18 +273,14 @@ public final class BCRSurfaceControlAdapter {
                     if input.value.boolValue! { surface.press(control) } else { surface.release(control) }
                 case .signedDelta: surface.turn(control, by: Int(input.value.finiteNumber!))
                 case .scalar:
-                    let current = surface.engine.hardwareMap.midi(for: control)?.kind == .nrpn ?
-                        Int(surface.mock.rawValues[control] ?? 0) : Int(surface.mock.value(of: control))
-                    surface.turn(control, by: Int(input.value.finiteNumber!) - current)
+                    // The requested position, not a delta from the (possibly overlaid) display.
+                    surface.simulateAbsoluteInput(control, rawValue: UInt16(input.value.finiteNumber!))
                 }
             }
-            try refresh()
-            try core.validateExpected(input.expected)
             let accepted = before != surface.engine.state(of: control).eventCount
-            return try .encoded(core.recordInput(input, disposition: accepted ? .accepted : .ignored,
-                                                 mappedValue: surface.engine.value(of: id).map(JSONValue.double),
-                                                 reason: accepted ? nil : "no_change",
-                                                 origin: .remote, at: now))
+            return try commitInput(input, disposition: accepted ? .accepted : .ignored,
+                                   mappedValue: surface.engine.value(of: id).map(JSONValue.double),
+                                   reason: accepted ? nil : "no_change", at: now)
         case let .feedback(update):
             try requireMock()
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
@@ -237,43 +289,47 @@ public final class BCRSurfaceControlAdapter {
             let now = monotonic(); try core.validateFeedback(update, at: now)
             let control = try control(update.control_id)
             let raw: UInt16
-            if update
-                .kind ==
-                "indicator"
-            {
+            if update.kind == "indicator" {
+                // Static presentation: BCR button LEDs do not flash, so blink is shown as 96.
                 raw = update.value.stringValue == "off" ? 0 : (update.value.stringValue == "on" ? 127 : 96)
             } else if let value = update.value.boolValue { raw = value ? 127 : 0 }
             else { raw = UInt16(update.value.finiteNumber!) }
+            try surface.validateSimulationDisplayFeedback(control, rawValue: raw)
             var next = core
             let event = try next.recordFeedback(update, origin: .remote, at: now)
+            let result = try JSONValue.encoded(event)
             try consume(gateway)
             handlingRemote = true
             defer { handlingRemote = false }
             try surface.setSimulationDisplayFeedback(control, rawValue: raw)
             core = next
-            return try .encoded(event)
+            return result
         case let .reset(expected, expectedSequence):
             try requireMock()
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
             guard permissions.reset, gateway.permissions.parameterWrite, gateway.permissions.simulationControl else {
                 throw ControlContractError("permission_denied")
             }
+            let now = monotonic()
             var next = core
             try next.reset(
                 expected: expected,
                 expectedSequence: expectedSequence,
                 epoch: UUID().uuidString,
                 mappingRevision: UUID().uuidString,
-                at: monotonic()
+                at: now
             )
+            try surface.validateSimulationReset()
             try consume(gateway)
             handlingRemote = true
             defer { handlingRemote = false }
-            try surface.clearSimulationDisplayFeedback()
-            try surface.resetSimulationInputs()
-            core = next; context = try Self.context(surface); generation = surface.inputEvents.generation
-            observationError = nil
-            try seed()
+            // Session side first; it validates before its first change. The core commits last.
+            try surface.resetSimulationContext()
+            do { next = try Self.seeded(next, surface: surface, at: now) }
+            catch { failClosed("reset_seed_failed", error: error); throw error }
+            core = next
+            contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+            pendingRotation = nil
             return try .encoded(core.discovery())
         }
     }

@@ -15,8 +15,14 @@ public enum SurfaceControlMCPModule {
         -> BCRSurfaceControlAdapter?
     {
         guard let surface = gateway.surfaceSession else { return nil }
-        let adapter = try BCRSurfaceControlAdapter(surface: surface, instanceID: instanceID, permissions: permissions,
-                                                   eventCapacity: eventCapacity, monotonic: monotonic)
+        let adapter = try BCRSurfaceControlAdapter(
+            surface: surface, instanceID: instanceID, permissions: permissions,
+            eventCapacity: eventCapacity, monotonic: monotonic,
+            diagnostic: { [weak gateway] value in
+                // Existing audit trail; the context itself is revoked by the adapter (fail closed).
+                gateway?.record("surface_control.context", succeeded: false, detail: value.reason + ": " + value.code)
+            }
+        )
         let tools = SurfaceControlTools.descriptors.map { descriptor in JSONValue.object([
             "name": .string(descriptor.name), "description": .string("Optional simulation surface control 1.0"),
             "inputSchema": descriptor.inputSchema, "outputSchema": descriptor.outputSchema,
@@ -24,8 +30,7 @@ public enum SurfaceControlMCPModule {
         ]) }
         try gateway.registerModule(id: "surface.controls.1", tools: tools, rawResults: true, validatesInHandler: true,
                                    failureEncoder: { error in
-                                       .object(["code": .string((error as? ControlContractError)?
-                                               .code ?? "invalid_argument")])
+                                       .object(["code": .string(BCRSurfaceControlAdapter.failureCode(error))])
                                    }) { [weak gateway] name, arguments in
             guard let gateway else { throw ControlContractError("not_initialized") }
             return try adapter.execute(SurfaceControlTools.parse(name, arguments: .object(arguments)), gateway: gateway)

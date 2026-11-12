@@ -79,6 +79,23 @@ public struct MockBCR2000: Sendable {
         return MIDI1UMPCodec.feedback(control: midi, value: next)
     }
 
+    /// Moves an absolute encoder directly to a simulated input position. Unlike `turn`, the result
+    /// does not depend on the shown position, so received display feedback cannot alter the input.
+    public mutating func move(_ control: BCRControlID, to rawValue: UInt16) -> MIDIVoiceMessage? {
+        guard control.isContinuous, let midi = preset.midi(for: control),
+              (encoderModes[control] ?? .absolute) == .absolute,
+              rawValue <= (midi.kind == .nrpn ? 16383 : 127) else { return nil }
+        inputDataValues[control] = rawValue
+        sentCount += 1
+        if midi.kind == .nrpn {
+            rawValues[control] = rawValue
+            values[control] = UInt8((Double(rawValue) * 127 / 16383).rounded())
+            return .nrpn(channel: midi.channel, number: midi.number, value: rawValue)
+        }
+        values[control] = UInt8(rawValue)
+        return MIDI1UMPCodec.feedback(control: midi, value: UInt8(rawValue))
+    }
+
     public mutating func press(_ control: BCRControlID) -> MIDIVoiceMessage? {
         guard !control.isContinuous, let midi = preset.midi(for: control) else {
             return nil

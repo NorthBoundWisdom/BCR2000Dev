@@ -234,6 +234,13 @@ public struct SurfaceEngine: Sendable {
         return apply(control, value: value, isPositive: message.isPositiveActivation, fromDevice: true, at: now)
     }
 
+    /// Simulation absolute input states a position, not a movement relative to whatever the
+    /// device last showed. Dropping the stepped/toggle accumulator makes the next absolute input
+    /// map its own raw value, so a display-feedback overlay cannot absorb it.
+    public mutating func resetAbsoluteInputTracking(for control: BCRControlID) {
+        absoluteInputs[control] = nil
+    }
+
     // MARK: Software input (virtual panel in hardware mode, inspector, parameter list)
 
     /// Turns a control from the software side, as if the user had moved it.
