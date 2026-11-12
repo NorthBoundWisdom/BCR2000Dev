@@ -213,8 +213,9 @@ private struct FunctionSection: View {
                             set: { update(target: .parameter($0)) }
                         )) {
                             ForEach(model.configuration.parameters) { parameter in
-                                Text(parameter.group.isEmpty ? parameter
-                                    .name : "\(parameter.group) · \(parameter.name)")
+                                Text(parameter.group.isEmpty ? BuiltInNamePresentation.displayName(parameter.name)
+                                    :
+                                    "\(BuiltInNamePresentation.displayName(parameter.group)) · \(BuiltInNamePresentation.displayName(parameter.name))")
                                     .tag(parameter.id)
                             }
                         }
@@ -298,7 +299,7 @@ private struct FunctionSection: View {
                         set: { update(target: .resetGroup($0)) }
                     )) {
                         ForEach(model.configuration.parameterGroups, id: \.self) {
-                            Text($0.isEmpty ? L10n.text("（未分组）") : $0).tag($0)
+                            Text($0.isEmpty ? L10n.text("（未分组）") : BuiltInNamePresentation.displayName($0)).tag($0)
                         }
                     }
                 }
@@ -434,8 +435,8 @@ private struct ParameterEditor: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                textRow(L10n.text("名称"), $draftState.value.name)
-                textRow(L10n.text("分组"), $draftState.value.group)
+                textRow(L10n.text("名称"), displayedName($draftState.value.name))
+                textRow(L10n.text("分组"), displayedName($draftState.value.group))
                 textRow(L10n.text("单位"), $draftState.value.unit)
                 FieldRow(L10n.text("类型")) {
                     Picker(L10n.text("类型"), selection: $draftState.value.kind) {
@@ -469,7 +470,10 @@ private struct ParameterEditor: View {
                     .disabled(!draftState.isDirty && draftState.conflict == nil)
                 Spacer()
                 Button(L10n.text("删除参数…"), role: .destructive) { confirmsRemoval = true }
-                    .confirmationDialog(L10n.text("删除参数“\(definition.name)”？"), isPresented: $confirmsRemoval) {
+                    .confirmationDialog(
+                        L10n.text("删除参数“\(BuiltInNamePresentation.displayName(definition.name))”？"),
+                        isPresented: $confirmsRemoval
+                    ) {
                         Button(L10n.text("删除"), role: .destructive) { model.removeParameter(definition.id) }
                     } message: {
                         Text(L10n.text("所有绑定到它的控件都会变为未分配。"))
@@ -478,6 +482,11 @@ private struct ParameterEditor: View {
         }
         .panelStyle()
         .onChange(of: definition) { _, updated in draftState.receive(updated) }
+    }
+
+    // Rendering a translated draft must not dirty it or rewrite an untouched name on Apply.
+    private func displayedName(_ saved: Binding<String>) -> Binding<String> {
+        Binding(get: { BuiltInNamePresentation.displayName(saved.wrappedValue) }, set: { saved.wrappedValue = $0 })
     }
 
     private func textRow(_ label: String, _ text: Binding<String>) -> some View {

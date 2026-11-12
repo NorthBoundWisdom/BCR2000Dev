@@ -32,6 +32,28 @@ public enum ConfigurationPreset: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// Translate only exact built-in names at presentation time; persisted names and group keys stay verbatim.
+public enum BuiltInNamePresentation {
+    public static func displayName(_ savedName: String, language: AppLanguage = L10n.language) -> String {
+        guard let message = messagesByName[savedName] else { return savedName }
+        return L10n.text(message, language: language)
+    }
+
+    private static let messagesByName: [String: LocalizedMessage] = {
+        let names: [LocalizedMessage] = [
+            "J1 底座旋转", "J2 肩部", "J3 肘部", "J4 腕部俯仰", "J5 腕部旋转", "J6 末端旋转",
+            "夹爪开合", "运动速度", "使能", "机械臂", "通用", "机械臂示例", "默认配置"
+        ] + (1 ... 8).map { "参数 \($0)" }
+        var result: [String: LocalizedMessage] = [:]
+        for message in names {
+            for language in [AppLanguage.chinese, .english] {
+                result[L10n.text(message, language: language)] = message
+            }
+        }
+        return result
+    }()
+}
+
 public extension SurfaceConfiguration {
     static let starterGroup = L10n.text("通用")
     static let robotArmGroup = L10n.text("机械臂")

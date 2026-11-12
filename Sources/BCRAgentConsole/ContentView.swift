@@ -138,7 +138,7 @@ private struct HeaderBar: View {
                 Text("BCR CONSOLE")
                     .font(.system(size: 13, weight: .heavy, design: .rounded))
                     .tracking(1.2)
-                Text(model.configuration.name)
+                Text(BuiltInNamePresentation.displayName(model.configuration.name))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

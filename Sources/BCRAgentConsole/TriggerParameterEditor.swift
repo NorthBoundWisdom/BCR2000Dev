@@ -12,7 +12,9 @@ struct TriggerParameterEditor: View {
             if let id = target.parameterID {
                 FieldRow(L10n.text("参数")) {
                     Picker(L10n.text("参数"), selection: Binding(get: { id }, set: { changeParameter($0) })) {
-                        ForEach(model.configuration.parameters) { Text($0.name).tag($0.id) }
+                        ForEach(model.configuration.parameters) {
+                            Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
+                        }
                     }
                 }
                 fields(id)

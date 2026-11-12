@@ -30,7 +30,7 @@ extension ConsoleViewModel {
             accent = Theme.trigger
         case let .parameter(id)?:
             if let definition = configuration.parameter(id), let value = engine.value(of: id) {
-                label = definition.name
+                label = BuiltInNamePresentation.displayName(definition.name)
                 detail = definition.formatted(value, minimumFractionDigits: parameterFractionDigits(id))
                 accent = Theme.parameter
             }
@@ -41,19 +41,19 @@ extension ConsoleViewModel {
                 accent = stateColor(slot.state)
             }
         case let .resetGroup(group)?:
-            label = L10n.text("复位 \(group)")
+            label = L10n.text("复位 \(BuiltInNamePresentation.displayName(group))")
             accent = Theme.trigger
         case let .stepParameter(id, step, _)?:
             label = step > 0 ? L10n.text("步进 +") : L10n.text("步进 −")
-            detail = configuration.parameter(id)?.name
+            detail = configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) }
             accent = Theme.trigger
         case let .setParameter(id, value)?:
             label = L10n.text("设为 ") + (configuration.parameter(id)?.formatted(value) ?? String(value))
-            detail = configuration.parameter(id)?.name
+            detail = configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) }
             accent = Theme.trigger
         case let .cycleParameter(id, values)?:
             label = L10n.text("循环 \(values.count) 个值")
-            detail = configuration.parameter(id)?.name
+            detail = configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) }
             accent = Theme.trigger
         case nil:
             break
