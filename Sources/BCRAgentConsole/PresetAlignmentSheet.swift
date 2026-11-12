@@ -22,10 +22,17 @@ struct PresetAlignmentSheet: View {
             Divider()
             HStack {
                 if let backup = state.backup {
-                    Text(L10n.text("写入前备份：\(backup.lastPathComponent)"))
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                        .help(backup.path)
+                    Button { model.revealPresetBackups(file: backup) } label: {
+                        Text(L10n.text("写入前备份：\(backup.lastPathComponent)"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption.monospaced())
+                    .frame(maxWidth: 260, alignment: .leading)
+                    .accessibilityLabel(L10n.text("在访达中显示此备份"))
+                    .accessibilityIdentifier("preset.backup.reveal")
+                    .help(backup.path)
                 }
                 Spacer()
                 if state.canRestore || (model.presetRestorePoint != nil && state.phase != .preview) {

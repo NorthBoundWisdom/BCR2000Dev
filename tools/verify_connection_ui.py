@@ -126,6 +126,12 @@ def run():
     assert state()["voiceWrites"] == state()["presetWrites"] == 0
     for iteration in range(3):
         open_preview()
+        if iteration == 0:
+            backups_before = {path.name: path.read_bytes() for path in (directory / "Backups").glob("*.syx")}
+            ui.press("preset.backup.reveal")
+            ui.run("set frontmost to true")
+            assert backups_before == {path.name: path.read_bytes() for path in (directory / "Backups").glob("*.syx")}
+            assert state()["presetWrites"] == 0
         if capture and iteration == 0:
             ui.capture(images / "preset-alignment.png", width=width)
         ui.press("preset.option.enableButtonFunctions")
@@ -148,6 +154,11 @@ def run():
     assert state()["presetWrites"] == 2 and state()["matchesOriginal"]
     assert not (directory / "preset-alignment-restore.json").exists()
     ui.press("preset.close")
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.backups"), "Backup folder action missing")
+    ui.press("preset.menu.backups")
+    ui.run("set frontmost to true")
+    assert state()["presetWrites"] == 2 and state()["matchesOriginal"]
     print(
         "PASS native connection decline/read, read-only preview/deduplication, options, write/readback and restore",
         flush=True,

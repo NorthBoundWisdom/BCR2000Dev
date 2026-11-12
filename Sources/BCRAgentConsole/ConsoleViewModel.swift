@@ -1046,8 +1046,37 @@ final class ConsoleViewModel: ObservableObject {
         presetAlignment = nil
     }
 
+    private var presetBackupDirectory: URL {
+        supportDirectory.appending(path: "Backups", directoryHint: .isDirectory)
+    }
+
+    var canRevealPresetBackups: Bool {
+        var directory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: presetBackupDirectory.path, isDirectory: &directory)
+            && directory.boolValue
+    }
+
+    /// Finder navigation only; never loads a preset or changes the restore point.
+    func revealPresetBackups(file: URL? = nil) {
+        if let file {
+            guard FileManager.default.fileExists(atPath: file.path) else {
+                notice = ConsoleNotice(level: .warning, text: L10n.text("备份文件已不存在。"))
+                return
+            }
+            NSWorkspace.shared.activateFileViewerSelecting([file])
+        } else {
+            guard canRevealPresetBackups else {
+                notice = ConsoleNotice(level: .info, text: L10n.text("尚无预设备份。"))
+                return
+            }
+            if !NSWorkspace.shared.open(presetBackupDirectory) {
+                notice = ConsoleNotice(level: .error, text: L10n.text("无法打开备份文件夹。"))
+            }
+        }
+    }
+
     private func saveBackup(_ dump: Data) throws -> URL {
-        try PresetBackupStore(directory: supportDirectory.appending(path: "Backups", directoryHint: .isDirectory))
+        try PresetBackupStore(directory: presetBackupDirectory)
             .save(dump, protecting: presetRestorePoint?.backupFile)
     }
 

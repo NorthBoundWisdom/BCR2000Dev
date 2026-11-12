@@ -837,3 +837,8 @@
 "已展开" = "Expanded";
 "已折叠" = "Collapsed";
 "展开或收起此类修改" = "Expand or collapse these changes";
+"在访达中显示备份…" = "Show Backups in Finder…";
+"在访达中显示此备份" = "Reveal This Backup in Finder";
+"备份文件已不存在。" = "The backup file no longer exists.";
+"尚无预设备份。" = "No preset backups yet.";
+"无法打开备份文件夹。" = "Could not open the backups folder.";
