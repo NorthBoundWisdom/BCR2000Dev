@@ -148,6 +148,58 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
 - 产出：一份数据（各操作在 0/60/120 ms 延迟下的耗时）和是否需要调整 2 秒 ACK 超时的结论，决定 C2 是否值得做。
   不涉及真实设备。
 
+## F. 第三轮不需要设备的工作（2026-11-13）
+
+E1–E5、E7 已完成并通过 review。本轮接着做遗留和离屏相关的缺口。F1–F3 可立即执行；F4 独立，可并行。
+
+### F1 测试替身去重（即 E8，上一轮未做）
+
+- 依据：`grep -rln "0xF0, 0, 0x20, 0x32" Tests` 有 9 个文件各自手写 BCL 帧头；`IntegrationMIDIFixture.swift` 与测试里的
+  `PresetDevice`、`DisplayDevice`、`StartupMIDI`、`ConfirmationMIDI`、`ButtonFunctionMIDI` 等重复同一套 56 旋钮预设和假设备。
+- 做法：在测试支持代码里提供一个 BCL 帧编码函数和一个预设行构造器，各测试复用；假设备替身能合并的合并。
+  SwiftPM 的测试目标之间不能直接共享源码：先看 `Package.swift`，选改动最小的方式（新增一个仅测试依赖的支持目标，
+  或在各测试目标内各放一份同名辅助文件），并在执行记录里写明选择与理由。Debug 夹具 `IntegrationMIDIFixture` 在 App 目标内，
+  只复用它能访问到的公共函数，不为去重把测试代码搬进产品目标。
+- 验收：不改任何测试断言；测试总数不减少；手写帧头的文件数明显下降并在记录里给出前后数字。
+
+### F2 其余原生验收脚本的离屏运行（中）
+
+- 依据：2026-11-13 只验证了 `verify_connection_ui.py` 可离屏。其余 7 个脚本默认仍在前台，会弹窗并抢焦点：
+  `verify_builtin_names_ui.py`、`verify_configuration_ui.py`、`verify_endpoint_ui.py`、`verify_functions_ui.py`、
+  `verify_output_ui.py`、`verify_precision_ui.py`、`verify_review_fixes_ui.py`。
+  已知障碍（`grep -nE "keystroke|key code|screencapture" tools/verify_*.py`）：
+  - 区域截图 `screencapture -x -R80,80,1200,760`（endpoint、precision、review_fixes）：离屏窗口不在该区域，会截到别的窗口；
+  - 键盘事件 `key code` / `keystroke`（configuration、output、precision）：系统键盘事件发给前台应用，离屏时会打到用户正在用的应用；
+  - 系统打开/保存面板（configuration）：面板是否能在离屏下由辅助功能驱动，未知。
+- 做法，逐个脚本处理并逐个记录结果：
+  1. 区域截图改为按窗口号截图（`tools/native_ui.py` 的 `NativeUI.capture` 已有按本进程窗口号截图的实现）。
+     离屏窗口是透明的，按窗口号截图是否仍得到内容需要实测；得不到时改用 App 自己的渲染输出
+     （`--render-ui` 与 `BCR_UI_SNAPSHOT_DIRECTORY` 已存在，见 `BCRAgentConsoleApp.swift`），或保留该脚本为前台并写明原因。
+  2. 键盘事件改为辅助功能动作（`tools/native_ui.swift` 的 AXPress / 设置值）。**离屏运行时绝不向系统发送键盘事件。**
+     改不了的步骤，该脚本保持前台。
+  3. 每个脚本离屏跑通后，用采样确认运行期间前台应用不变、没有可见窗口，再把它列入可离屏清单。
+- 验收：`docs/UI_ACCEPTANCE.md` 给出一张表：每个脚本“可离屏 / 必须前台（原因）”。可离屏的脚本在中文下离屏通过；
+  必须前台的脚本行为不变。`tools/mcp_integration.py` 带 `--script` 时的默认值不要改成离屏，除非全部脚本都可离屏。
+- 不做：不为离屏去改产品界面的行为；不删除任何现有验收断言。
+
+### F3 离屏模式的收尾（小）
+
+- 依据（均在 `Sources/BCRAgentConsole/OffscreenPresentation.swift` 与 2026-11-13 的实测）：
+  - 离屏状态靠 50 ms 轮询加四个通知维持，轮询在测试进程整个生命周期里空转；
+  - 实测中透明窗口的坐标并不总在屏幕外（SwiftUI 会把窗口放回屏幕范围），目前不可见是靠 `alphaValue = 0`，
+    “停在所有屏幕之外”的注释与实际不完全一致；
+  - `mcp_integration.py` 的 `--offscreen` / `--foreground` 没有测试；`OffscreenPresentationTests` 只测了单个窗口。
+- 做法：注释与文档按实测改准确（不可见的保证来自透明与不响应鼠标，屏幕外只是尽力而为）；能用通知覆盖的就去掉轮询，
+  去不掉则保留并说明原因；给 `mcp_integration.py` 的参数解析加单元测试（离屏默认值随 `--script` 变化、两个开关互斥）。
+- 验收：现有离屏 smoke 与离屏连接验收仍通过；采样确认无可见窗口、前台应用不变。
+
+### F4 远程桥接可行性预研（即 E9，独立）
+
+- 依据与产出见上文 E9。只在本机用回环和假设备做，不连接 ethanmacair，不发送真实 MIDI。
+- 产出一份数据表写入 `docs/`（建议 `docs/REMOTE_BRIDGE_FEASIBILITY.md`）：0 / 60 / 120 ms 往返延迟下，
+  554 帧预设读取、逐行确认写入的耗时，以及 2 秒 ACK 超时的余量；结论一句话：C2 值得做 / 需要先改超时 / 不值得。
+- 预研代码放 `tools/` 或 `experiments/`，不进产品目标；不改 `CoreMIDIService`。
+
 ## B. 需要设备（设备可写之后）
 
 前置：先完成 C1（远端驱动）或把设备插回本机。顺序按依赖排列。
@@ -250,13 +302,73 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 
 ## 下一步执行顺序
 
-1. A 组已完成并通过 review（见文末“Review 结论（A1–A7）”），已推送。
-2. 现在可做（不需要设备、不需要用户决定）：E1、E2、E3，然后 E4、E5、E7、E8；E9 独立，可并行。
+1. A 组与 E1–E5、E7 已完成并通过 review，已推送。
+2. 现在可做（不需要设备、不需要用户决定）：F1、F2、F3；F4 独立，可交给另一个窗口并行。
 3. E6 等 D5 的决定；D6、D7 可随时由用户口头决定。
 4. 用户回到 ethanmacair 时先完成 C1，再按 B1–B4 实测（约 40 分钟），结果写入硬件验证记录。
 5. 根据 B 组结果修正软件，再裁定 D1–D4；C2 以 E9 的数据为依据决定。
 
-## 给执行窗口的提示词（E1–E5、E7、E8）
+## 给执行窗口的提示词（F1–F3）
+
+```text
+你在 /Users/ethan/Documents/BCR2000Dev（main 分支，SwiftUI/CoreMIDI 的 BCR2000 控制台）工作。
+先读 AGENTS.md、CONTRIBUTING.md，再读根目录 PLAN.md 的“F. 第三轮不需要设备的工作”，按顺序实现 F1、F2、F3。
+每项的依据、做法和验收写在 PLAN.md 里，以它为准。F4 不在本次范围。
+
+规则：
+1. 只做 F1–F3。不连接设备，不发送任何真实 MIDI/SysEx；需要设备行为时只用隔离的假设备。
+2. 不打扰桌面：这台机器上同时有人在别的应用里工作。
+   - 启动 App 的检查一律离屏：python3 configs/macos_workflow.py smoke 本机已默认离屏；
+     tools/mcp_integration.py 带 --script 时显式加 --offscreen。
+   - 只有在验证“某脚本必须前台”时才允许前台运行，每次运行前在执行记录里写明原因，跑完立即结束。
+   - 离屏运行时绝不向系统发送键盘事件（osascript 的 keystroke / key code 会打到用户正在用的应用）。
+   - 不要打开访达、系统设置或任何其他应用的窗口。
+3. 不改模拟侧文件：Sources/BCRProviderMCPAdapter/SurfaceControl*.swift、docs/SURFACE_*.md、
+   configs/package_provider.py、Schemas/、Clients/。冲突热点 SurfaceSession.swift、SurfaceEngine.swift、
+   docs/CONTROL_MAP.md 只在条目必须时改动，并在执行记录里说明。
+4. 不改任何现有测试断言，不删除验收步骤。F1 是纯重构，测试总数不得减少。
+5. 新界面文字走 L10n.text，两个 Localizable.strings 成对添加，plutil -lint 检查。
+6. 每项一个本地提交（Conventional Commits）。提交前：
+   - git fetch；远端有新提交则 git rebase origin/main（不 merge、不 force）；
+     锁文件变了就运行 python3 configs/surface_plugins_dependency.py update。
+   - python3 configs/format_repo.py --staged（它改了文件就重新 git add 再跑一次）；git diff --check --cached。
+   - python3 configs/macos_workflow.py test（必须显示 5 个模块全部 PASS，并报告总测试数）。
+   - python3 configs/check_domain_boundaries.py；python3 -m unittest discover -s Tests/BuildWorkflowTests。
+   - 改了 App 或验收脚本的条目：python3 configs/macos_workflow.py build && python3 configs/macos_workflow.py smoke，
+     再离屏跑受影响的验收脚本。
+7. 提交时不要留下已暂存但未提交的改动；每项做完工作区必须干净。
+8. 只提交，不 push，不打标签；push 由审查窗口 review 后执行。
+9. 每完成一项，在 PLAN.md 的“执行记录”追加：条目号、提交号、改动文件、测试总数与失败数、
+   哪些是离屏跑的、哪些是前台跑的及原因、未验证之处、与 PLAN 的偏离及原因。
+   如实写：失败、没做完、只做了一部分的，都要写明，不要写成已完成。
+10. PLAN 没覆盖的取舍选改动最小的做法并记录；涉及改用户数据格式、改公开合同、改产品界面行为的，停下记录，不要自行决定。
+```
+
+## 给执行窗口的提示词（F4，可交给另一个窗口并行）
+
+```text
+你在 /Users/ethan/Documents/BCR2000Dev（main 分支）工作。先读 AGENTS.md，再读根目录 PLAN.md 的 E9 与 F4，
+以及 /Users/ethan/Documents/XTouchCompactDev/docs/REMOTE_HARDWARE.md（只读参考，不要改那个仓库）。
+任务：做 F4 远程桥接可行性预研，产出数据和结论，不实现正式的远程方案。
+
+规则：
+1. 全部在本机完成：用回环（ssh localhost 或本地管道）加假设备，人为注入 0 / 60 / 120 ms 往返延迟。
+   不连接 ethanmacair 或任何其他主机，不发送真实 MIDI/SysEx，不创建系统可见的虚拟 MIDI 端口
+   （本机还有其他应用在用 MIDI；需要端口时用进程内的管道代替）。如果 ssh localhost 不可用，改用本地管道并在记录里说明。
+2. 预研代码放 tools/ 或 experiments/，不进产品目标，不改 Sources/BCRCoreMIDIDriver/。
+3. 测量对象：554 帧预设全文读取；逐行确认的写入（每行等 ACK，产品里的超时是 2 秒）；33 条预设名称查询。
+   本地直连的参考值见 docs/HARDWARE_VALIDATION.md 的 2026-11-12 一节（15.4 秒、0.93 秒）。
+4. 产出 docs/REMOTE_BRIDGE_FEASIBILITY.md：方法、每个延迟档位的耗时表、ACK 超时余量、局限
+   （假设备不等于真机固件的节奏），以及一句话结论：值得做 / 需要先改超时 / 不值得。不要把假设备数据写成实机结论。
+5. 不弹窗、不抢焦点：不启动带窗口的 App，不发送键盘事件。
+6. 一个本地提交（Conventional Commits）。提交前 git fetch，远端有新提交则 git rebase origin/main；
+   python3 configs/format_repo.py --staged；git diff --check --cached；
+   python3 configs/macos_workflow.py test（5 个模块全部 PASS）；python3 -m unittest discover -s Tests/BuildWorkflowTests。
+   只提交不 push，工作区保持干净。
+7. 在 PLAN.md 的“执行记录”追加 F4 条目：提交号、文件、数据摘要、未验证之处、偏离及原因。如实写。
+```
+
+## 上一轮的提示词（E1–E5、E7、E8，已执行，保留备查）
 
 ```text
 你在 /Users/ethan/Documents/BCR2000Dev（main 分支）工作。先读 AGENTS.md、CONTRIBUTING.md，再读根目录 PLAN.md 的
