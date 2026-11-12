@@ -486,7 +486,10 @@ private struct ParameterEditor: View {
 
     // Rendering a translated draft must not dirty it or rewrite an untouched name on Apply.
     private func displayedName(_ saved: Binding<String>) -> Binding<String> {
-        Binding(get: { BuiltInNamePresentation.displayName(saved.wrappedValue) }, set: { saved.wrappedValue = $0 })
+        Binding(
+            get: { BuiltInNamePresentation.displayName(saved.wrappedValue) },
+            set: { saved.wrappedValue = BuiltInNamePresentation.editedName($0, replacing: saved.wrappedValue) }
+        )
     }
 
     private func textRow(_ label: String, _ text: Binding<String>) -> some View {

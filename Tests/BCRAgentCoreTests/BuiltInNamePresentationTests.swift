@@ -25,6 +25,31 @@ final class BuiltInNamePresentationTests: XCTestCase {
         }
     }
 
+    /// Review finding: in the English UI the group field shows "Robot Arm" for the stored "机械臂".
+    /// Typing a character and deleting it wrote "Robot Arm" back, splitting the parameter from its
+    /// group and from the reset button that references the stored string.
+    func testNoOpEditOfATranslatedFieldKeepsTheStoredSpelling() {
+        var saved = "机械臂"
+        let shown = { BuiltInNamePresentation.displayName(saved, language: .english) }
+        let type = { (text: String) in
+            saved = BuiltInNamePresentation.editedName(text, replacing: saved, language: .english)
+        }
+        type(shown() + "x")
+        XCTAssertEqual(saved, "Robot Armx")
+        type("Robot Arm")
+        // The user really typed the English built-in over a custom name: that is a real edit.
+        XCTAssertEqual(saved, "Robot Arm")
+
+        saved = "机械臂"
+        type(shown())
+        XCTAssertEqual(saved, "机械臂", "committing unchanged text must not rewrite the stored name")
+        type("My Arm")
+        XCTAssertEqual(saved, "My Arm")
+        // In the stored language nothing is translated, so every edit is taken literally.
+        XCTAssertEqual(BuiltInNamePresentation.editedName("机械臂", replacing: "机械臂", language: .chinese), "机械臂")
+        XCTAssertEqual(BuiltInNamePresentation.editedName("手臂", replacing: "机械臂", language: .chinese), "手臂")
+    }
+
     func testSameConfigurationCanDisplayBothLanguagesWithoutChangingEncodedValuesOrGroupReferences() throws {
         let configuration = SurfaceConfiguration(
             name: "机械臂示例",

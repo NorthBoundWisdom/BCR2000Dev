@@ -39,6 +39,18 @@ public enum BuiltInNamePresentation {
         return L10n.text(message, language: language)
     }
 
+    /// The value to store after the user edited a field that shows `displayName(saved)`.
+    ///
+    /// Text equal to what the field displays means the name itself was not changed (typing a
+    /// character and deleting it, or the field committing unchanged text), so the stored spelling
+    /// is kept. Otherwise a group referenced by its stored string would be split from its other
+    /// parameters and its reset button by a mere focus change in another UI language.
+    public static func editedName(_ text: String, replacing saved: String,
+                                  language: AppLanguage = L10n.language) -> String
+    {
+        text == displayName(saved, language: language) ? saved : text
+    }
+
     private static let messagesByName: [String: LocalizedMessage] = {
         let names: [LocalizedMessage] = [
             "J1 底座旋转", "J2 肩部", "J3 肘部", "J4 腕部俯仰", "J5 腕部旋转", "J6 末端旋转",
