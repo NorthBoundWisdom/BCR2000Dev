@@ -30,8 +30,8 @@ public protocol MIDIService: SurfaceDevice {
     func configureStartup(_ program: MIDIStartupProgram) async throws
     /// Read-only dump of the current temporary preset (BCL frames, `$rev` … `$end`).
     func readCurrentPreset() async throws -> Data
-    /// Read-only dump of memory preset `index` (0…31); empty presets reply with only `$rev`…`$end`.
-    func readMemoryPreset(_ index: Int) async throws -> Data
+    /// Read-only names of the temporary preset and the 32 memory presets (short replies, no dump).
+    func readPresetNames() async throws -> BCRPresetNames
     /// Sends BCL frames one at a time, each acknowledged by the device. No store unless a frame says so.
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws
 }
@@ -40,7 +40,7 @@ public extension MIDIService {
     var supportsStartupConfiguration: Bool { false }
     func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
-    func readMemoryPreset(_ index: Int) async throws -> Data { throw MIDIStartupError.invalidProgram }
+    func readPresetNames() async throws -> BCRPresetNames { throw MIDIStartupError.invalidProgram }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         throw MIDIStartupError.invalidProgram
     }
@@ -88,6 +88,12 @@ public final class CoreMIDIService: MIDIService {
     private var dumpContinuation: CheckedContinuation<Data, any Error>?
     private var dumpTask: Task<Void, Never>?
     static let presetDumpRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x40, 0x7F, 0xF7]
+    private var namesID: UUID?
+    private var names: [Int: String] = [:]
+    private var namesContinuation: CheckedContinuation<BCRPresetNames, any Error>?
+    private var namesTask: Task<Void, Never>?
+    /// Ordinary input is dropped only while a write or value snapshot needs the route to itself.
+    private var holdsInput = false
 
     public init(selection: MIDIEndpointSelection = .init()) { self.selection = selection }
 
@@ -110,6 +116,9 @@ public final class CoreMIDIService: MIDIService {
                 Task { @MainActor [weak self] in
                     if self?.inputGeneration != generation, let ack = self?.ackID {
                         self?.finishAck(ack, result: .failure(CoreMIDIServiceError.outputUnavailable))
+                    }
+                    if self?.inputGeneration != generation, let request = self?.namesID {
+                        self?.finishNames(request, result: .failure(CoreMIDIServiceError.outputUnavailable))
                     }
                     if self?.inputGeneration != generation, let dump = self?.dumpID {
                         self?.finishDump(dump, result: .failure(CoreMIDIServiceError.outputUnavailable))
@@ -176,7 +185,7 @@ public final class CoreMIDIService: MIDIService {
 
     private func receive(_ messages: [MIDIVoiceMessage], generation: UInt) {
         guard generation == inputGeneration else { return }
-        guard startupID == nil else { return }
+        guard startupID == nil || !holdsInput else { return }
         guard let id = snapshotID else { onMessages?(messages); return }
         snapshotActivity = ProcessInfo.processInfo.systemUptime
         for message in messages where snapshotExpected.contains(message.controlID) {
@@ -216,14 +225,43 @@ public final class CoreMIDIService: MIDIService {
 
     public func readCurrentPreset() async throws -> Data { try await readPreset(selector: 0x7F) }
 
-    public func readMemoryPreset(_ index: Int) async throws -> Data {
-        guard (0 ... 31).contains(index) else { throw MIDIStartupError.invalidProgram }
-        return try await readPreset(selector: UInt8(index))
+    public func readPresetNames() async throws -> BCRPresetNames {
+        try await exclusiveSysEx(holdsInput: false) { transport, generation in
+            let id = UUID()
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<
+                    BCRPresetNames, any Error
+                >) in
+                    self.namesID = id; self.names = [:]; self.namesContinuation = continuation
+                    do {
+                        try transport.sendBytes([0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x42, 0x7F, 0xF7],
+                                                expectedGeneration: generation)
+                        try transport.sendBytes([0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x42, 0x7E, 0xF7],
+                                                expectedGeneration: generation)
+                    } catch { self.finishNames(id, result: .failure(error)); return }
+                    self.namesTask = Task { @MainActor [weak self] in
+                        do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                        self?.finishNames(id, result: .failure(MIDIStartupError.noReply))
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.finishNames(id, result: .failure(CancellationError())) }
+            }
+        }
+    }
+
+    private func finishNames(_ id: UUID, result: Result<BCRPresetNames, any Error>) {
+        guard namesID == id else { return }
+        let continuation = namesContinuation
+        namesID = nil; namesContinuation = nil; names = [:]
+        namesTask?.cancel(); namesTask = nil
+        continuation?.resume(with: result)
     }
 
     private func readPreset(selector: UInt8) async throws -> Data {
         let request: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x40, selector, 0xF7]
-        return try await exclusiveSysEx { transport, generation in
+        return try await exclusiveSysEx(holdsInput: false) { transport, generation in
             let id = UUID()
             return try await withTaskCancellationHandler {
                 try Task.checkCancellation()
@@ -255,13 +293,14 @@ public final class CoreMIDIService: MIDIService {
 
     /// Runs one SysEx exchange while ordinary input is held back and the route must stay unchanged.
     private func exclusiveSysEx<T>(
+        holdsInput: Bool = true,
         _ body: (CoreMIDITransport, UInt) async throws -> T
     ) async throws -> T {
         guard startupID == nil, snapshotID == nil, connection.isConnected,
               let transport else { throw CoreMIDIServiceError.outputUnavailable }
         let id = UUID(), generation = inputGeneration
-        startupID = id; sysEx = MIDISysEx7Assembler()
-        defer { if startupID == id { startupID = nil; sysEx = MIDISysEx7Assembler() } }
+        startupID = id; sysEx = MIDISysEx7Assembler(); self.holdsInput = holdsInput
+        defer { if startupID == id { startupID = nil; self.holdsInput = false; sysEx = MIDISysEx7Assembler() } }
         try Task.checkCancellation()
         return try await body(transport, generation)
     }
@@ -317,6 +356,18 @@ public final class CoreMIDIService: MIDIService {
                 let text = String(decoding: frame[9 ..< frame.count - 1], as: UTF8.self)
                 if text.trimmingCharacters(in: .whitespaces) == "$end" {
                     finishDump(id, result: .success(Data(dumpFrames.joined())))
+                }
+                continue
+            }
+            // Send Preset Name: F0 00 20 32 dd 15 21 00 index name(24) F7.
+            if let id = namesID, frame.count == 34, frame.prefix(4) == [0xF0, 0, 0x20, 0x32],
+               frame[5] == 0x15, frame[6] == 0x21, frame[7] == 0, frame[8] < 32 || frame[8] == 0x7F
+            {
+                names[Int(frame[8])] = String(decoding: frame[9 ..< 33], as: UTF8.self)
+                if let temporary = names[0x7F], (0 ... 31).allSatisfy({ names[$0] != nil }) {
+                    finishNames(id, result: .success(BCRPresetNames(
+                        temporary: temporary, memory: (0 ... 31).map { names[$0]! }
+                    )))
                 }
                 continue
             }

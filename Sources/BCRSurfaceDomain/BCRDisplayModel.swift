@@ -5,8 +5,7 @@ import Foundation
 /// observe. The device never reports its display, so this follows the documented firmware rules:
 ///
 /// - Play mode shows the preset number as `P- 1` … `P-32` (observed on firmware 1.10). The device
-///   doesn't report it; the host knows it after loading a preset or matching the temporary preset
-///   against the memory presets.
+///   doesn't report it; the host knows it after loading a preset or from a unique preset name.
 /// - Moving an element with ShowValue on briefly shows its raw MIDI value (4 digits, so 10000+ loses
 ///   its leading 1).
 /// - Buttons with ShowValue on show "on" while pressed and "oFF" on release (toggleoff); a counter
@@ -80,29 +79,32 @@ public struct BCRDisplayModel: Equatable, Sendable {
     }
 }
 
-/// Finds which memory preset the temporary preset was recalled from. The device never reports its
-/// preset number, so the element definitions are compared; temporary edits made afterwards (for
-/// example by alignment) make the match fail and leave the number unknown instead of guessing.
-public enum BCRPresetIdentification {
-    /// Comparable content of one preset: element sections with their statements, without values
-    /// (`.default`) that the device keeps per element rather than per preset.
-    public static func signature(of dump: Data) throws -> [String] {
-        let lines = try BCRPresetEncoderLearning.decodeLines(dump)
-        guard lines.first == "$rev R1", lines.last == "$end" else {
-            throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设"))
-        }
-        return lines.filter {
-            $0 != "$rev R1" && $0 != "$end" && !$0.hasPrefix(".default ") && !$0.hasPrefix("$store ")
-                && !$0.hasPrefix("$recall ")
-        }
+/// Names of the temporary preset and memory presets 1…32, as the device reports them.
+public struct BCRPresetNames: Equatable, Sendable {
+    public let temporary: String
+    public let memory: [String]
+
+    public init(temporary: String, memory: [String]) {
+        self.temporary = temporary; self.memory = memory
     }
 
-    /// The single memory preset (1…32) equal to the temporary preset, or nil when none or several match.
-    public static func match(temporary: Data, memory: [Int: Data]) throws -> Int? {
-        let target = try signature(of: temporary)
-        let matches = try memory.filter { try signature(of: $0.value) == target }.map(\.key)
+    /// The memory preset (1…32) the temporary preset was recalled from, identified by name.
+    /// The device never reports its preset number. Its name survives temporary edits (such as
+    /// alignment), so this follows what the display shows; a name shared by several presets or
+    /// by none leaves the number unknown instead of guessing.
+    public var presetNumber: Int? {
+        let key = Self.normalized(temporary)
+        guard !key.isEmpty else { return nil }
+        let matches = memory.indices.filter { Self.normalized(memory[$0]) == key }
         return matches.count == 1 ? matches[0] + 1 : nil
     }
+
+    public var temporaryName: String? {
+        let name = Self.normalized(temporary)
+        return name.isEmpty ? nil : name
+    }
+
+    private static func normalized(_ name: String) -> String { name.trimmingCharacters(in: .whitespaces) }
 }
 
 /// Per-control `.showvalue` settings and the preset name, read from a device preset dump.
@@ -110,9 +112,6 @@ public enum BCRPresetIdentification {
 public struct BCRDisplayProfile: Codable, Equatable, Sendable {
     public var name: String?
     public var silentControls: Set<BCRControlID>
-    /// Memory preset last identified for this content; kept across temporary edits (alignment
-    /// changes elements but not the number the device shows).
-    public var presetNumber: Int?
 
     public init(name: String? = nil, silentControls: Set<BCRControlID> = []) {
         self.name = name; self.silentControls = silentControls

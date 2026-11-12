@@ -48,18 +48,14 @@ final class BCRDisplayModelTests: XCTestCase {
         })
     }
 
-    func testIdentifiesTheMemoryPresetOnlyOnAUniqueExactMatch() throws {
-        let body = ["$preset", ".name 'A'", "$encoder 1", ".easypar CC 1 1 0 127 absolute"]
-        let temporary = dump(["$rev R1"] + body + [".default 40", "$end"])
-        let same = dump(["$rev R1"] + body + [".default 0", "$end"])
-        let other = dump(["$rev R1", "$preset", ".name 'B'", "$end"])
-        let empty = dump(["$rev R1", "$end"])
-        // Per-element values (.default) are not part of the comparison.
-        XCTAssertEqual(try BCRPresetIdentification.match(temporary: temporary,
-                                                         memory: [0: same, 1: other, 2: empty]), 1)
-        XCTAssertNil(try BCRPresetIdentification.match(temporary: temporary, memory: [0: other, 1: empty]))
-        // Two identical presets: the number cannot be known, so nothing is guessed.
-        XCTAssertNil(try BCRPresetIdentification.match(temporary: temporary, memory: [0: same, 5: same]))
+    func testPresetNumberComesFromAUniqueName() {
+        let memory = (1 ... 32).map { $0 == 1 ? "Reason Redrum 1         " : "Preset \($0)" }
+        XCTAssertEqual(BCRPresetNames(temporary: "Reason Redrum 1         ", memory: memory).presetNumber, 1)
+        XCTAssertEqual(BCRPresetNames(temporary: "Reason Redrum 1", memory: memory).temporaryName, "Reason Redrum 1")
+        // Unknown, duplicated or blank names leave the number unknown instead of guessing.
+        XCTAssertNil(BCRPresetNames(temporary: "Other", memory: memory).presetNumber)
+        XCTAssertNil(BCRPresetNames(temporary: "Same", memory: ["Same", "Same"]).presetNumber)
+        XCTAssertNil(BCRPresetNames(temporary: "      ", memory: ["      "]).presetNumber)
     }
 
     func testProfileReadsNameAndShowValueFromThePreset() throws {
@@ -119,28 +115,14 @@ private final class DisplayDevice: MIDIService {
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     var supportsStartupConfiguration: Bool { true }
     var temporary: Data
-    var memory: [Int: Data]
+    var names: BCRPresetNames
     var writes = 0
-    init(temporary: Data, memory: [Int: Data]) { self.temporary = temporary; self.memory = memory }
+    init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {}
     func readCurrentPreset() async throws -> Data { temporary }
-    func readMemoryPreset(_ index: Int) async throws -> Data {
-        memory[index] ?? Data([0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, 0, 0] + Array("$rev R1".utf8) + [
-            0xF7,
-            0xF0,
-            0,
-            0x20,
-            0x32,
-            0,
-            0x15,
-            0x20,
-            0,
-            1
-        ] + Array("$end".utf8) + [0xF7])
-    }
-
+    func readPresetNames() async throws -> BCRPresetNames { names }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws { writes += 1
     }
 }
@@ -166,7 +148,8 @@ final class DeviceDisplayTests: XCTestCase {
         try stores.hardwareMap.save(map)
         let preset = dump(["$rev R1", "$preset", ".name 'Redrum'", "$encoder 1", ".easypar CC 1 8 0 127 absolute",
                            ".showvalue on", "$button 1", ".easypar CC 16 0 127 0 toggleoff", ".showvalue off", "$end"])
-        let device = DisplayDevice(temporary: preset, memory: [0: preset])
+        let names = BCRPresetNames(temporary: "Redrum", memory: ["Redrum"] + (2 ... 32).map { "P\($0)" })
+        let device = DisplayDevice(temporary: preset, names: names)
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
         try await Task.sleep(for: .milliseconds(200))
@@ -182,18 +165,18 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayText, "P- 1")
     }
 
-    func testEditedTemporaryPresetIsNotGuessedWithoutAKnownEarlierMatch() async throws {
+    func testUnknownPresetNameIsNotGuessed() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let stored = dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock off", "$end"])
-        let edited = dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
-        let device = DisplayDevice(temporary: edited, memory: [0: stored])
+        let preset = dump(["$rev R1", "$preset", ".name 'Edited'", "$end"])
+        let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Edited",
+                                                                            memory: (1 ... 32).map { "P\($0)" }))
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(model.displayText, "----")
-        XCTAssertEqual(model.displayPresetName, "Redrum")
+        XCTAssertEqual(model.displayPresetName, "Edited")
     }
 }
