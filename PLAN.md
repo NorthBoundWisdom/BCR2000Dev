@@ -182,7 +182,7 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 
 ## 执行记录
 
-### A1 — `964151c`（rebase 前 `6a71375`）
+### A1 — `75a86d1`（rebase 前 `6a71375`）
 
 - 改动：macos_workflow 增加流式执行与逐包汇总；CONTRIBUTING 引用新入口；新增 test_test_summary.py。
   旧环境测试只把 mock 从 _run 移到 _run_tests，原断言保留。
@@ -192,7 +192,7 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 - 过程：初次回归发现旧 mock 入口不匹配及一次误替换，已纠正并完整重跑；未更改既有断言。
 - 未验证/偏离：负例使用临时假 swift 输出，不改生产 Swift 测试。未连接设备。
 
-### A2 — `76170eb`（rebase 前 `fc7a587`）
+### A2 — `7d3c607`（rebase 前 `fc7a587`）
 
 - 改动：BulkAssignmentView、OutputSettingsView（含输出读数）以及 ConsoleViewModel 两条提示接入显示翻译。
 - 验证：Swift 五包 517 项、失败 0；BuildWorkflow 76 项、失败 0；边界、strings lint、App build、
@@ -200,7 +200,7 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 - 未验证：未逐项点击英文批量分配/输出窗口；显示函数已有双向翻译与存储不变测试。
   没有存储格式、分组引用或功能逻辑变化，无设备操作。
 
-### A3 — `ad0bd2b`（rebase 前 `0c134b6`）
+### A3 — `9142d8c`（rebase 前 `0c134b6`）
 
 - 改动：新增 PresetBackupStore；ConsoleViewModel 备份入口委托该值类型；新增四项存储测试和一项连续三次预览测试。
 - 验证：Swift 五包 522 项、失败 0；BuildWorkflow 76 项、失败 0；边界与格式检查通过。
@@ -209,7 +209,7 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
   未知文件、损坏内容、目录、符号链接不删除；读写与清理错误仍显示为失败。
 - 未验证/偏离：只测试隔离目录与假设备，没有设备操作。没有既有用户数据 schema 变更；备份命名与清理属于 A3 明确范围。
 
-### A4 — `5a16a97`（rebase 前 `f72c966`）
+### A4 — `564510a`（rebase 前 `f72c966`）
 
 - 改动：两个 sheet 及设备菜单加稳定标识；Debug 专用 IntegrationMIDIFixture、原生 PID 级 AX 工具与
   verify_connection_ui.py；mcp_integration 显式 fixture 开关；UI_ACCEPTANCE 增加入口和隔离边界。
@@ -218,3 +218,20 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
   普通实例单独使用 fixture 参数退出 2，未初始化 MIDI。对应隔离产物：case-hff9li_8、case-c81086b6。
 - 过程/偏离：AppleScript 逐元素遍历超时，改用自动编译的 Swift 6 AX 查找辅助器；窗口操作仍经 System Events。
   不改真实驱动、Provider 合同或普通隔离模式；没有实体 MIDI/SysEx IO。未验证配置文件驱动的“初始化并连接”分支。
+
+### A5 — `9426613`（rebase 前 `bf7af6f`）
+
+- 改动：README 功能/连接/显示说明及六张截图；NativeUI 增加仅捕获本进程主窗口的方法，连接脚本增加显式截图模式。
+- 验证：六张 1680×900 PNG 均逐张检查；四张 Mock 截图和两张假设备截图通过实际屏幕录制生成，脚本完整通过。
+  本机辅助功能、屏幕录制预检均为 true。合并远端后 Swift 五包 525 项、失败 0；BuildWorkflow 76 项、失败 0；
+  边界、格式、命令、compileall、App build、双语 startup smoke 和假设备原生连接验收通过。
+- 同步：rebase 到 edae4d4 并按锁更新 SurfacePlugins 到 6071354；随后又合入仅修改模拟启动文档的 6acc14b。
+  上方 A1–A4 编号更新为最终 rebase 后编号；各项原始测试数保留，525 为合入远端后的结果。
+- 过程/偏离：首次补图任务与前一截图任务短暂重叠，发生端口冲突，已串行重跑通过；截图共新增两张流程图，
+  明确标注内存假设备，不作为实机证据。没有拍摄其他窗口或桌面，没有真实 MIDI IO。
+
+### A4 补充 — `ec225b4`
+
+- 补跑复现一次“恢复进度未出现”：实际已完成，但 AX 查询错过短暂进度态。
+  脚本现在接受进度或完成态作为启动证据，随后仍要求完成控件、精确写入次数和恢复哈希一致。
+- 中文、英文原生验收串行重跑通过（case-xfjejwu1、case-_75cwihp）；没有改变应用或设备逻辑。

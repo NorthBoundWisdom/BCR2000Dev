@@ -379,7 +379,10 @@ private struct LEDDisplay: View {
     var body: some View {
         Group {
             if busy {
-                TimelineView(.periodic(from: .now, by: 1.0 / 12)) { context in
+                TimelineView(.periodic(
+                    from: .now,
+                    by: 1 / BCRDisplayModel.Calibration.busyFramesPerSecond
+                )) { context in
                     BusySegments(frame: BCRDisplayModel.busyFrame(
                         at: context.date.timeIntervalSinceReferenceDate
                     ))

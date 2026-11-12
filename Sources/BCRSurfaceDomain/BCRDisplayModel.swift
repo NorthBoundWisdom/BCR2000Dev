@@ -22,9 +22,21 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case unknown
     }
 
-    /// How long the device keeps a value before returning to the preset number. The device returns
-    /// noticeably faster than 1.5 s (observed); not measured precisely.
-    public static let holdSeconds: Double = 0.8
+    /// Adjust these together after PLAN B4 hardware measurements. These are presentation estimates,
+    /// not firmware constants or measured timing guarantees.
+    public enum Calibration {
+        /// 2026-11-12 user report: the device returns faster than 1.5 s. 0.8 s is still an estimate.
+        public static let valueHoldSeconds: Double = 0.8
+        /// Existing animation speed; not timed against hardware.
+        public static let busyFramesPerSecond: Double = 12
+        /// Outline indices are clockwise from the top left (see BusySegments in the host).
+        /// Reverse traversal follows the user's counterclockwise "|____|, closing across the top"
+        /// description; individual frames have not been compared with the device.
+        public static let busyFrameSequence = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+    }
+
+    /// Compatibility spelling for the shared presentation calibration.
+    public static let holdSeconds = Calibration.valueHoldSeconds
 
     public private(set) var preset: Int?
     /// Number of BCL transfers in flight (observed: the device animates for their whole duration).
@@ -83,9 +95,12 @@ public struct BCRDisplayModel: Equatable, Sendable {
         }
     }
 
-    /// Animation frame while busy: a single lit segment chases around the outline of the four
-    /// digits, counterclockwise as observed on the device (frames count clockwise from top left).
-    public static func busyFrame(at time: Double) -> Int { 11 - Int((time * 12).rounded(.down)) % 12 }
+    /// Animation frame while busy, using the estimated timing and user-described order above.
+    public static func busyFrame(at time: Double) -> Int {
+        let sequence = Calibration.busyFrameSequence
+        let phase = Int((time * Calibration.busyFramesPerSecond).rounded(.down)) % sequence.count
+        return sequence[(phase + sequence.count) % sequence.count]
+    }
 
     private static func pad(_ text: String) -> String {
         String(repeating: " ", count: max(0, 4 - text.count)) + text
