@@ -1,18 +1,10 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
 @testable import BCRCoreMIDIDriver
 
-@MainActor
-private final class ConfirmationMIDI: MIDIService {
-    var connection = MIDIConnectionSnapshot(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1")
-    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
-    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
-    var sent: [MIDIVoiceMessage] = []
-    func start() throws { onConnection?(connection) }
-    func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
-}
+private typealias ConfirmationMIDI = RecordingMIDIService
 
 @MainActor
 final class HardwareConnectionStatusTests: XCTestCase {
@@ -21,7 +13,10 @@ final class HardwareConnectionStatusTests: XCTestCase {
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
         try stores.hardwareMap.save(.mockPreset())
-        let midi = ConfirmationMIDI()
+        let midi = ConfirmationMIDI(
+            connection: .init(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1"),
+            notifyOnStart: true
+        )
         let model = ConsoleViewModel(stores: stores, midiService: midi, automaticallyAdvancesMock: false)
         model.mcp.service.permissions.parameterWrite = true
         model.mcp.service.permissions.deviceControl = true

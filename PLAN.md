@@ -557,3 +557,16 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
 - 验证：Swift 五包 535 项、失败 0；BuildWorkflow 76 项、失败 0；边界、strings lint、build、双语 smoke 通过。
   双语原生脚本实际点击文件和目录入口，校验备份字节、恢复点流程及设备预设写入次数不变；检查最小窗口链接布局。
 - 未验证/偏离：没有真实设备；Finder 自身窗口未另做辅助功能树断言，定位使用系统 NSWorkspace API，原生脚本只断言 App 与文件状态。
+
+### F1（实现提交号在后续收尾索引补齐）
+
+- 改动：新增仅 CoreTests/ConsoleTests 依赖的 BCRTestSupport（BCLFixtures、RecordingMIDIService）；共享帧编码、
+  预设行和 56 旋钮映射构造，合并 PressMIDI/ButtonFunctionMIDI/BlinkMIDI/ConfirmationMIDI 的记录型行为，
+  保留各自端口名与启动通知差异。Package 产品目标未添加依赖，专用快照/显示/失败替身继续保留。
+- 帧头文件统计：Tests 下包含原始帧头的文件由 9 降至 5；剩余为公共构造器、3 个含原始字节断言的 Swift 文件及
+  Python 诊断测试。原有 XCTest 断言行无改动，预设数据/测试步骤语义保留。
+- 验证：5/5 模块 PASS，共 538 项、失败 0，未低于基线 538；BuildWorkflow 90 项、失败 0；
+  域边界、命令、格式和差异检查通过。未启动验收 App，未前台运行，未发送真实 MIDI/SysEx。
+- 选择/偏离：采用仅测试依赖的新支持目标，避免把测试代码引入产品。Debug 夹具没有可直接复用的公共 BCL 编码入口，
+  故不为去重新增产品 API 或搬入测试支持代码；保留其独立构造。F1 未改 App/验收脚本，无需运行其 UI 场景。
+- 提交号在下一项文档更新补入，避免提交引用自身编号；每项提交后保持工作区干净。

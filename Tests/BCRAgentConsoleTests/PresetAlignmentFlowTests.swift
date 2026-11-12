@@ -1,3 +1,4 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
@@ -28,27 +29,13 @@ private final class PresetDevice: MIDIService {
 
 @MainActor
 final class PresetAlignmentFlowTests: XCTestCase {
-    private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
-    }
-
     private func setUp(failAfter: Int? = nil) throws -> (ConsoleViewModel, PresetDevice, URL) {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        var lines = ["$rev R1", "$preset", ".egroups 4", ".fkeys on", ".lock off"]
-        var map = HardwareMap()
-        for number in 1 ... 56 {
-            lines += ["$encoder \(number)", ".easypar CC 1 \(number) 0 127 absolute", ".mode 1dot"]
-            let control: BCRControlID = number <= 32
-                ? .pushEncoder(group: (number - 1) / 8 + 1, (number - 1) % 8 + 1)
-                : .encoder(row: (number - 33) / 8 + 1, (number - 33) % 8 + 1)
-            try map.bind(control, to: .init(kind: .controlChange, channel: 0, number: UInt8(number)), ringMode: .oneDot)
-        }
-        try stores.hardwareMap.save(map)
-        let device = PresetDevice(preset: dump(lines + ["$end"]))
+        let fixture = try BCLFixtures.encoderPreset()
+        try stores.hardwareMap.save(fixture.hardwareMap)
+        let device = PresetDevice(preset: fixture.dump)
         device.failAfter = failAfter
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)

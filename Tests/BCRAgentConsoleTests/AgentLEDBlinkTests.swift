@@ -1,19 +1,11 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
 @testable import BCRConfigurationAdapter
 @testable import BCRCoreMIDIDriver
 
-@MainActor
-private final class BlinkMIDI: MIDIService {
-    var connection = MIDIConnectionSnapshot(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1")
-    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
-    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
-    var sent: [MIDIVoiceMessage] = []
-    func start() throws {}
-    func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
-}
+private typealias BlinkMIDI = RecordingMIDIService
 
 final class AgentLEDBlinkPatternTests: XCTestCase {
     func testStatesMapToDistinctRhythms() {
@@ -38,7 +30,10 @@ final class AgentLEDBlinkTests: XCTestCase {
         var map = HardwareMap()
         try map.bind(.button(row: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 65))
         try stores.hardwareMap.save(map)
-        let midi = BlinkMIDI()
+        let midi = BlinkMIDI(connection: .init(
+            connectedSource: "BCR2000 Port 1",
+            connectedDestination: "BCR2000 Port 1"
+        ))
         let model = ConsoleViewModel(stores: stores, midiService: midi, initialPreset: .robotArm,
                                      automaticallyAdvancesMock: false)
         model.selectSource(.hardware)
@@ -65,8 +60,15 @@ final class AgentLEDBlinkTests: XCTestCase {
         model.setBlinksAgentLEDs(true)
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let reopened = ConsoleViewModel(stores: stores, midiService: BlinkMIDI(), initialPreset: .robotArm,
-                                        automaticallyAdvancesMock: false)
+        let reopened = ConsoleViewModel(
+            stores: stores,
+            midiService: BlinkMIDI(connection: .init(
+                connectedSource: "BCR2000 Port 1",
+                connectedDestination: "BCR2000 Port 1"
+            )),
+            initialPreset: .robotArm,
+            automaticallyAdvancesMock: false
+        )
         XCTAssertTrue(reopened.blinksAgentLEDs)
     }
 

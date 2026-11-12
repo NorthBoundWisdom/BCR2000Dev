@@ -1,20 +1,24 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentCore
 
 final class PresetAlignmentTests: XCTestCase {
     private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
+        BCLFixtures.dump(lines)
     }
 
     /// A preset like the user's: 56 absolute CC encoders, a few buttons, one sharing an encoder CC.
     private func presetLines(lock: String = "off") -> [String] {
         var lines = ["$rev R1", "$preset", ".name 'Test'", ".snapshot off", ".request off", ".egroups 4",
                      ".fkeys on", ".lock \(lock)", ".init"]
-        for number in 1 ... 56 {
-            lines += ["$encoder \(number)", ".easypar CC 1 \(number) 0 127 absolute", ".showvalue on",
-                      ".mode 1dot", ".resolution 96 96 96 96", ".default 0"]
+        lines += BCLFixtures.encoderSections {
+            [
+                ".easypar CC 1 \($0) 0 127 absolute",
+                ".showvalue on",
+                ".mode 1dot",
+                ".resolution 96 96 96 96",
+                ".default 0"
+            ]
         }
         // Button 6 duplicates encoder 1's identity; 33 is a counter; 34 already reports press/release.
         lines += ["$button 6", ".easypar CC 1 1 127 0 toggleoff", ".showvalue on", ".default 0",
@@ -25,13 +29,7 @@ final class PresetAlignmentTests: XCTestCase {
     }
 
     private func encoderMap() throws -> HardwareMap {
-        var map = HardwareMap()
-        for number in 1 ... 56 {
-            let control: BCRControlID = number <= 32
-                ? .pushEncoder(group: (number - 1) / 8 + 1, (number - 1) % 8 + 1)
-                : .encoder(row: (number - 33) / 8 + 1, (number - 33) % 8 + 1)
-            try map.bind(control, to: .init(kind: .controlChange, channel: 0, number: UInt8(number)), ringMode: .oneDot)
-        }
+        var map = try BCLFixtures.encoderMap()
         try map.bind(.button(row: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 90),
                      visualizationOnly: true, pressMode: .pulse)
         try map.bind(.button(row: 1, 2), to: .init(kind: .controlChange, channel: 0, number: 91),

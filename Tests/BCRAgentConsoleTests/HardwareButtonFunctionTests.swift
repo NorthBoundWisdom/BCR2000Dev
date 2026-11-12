@@ -1,17 +1,9 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
 
-@MainActor
-private final class ButtonFunctionMIDI: MIDIService {
-    let connection = MIDIConnectionSnapshot(connectedSource: "Test input", connectedDestination: "Test output")
-    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
-    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
-    var sent: [MIDIVoiceMessage] = []
-    func start() throws {}
-    func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
-}
+private typealias ButtonFunctionMIDI = RecordingMIDIService
 
 @MainActor
 final class HardwareButtonFunctionTests: XCTestCase {

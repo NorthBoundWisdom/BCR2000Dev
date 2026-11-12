@@ -1,3 +1,4 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentCore
 
@@ -13,9 +14,7 @@ private final class PreviewDevice: SurfaceDevice {
 @MainActor
 final class ButtonPreviewTests: XCTestCase {
     private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
+        BCLFixtures.dump(lines)
     }
 
     func testLearnsButtonIdentitiesForPreviewWithoutAssigningOrExecutingActions() throws {

@@ -1,3 +1,4 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentCore
 @testable import BCRMCPAdapter
@@ -5,16 +6,13 @@ import XCTest
 
 final class BCRPresetEncoderLearningTests: XCTestCase {
     private func lines() -> [String] {
-        ["$rev R1", "$preset", ".name 'Test'", ".egroups 4"] + (1 ... 56).flatMap {
-            ["$encoder \($0)", ".easypar CC 7 \(120 - $0) 0 127 absolute", ".mode 12dot", ".default 0"]
+        ["$rev R1", "$preset", ".name 'Test'", ".egroups 4"] + BCLFixtures.encoderSections {
+            [".easypar CC 7 \(120 - $0) 0 127 absolute", ".mode 12dot", ".default 0"]
         } + ["$end"]
     }
 
     private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { index, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(index >> 7), UInt8(index & 127)]
-                + Array(line.utf8) + [0xF7]
-        })
+        BCLFixtures.dump(lines)
     }
 
     private var snapshot: [MIDIControlID: UInt8] {

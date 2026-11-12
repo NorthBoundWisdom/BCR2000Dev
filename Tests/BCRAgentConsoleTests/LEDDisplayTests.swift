@@ -1,3 +1,4 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
@@ -56,9 +57,7 @@ final class BCRDisplayModelTests: XCTestCase {
     }
 
     private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
+        BCLFixtures.dump(lines)
     }
 
     func testPresetNumberComesFromAUniqueName() {
@@ -90,9 +89,7 @@ final class BCRDisplayModelTests: XCTestCase {
                      "$button 1", ".easypar CC 16 0 127 0 toggleoff", ".showvalue off",
                      "$button 49", ".easypar CC 16 9 127 0 toggleoff", ".showvalue on",
                      "$end"]
-        let dump = Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
+        let dump = BCLFixtures.dump(lines)
         let profile = try BCRDisplayProfile.read(fromPresetDump: dump)
         XCTAssertNil(profile.locked)
         let locked = try BCRDisplayProfile.read(fromPresetDump: self.dump(
@@ -167,9 +164,7 @@ private final class DisplayDevice: MIDIService {
 @MainActor
 final class DeviceDisplayTests: XCTestCase {
     private func dump(_ lines: [String]) -> Data {
-        Data(lines.enumerated().flatMap { i, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(i >> 7), UInt8(i & 127)] + Array(line.utf8) + [0xF7]
-        })
+        BCLFixtures.dump(lines)
     }
 
     func testHardwareModeReadsPresetNumberAndShowValueWithoutWriting() async throws {

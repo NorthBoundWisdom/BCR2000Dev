@@ -1,18 +1,10 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
 @testable import BCRCoreMIDIDriver
 
-@MainActor
-private final class PressMIDI: MIDIService {
-    var connection = MIDIConnectionSnapshot(connectedSource: "Test input", connectedDestination: "Test output")
-    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
-    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
-    var sent: [MIDIVoiceMessage] = []
-    func start() throws {}
-    func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
-}
+private typealias PressMIDI = RecordingMIDIService
 
 @MainActor
 final class HardwarePressAnimationTests: XCTestCase {

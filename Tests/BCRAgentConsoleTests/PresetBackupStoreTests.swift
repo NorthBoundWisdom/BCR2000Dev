@@ -1,3 +1,4 @@
+import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -48,9 +49,7 @@ final class PresetBackupStoreTests: XCTestCase {
     func testValidLegacyTimestampBackupIsReused() throws {
         let directory = try temporary()
         let lines = ["$rev R1", "$preset", ".egroups 4", ".lock off", "$end"]
-        let data = Data(lines.enumerated().flatMap { index, line in
-            [0xF0, 0, 0x20, 0x32, 0, 0x15, 0x20, UInt8(index >> 7), UInt8(index & 127)] + Array(line.utf8) + [0xF7]
-        })
+        let data = BCLFixtures.dump(lines)
         let legacy = directory.appending(path: "temporary-preset-1794500000.syx")
         try data.write(to: legacy)
         XCTAssertEqual(

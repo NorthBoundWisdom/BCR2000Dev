@@ -51,6 +51,8 @@ let package = Package(
     ],
     dependencies: [surfacePlugins],
     targets: [
+        .target(name: "BCRTestSupport", dependencies: ["BCRSurfaceDomain", "BCRCoreMIDIDriver"],
+                path: "Tests/Support/BCRTestSupport"),
         .target(name: "BCRPluginRuntime", dependencies: [
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
             .product(name: "RemoteToolContracts", package: "SurfacePlugins")
@@ -195,12 +197,12 @@ let package = Package(
         ),
         .testTarget(
             name: "BCRAgentCoreTests",
-            dependencies: ["BCRAgentCore"],
+            dependencies: ["BCRAgentCore", "BCRTestSupport"],
             exclude: ["Fixtures"]
         ),
         .testTarget(
             name: "BCRAgentConsoleTests",
-            dependencies: ["BCRAgentConsole"],
+            dependencies: ["BCRAgentConsole", "BCRTestSupport"],
             exclude: ["Fixtures"]
         ),
         .testTarget(
