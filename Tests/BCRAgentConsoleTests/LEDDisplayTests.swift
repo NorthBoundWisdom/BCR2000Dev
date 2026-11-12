@@ -35,6 +35,19 @@ final class BCRDisplayModelTests: XCTestCase {
         XCTAssertEqual(display.content(at: 5), .unknown)
     }
 
+    func testTransfersShowBusyOverEverythingElse() {
+        var display = BCRDisplayModel(preset: 1)
+        display.encoderMoved(rawValue: 64, showsValue: true, at: 0)
+        display.beginTransfer()
+        XCTAssertEqual(display.content(at: 0.1), .busy)
+        display.beginTransfer(); display.endTransfer()
+        XCTAssertEqual(display.content(at: 0.1), .busy)
+        display.endTransfer()
+        // The value that was showing is not resurrected; the preset number returns.
+        XCTAssertEqual(display.content(at: 0.1), .preset(1))
+        XCTAssertEqual(Set((0 ..< 24).map { BCRDisplayModel.busyFrame(at: Double($0) / 12) }), Set(0 ..< 12))
+    }
+
     func testShowValueOffLeavesTheDisplayUnchanged() {
         var display = BCRDisplayModel(preset: 3)
         display.encoderMoved(rawValue: 99, showsValue: false, at: 0)
@@ -132,11 +145,15 @@ private final class DisplayDevice: MIDIService {
     var writes = 0
     var dumps = 0
     init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
-    func readMemoryPreset(_ number: Int) async throws -> Data { dumps += 1; return memory[number] ?? temporary }
+    var dumpDelay = Duration.zero
+    func readMemoryPreset(_ number: Int) async throws -> Data {
+        dumps += 1; try await Task.sleep(for: dumpDelay); return memory[number] ?? temporary
+    }
+
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {}
-    func readCurrentPreset() async throws -> Data { dumps += 1; return temporary }
+    func readCurrentPreset() async throws -> Data { dumps += 1; try await Task.sleep(for: dumpDelay); return temporary }
     func readPresetNames() async throws -> BCRPresetNames { names }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws { writes += 1
     }
@@ -212,9 +229,14 @@ final class DeviceDisplayTests: XCTestCase {
         var memory = (1 ... 32).map { "P\($0)" }; memory[0] = "Redrum"; memory[7] = "Redrum"
         let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Redrum", memory: memory))
         device.memory = [1: preset, 8: other]
+        device.dumpDelay = .milliseconds(100)
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(50))
+        // While the device dumps (its display animating), the panel shows busy too.
+        XCTAssertTrue(model.displayBusy)
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertFalse(model.displayBusy)
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.dumps, 3)
         // Next connection: names alone, no slow dumps.

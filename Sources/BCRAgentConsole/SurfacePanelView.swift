@@ -228,7 +228,7 @@ struct SurfacePanelView: View {
     /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
         VStack(spacing: m(8)) {
-            LEDDisplay(text: model.displayText)
+            LEDDisplay(text: model.displayText, busy: model.displayBusy)
                 .help(L10n.text("按设备规则重现：操作开启“显示数值”的控件时短暂显示其数值或 on/oFF，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
             if let name = model.displayPresetName {
                 Text(name)
@@ -345,18 +345,56 @@ struct SurfacePanelView: View {
 /// The 4-digit red LED display.
 private struct LEDDisplay: View {
     let text: String
+    var busy = false
     @Environment(\.panelMetrics) private var m
 
     var body: some View {
-        Text(String(text.suffix(4)).leftPadded(to: 4))
-            .font(m.font(17, weight: .bold, design: .monospaced))
-            .foregroundStyle(Theme.led)
-            .shadow(color: Theme.led.opacity(0.7), radius: 3)
-            .frame(width: m(78), height: m(30))
-            .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
-            .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
-            .accessibilityLabel(L10n.text("LED 显示"))
-            .accessibilityValue(text)
+        Group {
+            if busy {
+                TimelineView(.periodic(from: .now, by: 1.0 / 12)) { context in
+                    BusySegments(frame: BCRDisplayModel.busyFrame(
+                        at: context.date.timeIntervalSinceReferenceDate
+                    ))
+                }
+            } else {
+                Text(String(text.suffix(4)).leftPadded(to: 4))
+                    .font(m.font(17, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Theme.led)
+                    .shadow(color: Theme.led.opacity(0.7), radius: 3)
+            }
+        }
+        .frame(width: m(78), height: m(30))
+        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
+        .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
+        .accessibilityLabel(L10n.text("LED 显示"))
+        .accessibilityValue(busy ? L10n.text("设备正在传输预设") : text)
+    }
+}
+
+/// One lit segment chasing around the outline of four 7-segment digits (top row left to right,
+/// right side, bottom row right to left, left side), conveying the device's busy display.
+private struct BusySegments: View {
+    let frame: Int
+    @Environment(\.panelMetrics) private var m
+
+    var body: some View {
+        HStack(spacing: m(4)) {
+            ForEach(0 ..< 4, id: \.self) { digit in
+                VStack(spacing: m(12)) {
+                    bar(lit: frame == digit, vertical: false)
+                    bar(lit: frame == 9 - digit, vertical: false)
+                }
+                .overlay(alignment: .leading) { if digit == 0 { bar(lit: frame >= 10, vertical: true) } }
+                .overlay(alignment: .trailing) { if digit == 3 { bar(lit: frame == 4 || frame == 5, vertical: true) } }
+            }
+        }
+    }
+
+    private func bar(lit: Bool, vertical: Bool) -> some View {
+        Capsule()
+            .fill(lit ? Theme.led : Theme.led.opacity(0.12))
+            .shadow(color: lit ? Theme.led.opacity(0.7) : .clear, radius: 3)
+            .frame(width: m(vertical ? 2.5 : 12), height: m(vertical ? 12 : 2.5))
     }
 }
 

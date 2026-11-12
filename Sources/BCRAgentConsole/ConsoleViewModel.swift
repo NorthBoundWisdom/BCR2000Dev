@@ -419,6 +419,16 @@ final class ConsoleViewModel: ObservableObject {
         BCRDisplayModel.text(for: display.content(at: ProcessInfo.processInfo.systemUptime))
     }
 
+    /// True while a BCL dump or write runs; the device's display animates meanwhile.
+    var displayBusy: Bool { display.transfers > 0 }
+
+    /// Runs one BCL transfer with the panel display animating like the device's.
+    private func withDisplayTransfer<T>(_ body: () async throws -> T) async rethrows -> T {
+        display.beginTransfer(); objectWillChange.send()
+        defer { display.endTransfer(); objectWillChange.send() }
+        return try await body()
+    }
+
     /// The device's preset name, when it has been read; shown beside the 4-digit display.
     var displayPresetName: String? { source == .hardware ? displayProfile?.name : nil }
 
@@ -479,14 +489,14 @@ final class ConsoleViewModel: ObservableObject {
                 let needsNumber = self.startupConfiguredPreset == nil && candidates.count > 1
                     && cached?.resolvedCandidates != candidates
                 guard cached == nil || needsNumber else { return }
-                let temporary = try await self.midi.readCurrentPreset()
+                let temporary = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 guard current() else { return }
                 self.updateDisplayProfile(from: temporary)
                 guard needsNumber, candidates.count <= 4 else { return }
                 var dumps: [Int: Data] = [:]
                 for number in candidates {
                     guard current(), self.presetAlignment?.phase.isBusy != true else { return }
-                    dumps[number] = try await self.midi.readMemoryPreset(number)
+                    dumps[number] = try await self.withDisplayTransfer { try await self.midi.readMemoryPreset(number) }
                 }
                 guard current() else { return }
                 let number = try BCRPresetNames.resolve(temporary: temporary, candidates: dumps)
@@ -791,7 +801,7 @@ final class ConsoleViewModel: ObservableObject {
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let dump = try await self.midi.readCurrentPreset()
+                let dump = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 try Task.checkCancellation()
                 guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
                 self.presetDump = dump
@@ -844,13 +854,15 @@ final class ConsoleViewModel: ObservableObject {
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await self.midi.sendPresetFrames(frames) { [weak self] done in
-                    self?.presetAlignment?.phase = .writing(done: done, total: frames.count)
+                try await self.withDisplayTransfer {
+                    try await self.midi.sendPresetFrames(frames) { [weak self] done in
+                        self?.presetAlignment?.phase = .writing(done: done, total: frames.count)
+                    }
                 }
                 self.mapBeforeAlignment = previousMap
                 self.presetAlignment?.canRestore = true
                 self.presetAlignment?.phase = .verifying
-                let readback = try await self.midi.readCurrentPreset()
+                let readback = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
                 let check = try BCRPresetAlignment.prepare(dump: readback, hardwareMap: plan.hardwareMap,
                                                            configuration: self.configuration, options: options)
@@ -903,7 +915,7 @@ final class ConsoleViewModel: ObservableObject {
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await self.midi.sendPresetFrames(frames) { _ in }
+                try await self.withDisplayTransfer { try await self.midi.sendPresetFrames(frames) { _ in } }
                 self.updateDisplayProfile(from: dump)
                 try self.session.installHardwareMap(point.hardwareMap)
                 self.session.synchronize()

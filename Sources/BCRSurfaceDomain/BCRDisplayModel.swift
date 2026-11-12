@@ -13,6 +13,8 @@ import Foundation
 /// - Values written *to* the device are not shown; only local manipulation is.
 public struct BCRDisplayModel: Equatable, Sendable {
     public enum Content: Equatable, Sendable {
+        /// The device animates its display while it sends or receives a BCL preset dump.
+        case busy
         case preset(Int)
         case value(Int)
         case on
@@ -25,12 +27,14 @@ public struct BCRDisplayModel: Equatable, Sendable {
     public static let holdSeconds: Double = 0.8
 
     public private(set) var preset: Int?
+    /// Number of BCL transfers in flight (observed: the device animates for their whole duration).
+    public private(set) var transfers = 0
     public private(set) var transient: (content: Content, until: Double)?
 
     public init(preset: Int? = nil) { self.preset = preset }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.preset == rhs.preset && lhs.transient?.content == rhs.transient?.content
+        lhs.preset == rhs.preset && lhs.transfers == rhs.transfers && lhs.transient?.content == rhs.transient?.content
             && lhs.transient?.until == rhs.transient?.until
     }
 
@@ -58,7 +62,11 @@ public struct BCRDisplayModel: Equatable, Sendable {
 
     public mutating func clearTransient() { transient = nil }
 
+    public mutating func beginTransfer() { transfers += 1; transient = nil }
+    public mutating func endTransfer() { transfers = max(0, transfers - 1) }
+
     public func content(at time: Double) -> Content {
+        if transfers > 0 { return .busy }
         if let transient, time < transient.until { return transient.content }
         return preset.map(Content.preset) ?? .unknown
     }
@@ -71,8 +79,13 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case .on: pad("on")
         case .off: pad("oFF")
         case .unknown: "----"
+        case .busy: "----"
         }
     }
+
+    /// Animation frame while busy: a single lit segment chases around the four digits. The device's
+    /// exact pattern is not documented; this conveys the same "transfer running" state.
+    public static func busyFrame(at time: Double) -> Int { Int((time * 12).rounded(.down)) % 12 }
 
     private static func pad(_ text: String) -> String {
         String(repeating: " ", count: max(0, 4 - text.count)) + text
