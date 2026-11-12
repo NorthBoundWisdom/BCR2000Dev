@@ -17,6 +17,7 @@ python3 configs/macos_workflow.py build
 
 ```bash
 python3 tools/mcp_integration.py --connection-fixture --script tools/verify_connection_ui.py
+python3 tools/mcp_integration.py --language en --configuration-write --script tools/verify_builtin_names_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_configuration_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_endpoint_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_functions_ui.py
@@ -37,7 +38,8 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 隔离实例默认使用简体中文，以保持现有脚本的文字选择器稳定；可用 `--language en` 验证英文 MCP。
 此语言覆盖只作用于测试进程，不修改用户偏好。
 
-双语改动已通过两种语言的 1200 × 760 原生启动与 MCP 冒烟；下表记录的是双语改动前的完整交互验收。
+双语改动已通过两种语言的 1200 × 760 原生启动与 MCP 冒烟；下表保留原六项脚本的历史结果，
+新增连接脚本为 2026-11-12 中英文实际点击验收；内置名称脚本为英文界面配中文存储的实际浏览验收。
 本次新增中英文原生视图渲染快照检查（主窗口最小 1200 × 760 以及各设置页）；
 设置意图由聚焦测试验证。完整辅助功能点击脚本仍保留为人工发布验收入口，未冒充本轮已执行。
 
@@ -47,17 +49,18 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 
 ## 覆盖范围与最近验收
 
-| 脚本 | 覆盖范围 | 2026-11-11 |
+| 脚本 | 覆盖范围 | 最近验收 |
 | --- | --- | --- |
+| `verify_builtin_names_ui.py` | 中文存储的参数/分组在英文工作区、批量预览、输出设置中翻译；浏览不改 JSON/MCP 原名 | 2026-11-12 通过 |
 | `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；选项、写入进度、回读及恢复 | 2026-11-12 中英文通过 |
-| `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 通过 |
-| `verify_endpoint_ui.py` | MIDI 端点设置；默认自动 Port 1；隔离模式禁止应用实体端口 | 通过 |
-| `verify_functions_ui.py` | 步进 / 指定 / 循环按键；参数吸附；整行分配预览确认及保留运行值 | 通过 |
-| `verify_output_ui.py` | 本机 OSC 仿真；使能、限速、停机；实际 LED；接收端断线 / 重启后重新使能 | 通过 |
-| `verify_precision_ui.py` | 相对 1 / 2、每格步长编辑；Mock NRPN 回路与 14-bit 读数 | 通过 |
-| `verify_review_fixes_ui.py` | MCP 保护使能参数；复位跳过报告；启用可选机械臂预览及极大有限值渲染 | 通过 |
+| `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 2026-11-11 通过 |
+| `verify_endpoint_ui.py` | MIDI 端点设置；默认自动 Port 1；隔离模式禁止应用实体端口 | 2026-11-11 通过 |
+| `verify_functions_ui.py` | 步进 / 指定 / 循环按键；参数吸附；整行分配预览确认及保留运行值 | 2026-11-11 通过 |
+| `verify_output_ui.py` | 本机 OSC 仿真；使能、限速、停机；实际 LED；接收端断线 / 重启后重新使能 | 2026-11-11 通过 |
+| `verify_precision_ui.py` | 相对 1 / 2、每格步长编辑；Mock NRPN 回路与 14-bit 读数 | 2026-11-11 通过 |
+| `verify_review_fixes_ui.py` | MCP 保护使能参数；复位跳过报告；启用可选机械臂预览及极大有限值渲染 | 2026-11-11 通过 |
 
-本轮 OSC 接收端丢失后 309 ms 内告警；它是本机仿真结果，不代表真实机械臂的停机保证。
+2026-11-11 OSC 验收中，接收端丢失后 309 ms 内告警；它是本机仿真结果，不代表真实机械臂的停机保证。
 端点脚本仅验证隔离界面与默认选择；实际设备枚举、手动路由和 USB 重连仍按 R1 验收。
 
 新增非硬件验收入口：CodexSessionIntegrationTests、CodexAgentControllerTests、SurfaceProgramsTests、

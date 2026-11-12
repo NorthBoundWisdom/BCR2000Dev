@@ -9,15 +9,18 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
 ## 现状（2026-11-12）
 
 - 设备插在 ethanmacair，该机没有 USB 修复驱动，**只能收不能发**；驱动签署在 SSH 和桌面终端都失败。
-  在驱动装好或设备插回本机之前，所有需要写设备的验证都做不了。见 [UI_POLISH.md](UI_POLISH.md) 的“远端设备”一节。
-- 界面打磨 1–11、14 已完成；12（README 截图）与 13（连接实测）未做。
-- 全量测试 5 个测试包 517 项通过（含本次 review 的回归测试）。
+  在驱动装好或设备插回本机之前，所有需要写设备的验证都做不了。详见本文件 C1 与 [连接实测清单](HARDWARE_CONNECT_TEST.md)。
+- 界面打磨 1–12、14 已完成；13（连接实测）移交 B1–B3 与 `HARDWARE_CONNECT_TEST.md`，仍待设备可写。
+- A1–A7 软件与文档工作已完成；六张 README 截图已更新，连接/对齐原生脚本已在中英文通过。
+- 当前全量测试 5 个测试包 525 项通过；BuildWorkflow 76 项通过。各次执行结果见文末记录。
+- 原界面打磨清单已删除，任务书、执行日志与 review 结论保留在 git 历史：
+  `git show 80a0ef8:UI_POLISH.md`。仍有效的设备现状与未完成验证见本文件及连接实测清单。
 
 ## A. 不需要设备，可立即执行
 
-按价值排序。A1–A4 是 review 或自查发现的实际缺口，建议优先。
+本组已完成，以下保留各项依据、实现目标和验收条件，执行结果见文末。B–D 不随本组自动开工。
 
-### A1 测试汇总写进工作流（小）
+### A1（已完成） 测试汇总写进工作流（小）
 
 - 依据：`configs/macos_workflow.py:545` 的 `test` 只转发 `swift test`，结果要人读；输出最后一行只是最后一个测试包。
   2026-11-12 因此漏报过一个持续失败的用例（R4-30）。`CONTRIBUTING.md:71` 只写“必须全部通过”。
@@ -25,7 +28,7 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
   `Test Case … failed` 时返回非零；`Tests/BuildWorkflowTests` 加解析测试；CONTRIBUTING 改为引用该命令。
 - 验收：人为制造一个失败用例时命令返回非零并指出包名。
 
-### A2 内置名称翻译补齐剩余界面（小）
+### A2（已完成） 内置名称翻译补齐剩余界面（小）
 
 - 依据：任务 3 只覆盖面板、检查器和标题栏。`BulkAssignmentView.swift:116–125`（批量分配的目标标题）和
   `OutputSettingsView.swift:38,93,131`（输出设置的参数列表）仍直接显示 `definition.name`，英文界面下是中文。
@@ -33,7 +36,7 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
 - 做法：这些显示点改用 `BuiltInNamePresentation.displayName`；不改存储值。
 - 验收：英文界面下这三处不再出现内置中文名；现有测试不改。
 
-### A3 对齐与恢复的备份清理（小）
+### A3（已完成） 对齐与恢复的备份清理（小）
 
 - 依据：`ConsoleViewModel.saveBackup`（`ConsoleViewModel.swift:1019`）在每次打开对齐窗口读取预设后都写一个
   `Backups/temporary-preset-<时间戳>.syx`，即使用户只看预览不写入；没有任何清理。每个约 15 KB。
@@ -41,7 +44,7 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
   不删除不是本功能写的文件。
 - 验收：连续打开预览三次只多出一份备份；恢复点引用的文件永不被清理；测试覆盖。
 
-### A4 对齐/连接窗口的可访问性标识与自动化验收（中）
+### A4（已完成） 对齐/连接窗口的可访问性标识与自动化验收（中）
 
 - 依据：`PresetAlignmentSheet.swift` 与 `HardwareConnectionSheet.swift` 没有任何 `accessibilityIdentifier`，
   `tools/verify_*_ui.py` 的原生验收脚本无法稳定定位这两个流程；`docs/UI_ACCEPTANCE.md` 也没有覆盖它们。
@@ -49,22 +52,23 @@ Surface 模拟与 Pipe 对接在 AstroController 工作区，见其 `TODO.md`，
   写一个 `tools/verify_connection_ui.py`，覆盖：弹窗出现、拒绝、读取连接、对齐预览不写入、写入、恢复。
 - 验收：脚本在无设备的隔离实例中通过；`docs/UI_ACCEPTANCE.md` 增加一行。运行需要辅助功能权限，脚本本身可先写好。
 
-### A5 README 与截图（中，需要屏幕录制权限）
+### A5（已完成） README 与截图（中，需要屏幕录制权限）
 
 - 依据：`docs/images/*.png` 是 2026-11-11 的旧面板，没有显示屏、右侧设备列、设备菜单。
 - 做法：用 `tools/capture_readme_screenshots.py` 重新截图并更新 README 的功能描述（连接确认、对齐预设、显示屏）。
-- 阻塞：本机终端没有屏幕录制与辅助功能权限。需要用户授权或自己运行脚本。
+- 本轮权限：调用宿主的辅助功能与屏幕录制预检均通过，已实际生成并检查六张截图。
+  其他终端运行截图脚本仍需获得各自的系统授权；命令见 README。
 
-### A6 显示屏细节（小）
+### A6（已完成） 显示屏细节（小）
 
 - 依据：`BCRDisplayModel.holdSeconds = 0.8` 是估计值（用户反馈“真机更快”，未测量）；跑马灯图案按用户口述
   “|____| 逆时针，上方合上口”实现，未逐帧核对。
 - 做法：把保持时间与跑马灯帧序做成可在一处调整的常量并写明来源；等设备可用时在 B 组测量。现在不改数值。
 
-### A7 文档收尾（小）
+### A7（已完成） 文档收尾（小）
 
-- `UI_POLISH.md` 的任务书与执行记录已完成使命：把仍有效的内容（远端设备现状、未做的 12/13）并入本文件与
-  `HARDWARE_CONNECT_TEST.md`，然后删除 `UI_POLISH.md`。
+- 已将旧清单的远端设备现状、未完成连接/灯光验证归入本文件与 `HARDWARE_CONNECT_TEST.md`，删除旧清单。
+  README 截图（原 12）由 A5 完成；连接实测（原 13）仍待 B1–B3。
 - `TODO.md` 状态区补充：连接确认、对齐预设、显示屏、设备列、内置名称翻译、确认状态查询。
 - `docs/CONTROL_MAP.md` 的“右侧控制列”一节更新为现状（设备键分组、锁图标、分组圆点、IN 灯、设备菜单）。
 
@@ -99,7 +103,8 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 
 ### B6 未校准的灯环模式
 
-`LEDRingMode` 的 `spread`、`qual`、`cut`、`damp` 仍返回未知（`LEDRingMode.swift:40`），`bar/off` 未核对。
+`LEDRingMode` 的 `spread`、`qual`、`cut`、`damp` 仍返回未知，`bar/off` 模式未核对。
+`bar/pan` 已完成 24 个测试值逐灯对照，尚未做全部 128 值扫描。
 做法与 2026-11-12 的 bar/pan 校准相同：临时把一个旋钮设为该模式，发 3 组各 8 个值，用户读灯。
 只有在打算让对齐功能使用这些模式时才需要做。
 
@@ -107,7 +112,12 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 
 ### C1 ethanmacair 的 USB 修复驱动（需要用户在该机桌面）
 
-- 现状：override 候选已编译，工程已生成；dext 签署报 `errSecInternalComponent`。
+- 设备自 2026-11-12 起插在 ethanmacair（SSH 可达，登录用户 henrykang，仓库 `~/Documents/BCR2000Dev`）。
+  系统识别到 USB 与 MIDI 端口，但只读身份查询无回复；尚未安装 BCRDescriptorProbe 描述覆盖驱动，OUT 包长仍为 4。
+- 已只读采集 USB 描述到该机忽略目录 `build/original-usb-report.json`，编译 override 候选并生成
+  `build/driverkit-probe/xcode-override` 工程，签署团队沿用该机上次 control 构建。
+- 阻塞：dext 签署报 `errSecInternalComponent`，SSH 会话和该机桌面终端均失败；宿主 App 尚未生成，
+  没有安装或激活任何扩展。驱动可用前远程开发只有“只听不发”的价值，C2 尚未开工。
 - 排查顺序（都在该机桌面执行）：
   1. `security find-identity -v -p codesigning` 确认开发证书带私钥；
   2. 用任意小文件试签：`codesign -s "<证书 SHA-1>" -f /tmp/test`，若同样报错，说明是钥匙串对 codesign 的私钥访问
@@ -147,38 +157,20 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 `hardware-startup.json` 的“初始化并连接”路径没有界面入口，只能手写文件，且切换预设后固定等待 150 ms 未实测。
 对齐功能已覆盖大部分用途。选项：删除这条路径；或保留并补界面与实测。
 
-## 建议的执行顺序
+## 下一步执行顺序
 
-1. 现在：A1、A2、A3（各自独立，都小）。
-2. 随后：A4（脚本）、A7（文档收尾）；A5 等权限。
-3. 用户回到 ethanmacair 时：C1，然后立刻做 B1–B4（约 40 分钟，需要用户在设备旁）。
-4. B 组结果出来后：按结果修正，再请用户裁定 D1–D4。
-5. C2 在 C1 通过并确认有持续远程开发需求后再开工。
+1. A 组已完成；本窗口仅本地提交，后续 review/推送按既有约定由审查窗口决定。
+2. 用户回到 ethanmacair 时先完成 C1，再按 B1–B4 实测，结果写入硬件验证记录。
+3. 根据 B 组结果修正软件，再由用户决定 D1–D4；C2 仍需明确是否值得投入。
 
-## 给执行窗口的提示词（A1–A3）
+## 本轮执行约束
 
-```text
-你在 /Users/ethan/Documents/BCR2000Dev（main 分支）工作。先读 AGENTS.md、CONTRIBUTING.md，再读根目录 PLAN.md，
-按顺序实现 A1、A2、A3。每项的依据、做法和验收写在 PLAN.md 里，以它为准。
-
-规则：
-1. 只做这三项。不连接设备，不发送任何 MIDI/SysEx。
-2. 不改模拟侧文件：Sources/BCRProviderMCPAdapter/SurfaceControl*.swift、docs/SURFACE_*.md、
-   configs/package_provider.py、Schemas/、Clients/。冲突热点 SurfaceSession.swift、SurfaceEngine.swift、
-   docs/CONTROL_MAP.md 除非必须不要动。
-3. 新界面文字走 L10n.text，并在两个 Localizable.strings 成对添加，plutil -lint 检查。
-4. 每项一个本地提交（Conventional Commits）。提交前：git fetch；远端有新提交则 git rebase origin/main
-   （不 merge、不 force），锁文件变了就运行 python3 configs/surface_plugins_dependency.py update；
-   python3 configs/format_repo.py --staged（改了文件就重新 add 再跑）；git diff --check --cached；
-   全量测试 swift test --build-path build/swiftpm > /tmp/bcr_test.log 2>&1，然后
-   grep -E "Test Suite '.*\\.xctest' (passed|failed)|Test Case .* failed" /tmp/bcr_test.log，
-   必须 5 个测试包全部 passed 且没有 failed 用例（A1 完成后改用新的汇总命令）；
-   python3 configs/check_domain_boundaries.py；python3 -m unittest discover -s Tests/BuildWorkflowTests。
-5. 只提交，不 push，不打标签；push 由审查窗口 review 后执行。
-6. 每完成一项，在 PLAN.md 末尾的“执行记录”追加：条目号、提交号、改动文件、测试总数与失败数、未验证之处、
-   与 PLAN 的偏离及原因。如实写。
-7. PLAN 没覆盖的取舍选改动最小的做法并记录；涉及改用户数据、改既有测试断言、改公开合同的，停下记录。
-```
+- 本轮按用户指令完成 A1–A7；B–D 留待设备及用户决定。不连接实体设备，不发送真实 MIDI/SysEx。
+- 始终在 main 验证并逐项本地提交，不建分支/额外检出，不 push、不打标签；审查窗口负责 review 后推送。
+- 保留模拟侧实现、Schemas、Clients 及 Provider 合同；CONTROL_MAP 只按 A7 明确范围更新现状说明。
+- 新文案成对本地化；不改既有测试断言。测试替身入口变更、失败修正与额外提交在下方如实记录。
+- 以 `python3 configs/macos_workflow.py test` 汇总全部包，运行边界、BuildWorkflow、格式和相关原生验收；
+  未验证项分别记录。提交号随下一次文档更新补入，末项由收尾记录补齐。
 
 ## 执行记录
 
@@ -235,3 +227,21 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 - 补跑复现一次“恢复进度未出现”：实际已完成，但 AX 查询错过短暂进度态。
   脚本现在接受进度或完成态作为启动证据，随后仍要求完成控件、精确写入次数和恢复哈希一致。
 - 中文、英文原生验收串行重跑通过（case-xfjejwu1、case-_75cwihp）；没有改变应用或设备逻辑。
+
+### A6 — `67d4274`
+
+- 改动：BCRDisplayModel.Calibration 集中保持时间、动画速率和帧序；SurfacePanelView 读取同一速率。
+  保留 holdSeconds 兼容入口；注释注明 0.8 秒为估计值、12 Hz 未计时、帧序来自用户口述。
+- 验证：Swift 五包 525 项、失败 0；既有显示测试不改；BuildWorkflow 76 项、边界、build、双语 smoke 通过。
+  中英文假设备原生验收通过。A4 瞬态进度问题另用 ec225b4 修正并独立记录，没有混入显示逻辑提交。
+- 未验证/偏离：没有设备计时或逐帧校准，数值与正时间域内的显示顺序未变；仍按 B4 待实测。
+
+### A2 补充 — `153c0a3`
+
+- 最终显示点核对补齐 BulkAssignmentView 的分组选择器、WorkspaceTabsView 的参数/分组与导入确认、
+  SurfaceProgramsView 的宏参数选择器。均为显示层调用；配置库元数据保留原文。
+- 新增 verify_builtin_names_ui.py：在英文隔离实例中保存 8 个中文参数名与中文分组，实际浏览工作区、输出设置、
+  批量分配预览；英文显示通过，配置 JSON 字节不变，MCP 仍返回中文原名（case-2dsalk9j）。
+- Swift 五包 525 项、失败 0；BuildWorkflow 76 项、失败 0；边界和 App build 通过。
+  现有测试断言未改，保护参数定义未改。初轮脚本尝试修改使能定义被正确拒绝，另一次误选样本分组，修正脚本后通过。
+- 与初稿偏离：自查时发现上述同类漏点，按 A2 的“剩余界面”目标一并补齐，未引入名称存储或业务逻辑变化。
