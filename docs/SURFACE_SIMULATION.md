@@ -53,7 +53,10 @@ SurfaceSession; a GUI does not implicitly enable the optional contract.
 
 ## Button holds (contract 1.1)
 
-The historical `--simulation-profile` declares every button's `hold: {rest_value: false, max_hold_s: 5}`. Five seconds bounds how long a
+Both simulation modes declare `hold: {rest_value: false, max_hold_s: 5}` only for buttons that
+accept input and have a momentary binding: releasing them restores the parameter to rest. Toggle
+and unbound buttons have no lease; `hold_s` on a writable toggle returns `unsupported_hold`.
+Five seconds bounds how long a
 lost client can leave a simulated button pressed; consumers renew well inside it. An input of
 `true` with `hold_s` (0, 5] is accepted with `hold_deadline = time + hold_s`; an input of `false`, or
 an accepted value without `hold_s`, clears the lease. `surface_control_renew({expected, control_id,
@@ -117,10 +120,11 @@ hardware source or a disabled console. `--describe-surface` uses the supplied fi
 devices or listening on a port. Invalid files fail before credentials or user persistence are read.
 
 See [the held-enable, axes and feedback example](../examples/simulation/README.md) and its pinned
-consumer role mapping. Only momentary button bindings declare holds in this mode; the historical
-`--simulation-profile` parameter bindings and hold semantics remain unchanged. Its contract 1.2
-mapping revision is `bd169e1fddae247e`; the previous 1.1 revision `2813b4891860c6da` remains
-verified by stripping only the added `accepts_input` fields from the new descriptors.
+consumer role mapping. Both modes use the same accepted-input/momentary rule for holds. The default contract 1.2
+mapping revision is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
+overly broad holds, and the previous 1.1 revision `2813b4891860c6da` remains
+verified by reconstructing its historical button hold declarations and removing the later
+`accepts_input` fields in a compatibility test.
 
 ## Contract 1.2 input declarations and feedback concurrency
 
@@ -209,7 +213,7 @@ copied byte for byte from the materialized `build/seed/SurfacePlugins`:
 The delivery also includes `examples/simulation/` with the configurable parameters, role mapping,
 README and a separately generated `control-contract.json`. Both manifests' `simulation_examples`
 entry pins those paths and the example mapping revision `3d93301a62d6f9b6`. The top-level
-`mapping_revision` continues to describe the default profile (`bd169e1fddae247e`). Packaging rejects
+`mapping_revision` continues to describe the default profile (`ef0e106767594759`). Packaging rejects
 an example role pin that does not match the delivered executable's description.
 
 The delivery has two manifests that describe the same files:

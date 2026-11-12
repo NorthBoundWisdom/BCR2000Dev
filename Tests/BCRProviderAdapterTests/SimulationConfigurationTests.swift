@@ -54,13 +54,13 @@ final class SimulationConfigurationTests: XCTestCase {
             includeAgent: false
         )
         let adapter = try XCTUnwrap(SurfaceControlMCPModule.install(on: gateway, instanceID: "configuration-test",
-                                                                    permissions: .init(input: true),
-                                                                    momentaryHoldsOnly: true))
+                                                                    permissions: .init(input: true)))
         _ = adapter
         let discovery = gateway.call("surface_control_discover").value.objectValue!
         let controls = discovery["profile"]!.objectValue!["controls"]!.arrayValue!
         let enable = try XCTUnwrap(controls.first { $0.objectValue?["id"] == .string("button.1.1") }?.objectValue)
         let stop = try XCTUnwrap(controls.first { $0.objectValue?["id"] == .string("button.1.2") }?.objectValue)
+        XCTAssertEqual(discovery["expected"]?.objectValue?["mapping_revision"], .string("3d93301a62d6f9b6"))
         XCTAssertNotNil(enable["hold"])
         XCTAssertNil(stop["hold"])
         for (id, encoding, value, parameter) in [
@@ -213,7 +213,12 @@ final class SimulationConfigurationTests: XCTestCase {
         let contract = try BCRSurfaceControlAdapter.publishedContract(surface: surface)
         var profile = try XCTUnwrap(contract.objectValue?["discovery"]?.objectValue?["profile"]?.objectValue)
         profile["controls"] = .array(try XCTUnwrap(profile["controls"]?.arrayValue).map { row in
-            var fields = row.objectValue!; fields.removeValue(forKey: "accepts_input"); return .object(fields)
+            var fields = row.objectValue!; fields.removeValue(forKey: "accepts_input")
+            // Reconstruct the old overbroad hold declaration solely to retain its historical pin.
+            if fields["input_kind"] == .string("button") {
+                fields["hold"] = .object(["rest_value": .bool(false), "max_hold_s": .double(5)])
+            }
+            return .object(fields)
         })
         let legacy = try JSONValue.object(profile).decoded(ControlProfile.self)
         XCTAssertEqual(legacy.mappingRevision, "2813b4891860c6da")

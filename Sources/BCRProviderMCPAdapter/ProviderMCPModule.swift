@@ -119,8 +119,7 @@ public enum ProviderMCPModule {
     public static func install(on service: AgentControlService, application: ProviderApplication,
                                enableSurfaceControl: Bool = false,
                                surfaceInstanceID: String? = nil,
-                               surfacePermissions: BCRSurfaceControlAdapter.Permissions = .init(),
-                               surfaceMomentaryHoldsOnly: Bool = false) throws
+                               surfacePermissions: BCRSurfaceControlAdapter.Permissions = .init()) throws
     {
         try service.registerModule(
             id: "bcr.provider.1.0",
@@ -246,8 +245,7 @@ public enum ProviderMCPModule {
         }
         if enableSurfaceControl {
             try SurfaceControlMCPModule.install(on: service, instanceID: surfaceInstanceID ?? application.providerID,
-                                                permissions: surfacePermissions,
-                                                momentaryHoldsOnly: surfaceMomentaryHoldsOnly)
+                                                permissions: surfacePermissions)
         }
     }
 

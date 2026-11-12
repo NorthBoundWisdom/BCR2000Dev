@@ -82,6 +82,22 @@ final class SurfaceControlHoldTests: XCTestCase {
          "hold_s": .double(seconds)]
     }
 
+    func testToggleAndUnboundButtonsDoNotOfferLeases() throws {
+        let (gateway, adapter) = try host()
+        for id in ["button.1.1", "button.1.2", "button.2.1"] {
+            let control = try XCTUnwrap(try adapter.discovery().profile.controls.first { $0.id == id })
+            XCTAssertNil(control.hold, id)
+            XCTAssertEqual(code(gateway, "input", try press(gateway, true, control: id)),
+                           .string(id == "button.2.1" ? "permission_denied" : "unsupported_hold"))
+        }
+        var protected = try XCTUnwrap(gateway.session.engine.configuration.parameter("simulation.hold"))
+        protected.externallyProtected = true
+        try gateway.session.updateParameter(protected)
+        let blocked = try XCTUnwrap(try adapter.discovery().profile.controls.first { $0.id == "button.1.3" })
+        XCTAssertEqual(blocked.accepts_input, false)
+        XCTAssertNil(blocked.hold)
+    }
+
     func testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold() throws {
         let (gateway, adapter) = try host()
         let discovery = try adapter.discovery()
@@ -96,10 +112,13 @@ final class SurfaceControlHoldTests: XCTestCase {
         ])
         XCTAssertEqual(discovery.expected.mapping_revision, discovery.profile.mappingRevision)
         XCTAssertEqual(discovery.expected.mapping_revision.count, 16)
-        let buttons = discovery.profile.controls.filter { $0.input_kind == .button }
-        XCTAssertTrue(buttons.allSatisfy {
-            $0.hold == ControlHold(restValue: .bool(false),
-                                   maxHoldSeconds: BCRSurfaceControlAdapter.maximumButtonHoldSeconds)
+        XCTAssertEqual(discovery.expected.mapping_revision, "ef0e106767594759")
+        let leased = discovery.profile.controls.filter { $0.hold != nil }
+        XCTAssertEqual(leased.map(\.id), ["button.1.3"])
+        XCTAssertTrue(leased.allSatisfy {
+            $0.accepts_input == true && $0.hold == ControlHold(restValue: .bool(false),
+                                                               maxHoldSeconds: BCRSurfaceControlAdapter
+                                                                   .maximumButtonHoldSeconds)
         })
         XCTAssertTrue(discovery.profile.controls.filter { $0.input_kind != .button }.allSatisfy { $0.hold == nil })
         // Same mapping in another process or after reset: same revision, different epoch.

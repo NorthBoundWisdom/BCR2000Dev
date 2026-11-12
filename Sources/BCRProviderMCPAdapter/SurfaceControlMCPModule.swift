@@ -10,7 +10,6 @@ public enum SurfaceControlMCPModule {
     @discardableResult
     public static func install(on gateway: MCPApplicationGateway, instanceID: String,
                                permissions: BCRSurfaceControlAdapter.Permissions = .init(), eventCapacity: Int = 1024,
-                               momentaryHoldsOnly: Bool = false,
                                monotonic: @escaping @MainActor ()
                                    -> Double = { ProcessInfo.processInfo.systemUptime },
                                holdScheduler: @escaping BCRSurfaceControlAdapter.HoldScheduler =
@@ -25,7 +24,7 @@ public enum SurfaceControlMCPModule {
                 // Existing audit trail; the context itself is revoked by the adapter (fail closed).
                 gateway?.record("surface_control.context", succeeded: false, detail: value.reason + ": " + value.code)
             },
-            holdScheduler: holdScheduler, momentaryHoldsOnly: momentaryHoldsOnly
+            holdScheduler: holdScheduler
         )
         // Any request, including legacy and unrelated tools, first releases due leases: a flood of
         // queued requests then delays an expiry by at most one request, not by the whole queue.

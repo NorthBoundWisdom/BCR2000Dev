@@ -191,8 +191,7 @@ private struct BCRProviderService {
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(
                     encoder.encode(BCRSurfaceControlAdapter.publishedContract(
-                        surface: session,
-                        momentaryHoldsOnly: options.simulationConfiguration != nil
+                        surface: session
                     )) + Data("\n".utf8)
                 )
                 return
@@ -306,8 +305,7 @@ private struct BCRProviderService {
                                               options.surfacePermissions.input || options.surfacePermissions
                                               .feedback || options.surfacePermissions.reset,
                                           surfaceInstanceID: options.surfaceInstanceID,
-                                          surfacePermissions: options.surfacePermissions,
-                                          surfaceMomentaryHoldsOnly: options.simulationConfiguration != nil)
+                                          surfacePermissions: options.surfacePermissions)
             try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),

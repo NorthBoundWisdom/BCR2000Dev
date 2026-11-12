@@ -38,9 +38,9 @@ allowed. Unknown fields at any level, duplicate assignments/parameter IDs, nonex
 unknown parameters, invalid numbers and invalid modes fail startup with a diagnostic. No migration,
 persistence or fallback is performed for this simulation input file.
 
-In configurable mode only momentary button bindings declare a hold lease. The historical
-`--simulation-profile` keeps its ordinary bindings and hold declarations. Its contract 1.2 mapping
-revision is `bd169e1fddae247e` (former contract 1.1: `2813b4891860c6da`).
+Both simulation modes declare hold leases only on buttons accepting input with a momentary binding.
+The default `--simulation-profile` contract 1.2 mapping revision is `ef0e106767594759`
+(former 1.2: `bd169e1fddae247e`; former 1.1: `2813b4891860c6da`).
 This example's contract 1.2 mapping revision is **`3d93301a62d6f9b6`**, pinned in `chassis-roles.json`.
 The example's former 1.1 revision was `2b2ae6638f08af35`. All seven assigned controls declare
 `accepts_input: true`; every other unbound control declares false.
