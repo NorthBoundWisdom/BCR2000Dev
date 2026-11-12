@@ -74,6 +74,12 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var visibleGroup = 1
     @Published private(set) var pendingHardwareConnection: HardwareConnectionPrompt?
     private(set) var startupConfiguredGroup: Int?
+    /// Only known after this app loaded the preset itself; the device never reports its preset number.
+    private(set) var startupConfiguredPreset: Int?
+    /// The control whose value the panel's LED display shows, as the device does while a control moves.
+    /// Not `@Published`: input bursts publish through the session's coalesced frame refresh.
+    private(set) var displayedControl: BCRControlID?
+    private var displayRevertTask: Task<Void, Never>?
     private var startupProgram: MIDIStartupProgram?
     private var startupProgramError: String?
     private var connectionOfferTask: Task<Void, Never>?
@@ -345,7 +351,8 @@ final class ConsoleViewModel: ObservableObject {
 
     func selectSource(_ newSource: DeviceSource) {
         connectionOfferTask?.cancel(); connectionOfferTask = nil
-        pendingHardwareConnection = nil; startupConfiguredGroup = nil
+        pendingHardwareConnection = nil; startupConfiguredGroup = nil; startupConfiguredPreset = nil
+        clearDisplayedValue()
         clearHardwarePresses()
         hardwareConnectionTask?.cancel()
         hardwareConnectionTask = nil
@@ -353,6 +360,28 @@ final class ConsoleViewModel: ObservableObject {
         connectingHardware = false
         observedHardwareGroup = nil
         session.selectSource(newSource)
+    }
+
+    /// Text of the 4-digit LED display: the moving control's value, else the preset number if known.
+    var displayText: String {
+        if let control = displayedControl { return String(displayValue(of: control)) }
+        return startupConfiguredPreset.map(String.init) ?? "----"
+    }
+
+    private func showDisplayedValue(of control: BCRControlID) {
+        displayedControl = control
+        displayRevertTask?.cancel()
+        displayRevertTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(1_500)) } catch { return }
+            self?.objectWillChange.send()
+            self?.displayedControl = nil
+            self?.displayRevertTask = nil
+        }
+    }
+
+    private func clearDisplayedValue() {
+        displayRevertTask?.cancel(); displayRevertTask = nil
+        if displayedControl != nil { objectWillChange.send(); displayedControl = nil }
     }
 
     private func clearHardwarePresses() {
@@ -720,6 +749,7 @@ final class ConsoleViewModel: ObservableObject {
                     self.visibleGroup = 1; self.session.selectGroup(1)
                     self.session.selectSource(.hardware)
                     self.observedHardwareGroup = nil; self.startupConfiguredGroup = 1
+                    self.startupConfiguredPreset = program.preset
                     self.notice = ConsoleNotice(
                         level: .info,
                         text: L10n.text("预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。")
@@ -734,6 +764,7 @@ final class ConsoleViewModel: ObservableObject {
                     else { throw HardwareSnapshotError.invalid }
                     try self.session.adoptHardwareSnapshot(messages)
                     self.observedHardwareGroup = nil; self.startupConfiguredGroup = nil
+                    self.startupConfiguredPreset = nil
                     self.notice = ConsoleNotice(level: .info, text: L10n.text("已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。"))
                 }
             } catch is CancellationError {
@@ -767,7 +798,8 @@ final class ConsoleViewModel: ObservableObject {
             }
         case let .connected(snapshot):
             observedHardwareGroup = nil
-            startupConfiguredGroup = nil
+            startupConfiguredGroup = nil; startupConfiguredPreset = nil
+            clearDisplayedValue()
             clearHardwarePresses()
             offerHardwareConnection()
             if connectionOfferTask != nil || connectingHardware { return }
@@ -784,6 +816,7 @@ final class ConsoleViewModel: ObservableObject {
                 )
             }
         case let .touched(control):
+            if control.isContinuous { showDisplayedValue(of: control) }
             if source == .hardware, control.section == .pushEncoder || control.section == .pushEncoderButton {
                 observedHardwareGroup = control.row
             }

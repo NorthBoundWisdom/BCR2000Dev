@@ -752,3 +752,9 @@
 " 设备可能停在部分设置的临时预设；永久存储未改动，重新载入预设或重启设备即可恢复。" = " The device may be left in a partially configured temporary preset; stored presets are unchanged, so reloading the preset or restarting the device restores it.";
 "不切换预设，把软件当前参数值写入设备当前预设中已学习的控件。" = "Keep the current preset and write current software values to its learned controls.";
 "写入并连接" = "Write and connect";
+"实体在转动控件时显示数值，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。" = "The device shows the value while a control moves, otherwise the preset number. The device does not report its preset, so it is shown only after this app loads one.";
+"设备本机编程键：不发送也不接收 MIDI，软件无法读取或操作，仅作对照显示。" = "Device-local programming keys: they neither send nor receive MIDI, so the app cannot read or operate them. Shown for reference only.";
+"实体预设切换只在设备本机生效，不通知软件；请在设备上操作。" = "Preset changes happen on the device only and are not reported to the app. Use the device.";
+"实体 Port 1 已连接时点亮" = "Lit while the device's Port 1 is connected";
+"MIDI IN / OUT A / OUT B 指示 DIN 接口流量，设备不向软件报告，仅作对照显示。" = "MIDI IN / OUT A / OUT B show DIN port traffic. The device does not report them to the app; shown for reference only.";
+"LED 显示" = "LED display";

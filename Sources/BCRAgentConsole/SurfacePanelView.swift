@@ -199,33 +199,30 @@ struct SurfacePanelView: View {
         }
     }
 
+    /// Right-hand column in the device's order: display, status LEDs, encoder groups, fixed
+    /// programming keys, the four user keys and the preset keys. Device-local keys are drawn but
+    /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
-        VStack(spacing: m(10)) {
-            Text(model.source == .hardware ? L10n.text("查看分组") : "GROUP")
-                .font(m.font(8.5, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
+        VStack(spacing: m(8)) {
+            LEDDisplay(text: model.displayText)
+                .help(L10n.text("实体在转动控件时显示数值，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
+            statusLEDs
+            sideLabel(model.source == .hardware ? L10n.text("查看分组") : "ENCODER GROUP")
             if model.source == .hardware {
                 Text(model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") }
                     ?? model.startupConfiguredGroup.map { L10n.text("启动设为组 \($0)") }
                     ?? L10n.text("硬件组未确认"))
-                    .font(m.font(8, weight: .medium))
+                    .font(m.font(7.5, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            LazyVGrid(columns: [GridItem(.fixed(m(34))), GridItem(.fixed(m(34)))], spacing: m(6)) {
+            keyGrid {
                 ForEach(BCRLayout.encoderGroups, id: \.self) { group in
                     Button {
                         model.selectGroup(group)
                     } label: {
-                        VStack(spacing: m(3)) {
-                            Capsule()
-                                .fill(group == model.visibleGroup ? Theme.led : Theme.ledOff)
-                                .frame(width: m(18), height: m(3))
-                                .shadow(color: group == model.visibleGroup ? Theme.led : .clear, radius: 3)
-                            Text("\(group)")
-                                .font(m.font(10, weight: .bold).monospacedDigit())
-                        }
-                        .frame(width: m(34), height: m(30))
-                        .background(Color.black.opacity(0.35), in: RoundedRectangle(cornerRadius: m(6)))
+                        DeviceKey(label: "\(group)", lit: group == model.visibleGroup)
                     }
                     .buttonStyle(.plain)
                 }
@@ -233,17 +230,57 @@ struct SurfacePanelView: View {
             .help(model.source == .mock
                 ? L10n.text("切换 Mock 设备的编码器组（与实体一样不发送 MIDI）")
                 : L10n.text("实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。"))
-
-            Spacer(minLength: m(24))
-
-            Text("USER")
-                .font(m.font(8.5, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
-            VStack(spacing: m(6)) {
-                ForEach(1 ... 4, id: \.self) { index in pad(.userButton(index)) }
+            keyGrid {
+                ForEach(["STORE", "LEARN", "EDIT", "EXIT"], id: \.self) { DeviceKey(label: $0, enabled: false) }
             }
+            .help(L10n.text("设备本机编程键：不发送也不接收 MIDI，软件无法读取或操作，仅作对照显示。"))
+
+            Spacer(minLength: m(12))
+
+            sideLabel("USER")
+            keyGrid {
+                ForEach(1 ... 4, id: \.self) { index in userKey(.userButton(index)) }
+            }
+            sideLabel("PRESET")
+            keyGrid {
+                DeviceKey(systemImage: "arrowtriangle.left.fill", enabled: false)
+                DeviceKey(systemImage: "arrowtriangle.right.fill", enabled: false)
+            }
+            .help(L10n.text("实体预设切换只在设备本机生效，不通知软件；请在设备上操作。"))
         }
         .frame(width: m(80))
+    }
+
+    private var statusLEDs: some View {
+        let usb = model.source == .hardware && model.connection.isConnected
+        return HStack(spacing: m(6)) {
+            StatusLED(label: "USB", lit: usb)
+                .help(L10n.text("实体 Port 1 已连接时点亮"))
+            ForEach(["IN", "A", "B"], id: \.self) { StatusLED(label: $0, lit: false) }
+                .help(L10n.text("MIDI IN / OUT A / OUT B 指示 DIN 接口流量，设备不向软件报告，仅作对照显示。"))
+        }
+    }
+
+    private func sideLabel(_ text: String) -> some View {
+        Text(text)
+            .font(m.font(7.5, weight: .bold, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    private func keyGrid<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        LazyVGrid(columns: [GridItem(.fixed(m(36)), spacing: m(6)), GridItem(.fixed(m(36)))], spacing: m(6)) {
+            content()
+        }
+    }
+
+    private func userKey(_ control: BCRControlID) -> some View {
+        UserKeyCell(
+            presentation: model.presentation(of: control),
+            onPress: { model.press(control) },
+            onRelease: { model.release(control) }
+        )
     }
 
     private func knob(_ control: BCRControlID) -> some View {
@@ -272,6 +309,143 @@ struct SurfacePanelView: View {
 }
 
 // MARK: - Cells
+
+/// The 4-digit red LED display.
+private struct LEDDisplay: View {
+    let text: String
+    @Environment(\.panelMetrics) private var m
+
+    var body: some View {
+        Text(String(text.suffix(4)).leftPadded(to: 4))
+            .font(m.font(17, weight: .bold, design: .monospaced))
+            .foregroundStyle(Theme.led)
+            .shadow(color: Theme.led.opacity(0.7), radius: 3)
+            .frame(width: m(78), height: m(30))
+            .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
+            .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
+            .accessibilityLabel(L10n.text("LED 显示"))
+            .accessibilityValue(text)
+    }
+}
+
+private extension String {
+    func leftPadded(to length: Int) -> String {
+        String(repeating: " ", count: max(0, length - count)) + self
+    }
+}
+
+private struct StatusLED: View {
+    let label: String
+    let lit: Bool
+    @Environment(\.panelMetrics) private var m
+
+    var body: some View {
+        VStack(spacing: m(2)) {
+            Circle()
+                .fill(lit ? Theme.led : Theme.ledOff)
+                .frame(width: m(4.5), height: m(4.5))
+                .shadow(color: lit ? Theme.led : .clear, radius: 2.5)
+            Text(label)
+                .font(m.font(6, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
+    }
+}
+
+/// A small square device key. Disabled keys are device-local and cannot be synchronized.
+private struct DeviceKey: View {
+    var label: String?
+    var systemImage: String?
+    var lit = false
+    var enabled = true
+    @Environment(\.panelMetrics) private var m
+
+    var body: some View {
+        VStack(spacing: m(3)) {
+            Capsule()
+                .fill(lit ? Theme.led : Theme.ledOff)
+                .frame(width: m(16), height: m(3))
+                .shadow(color: lit ? Theme.led : .clear, radius: 3)
+            Group {
+                if let systemImage {
+                    Image(systemName: systemImage).font(m.font(8))
+                } else {
+                    Text(label ?? "").font(m.font(label?.count == 1 ? 10 : 7, weight: .bold).monospacedDigit())
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+        }
+        .frame(width: m(36), height: m(28))
+        .background(Color.black.opacity(enabled ? 0.35 : 0.2), in: RoundedRectangle(cornerRadius: m(6)))
+        .overlay { RoundedRectangle(cornerRadius: m(6)).stroke(Color.white.opacity(enabled ? 0.08 : 0.04)) }
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label ?? systemImage ?? "")
+        .accessibilityAddTraits(enabled ? .isButton : [])
+    }
+}
+
+/// Compact USER key laid out 2 × 2 like the device; label and value are in the inspector and help.
+private struct UserKeyCell: View {
+    let presentation: ControlPresentation
+    @Environment(\.panelMetrics) private var m
+    let onPress: () -> Void
+    let onRelease: () -> Void
+    @State private var isDown = false
+
+    var body: some View {
+        let down = isDown || presentation.hardwarePressed
+        let level = Double(presentation.value) / 127
+        VStack(spacing: m(2)) {
+            Capsule()
+                .fill(level > 0 ? Theme.led.opacity(0.35 + 0.65 * level) : Theme.ledOff)
+                .frame(width: m(16), height: m(3))
+                .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 3)
+            Text(presentation.control.shortName)
+                .font(m.font(8, weight: .bold, design: .monospaced))
+            Text(presentation.label ?? L10n.text("未分配"))
+                .font(m.font(6.5, weight: .semibold))
+                .foregroundStyle(presentation
+                    .label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .padding(.horizontal, m(2))
+        .frame(width: m(36), height: m(40))
+        .background(
+            down ? Color.white.opacity(0.2) : Color.black.opacity(0.35),
+            in: RoundedRectangle(cornerRadius: m(6))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: m(6)).stroke(
+                presentation.isLearnTarget ? Theme.learn
+                    :
+                    (presentation.isSelected ? Theme.selection : Color.white
+                        .opacity(presentation.hardwarePressed ? 0.5 : 0.08)),
+                lineWidth: presentation.isLearnTarget ? 2 : 1
+            )
+        }
+        .overlay(alignment: .topTrailing) {
+            if !presentation.isBound {
+                Circle().fill(.orange).frame(width: m(4), height: m(4)).padding(m(3))
+            }
+        }
+        .scaleEffect(down ? 0.94 : 1)
+        .animation(.easeOut(duration: 0.1), value: down)
+        .modifier(PressGesture(isDown: $isDown, onPress: onPress, onRelease: onRelease))
+        .help(
+            "\(presentation.control.description) · \(presentation.label ?? L10n.text("未分配")) · \(presentation.detail ?? "\(presentation.value)")"
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            onPress()
+            onRelease()
+        }
+    }
+}
 
 private struct CellChrome: ViewModifier {
     let presentation: ControlPresentation

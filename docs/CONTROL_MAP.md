@@ -287,6 +287,18 @@ Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非�
 通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
 接入与边界见 [SURFACE_SIMULATION.md](SURFACE_SIMULATION.md)。
 
+## 右侧控制列（2026-11-12）
+
+面板右列按实体顺序绘制：4 位 LED 显示、USB/MIDI 状态灯、ENCODER GROUP 1–4、STORE/LEARN/EDIT/EXIT、
+USER 1–4（2 × 2）和 PRESET ◀ ▶。依据用户手册：显示屏在转动控件时实时显示数值，其余时间显示预设号；
+STORE/LEARN/EDIT/EXIT 为设备固定编程键；PRESET 键在本机切换 32 个预设。
+
+- LED 显示：最近转动的旋钮值保持 1.5 秒；否则仅在本软件经启动设置载入预设后显示该预设号，
+  其余情况显示 `----`，不猜测设备当前预设。
+- USB 灯在实体模式且 Port 1 连接时点亮；MIDI IN/OUT A/OUT B 不由设备报告，常灭。
+- 分组键沿用“查看分组”语义（设备不报告当前组）；USER 键保持原有学习/动作/按压可视化。
+- STORE/LEARN/EDIT/EXIT、PRESET 与 DIN 状态灯既不发送也不接收 MIDI，只作对照显示并禁用。
+
 ## 硬件按压可视化（2026-11-12）
 
 顶部旋钮按键、两排独立按钮和 USER 键使用独立的短暂按压动画（180 ms 输入脉冲、下沉缩放、
