@@ -55,7 +55,19 @@ final class BCRDisplayModelTests: XCTestCase {
         // Unknown, duplicated or blank names leave the number unknown instead of guessing.
         XCTAssertNil(BCRPresetNames(temporary: "Other", memory: memory).presetNumber)
         XCTAssertNil(BCRPresetNames(temporary: "Same", memory: ["Same", "Same"]).presetNumber)
+        XCTAssertEqual(BCRPresetNames(temporary: "Same", memory: ["Same", "x", "Same"]).candidates, [1, 3])
         XCTAssertNil(BCRPresetNames(temporary: "      ", memory: ["      "]).presetNumber)
+    }
+
+    func testSameNamedPresetsAreResolvedByContentWithoutValues() throws {
+        let body = ["$rev R1", "$preset", ".name 'Redrum'", "$encoder 1", ".easypar CC 1 1 0 127 absolute"]
+        let temporary = dump(body + [".default 40", "$end"])
+        let slot1 = dump(body + [".default 0", "$end"])
+        let slot8 = dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
+        XCTAssertEqual(try BCRPresetNames.resolve(temporary: temporary, candidates: [1: slot1, 8: slot8]), 1)
+        // An edited temporary preset (e.g. aligned) matches neither: unknown, not guessed.
+        let edited = dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
+        XCTAssertNil(try BCRPresetNames.resolve(temporary: edited, candidates: [1: slot1, 8: slot8]))
     }
 
     func testProfileReadsNameAndShowValueFromThePreset() throws {
@@ -116,12 +128,15 @@ private final class DisplayDevice: MIDIService {
     var supportsStartupConfiguration: Bool { true }
     var temporary: Data
     var names: BCRPresetNames
+    var memory: [Int: Data] = [:]
     var writes = 0
+    var dumps = 0
     init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
+    func readMemoryPreset(_ number: Int) async throws -> Data { dumps += 1; return memory[number] ?? temporary }
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {}
-    func readCurrentPreset() async throws -> Data { temporary }
+    func readCurrentPreset() async throws -> Data { dumps += 1; return temporary }
     func readPresetNames() async throws -> BCRPresetNames { names }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws { writes += 1
     }
@@ -178,5 +193,35 @@ final class DeviceDisplayTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(model.displayText, "----")
         XCTAssertEqual(model.displayPresetName, "Edited")
+    }
+
+    func testDuplicateNamesResolveOnceThenUseTheCache() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let preset = dump([
+            "$rev R1",
+            "$preset",
+            ".name 'Redrum'",
+            "$encoder 1",
+            ".easypar CC 1 1 0 127 absolute",
+            "$end"
+        ])
+        let other = dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
+        var memory = (1 ... 32).map { "P\($0)" }; memory[0] = "Redrum"; memory[7] = "Redrum"
+        let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Redrum", memory: memory))
+        device.memory = [1: preset, 8: other]
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.dumps, 3)
+        // Next connection: names alone, no slow dumps.
+        model.selectSource(.mock)
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.dumps, 3)
     }
 }

@@ -452,9 +452,10 @@ final class ConsoleViewModel: ObservableObject {
 
     private var displayReadTask: Task<Void, Never>?
 
-    /// Read-only, on entering hardware mode: preset names first (instant, gives the number the
-    /// display shows), then the temporary preset for per-control ShowValue. Failures leave the
-    /// display at what is already known.
+    /// Read-only, on entering hardware mode. The 33 preset names take under a second and usually
+    /// give the number. Full dumps take 12–15 s each on firmware 1.10 (the device display animates
+    /// meanwhile), so they run only when nothing is cached for this preset name: once for the
+    /// per-control ShowValue settings, and for same-named candidates to resolve the number.
     private func refreshDisplayFromDevice() {
         guard canConfigureMIDI, midi.supportsStartupConfiguration, source == .hardware, connection.isConnected,
               displayReadTask == nil, presetAlignment?.phase.isBusy != true else { return }
@@ -462,13 +463,37 @@ final class ConsoleViewModel: ObservableObject {
         displayReadTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.displayReadTask = nil }
+            @MainActor func current() -> Bool { self.source == .hardware && self.connection.hasSameRoute(as: route) }
             do {
                 let names = try await self.midi.readPresetNames()
-                guard self.source == .hardware, self.connection.hasSameRoute(as: route) else { return }
-                if self.startupConfiguredPreset == nil { self.setDisplayPreset(names.presetNumber) }
+                guard current() else { return }
+                let candidates = names.candidates
+                let cached = self.displayProfile.flatMap { $0.name == names.temporaryName ? $0 : nil }
+                if self.startupConfiguredPreset == nil {
+                    if candidates.count == 1 {
+                        self.setDisplayPreset(candidates[0])
+                    } else if let cached, cached.resolvedCandidates == candidates {
+                        self.setDisplayPreset(cached.resolvedPreset)
+                    }
+                }
+                let needsNumber = self.startupConfiguredPreset == nil && candidates.count > 1
+                    && cached?.resolvedCandidates != candidates
+                guard cached == nil || needsNumber else { return }
                 let temporary = try await self.midi.readCurrentPreset()
-                guard self.source == .hardware, self.connection.hasSameRoute(as: route) else { return }
+                guard current() else { return }
                 self.updateDisplayProfile(from: temporary)
+                guard needsNumber, candidates.count <= 4 else { return }
+                var dumps: [Int: Data] = [:]
+                for number in candidates {
+                    guard current(), self.presetAlignment?.phase.isBusy != true else { return }
+                    dumps[number] = try await self.midi.readMemoryPreset(number)
+                }
+                guard current() else { return }
+                let number = try BCRPresetNames.resolve(temporary: temporary, candidates: dumps)
+                self.setDisplayPreset(number)
+                self.displayProfile?.resolvedPreset = number
+                self.displayProfile?.resolvedCandidates = candidates
+                if let profile = self.displayProfile { try? self.displayProfileStore.save(profile) }
             } catch {
                 return
             }
@@ -476,7 +501,12 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func updateDisplayProfile(from dump: Data) {
-        guard let profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
+        guard var profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
+        // Temporary edits (alignment) keep the name and the preset it was recalled from.
+        if displayProfile?.name == profile.name {
+            profile.resolvedPreset = displayProfile?.resolvedPreset
+            profile.resolvedCandidates = displayProfile?.resolvedCandidates
+        }
         displayProfile = profile
         do { try displayProfileStore.save(profile) } catch { report(error) }
     }

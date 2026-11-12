@@ -93,10 +93,33 @@ public struct BCRPresetNames: Equatable, Sendable {
     /// alignment), so this follows what the display shows; a name shared by several presets or
     /// by none leaves the number unknown instead of guessing.
     public var presetNumber: Int? {
+        let matches = candidates
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// Memory presets (1…32) whose name equals the temporary preset's. Several candidates need a
+    /// content comparison (see `resolve`); none means the number is unknown.
+    public var candidates: [Int] {
         let key = Self.normalized(temporary)
-        guard !key.isEmpty else { return nil }
-        let matches = memory.indices.filter { Self.normalized(memory[$0]) == key }
-        return matches.count == 1 ? matches[0] + 1 : nil
+        guard !key.isEmpty else { return [] }
+        return memory.indices.filter { Self.normalized(memory[$0]) == key }.map { $0 + 1 }
+    }
+
+    /// Picks the one candidate whose element definitions equal the temporary preset. A temporary
+    /// preset edited after recall (for example by alignment) matches none and stays unknown.
+    public static func resolve(temporary: Data, candidates: [Int: Data]) throws -> Int? {
+        let target = try signature(of: temporary)
+        let matches = try candidates.filter { try signature(of: $0.value) == target }.map(\.key)
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    /// Element definitions without per-element values (`.default`), which memory presets don't store.
+    static func signature(of dump: Data) throws -> [String] {
+        let lines = try BCRPresetEncoderLearning.decodeLines(dump)
+        guard lines.first == "$rev R1", lines.last == "$end" else {
+            throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设"))
+        }
+        return lines.filter { !$0.hasPrefix(".default ") && !$0.hasPrefix("$store ") && !$0.hasPrefix("$recall ") }
     }
 
     public var temporaryName: String? {
@@ -112,6 +135,11 @@ public struct BCRPresetNames: Equatable, Sendable {
 public struct BCRDisplayProfile: Codable, Equatable, Sendable {
     public var name: String?
     public var silentControls: Set<BCRControlID>
+    /// Preset number resolved by content when several memory presets share this name, with the
+    /// candidate list it was resolved for. Reused while the device reports the same names, so the
+    /// slow dumps run once rather than on every connection.
+    public var resolvedPreset: Int?
+    public var resolvedCandidates: [Int]?
 
     public init(name: String? = nil, silentControls: Set<BCRControlID> = []) {
         self.name = name; self.silentControls = silentControls

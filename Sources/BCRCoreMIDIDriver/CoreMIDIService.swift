@@ -32,6 +32,8 @@ public protocol MIDIService: SurfaceDevice {
     func readCurrentPreset() async throws -> Data
     /// Read-only names of the temporary preset and the 32 memory presets (short replies, no dump).
     func readPresetNames() async throws -> BCRPresetNames
+    /// Read-only dump of memory preset 1…32. Slow (~12–15 s on firmware 1.10, display busy meanwhile).
+    func readMemoryPreset(_ number: Int) async throws -> Data
     /// Sends BCL frames one at a time, each acknowledged by the device. No store unless a frame says so.
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws
 }
@@ -41,6 +43,7 @@ public extension MIDIService {
     func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
     func readPresetNames() async throws -> BCRPresetNames { throw MIDIStartupError.invalidProgram }
+    func readMemoryPreset(_ number: Int) async throws -> Data { throw MIDIStartupError.invalidProgram }
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         throw MIDIStartupError.invalidProgram
     }
@@ -224,6 +227,11 @@ public final class CoreMIDIService: MIDIService {
     }
 
     public func readCurrentPreset() async throws -> Data { try await readPreset(selector: 0x7F) }
+
+    public func readMemoryPreset(_ number: Int) async throws -> Data {
+        guard (1 ... 32).contains(number) else { throw MIDIStartupError.invalidProgram }
+        return try await readPreset(selector: UInt8(number - 1))
+    }
 
     public func readPresetNames() async throws -> BCRPresetNames {
         try await exclusiveSysEx(holdsInput: false) { transport, generation in
