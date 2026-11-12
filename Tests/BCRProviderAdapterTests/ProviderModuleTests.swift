@@ -122,6 +122,75 @@ final class ProviderModuleTests: XCTestCase {
             })
     }
 
+    func testLegacyMockInputRequiresBothPermissionsAndCannotSelectHardware() throws {
+        let (gateway, _) = try context(permissions: .init(parameterWrite: false, deviceControl: true))
+        let control = BCRControlID.pushEncoder(group: 1, 1)
+        let args: JSONValue = .object([
+            "operation": .string("turn"), "control": try .encoded(control), "delta": .number(10)
+        ])
+        let initial = gateway.session.engine.value(of: "general.1")
+        for permissions in [MCPPermissions(parameterWrite: false, deviceControl: true),
+                            MCPPermissions(parameterWrite: true, deviceControl: false)]
+        {
+            gateway.permissions = permissions
+            let result = gateway.call("console_mock_input", arguments: args)
+            XCTAssertTrue(result.isError)
+            XCTAssertEqual(result.value.objectValue?["error"]?.objectValue?["code"], .string("permission_denied"))
+            XCTAssertEqual(gateway.session.engine.value(of: "general.1"), initial)
+        }
+        gateway.permissions = .init(deviceControl: true)
+        gateway.session.selectSource(.hardware)
+        let generation = gateway.session.inputEvents.generation
+        let result = gateway.call("console_mock_input", arguments: args)
+        XCTAssertTrue(result.isError)
+        XCTAssertEqual(result.value.objectValue?["error"]?.objectValue?["code"], .string("unsupported"))
+        XCTAssertEqual(gateway.session.engine.value(of: "general.1"), initial)
+        XCTAssertEqual(gateway.session.inputEvents.generation, generation)
+        let forged: JSONValue = .object([
+            "operation": .string("turn"), "control": try .encoded(control), "delta": .number(10),
+            "source": .string("hardware")
+        ])
+        XCTAssertTrue(gateway.call("console_mock_input", arguments: forged).isError)
+    }
+
+    func testLegacyMockInputCannotInvokeActionOrReadonlyParameter() throws {
+        let (gateway, _) = try context(permissions: .init(deviceControl: true))
+        let control = BCRControlID.button(row: 1, 1)
+        var actionCount = 0
+        gateway.session.onTriggerAgent = { _ in actionCount += 1 }
+        try gateway.session.setAssignment(.init(control: control, target: .agentPrimaryAction(AgentSlotID(1))),
+                                          for: control)
+        let args: JSONValue = .object(["operation": .string("press"), "control": try .encoded(control)])
+        let action = gateway.call("console_mock_input", arguments: args)
+        XCTAssertTrue(action.isError)
+        XCTAssertEqual(action.value.objectValue?["error"]?.objectValue?["code"], .string("permission_denied"))
+        XCTAssertEqual(actionCount, 0)
+        try gateway.session.addParameter(.init(id: "readonly", name: "Read only", minimum: 0, maximum: 1,
+                                               kind: .toggle, agentWritable: false))
+        try gateway.session.setAssignment(.init(control: control, target: .parameter("readonly")), for: control)
+        let readonly = gateway.call("console_mock_input", arguments: args)
+        XCTAssertTrue(readonly.isError)
+        XCTAssertEqual(readonly.value.objectValue?["error"]?.objectValue?["code"], .string("permission_denied"))
+        XCTAssertEqual(gateway.session.engine.value(of: "readonly"), 0)
+    }
+
+    func testLegacyProviderInstancesKeepInputsAndEpochsIsolated() throws {
+        let (first, _) = try context(permissions: .init(deviceControl: true))
+        let (second, _) = try context(permissions: .init(deviceControl: true))
+        let secondGeneration = second.session.inputEvents.generation
+        let secondSnapshot = second.session.inputEvents.snapshot()
+        XCTAssertNotEqual(first.session.inputEvents.generation, secondGeneration)
+        _ = try call(first, "console_mock_input", .object([
+            "operation": .string("turn"), "control": try .encoded(BCRControlID.pushEncoder(group: 1, 1)),
+            "delta": .number(25)
+        ]))
+        XCTAssertGreaterThan(first.session.engine.value(of: "general.1") ?? 0, 0)
+        XCTAssertEqual(second.session.engine.value(of: "general.1"), 0)
+        first.session.selectSource(.hardware)
+        XCTAssertEqual(second.session.inputEvents.generation, secondGeneration)
+        XCTAssertEqual(second.session.inputEvents.snapshot(), secondSnapshot)
+    }
+
     func testManualTimeAndDeviceResetDoNotMutateConsoleOrAnotherDevice() throws {
         let (gateway, app) = try context(permissions: .init(
             robotControl: true,
