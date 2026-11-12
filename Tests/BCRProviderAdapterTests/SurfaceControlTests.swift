@@ -138,7 +138,7 @@ final class SurfaceControlTests: XCTestCase {
         var stale = args; stale["expected"] = old["expected"]
         XCTAssertEqual(
             writable.call("surface_control_input", arguments: .object(stale)).value.objectValue?["code"],
-            .string("stale_epoch")
+            .string("stale_mapping")
         )
         let current = try call(writable, "discover").objectValue!
         stale["expected"] = current["expected"]

@@ -37,14 +37,14 @@ def main():
         assert not Path(name).is_absolute() and ".." not in Path(name).parts
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
-    assert manifest["surface_control_contract"] == "1.1" and manifest["surface_control_sdk"] == "1.1.0"
-    sdk = artifact / "surface-control-sdk-1.1.0.zip"
+    assert manifest["surface_control_contract"] == "1.2" and manifest["surface_control_sdk"] == "1.2.0"
+    sdk = artifact / "surface-control-sdk-1.2.0.zip"
     sys.path.insert(0, str(sdk))
     import surface_control
     from surface_control import Client, CommandCursor, SurfaceError
 
     # The delivered SDK is the locked shared package source, byte for byte.
-    assert surface_control.__version__ == "1.1.0" and surface_control.__file__.startswith(str(sdk) + "/")
+    assert surface_control.__version__ == "1.2.0" and surface_control.__file__.startswith(str(sdk) + "/")
 
     cases = []
     hosts = []
@@ -77,6 +77,8 @@ def main():
                     ),
                     "--surface-instance-id",
                     "transport." + name.split("-")[0],
+                    "--write-limit",
+                    "1000",
                     "--allow-device-control",
                     "--allow-simulation-control",
                     "--token-stdin",
@@ -176,6 +178,64 @@ def main():
             client.feedback("button.1.1", "indicator", "blink")
             assert client.snapshot()["inputs"] == before
             passed("raw_roundtrip_" + protocol)
+        client.reset()
+        writer = Client(first.ready["url"], first.token, "transport.a")
+        writer.discover()
+        initial_written, continue_writes = threading.Event(), threading.Event()
+        feedback_results, writer_errors = [], []
+
+        def feedback_writer():
+            try:
+                for index in range(25):
+                    # Separate client, no expected_sequence in this raw request.
+                    event = writer.call(
+                        "surface_control_feedback",
+                        {
+                            "expected": writer.expected,
+                            "control_id": "button.1.1",
+                            "kind": "indicator",
+                            "value": "on" if index % 2 else "off",
+                        },
+                    )
+                    assert event["disposition"] == "accepted"
+                    feedback_results.append(event)
+                    if index == 0:
+                        initial_written.set()
+                        assert continue_writes.wait(5)
+                    time.sleep(0.006)
+            except Exception as error:
+                writer_errors.append(type(error).__name__)
+                initial_written.set()
+
+        thread = threading.Thread(target=feedback_writer, daemon=True)
+        thread.start()
+        assert initial_written.wait(5) and not writer_errors
+        rejected(lambda: client.input("pushEncoder.1.1", "scalar", 80), "stale_sequence")
+        stale_rejections = 1
+        client.refresh_sequence()
+        assert client.input("pushEncoder.1.1", "scalar", 80)["disposition"] == "accepted"
+        continue_writes.set()
+        for index in range(24):
+            while True:
+                try:
+                    result = client.input("pushEncoder.1.1", "scalar", 81 + index % 2)
+                    assert result["disposition"] == "accepted"
+                    break
+                except SurfaceError as error:
+                    assert error.code == "stale_sequence", error.code
+                    stale_rejections += 1
+                    client.refresh_sequence()  # Explicit read, caller chooses the next write.
+            time.sleep(0.004)
+        thread.join(timeout=5)
+        assert not thread.is_alive() and not writer_errors and len(feedback_results) == 25
+        final = client.snapshot()
+        assert final["latest_sequence"] == "50"  # 25 accepted inputs + 25 feedback events.
+        passed(
+            "concurrent_unsequenced_feedback_and_explicit_input_sequence_refresh",
+            feedback_accepted=25,
+            input_accepted=25,
+            stale_sequence_rejections=stale_rejections,
+        )
         held = client.input("button.1.3", "boolean", True, hold_s=0.4)
         assert held["disposition"] == "accepted" and held["hold_deadline"] == held["time"] + 0.4
         sequence = client.latest_sequence

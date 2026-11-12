@@ -63,6 +63,7 @@ public final class BCRSurfaceControlAdapter {
     private var deferredRests: [ControlHoldExpiry] = []
     private var core: SurfaceControlSession
     private let momentaryHoldsOnly: Bool
+    private var outputEnableParameter: ParameterID?
     private var contextRevision: UInt64
     private var generation: String
     private var handlingRemote = false
@@ -82,6 +83,7 @@ public final class BCRSurfaceControlAdapter {
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
         diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+        outputEnableParameter = surface.outputEnableParameter
         core = try Self.seeded(
             SurfaceControlSession(
                 instanceID: instanceID,
@@ -157,10 +159,14 @@ public final class BCRSurfaceControlAdapter {
                     ControlHold(
                         restValue: .bool(false),
                         maxHoldSeconds: maximumButtonHoldSeconds
-                    )
+                    ),
+                acceptsInput: assignment?.target.parameterID.flatMap { id in
+                    surface.engine.configuration.parameter(id)
+                        .map { $0.agentWritable && !surface.isMCPProtectedParameter(id) }
+                } ?? false
             )
         }
-        var capabilities = ["simulation", "controls.stable_ids"]
+        var capabilities = ["simulation", "controls.stable_ids", "feedback.unsequenced", "controls.input_declared"]
         let inputs = Set(controls.map(\.input_kind))
         for kind in [ControlInputKind.absolute, .relative, .button] where inputs.contains(kind) {
             capabilities.append("input." + kind.rawValue)
@@ -172,7 +178,7 @@ public final class BCRSurfaceControlAdapter {
         }
         capabilities += ["x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
                          "x.bcr.indicator_blink_static"]
-        return ControlProfile(id: "bcr2000.mock", version: "1.1", controls: controls, capabilities: capabilities)
+        return ControlProfile(id: "bcr2000.mock", version: "1.2", controls: controls, capabilities: capabilities)
     }
 
     private static func seeded(_ session: SurfaceControlSession, surface: SurfaceSession,
@@ -197,7 +203,8 @@ public final class BCRSurfaceControlAdapter {
     /// diagnostic requires it. The new session is built on a copy and committed only when complete.
     private func refresh() throws {
         guard pendingRotation != nil || contextRevision != surface.mappingContextRevision ||
-            generation != surface.inputEvents.generation else { return }
+            generation != surface.inputEvents.generation || outputEnableParameter != surface.outputEnableParameter
+        else { return }
         let now = monotonic()
         var next = core
         // Every lease is revoked with the old context. Due ones are closed in the discarded journal so
@@ -221,6 +228,7 @@ public final class BCRSurfaceControlAdapter {
         next = try Self.seeded(next, surface: surface, at: now)
         core = next
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+        outputEnableParameter = surface.outputEnableParameter
         pendingRotation = nil
         rescheduleHoldTimer()
     }
@@ -483,6 +491,7 @@ public final class BCRSurfaceControlAdapter {
             catch { failClosed("reset_seed_failed", error: error); throw error }
             core = next
             contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
+            outputEnableParameter = surface.outputEnableParameter
             pendingRotation = nil
             rescheduleHoldTimer()
             return try .encoded(core.discovery())

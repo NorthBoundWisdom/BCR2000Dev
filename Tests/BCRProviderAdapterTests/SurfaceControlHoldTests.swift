@@ -85,10 +85,12 @@ final class SurfaceControlHoldTests: XCTestCase {
     func testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold() throws {
         let (gateway, adapter) = try host()
         let discovery = try adapter.discovery()
-        XCTAssertEqual(discovery.contract_version, "1.1")
-        XCTAssertEqual(discovery.profile.version, "1.1")
+        XCTAssertEqual(discovery.contract_version, "1.2")
+        XCTAssertEqual(discovery.profile.version, "1.2")
         XCTAssertEqual(discovery.profile.capabilities, [
-            "simulation", "controls.stable_ids", "input.absolute", "input.button", "input.hold", "feedback.value",
+            "simulation", "controls.stable_ids", "feedback.unsequenced", "controls.input_declared", "input.absolute",
+            "input.button",
+            "input.hold", "feedback.value",
             "feedback.indicator", "x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
             "x.bcr.indicator_blink_static"
         ])

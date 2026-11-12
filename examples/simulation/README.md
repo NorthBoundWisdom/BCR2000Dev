@@ -39,8 +39,11 @@ unknown parameters, invalid numbers and invalid modes fail startup with a diagno
 persistence or fallback is performed for this simulation input file.
 
 In configurable mode only momentary button bindings declare a hold lease. The historical
-`--simulation-profile` keeps its existing declarations and mapping revision `2813b4891860c6da`.
-This example's contract 1.1 mapping revision is **`2b2ae6638f08af35`**, pinned in `chassis-roles.json`.
+`--simulation-profile` keeps its ordinary bindings and hold declarations. Its contract 1.2 mapping
+revision is `bd169e1fddae247e` (former contract 1.1: `2813b4891860c6da`).
+This example's contract 1.2 mapping revision is **`3d93301a62d6f9b6`**, pinned in `chassis-roles.json`.
+The example's former 1.1 revision was `2b2ae6638f08af35`. All seven assigned controls declare
+`accepts_input: true`; every other unbound control declares false.
 The role mapping is consumer-owned; it conveys simulation roles and no hardware authority.
 
 Read-only Pipe assembly check (does not start Pipe, import with bytecode writing disabled):
@@ -52,3 +55,10 @@ python3 -B configs/verify_simulation_roles.py --provider build/swiftpm/debug/BCR
 Use `--pipe-root` if the consumer checkout is elsewhere, and `--sdk` to select the verified SDK.
 Missing Pipe source is reported as SKIP. An incompatible consumer is reported as a failure with its
 actual error; the check does not change the consumer or patch its version/capability tables.
+
+The current Pipe consumer was verified against this example under contract 1.1 before the upgrade.
+Its existing contract allowlist contains only 1.1, and its capability vocabulary lacks
+`feedback.unsequenced` and `controls.input_declared`. With the supplied 1.2 mapping it currently
+rejects assembly as `invalid_mapping_config: Unsupported contract version allowlist`. The consumer
+must add contract 1.2 support, both capabilities and the new profile/mapping pins before using this
+delivery. No consumer source or validation table is patched by this repository.

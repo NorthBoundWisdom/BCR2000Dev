@@ -160,6 +160,10 @@ final class SharedSurfaceScenarioTests: XCTestCase {
         try run(fixture: "surface-control-software-v1.1", steps: 65)
     }
 
+    func testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations() throws {
+        try run(fixture: "surface-control-software-v1.2", steps: 83)
+    }
+
     private func run(fixture name: String, steps expectedSteps: Int) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -178,6 +182,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
             ) })
             var initial = try hosts.mapValues { try $0.expected }
             var lastInput: [String: ControlInput] = [:]
+            var sequences = Dictionary(uniqueKeysWithValues: names.map { ($0, "0") })
             var accepted = Dictionary(uniqueKeysWithValues: names.map { ($0, 0) })
             let steps = try XCTUnwrap(scenario.value(for: "steps")?.arrayValue)
             for (index, step) in steps.enumerated() {
@@ -199,7 +204,9 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 var expired: [ControlEvent] = []
                 func mapped(_ role: String) throws -> ControlDescriptor {
                     let control = try XCTUnwrap((try host.profile).controls
-                        .first { $0.mapping?.id == scenarioRoles[role] })
+                        .first {
+                            role == "blocked_input" ? $0.accepts_input == false : $0.mapping?.id == scenarioRoles[role]
+                        })
                     roles[role] = control.id
                     return control
                 }
@@ -210,7 +217,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 }
                 do {
                     switch operation {
-                    case "snapshot": _ = try host.snapshot(at: time)
+                    case "snapshot", "refresh_sequence": _ = try host.snapshot(at: time)
                     case "input", "feedback":
                         let role = try XCTUnwrap(step.value(for: "role")?.stringValue)
                         let control = try mapped(role)
@@ -221,8 +228,12 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                         let value: JSONValue
                         if step.value(for: "invalid_value") == .string("nan") { value = .double(.nan) }
                         else if step.value(for: "value") == .string("maximum") { value = .number(Int(range!.maximum)) }
-                        else if step.value(for: "value") == .string("minimum") { value = .number(Int(range!.minimum)) }
-                        else if step.value(for: "value") == .string("rest") { value = control.hold!.rest_value }
+                        else if step
+                            .value(for: "value") ==
+                            .string("minimum")
+                        {
+                            value = control.encoding == .boolean ? .bool(false) : .number(Int(range!.minimum))
+                        } else if step.value(for: "value") == .string("rest") { value = control.hold!.rest_value }
                         else if step.value(for: "value") == .string("active") {
                             let rest = control.hold!.rest_value
                             value = control.encoding == .boolean ? .bool(rest.boolValue != true) :
@@ -231,7 +242,8 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                         if operation == "input" {
                             let request = ControlInput(
                                 expected: suppliedExpected,
-                                expectedSequence: (try host.discovery()).latest_sequence,
+                                expectedSequence: step.value(for: "expected_sequence")?
+                                    .stringValue ?? sequences[selected]!,
                                 controlID: control.id,
                                 encoding: step.value(for: "encoding")?.stringValue ?? control.encoding.rawValue,
                                 value: value,
@@ -245,7 +257,8 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                             event = try host.feedback(
                                 .init(
                                     expected: suppliedExpected,
-                                    expectedSequence: (try host.discovery()).latest_sequence,
+                                    expectedSequence: step.value(for: "omit_sequence") == .bool(true) ? nil :
+                                        (step.value(for: "expected_sequence")?.stringValue ?? sequences[selected]!),
                                     controlID: control.id,
                                     kind: kind,
                                     value: value
@@ -287,6 +300,9 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 let after = try scenarioFingerprint(host, at: scheduled)
                 let snapshot = try host.controls.snapshot(at: min(scheduled, host.adapter.nextHoldDeadline
                         .map { $0 <= scheduled ? $0.nextDown : scheduled } ?? scheduled))
+                if actualError == nil, !(operation == "feedback" && step.value(for: "omit_sequence") == .bool(true)) {
+                    sequences[selected] = snapshot.latest_sequence
+                }
                 var checks: [Bool] = [actualError == expected["error"]?.stringValue]
                 if let disposition = expected["disposition"]?
                     .stringValue { checks.append(event?.disposition.rawValue == disposition) }
@@ -309,8 +325,16 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                     checks.append(deadline.map { abs($0 - at) < 1e-9 } == true)
                 }
                 if let held = expected["holds"]?.arrayValue?.compactMap(\.stringValue) {
-                    checks.append(Set((snapshot.holds ?? [:]).keys.compactMap(role(of:))) == Set(held)
-                        && (snapshot.holds ?? [:]).count == held.count)
+                    let holds = operation == "events" ? (page?.holds ?? [:]) : (snapshot.holds ?? [:])
+                    checks.append(Set(holds.keys.compactMap(role(of:))) == Set(held) && holds.count == held.count)
+                }
+                if let deadlines = expected["hold_deadlines_at_s"]?.objectValue {
+                    let holds = page?.holds ?? [:]
+                    checks.append(holds.count == deadlines.count)
+                    for (role, deadline) in deadlines {
+                        let control = try mapped(role)
+                        checks.append(holds[control.id].map { abs($0 - deadline.finiteNumber!) < 1e-9 } == true)
+                    }
                 }
                 if let list = expected["expired"]?.arrayValue?.compactMap(\.stringValue) {
                     checks.append(expired.map { role(of: $0.control_id) ?? $0.control_id } == list
@@ -368,7 +392,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
             "host_dirty": .bool(!(try commandOutput(["git", "status", "--porcelain"], root: root)).isEmpty),
             "shared_revision": sharedLock.value(for: "revision")!,
             "profile_id": .string("bcr2000.mock"),
-            "profile_version": .string("1.1"),
+            "profile_version": .string("1.2"),
             "contract_version": .string(ControlDiscovery.contractVersion),
             "roles": try .encoded(roles),
             "scope": .string("inprocess_real_mock_session"),

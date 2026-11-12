@@ -3,7 +3,7 @@
   "version": 1,
   "scope": "simulation-only",
   "contract_versions": [
-    "1.1"
+    "1.2"
   ],
   "allowed_origins": [
     "interface",
@@ -16,8 +16,8 @@
   "profiles": [
     {
       "profile_id": "bcr2000.mock",
-      "profile_version": "1.1",
-      "mapping_revision": "2b2ae6638f08af35",
+      "profile_version": "1.2",
+      "mapping_revision": "3d93301a62d6f9b6",
       "roles": {
         "enable": {
           "control_id": "button.1.1",

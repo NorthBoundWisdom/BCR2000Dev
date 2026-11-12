@@ -1,20 +1,20 @@
-# Optional Surface Control simulation 1.1
+# Optional Surface Control simulation 1.2
 
 The `surface_control_*` tools are a separate, optional software control contract. Provider 1.0,
 its Schema, SDK `bcr_provider`, console journal, errors and business plugin tools retain their
 existing behavior. A simulation event never qualifies as a physical operator input.
 
-The profile `bcr2000.mock` version `1.1` (contract `1.1`, SurfacePlugins `e527bd0`) describes stable
+The profile `bcr2000.mock` version `1.2` (contract `1.2`, SurfacePlugins `8a9f3b3`) describes stable
 controls such as `pushEncoder.1.1`; clients discover mappings instead of interpreting the ID geometry.
 The contract, generic Python SDK, schemas and fixtures have one source, the locked SurfacePlugins
 package; this host only adapts its Mock and session to them.
 
 Capabilities use the shared vocabulary: `simulation`, `controls.stable_ids`, each `input.*` and
 `feedback.*` kind actually present (`input.relative` appears only while a relative encoder is
-assigned), and `input.hold`. Host-private ones are `x.bcr.display_only_feedback`,
+assigned), and `input.hold`, plus `feedback.unsequenced` and `controls.input_declared`. Host-private ones are `x.bcr.display_only_feedback`,
 `x.bcr.explicit_input_permissions` and `x.bcr.indicator_blink_static`. `mapping_revision` is the
 deterministic `profile.mappingRevision` of the published profile: it changes only when a
-control's kind, encoding, range, feedback kinds, mapping or hold changes, and stale requests are
+control's kind, encoding, range, feedback kinds, mapping, hold or `accepts_input` changes, and stale requests are
 checked mapping before epoch (`stale_mapping`, then `stale_epoch`). Every context change still
 changes the epoch. Absolute controls use integer scalar ranges
 0–127 (0–16383 for the explicitly selected Mock NRPN experiment); relative controls use signed
@@ -53,7 +53,7 @@ SurfaceSession; a GUI does not implicitly enable the optional contract.
 
 ## Button holds (contract 1.1)
 
-Every button declares `hold: {rest_value: false, max_hold_s: 5}`. Five seconds bounds how long a
+The historical `--simulation-profile` declares every button's `hold: {rest_value: false, max_hold_s: 5}`. Five seconds bounds how long a
 lost client can leave a simulated button pressed; consumers renew well inside it. An input of
 `true` with `hold_s` (0, 5] is accepted with `hold_deadline = time + hold_s`; an input of `false`, or
 an accepted value without `hold_s`, clears the lease. `surface_control_renew({expected, control_id,
@@ -118,7 +118,25 @@ devices or listening on a port. Invalid files fail before credentials or user pe
 
 See [the held-enable, axes and feedback example](../examples/simulation/README.md) and its pinned
 consumer role mapping. Only momentary button bindings declare holds in this mode; the historical
-`--simulation-profile` configuration, capabilities and mapping revision remain unchanged.
+`--simulation-profile` parameter bindings and hold semantics remain unchanged. Its contract 1.2
+mapping revision is `bd169e1fddae247e`; the previous 1.1 revision `2813b4891860c6da` remains
+verified by stripping only the added `accepts_input` fields from the new descriptors.
+
+## Contract 1.2 input declarations and feedback concurrency
+
+Every descriptor declares `accepts_input`: true only when its current assignment references an
+existing writable parameter that is not externally protected or reserved as the output enable
+parameter. Unbound controls and other assignments declare false and reject remote input. Process
+permissions remain separate: a true declaration does not grant parameter or device-control access.
+Changing the output-enable target rotates the mapping/epoch in the simulation adapter, including
+when the ordinary session mapping revision is unchanged.
+
+Feedback may omit `expected_sequence` and still creates a feedback event with a new sequence.
+The SDK defaults to this mode when `feedback.unsequenced` is declared. Input keeps its mandatory
+sequence fence: `stale_sequence` means that input was not executed. Call `refresh_sequence()` to
+read one snapshot and then explicitly choose the next input; transport failure remains an unknown
+outcome and must not trigger an automatic retry. Event pages now include the current `holds`,
+including silent renewals; the field is omitted when no lease exists.
 
 ## Input, feedback and recovery
 
@@ -170,7 +188,7 @@ A display overlay is per control and persists: while it is set, that control sho
 instead of its parameter (target or actual) feedback, even when the mapped parameter later changes
 through input, GUI or Provider writes. Inputs and parameter values are not affected. The overlay is
 removed only by `surface_control_reset`, a source change, or a configuration/assignment/page/Mock
-encoding change; there is no per-control clear operation in contract 1.0 or 1.1. Changing source/configuration clears the
+encoding change; there is no per-control clear operation in contract 1.0, 1.1 or 1.2. Changing source/configuration clears the
 simulation display before any physical feedback. Reset explicitly creates a fresh all-off Mock
 context and clears the new journal; source, mapping, page and configuration changes also revoke
 old context. No input is replayed after reset/restart or an event gap.
@@ -178,12 +196,12 @@ old context. No input is replayed after reset/restart or an event gap.
 ## Public delivery and examples
 
 `configs/package_provider.py` creates a self-contained local artifact with the unchanged legacy
-Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.1
+Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.2
 delivery. Surface files sit at the delivery root under the same names as the XTouch delivery,
 copied byte for byte from the materialized `build/seed/SurfacePlugins`:
-`surface-control-sdk-1.1.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
+`surface-control-sdk-1.2.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
 `surface-control-scenario.schema.json`, `surface-control-software-v1.json`,
-`surface-control-software-v1.1.json`, `surface-control.md` and `surface-control-scenarios.md`.
+`surface-control-software-v1.1.json`, `surface-control-software-v1.2.json`, `surface-control.md` and `surface-control-scenarios.md`.
 `control-contract.json` is the static published discovery and tool descriptors of the
 `--simulation-profile` configuration, printed by the delivered binary's `--describe-surface`
 (placeholder instance and epoch; a live instance is still pinned through discovery).
@@ -212,5 +230,5 @@ delivered SDK, and pins the provider identity with `provider_header="BCR-Provide
 `--provider-id`. The Pipe taskless integration example and the SDK unit tests now live only in
 SurfacePlugins (`integrations/pipe/`, `clients/python/tests/`) and are not part of this delivery;
 that example runs as the owner of its simulation instance and therefore needs reset permission.
-Transport ambiguity, stale input, identity change or gap ends a consumer with no write retry;
+Transport ambiguity, stale input, identity change or gap ends a consumer with no automatic write retry;
 inspect the existing journal and explicitly create a new context to continue.

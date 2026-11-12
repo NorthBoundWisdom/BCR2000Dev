@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Minimal generic simulation consumer using only a pinned public delivery, no Pipe.
 
-The Surface control SDK 1.1.0 inside the delivery is a byte-identical copy of the locked
+The Surface control SDK 1.2.0 inside the delivery is a byte-identical copy of the locked
 SurfacePlugins source; this example verifies the manifest pin and every file hash first.
 """
 
@@ -13,7 +13,7 @@ import os
 from pathlib import Path
 import sys
 
-CONTRACT, SDK = "1.1", "1.1.0"
+CONTRACT, SDK = "1.2", "1.2.0"
 
 
 def require(condition, message):
