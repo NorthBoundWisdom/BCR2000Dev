@@ -26,3 +26,18 @@ The isolated-run fixtures added for R6 process isolation are:
   and replacing physical-bundle wrappers with one Selected tests root. The truncated variant
   removes the terminal/count. They cover the older no-physical-bundle filtered layout defensively;
   they are not represented as a captured old-Mac filtered run.
+
+
+### Single-worker verbose capture (2026-11-13)
+
+`swift_worker_verbose_two_success.txt` is the actual stdout from the installed Apple Swift
+6.4.2 command `swift test --skip-build --parallel --num-workers 1 --verbose` selecting the two
+SSE cases named in the file. Only the verbose manifest/compiler preamble before the first
+progress line was removed and terminal blank lines were normalized; worker progress, XCTest
+case/suite records and times are unchanged.
+`swift_worker_two_success.xml` and `swift_worker_zero_testing.xml` are the command's original
+primary and Swift Testing sidecar reports (only the sidecar terminal LF was normalized for
+repository text rules). The original full log and same-binary two-PID
+probe are retained as ignored local review evidence. SwiftPM 6.0.3 worker/verbose/XML behavior
+was checked against its official release source at commit
+`bc689418acad746af6f2e24e6bef640e411d9bd7`; this capture is not claimed to have run on 6.0.3.

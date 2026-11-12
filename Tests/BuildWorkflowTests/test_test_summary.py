@@ -2,7 +2,6 @@ import contextlib
 import io
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
@@ -63,9 +62,7 @@ class TestSummaryTests(unittest.TestCase):
         executable.chmod(0o755)
         (root / "fake-runner.json").write_text(json.dumps({"cases": cases, **options}))
 
-    def run_fake_modules(self, root, modules, cases, *, isolated_timing_cases=frozenset(), **options):
-        # Generic parser fixtures have their own policy; timing tests explicitly inject the
-        # entire production policy so absent required selectors/modules remain fatal.
+    def run_fake_modules(self, root, modules, cases, *, required_modules=frozenset(), **options):
         (root / "Package.swift").write_text(
             'Package(name: "Fixture", targets: ['
             + ",".join('.testTarget(name: "' + name + '")' for name in modules)
@@ -76,7 +73,7 @@ class TestSummaryTests(unittest.TestCase):
         with (
             patch.object(macos_workflow, "REPO_ROOT", root),
             patch.object(macos_workflow, "ensure_dependency"),
-            patch.object(macos_workflow, "ISOLATED_TIMING_CASES", isolated_timing_cases),
+            patch.object(macos_workflow, "REQUIRED_TEST_MODULES", required_modules),
             patch.dict("os.environ", {"PATH": str(root) + ":/usr/bin:/bin"}),
             contextlib.redirect_stdout(output),
         ):
@@ -182,9 +179,6 @@ class TestSummaryTests(unittest.TestCase):
                 macos_workflow._case_identifier(match[1])
                 for match in re.finditer(r"Test Case '([^']+)' started", self.fixture("swift6_aggregate_success.txt"))
             ]
-            # The historical raw aggregate predates some current selectors; only this fake
-            # CLI inventory is extended. Its raw parser fixtures and original assertions stay intact.
-            cases = sorted(set(cases) | macos_workflow.ISOLATED_TIMING_CASES)
             self.fake_swift(root, cases, package="BCRAgentConsole")
             with (
                 patch.object(macos_workflow, "REPO_ROOT", root),
@@ -209,7 +203,7 @@ class TestSummaryTests(unittest.TestCase):
             with (
                 patch.object(macos_workflow, "REPO_ROOT", root),
                 patch.object(macos_workflow, "ensure_dependency"),
-                patch.object(macos_workflow, "ISOLATED_TIMING_CASES", frozenset()),
+                patch.object(macos_workflow, "REQUIRED_TEST_MODULES", frozenset()),
                 patch.dict("os.environ", {"PATH": str(root) + ":/usr/bin:/bin"}),
                 contextlib.redirect_stdout(output),
             ):
@@ -278,7 +272,7 @@ class TestSummaryTests(unittest.TestCase):
             self.assertFalse(selected(invalid))
         self.assertFalse(selected(valid, set()))
 
-    def test_all_modules_use_distinct_processes_and_sum_the_full_inventory(self):
+    def test_all_cases_use_distinct_worker_processes_and_sum_the_full_inventory(self):
         cases = ["First.Sample/testOne", "First.Sample/testTwo", "Last.Sample/testThree"]
         for layout in ["aggregate", "split", "selected"]:
             with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
@@ -286,10 +280,12 @@ class TestSummaryTests(unittest.TestCase):
                 output = self.run_fake_modules(root, ["First", "Last"], cases, layout=layout)
                 calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
                 runs = [call for call in calls if call["action"] == "run"]
-                self.assertEqual(len(runs), 2)
-                self.assertEqual(len({call["pid"] for call in runs}), 2)
-                self.assertEqual([call["arguments"][-1] for call in runs], [r"^First\.", r"^Last\."])
-                self.assertIn("Total: 3 tests, 0 failures; PASS (2/2 modules, 3 expected tests)", output)
+                self.assertEqual(len(runs), 1)
+                workers = [call for call in calls if call["action"] == "worker"]
+                self.assertEqual(len(workers), 3)
+                self.assertEqual(len({call["pid"] for call in workers}), 3)
+                self.assertEqual([call["arguments"][-1] for call in workers], cases)
+                self.assertIn("Total: 3 tests, 0 failures; PASS (2/2 modules, 3 fresh XCTest processes;", output)
 
     def test_ignored_filter_empty_selection_and_omitted_case_fail_both_layouts(self):
         cases = ["First.Sample/testOne", "First.Sample/testTwo", "Last.Sample/testThree"]
@@ -300,121 +296,87 @@ class TestSummaryTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
                         self.run_fake_modules(root, ["First", "Last"], cases, layout=layout, **mutation)
                     calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                    self.assertEqual(len([call for call in calls if call["action"] == "run"]), 2)
+                    self.assertEqual(len([call for call in calls if call["action"] == "run"]), 1)
+                    self.assertEqual(len([call for call in calls if call["action"] == "worker"]), len(cases))
 
-    def timing_cases(self):
-        return sorted(macos_workflow.ISOLATED_TIMING_CASES) + [
-            "BCRAgentConsoleTests.Other/testRemainder",
-            "BCRProviderAdapterTests.Other/testRemainder",
-            "Last.Other/testFinal",
-        ]
-
-    def timing_modules(self):
-        return ["BCRAgentConsoleTests", "BCRProviderAdapterTests", "Last"]
-
-    def test_timing_selectors_have_distinct_processes_and_exact_disjoint_inventory(self):
-        cases = self.timing_cases()
-        for layout in ["aggregate", "split", "selected"]:
-            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                output = self.run_fake_modules(
-                    root,
-                    self.timing_modules(),
-                    cases,
-                    layout=layout,
-                    isolated_timing_cases=macos_workflow.ISOLATED_TIMING_CASES,
-                )
-                calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                runs = [call for call in calls if call["action"] == "run"]
-                self.assertEqual(len(runs), 7)
-                self.assertEqual(len({call["pid"] for call in runs}), 7)
-                observed = []
-                for call in runs:
-                    selection = call["arguments"][-1]
-                    selected = {case for case in cases if re.search(selection, case)}
-                    observed.extend(selected)
-                    if selected & macos_workflow.ISOLATED_TIMING_CASES:
-                        self.assertEqual(len(selected), 1)
-                        self.assertEqual(selection, "^" + re.escape(next(iter(selected))) + "$")
-                self.assertEqual(sorted(observed), sorted(cases))
-                self.assertIn("Total: 7 tests, 0 failures; PASS (3/3 modules, 7 expected tests)", output)
-
-    def test_timing_batch_failures_never_skip_later_batches_or_accept_wrong_results(self):
-        cases = self.timing_cases()
-        sensitive = next(iter(macos_workflow.ISOLATED_TIMING_CASES))
-        for layout in ["aggregate", "split", "selected"]:
-            for mutation in [
-                {"ignore_filter": True},
+    def test_worker_raw_results_cannot_hide_behind_exit_zero_and_green_xml(self):
+        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
+        for layout in ("aggregate", "split", "selected"):
+            for mutation in (
+                {"skip_case": cases[0]},
                 {"empty": True},
-                {"omit": sensitive},
-                {"duplicate_case": sensitive},
+                {"wrong_case": True},
+                {"duplicate_case": cases[0]},
                 {"unknown_case": True},
-                {"fail_module": "BCRAgentConsoleTests"},
-                {"exit_code": 7},
-            ]:
+                {"fail_module": "First", "force_xml_green": True, "force_exit_zero": True},
+            ):
                 with self.subTest(layout=layout, mutation=mutation), tempfile.TemporaryDirectory() as directory:
                     root = Path(directory)
                     with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                        self.run_fake_modules(
-                            root,
-                            self.timing_modules(),
-                            cases,
-                            layout=layout,
-                            isolated_timing_cases=macos_workflow.ISOLATED_TIMING_CASES,
-                            **mutation,
-                        )
+                        self.run_fake_modules(root, ["First", "Last"], cases, layout=layout, **mutation)
                     calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                    self.assertEqual(len([call for call in calls if call["action"] == "run"]), 7)
+                    self.assertEqual(len([call for call in calls if call["action"] == "worker"]), len(cases))
 
-    def test_timing_case_rename_or_removal_is_an_explicit_inventory_failure(self):
-        cases = self.timing_cases()
-        for missing in macos_workflow.ISOLATED_TIMING_CASES:
-            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                with self.assertRaisesRegex(RuntimeError, "timing inventory is incomplete"):
-                    self.run_fake_modules(
-                        root,
-                        self.timing_modules(),
-                        [case for case in cases if case != missing],
-                        isolated_timing_cases=macos_workflow.ISOLATED_TIMING_CASES,
-                    )
-                calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                self.assertFalse(any(call["action"] == "run" for call in calls))
+    def test_nonzero_worker_driver_exit_cannot_be_overridden_by_good_reports(self):
+        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
+                self.run_fake_modules(Path(directory), ["First", "Last"], cases, exit_code=7, force_xml_green=True)
 
-    def test_batch_launch_exception_is_fatal_but_remaining_inventory_is_attempted(self):
-        cases = self.timing_cases()
+    def test_worker_driver_launch_exception_is_fatal_and_artifacts_are_preserved(self):
         original = subprocess.Popen
-        attempts = []
 
         def launch(arguments, **options):
-            if "--filter" in arguments:
-                attempts.append(arguments[-1])
-                if len(attempts) == 1:
-                    raise OSError("injected process launch failure")
+            if "--parallel" in arguments:
+                raise OSError("injected driver launch failure")
             return original(arguments, **options)
 
         with tempfile.TemporaryDirectory() as directory, patch.object(subprocess, "Popen", side_effect=launch):
+            root = Path(directory)
             with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                self.run_fake_modules(
-                    Path(directory),
-                    self.timing_modules(),
-                    cases,
-                    isolated_timing_cases=macos_workflow.ISOLATED_TIMING_CASES,
-                )
-        self.assertEqual(len(attempts), 7)
-        self.assertEqual(
-            sorted(case for selection in attempts for case in cases if re.search(selection, case)), sorted(cases)
-        )
+                self.run_fake_modules(root, ["First"], ["First.Sample/testOne"])
+            artifacts = list((root / "build/test-runs").glob("run-*"))
+            self.assertEqual(len(artifacts), 1)
+            self.assertTrue((artifacts[0] / "execution.json").is_file())
+            self.assertTrue((artifacts[0] / "swift-test.log").is_file())
 
-    def test_whole_sensitive_module_removal_cannot_silently_remove_timing_policy(self):
-        for missing in ("BCRAgentConsoleTests", "BCRProviderAdapterTests"):
-            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
-                cases = [case for case in self.timing_cases() if not case.startswith(missing + ".")]
-                modules = [module for module in self.timing_modules() if module != missing]
-                with self.assertRaisesRegex(RuntimeError, "timing inventory is incomplete"):
-                    self.run_fake_modules(
-                        Path(directory), modules, cases, isolated_timing_cases=macos_workflow.ISOLATED_TIMING_CASES
-                    )
+    def test_a_previous_run_report_is_never_reused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old = root / "previous"
+            old.mkdir()
+            (old / "xctest.xml").write_text("old report")
+            with patch.object(macos_workflow.tempfile, "mkdtemp", return_value=str(old)):
+                with self.assertRaisesRegex(RuntimeError, "reports already exist"):
+                    self.run_fake_modules(root, ["First"], ["First.Sample/testOne"])
+            self.assertEqual((old / "xctest.xml").read_text(), "old report")
+
+    def test_additional_modules_and_cases_are_included_automatically(self):
+        modules = sorted(macos_workflow.REQUIRED_TEST_MODULES) + ["AdditionalTests"]
+        cases = [module + ".Sample/testOne" for module in modules] + ["AdditionalTests.Sample/testTwo"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.run_fake_modules(root, modules, cases, required_modules=macos_workflow.REQUIRED_TEST_MODULES)
+            calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
+            workers = [call for call in calls if call["action"] == "worker"]
+            self.assertEqual([call["arguments"][-1] for call in workers], cases)
+
+    def test_required_module_removed_from_manifest_or_discovery_is_fatal(self):
+        modules = sorted(macos_workflow.REQUIRED_TEST_MODULES)
+        cases = [module + ".Sample/testOne" for module in modules]
+        for missing in modules:
+            for remove_from_manifest in (False, True):
+                with (
+                    self.subTest(missing=missing, manifest=remove_from_manifest),
+                    tempfile.TemporaryDirectory() as directory,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
+                        self.run_fake_modules(
+                            Path(directory),
+                            [m for m in modules if m != missing] if remove_from_manifest else modules,
+                            [case for case in cases if not case.startswith(missing + ".")],
+                            required_modules=macos_workflow.REQUIRED_TEST_MODULES,
+                        )
 
     def test_invalid_inventory_cannot_skip_a_module_or_create_a_partial_pass(self):
         cases = ["First.Sample/testOne", "Last.Sample/testTwo"]

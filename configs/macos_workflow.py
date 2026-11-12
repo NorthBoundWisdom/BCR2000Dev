@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -23,6 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import use_build_environment  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.xctest_worker_results import validate_workers  # noqa: E402
 
 BUILD_ROOT = REPO_ROOT / "build"
 SWIFTPM_BUILD_ROOT = BUILD_ROOT / "swiftpm"
@@ -255,56 +257,38 @@ def summarize_tests(
     return success
 
 
-# Wall-clock assertions need a process with no earlier fixture's actor/timer cleanup.
-# Keep these exact selectors visible: renaming/removing one requires an explicit plan update.
-ISOLATED_TIMING_CASES = frozenset(
+REQUIRED_TEST_MODULES = frozenset(
     {
-        "BCRAgentConsoleTests.ConsoleRefreshTests/testHardwareBurstsPublishOnceAndFollowLatestTouchOnNextFrame",
-        "BCRProviderAdapterTests.SurfaceControlHoldTests/testRealSchedulerExpiresAShortLease",
-        "BCRProviderAdapterTests.SurfaceControlHoldTests/testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases",
-        "BCRProviderAdapterTests.SurfaceControlHoldTests/testSchedulerDeadlineIncludesTimeQueuedBeforeItsTaskStarts",
+        "BCRPluginHostTests",
+        "BCRAgentCoreTests",
+        "BCRAgentConsoleTests",
+        "BCRProviderDomainTests",
+        "BCRProviderAdapterTests",
     }
 )
 
 
-def _test_batches(inventory):
-    batches = []
-    discovered = set().union(*inventory.values())
-    if not ISOLATED_TIMING_CASES <= discovered:
-        raise RuntimeError("Swift test bundle verification failed: timing inventory is incomplete")
-    for module, cases in inventory.items():
-        required = {case for case in ISOLATED_TIMING_CASES if case.split(".", 1)[0] == module}
-        if not required <= cases:
-            raise RuntimeError("Swift test bundle verification failed: timing inventory is incomplete")
-        remainder = cases - required
-        if remainder:
-            selection = (
-                "^" + re.escape(module) + r"\."
-                if not required
-                else "^(?:" + "|".join(re.escape(case) for case in sorted(remainder)) + ")$"
-            )
-            batches.append((module, module, remainder, selection))
-        for case in sorted(required):
-            batches.append((module, case, {case}, "^" + re.escape(case) + "$"))
-    assigned = set()
-    for _, _, cases, selection in batches:
-        if not cases or assigned & cases or {case for case in discovered if re.search(selection, case)} != cases:
-            raise RuntimeError("Swift test bundle verification failed: overlapping or invalid test batches")
-        assigned.update(cases)
-    if assigned != discovered:
-        raise RuntimeError("Swift test bundle verification failed: incomplete test batch partition")
-    return batches
-
-
 def _run_tests(command: list[str | Path]) -> None:
-    # Enumerate all targets and all selectors before filtering, so an omitted case cannot pass.
+    # SwiftPM's single worker launches a fresh XCTest process for every discovered case.
+    # Both its synthesized XML and each child's real verbose output must agree with discovery.
     manifest = (REPO_ROOT / "Package.swift").read_text()
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)
     package = re.search(r'\bPackage\(\s*name:\s*"([^"]+)"', manifest)
     aggregate_name = package[1] + "PackageTests.xctest" if package else None
+    if not REQUIRED_TEST_MODULES <= set(modules):
+        raise RuntimeError("Swift test bundle verification failed: required test module is missing")
     command = [str(part) for part in command]
+    runs = REPO_ROOT / "build/test-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    artifacts = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
+    primary, sidecar = artifacts / "xctest.xml", artifacts / "xctest-swift-testing.xml"
+    if any(path.exists() or path.is_symlink() for path in (primary, sidecar)):
+        raise RuntimeError("Swift test bundle verification failed: test reports already exist")
+    print(f"Test artifacts: {artifacts}", flush=True)
     print(">>", " ".join([*command, "list"]), flush=True)
     discovery = subprocess.run([*command, "list"], cwd=REPO_ROOT, capture_output=True, text=True)
+    (artifacts / "inventory.stdout.log").write_text(discovery.stdout)
+    (artifacts / "inventory.stderr.log").write_text(discovery.stderr)
     if discovery.stderr:
         print(discovery.stderr, end="", file=sys.stderr, flush=True)
     inventory = {module: set() for module in modules}
@@ -320,73 +304,59 @@ def _run_tests(command: list[str | Path]) -> None:
             inventory[match[1]].add(selector)
     if not valid or any(not cases for cases in inventory.values()):
         raise RuntimeError("Swift test bundle verification failed: invalid or incomplete test inventory")
-    expected_total = sum(len(cases) for cases in inventory.values())
-    batches = _test_batches(inventory)
-    print(
-        f"Discovered {expected_total} tests across {len(modules)} modules; "
-        f"{len(batches)} exact batches each run in a fresh process.",
-        flush=True,
+    (artifacts / "inventory.json").write_text(
+        json.dumps({name: sorted(cases) for name, cases in inventory.items()}, indent=2) + "\n"
     )
-    results = []
-    all_bundles = {module + ".xctest" for module in modules}
-    for module, label, cases, selection in batches:
-        isolated = [*command, "--filter", selection]
-        print(">>", " ".join(isolated), flush=True)
-        output, returncode = [], -1
+    execution = [
+        *command,
+        "--skip-build",
+        "--parallel",
+        "--num-workers",
+        "1",
+        "--verbose",
+        "--xunit-output",
+        str(primary),
+    ]
+    print(">>", " ".join(execution), flush=True)
+    output, returncode = [], -1
+    started = time.monotonic()
+    with (artifacts / "swift-test.log").open("w") as log:
         try:
             with subprocess.Popen(
-                isolated, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+                execution, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
             ) as process:
                 for line in process.stdout:
                     print(line, end="", flush=True)
+                    log.write(line)
+                    log.flush()
                     output.append(line)
                 returncode = process.wait()
         except Exception as error:
-            # A broken batch must not prevent remaining discovered cases from being attempted.
-            print(f"FAIL test batch {label}: {type(error).__name__}", flush=True)
-        statistics = {}
-        passed = summarize_tests(
-            "".join(output),
-            [module + ".xctest"],
-            returncode,
-            aggregate_name=aggregate_name,
-            case_inventory=cases,
-            empty_bundles=all_bundles - {module + ".xctest"},
-            statistics=statistics,
-        )
-        results.append((module, label, passed, statistics))
-    total = sum(result["tests"] for _, _, _, result in results)
-    failures = sum(result["failures"] for _, _, _, result in results)
-    observed = set()
-    disjoint = True
-    for _, _, _, result in results:
-        identifiers = result["identifiers"]
-        disjoint = disjoint and not bool(observed & identifiers)
-        observed.update(identifiers)
-    success = (
-        len(results) == len(batches)
-        and all(passed for _, _, passed, _ in results)
-        and total == expected_total
-        and disjoint
-        and observed == set().union(*inventory.values())
+            print(f"FAIL SwiftPM worker driver: {type(error).__name__}", flush=True)
+    elapsed = time.monotonic() - started
+    (artifacts / "execution.json").write_text(
+        json.dumps({"command": execution, "returncode": returncode, "elapsed_s": elapsed}, indent=2) + "\n"
     )
-    print("\nIsolated Swift module summary:", flush=True)
+    try:
+        result = validate_workers("".join(output), primary, sidecar, inventory, aggregate_name, summarize_tests)
+        if returncode != 0:
+            raise ValueError(f"SwiftPM worker driver exited {returncode}")
+    except (OSError, ValueError) as error:
+        print(f"FAIL worker verification: {error}; artifacts: {artifacts}", flush=True)
+        raise RuntimeError("Swift test bundle verification failed; inspect worker logs and XML") from error
+    result["elapsed_s"] = elapsed
+    (artifacts / "verification.json").write_text(json.dumps(result, indent=2) + "\n")
+    print("\nSingle-worker XCTest summary:", flush=True)
     for module in modules:
-        module_results = [(passed, result) for owner, _, passed, result in results if owner == module]
-        completed = sum(result["completed"] for _, result in module_results)
-        passed = all(passed for passed, _ in module_results) and completed == len(inventory[module])
         print(
-            f"  {'PASS' if passed else 'FAIL'} {module}: {completed} complete / "
-            f"{len(inventory[module])} discovered tests",
+            f"  PASS {module}: {len(inventory[module])} complete / {len(inventory[module])} discovered tests",
             flush=True,
         )
     print(
-        f"Total: {total} tests, {failures} failures; {'PASS' if success else 'FAIL'} "
-        f"({len(modules)}/{len(modules)} modules, {expected_total} expected tests)",
+        f"Total: {result['tests']} tests, 0 failures; PASS "
+        f"({len(modules)}/{len(modules)} modules, {result['tests']} fresh XCTest processes; {elapsed:.3f}s)",
         flush=True,
     )
-    if not success:
-        raise RuntimeError("Swift test bundle verification failed; see the isolated module summaries above.")
 
 
 def _architectures(architecture: str) -> tuple[str, ...]:

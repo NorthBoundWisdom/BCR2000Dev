@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<testsuites>
+<testsuite name="TestResults" errors="0" tests="2" failures="0" time="0.513550917">
+<testcase classname="BCRAgentConsoleTests.SSEStreamTests" name="testBackpressureActuallyClosesTheClientConnection" time="0.312387709">
+</testcase>
+<testcase classname="BCRAgentConsoleTests.SSEStreamTests" name="testBurstCoalescesIntoOneLatestValueEvent" time="0.201163208">
+</testcase>
+</testsuite>
+</testsuites>
