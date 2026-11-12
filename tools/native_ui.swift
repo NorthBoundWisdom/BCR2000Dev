@@ -14,6 +14,15 @@ if arguments.count != 4 || Int32(arguments[1]) == nil || Int32(arguments[1])! <=
     exit(2)
 }
 
+if arguments[2] == "snapshot" {
+    guard UUID(uuidString: arguments[3]) != nil else { exit(2) }
+    DistributedNotificationCenter.default().postNotificationName(
+        Notification.Name("dev.bcragentconsole.integration.capture.\(arguments[1])"),
+        object: arguments[3], userInfo: nil, deliverImmediately: true
+    )
+    exit(0)
+}
+
 guard AXIsProcessTrusted() else {
     FileHandle.standardError.write(Data("Accessibility permission is required for the invoking terminal/agent.\n".utf8))
     exit(2)
@@ -25,13 +34,21 @@ var pending = [app]
 var visited = 0
 while let element = pending.popLast(), visited < 10000 {
     visited += 1
-    if attribute(element, kAXIdentifierAttribute) as? String == arguments[3] {
+    let matches: Bool
+    if arguments[2] == "press-help" {
+        matches = (attribute(element, kAXHelpAttribute) as? String)?.hasPrefix(arguments[3]) == true
+    } else if arguments[2] == "press-description" {
+        matches = (attribute(element, kAXDescriptionAttribute) as? String)?.hasPrefix(arguments[3]) == true
+    } else {
+        matches = attribute(element, kAXIdentifierAttribute) as? String == arguments[3]
+    }
+    if matches {
         switch arguments[2] {
         case "exists": print("found"); exit(0)
         case "enabled":
             if attribute(element, kAXEnabledAttribute) as? Bool == false { exit(3) }
             print("enabled"); exit(0)
-        case "press":
+        case "press", "press-help", "press-description":
             guard attribute(element, kAXEnabledAttribute) as? Bool != false,
                   AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
             else {

@@ -20,6 +20,13 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(OffscreenPresentation.isEnabled ? .accessory : .regular)
         OffscreenPresentation.install()
+        #if DEBUG
+            if CommandLine.arguments.contains("--integration-test"),
+               let path = ProcessInfo.processInfo.environment["BCR_INTEGRATION_DIRECTORY"]
+            {
+                IntegrationWindowCapture.install(directory: URL(fileURLWithPath: path, isDirectory: true))
+            }
+        #endif
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: url)
         {

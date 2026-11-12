@@ -15,6 +15,7 @@ import time
 import urllib.error
 
 from mcp_smoke import Client
+from native_ui import DesktopAudit
 
 
 def main():
@@ -72,6 +73,7 @@ def main():
             "BCR_MCP_URL": f"http://127.0.0.1:{args.port}/mcp",
         }
     )
+    environment["BCR_INTEGRATION_OFFSCREEN"] = "1" if offscreen else "0"
     if args.connection_fixture:
         environment["BCR_CONNECTION_FIXTURE"] = "1"
     # Give this artifact a unique app/process identity so native automation cannot
@@ -94,51 +96,57 @@ def main():
     subprocess.run(
         ["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)], check=True, capture_output=True
     )
-    with (directory / "app.log").open("w") as log:
-        app = subprocess.Popen(
-            [
-                str(executable),
-                "--integration-test",
-                *(["--connection-fixture"] if args.connection_fixture else []),
-                *(["--offscreen"] if offscreen else []),
-                "-AppleLanguages",
-                f"({args.language})",
-            ],
-            env=environment,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-        )
-        environment["BCR_INTEGRATION_APP_PID"] = str(app.pid)
-        try:
-            client = Client(environment["BCR_MCP_URL"], token)
-            deadline = time.monotonic() + 15
-            while time.monotonic() < deadline:
-                if app.poll() is not None:
-                    raise RuntimeError("isolated app exited before listening; inspect its app.log")
-                try:
-                    if client.rpc("ping")[0] == 200:
-                        break
-                except urllib.error.URLError:
-                    pass
-                time.sleep(0.1)
-            else:
-                raise RuntimeError("isolated listener did not start on the configured port")
-            for flags in ([], ["--legacy"]):
-                subprocess.run(
-                    [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
-                    env=environment,
-                    check=True,
-                )
-            if args.script:
-                subprocess.run([sys.executable, str(args.script.resolve())], env=environment, check=True)
-            print("Isolated native MCP acceptance passed; artifacts:", directory.relative_to(Path.cwd()))
-        finally:
-            app.terminate()
+    audit = DesktopAudit(directory) if offscreen else None
+    try:
+        with (directory / "app.log").open("w") as log:
+            app = subprocess.Popen(
+                [
+                    str(executable),
+                    "--integration-test",
+                    *(["--connection-fixture"] if args.connection_fixture else []),
+                    *(["--offscreen"] if offscreen else []),
+                    "-AppleLanguages",
+                    f"({args.language})",
+                ],
+                env=environment,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+            )
+            environment["BCR_INTEGRATION_APP_PID"] = str(app.pid)
+            (directory / "app-pid.txt").write_text(str(app.pid))
             try:
-                app.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                app.kill()
-                app.wait()
+                client = Client(environment["BCR_MCP_URL"], token)
+                deadline = time.monotonic() + 15
+                while time.monotonic() < deadline:
+                    if app.poll() is not None:
+                        raise RuntimeError("isolated app exited before listening; inspect its app.log")
+                    try:
+                        if client.rpc("ping")[0] == 200:
+                            break
+                    except urllib.error.URLError:
+                        pass
+                    time.sleep(0.1)
+                else:
+                    raise RuntimeError("isolated listener did not start on the configured port")
+                for flags in ([], ["--legacy"]):
+                    subprocess.run(
+                        [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
+                        env=environment,
+                        check=True,
+                    )
+                if args.script:
+                    subprocess.run([sys.executable, str(args.script.resolve())], env=environment, check=True)
+            finally:
+                app.terminate()
+                try:
+                    app.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    app.kill()
+                    app.wait()
+    finally:
+        if audit:
+            audit.finish()
+    print("Isolated native MCP acceptance passed; artifacts:", directory.relative_to(Path.cwd()))
 
 
 if __name__ == "__main__":

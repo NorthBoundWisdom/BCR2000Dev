@@ -8,24 +8,16 @@ import sys
 import time
 from pathlib import Path
 from mcp_smoke import Client
+from native_ui import NativeUI
 
 pid = int(os.environ["BCR_INTEGRATION_APP_PID"])
+ui = NativeUI(pid)
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f"""tell application "System Events"
-set targetProcess to first application process whose unix id is {pid}
-tell targetProcess
-set mainWindow to first window whose name starts with "BCRTest-"
-{body.replace("window 1", "mainWindow")}
-end tell
-end tell"""
-    result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip())
-    return result.stdout.strip()
+    return ui.run(body.replace("window 1", "mainWindow"))
 
 
 def debug_failure(kind, value, trace):
@@ -103,5 +95,5 @@ if "侧视" not in tree and "俯视" not in tree and "已使能" not in tree and
     raise RuntimeError("arm preview was not rendered")
 if client.call("get_parameter", {"id": "arm.j1"})["value"] != 1e300:
     raise RuntimeError("large-value preview lost target data")
-subprocess.run(["screencapture", "-x", "-R80,80,1200,760", str(directory / "large-angle-preview.png")], check=True)
+ui.capture(directory / "large-angle-preview.png", width=1200)
 print("Native arm preview rendered huge finite joint/gripper/speed values without crashing; MCP remained responsive.")

@@ -10,8 +10,12 @@ import sys
 import time
 
 from mcp_smoke import Client
+from native_ui import NativeUI
 
 pid = int(os.environ["BCR_INTEGRATION_APP_PID"])
+ui = NativeUI(pid)
+if ui.offscreen:
+    raise RuntimeError("Configuration acceptance requires foreground: product file panels explicitly activate the App")
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
@@ -21,17 +25,7 @@ def quote(value):
 
 
 def gui(body):
-    source = f"""tell application "System Events"
-set targetProcess to first application process whose unix id is {pid}
-tell targetProcess
-set mainWindow to first window whose name starts with "BCRTest-"
-{body.replace("window 1", "mainWindow")}
-end tell
-end tell"""
-    result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip())
-    return result.stdout.strip()
+    return ui.run(body.replace("window 1", "mainWindow"))
 
 
 def debug_failure(kind, value, trace):

@@ -8,24 +8,16 @@ import sys
 import time
 from pathlib import Path
 from mcp_smoke import Client
+from native_ui import NativeUI
 
 pid = int(os.environ["BCR_INTEGRATION_APP_PID"])
+ui = NativeUI(pid)
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f"""tell application "System Events"
-set targetProcess to first application process whose unix id is {pid}
-tell targetProcess
-set mainWindow to first window whose name starts with "BCRTest-"
-{body.replace("window 1", "mainWindow")}
-end tell
-end tell"""
-    result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip())
-    return result.stdout.strip()
+    return ui.run(body.replace("window 1", "mainWindow"))
 
 
 def debug_failure(kind, value, trace):
@@ -64,7 +56,7 @@ error "button help not found"''')
 
 gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 gui('''repeat with i from 1 to count of buttons of group 1 of window 1
-if help of button i of group 1 of window 1 is "选择实体 MIDI 输入与输出端口" then
+if help of button i of group 1 of window 1 starts with "选择实体 MIDI 输入与输出端口" then
 perform action "AXPress" of button i of group 1 of window 1
 return "opened"
 end if
@@ -84,6 +76,11 @@ error "Apply endpoint button missing"''')
 for label in ["输入端口", "输出端口"]:
     if gui(f'return value of pop up button "{label}" of group 1 of sheet 1 of window 1') != "自动 · Port 1":
         raise RuntimeError("unexpected default endpoint selection")
-subprocess.run(["screencapture", "-x", "-R80,80,1200,760", str(directory / "endpoint-settings.png")], check=True)
+if ui.offscreen and os.environ.get("BCR_WINDOWSERVER_PROBE") == "1":
+    try:
+        ui.capture_windowserver(directory / "endpoint-windowserver-probe.png", width=1200)
+    except (RuntimeError, subprocess.CalledProcessError) as error:
+        print("WindowServer probe unavailable for transparent window:", error)
+ui.capture(directory / "endpoint-settings.png", width=1200)
 gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
 print("Native endpoint sheet, default input/output and isolated physical-MIDI lock passed.")

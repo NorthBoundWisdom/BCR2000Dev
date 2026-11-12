@@ -8,24 +8,16 @@ import sys
 import time
 from pathlib import Path
 from mcp_smoke import Client
+from native_ui import NativeUI
 
 pid = int(os.environ["BCR_INTEGRATION_APP_PID"])
+ui = NativeUI(pid)
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f"""tell application "System Events"
-set targetProcess to first application process whose unix id is {pid}
-tell targetProcess
-set mainWindow to first window whose name starts with "BCRTest-"
-{body.replace("window 1", "mainWindow")}
-end tell
-end tell"""
-    result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip())
-    return result.stdout.strip()
+    return ui.run(body.replace("window 1", "mainWindow"))
 
 
 def debug_failure(kind, value, trace):
@@ -53,8 +45,11 @@ def wait_for(check, message):
 
 
 def press_help(help_text, area=1):
+    if help_text.startswith("操作 U"):
+        return ui.press_description("用户按键 #" + help_text.removeprefix("操作 U") + " ")
+    prefix = help_text
     return gui(f'''repeat with buttonIndex from 1 to count of buttons of scroll area {area} of group 1 of window 1
-if help of button buttonIndex of scroll area {area} of group 1 of window 1 is {json.dumps(help_text, ensure_ascii=False)} then
+if help of button buttonIndex of scroll area {area} of group 1 of window 1 starts with {json.dumps(prefix, ensure_ascii=False)} then
 perform action "AXPress" of button buttonIndex of scroll area {area} of group 1 of window 1
 return "pressed"
 end if

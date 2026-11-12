@@ -61,7 +61,14 @@ error "Unassigned B2-2 button missing"''')
     ui.press("hardware.buttonFunctions.change")
     ui.wait(lambda: ui.exists("hardware.buttonFunctions.confirm"), "Button function confirmation missing")
     assert json.loads(path.read_text()) == original
-    ui.run("set frontmost to true\nkey code 53")
+    if ui.offscreen:
+        try:
+            ui.press("hardware.buttonFunctions.cancel")
+        except RuntimeError:
+            # A closed AX element may lose its reply; the unchanged-map assertion below still applies.
+            pass
+    else:
+        ui.run("set frontmost to true\nkey code 53")
     ui.wait(lambda: not ui.exists("hardware.buttonFunctions.confirm"), "Cancel did not dismiss confirmation")
     assert json.loads(path.read_text()) == original
     expected = json.loads(json.dumps(original))
@@ -121,7 +128,10 @@ def run():
     client.call("set_device_source", {"source": "hardware"}, expect_error=True)
     ui.wait(lambda: ui.exists("connection.read"), "Read connection option did not reappear")
     # Return must choose the read-only option; writing and initialization have no default shortcut.
-    ui.run("set frontmost to true\nkey code 36")
+    if ui.offscreen:
+        ui.press("connection.read")
+    else:
+        ui.run("set frontmost to true\nkey code 36")
     ui.wait(lambda: status()["source"] == "hardware", "Read connection did not complete")
     assert status()["hardwareConnection"]["confirmation"] == "none"
     assert state()["voiceWrites"] == state()["presetWrites"] == 0

@@ -1,16 +1,71 @@
 """PID-scoped native accessibility helpers for isolated acceptance scripts."""
 
 import json
+import os
+import re
+import shutil
+import uuid
 from pathlib import Path
 import subprocess
 import time
 
 
+def native_binary(stem="native_ui"):
+    source = Path(__file__).with_name(stem + ".swift")
+    binary = source.parent.parent / "build/tools" / stem
+    if not binary.exists() or binary.stat().st_mtime_ns < source.stat().st_mtime_ns:
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["xcrun", "swiftc", "-swift-version", "6", str(source), "-o", str(binary)], check=True)
+    return binary
+
+
+class DesktopAudit:
+    """Finite sampling, scoped to the isolated PID, including startup and shutdown."""
+
+    def __init__(self, directory):
+        self.directory = Path(directory)
+        self.process = subprocess.Popen(
+            [str(native_binary("desktop_audit")), str(os.getpid()), str(directory)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 10
+        while not (self.directory / "desktop-audit.ready").exists():
+            if self.process.poll() is not None:
+                raise RuntimeError("Desktop sampler failed: " + self.process.stderr.read())
+            if time.monotonic() >= deadline:
+                self.process.terminate()
+                self.process.wait(timeout=3)
+                raise RuntimeError("Desktop sampler did not become ready")
+            time.sleep(0.02)
+
+    def finish(self):
+        (self.directory / "desktop-audit.stop").touch()
+        _, errors = self.process.communicate(timeout=5)
+        if self.process.returncode:
+            raise RuntimeError("Desktop sampler failed: " + errors)
+        result = json.loads((self.directory / "desktop-audit.json").read_text())
+        if result["samples"] == 0 or result["targetWasFront"] or result["visibleSamples"]:
+            raise RuntimeError("Offscreen desktop audit failed: " + json.dumps(result))
+        print("Offscreen desktop audit:", json.dumps(result), flush=True)
+
+
 class NativeUI:
     def __init__(self, pid):
         self.pid = int(pid)
+        arguments = subprocess.check_output(["ps", "-p", str(self.pid), "-o", "args="], text=True)
+        self.offscreen = "--offscreen" in arguments.split()
 
     def run(self, body):
+        if self.offscreen:
+            if re.search(r"\b(?:keystroke|key\s+(?:code|down|up))\b", body, re.IGNORECASE):
+                raise RuntimeError("System keyboard events are forbidden in offscreen acceptance")
+            body = "\n".join(
+                line
+                for line in body.splitlines()
+                if not re.match(r"\s*set\s+(?:frontmost|position|focused)\b", line, re.IGNORECASE)
+            )
         source = f"""tell application "System Events"
 set targetProcess to first application process whose unix id is {self.pid}
 tell targetProcess
@@ -24,11 +79,7 @@ end tell"""
         return result.stdout.strip()
 
     def command(self, action, identifier):
-        source = Path(__file__).with_suffix(".swift")
-        binary = source.parent.parent / "build/tools/native_ui"
-        if not binary.exists() or binary.stat().st_mtime_ns < source.stat().st_mtime_ns:
-            binary.parent.mkdir(parents=True, exist_ok=True)
-            subprocess.run(["xcrun", "swiftc", "-swift-version", "6", str(source), "-o", str(binary)], check=True)
+        binary = native_binary()
         result = subprocess.run(
             [str(binary), str(self.pid), action, identifier], capture_output=True, text=True, timeout=15
         )
@@ -47,7 +98,32 @@ end tell"""
         if not self.command("press", identifier):
             raise RuntimeError(f"Accessibility identifier missing: {identifier}")
 
+    def press_help(self, prefix):
+        if not self.command("press-help", prefix):
+            raise RuntimeError(f"Accessibility help prefix missing: {prefix}")
+
+    def press_description(self, prefix):
+        if not self.command("press-description", prefix):
+            raise RuntimeError(f"Accessibility description prefix missing: {prefix}")
+
     def capture(self, path, width=1680):
+        if self.offscreen:
+            nonce = str(uuid.uuid4())
+            directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
+            image = directory / f"capture-{nonce}.png"
+            failure = directory / f"capture-{nonce}.error"
+            self.command("snapshot", nonce)
+            self.wait(lambda: image.exists() or failure.exists(), "App view rendering did not respond")
+            if failure.exists():
+                raise RuntimeError(failure.read_text())
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(image, path)
+            print("Rendered own App view", path.name, flush=True)
+            return
+        self.capture_windowserver(path, width)
+
+    def capture_windowserver(self, path, width=1680):
         # Capture only the isolated main window. Other applications and desktop pixels are excluded.
         script = (
             'ObjC.import("CoreGraphics");'

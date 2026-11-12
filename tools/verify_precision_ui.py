@@ -8,24 +8,20 @@ import sys
 import time
 from pathlib import Path
 from mcp_smoke import Client
+from native_ui import NativeUI
 
 pid = int(os.environ["BCR_INTEGRATION_APP_PID"])
+ui = NativeUI(pid)
+if ui.offscreen:
+    raise RuntimeError(
+        "Precision acceptance requires foreground: AXConfirm did not commit the numeric step editor without focus"
+    )
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
 
 def gui(body):
-    source = f"""tell application "System Events"
-set targetProcess to first application process whose unix id is {pid}
-tell targetProcess
-set mainWindow to first window whose name starts with "BCRTest-"
-{body.replace("window 1", "mainWindow")}
-end tell
-end tell"""
-    result = subprocess.run(["osascript", "-e", source], capture_output=True, text=True, timeout=10)
-    if result.returncode:
-        raise RuntimeError(result.stderr.strip())
-    return result.stdout.strip()
+    return ui.run(body.replace("window 1", "mainWindow"))
 
 
 def debug_failure(kind, value, trace):
@@ -79,9 +75,7 @@ def turn(action):
 
 
 def mode(index):
-    gui(
-        f'perform action "AXPress" of radio button {index} of radio group "编码器模式" of scroll area 2 of group 1 of window 1'
-    )
+    gui(f'perform action "AXPress" of radio button {index} of radio group 1 of scroll area 2 of group 1 of window 1')
 
 
 gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
@@ -126,5 +120,5 @@ if not 0 < value < 0.05:
 tree = gui("return entire contents of window 1")
 if "14-bit" not in tree or "8193" not in tree:
     raise RuntimeError("raw NRPN readout not visible")
-subprocess.run(["screencapture", "-x", "-R80,80,1200,760", str(directory / "precision-ui.png")], check=True)
+ui.capture(directory / "precision-ui.png", width=1200)
 print("Native NRPN Mock wire loop, raw 8193 readout and sub-0.05 degree step passed.")

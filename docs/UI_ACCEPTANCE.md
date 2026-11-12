@@ -26,9 +26,40 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_pre
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_review_fixes_ui.py
 ```
 
-加 `--offscreen` 可让隔离实例离屏运行（后台附属进程，窗口透明且在屏幕之外，离屏时“在访达中显示”只给提示、
-不打开访达）。2026-11-13 实测 `verify_connection_ui.py` 离屏通过，期间前台应用未变、无可见窗口。
-其余脚本未做离屏验证：使用区域截图（`screencapture -R`）或系统打开/保存面板的脚本需要前台窗口，仍按默认前台运行。
+## 离屏能力（2026-11-13）
+
+本机有人使用桌面时，所有可离屏场景必须显式加 `--offscreen`。不发送系统键盘事件，不激活 App，不打开访达。
+只有必须前台的脚本保留原前台步骤；本轮未在当前桌面运行这些场景，离屏请求会在进入验收步骤前明确拒绝。
+因此带 `--script` 的默认值继续为前台，不自动改成离屏。
+
+| 脚本 | 模式 | 语言与依据 |
+| --- | --- | --- |
+| `verify_connection_ui.py` | 可离屏 | 中文/英文；离屏以 AX 执行读取和取消，不验证真实键盘快捷键 |
+| `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
+| `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
+| `verify_functions_ui.py` | 可离屏 | 中文；步进/指定/循环、批量分配和保留参数值通过 |
+| `verify_review_fixes_ui.py` | 可离屏 | 中文；MCP 保护、复位跳过报告、大角度 Canvas 自身渲染通过 |
+| `verify_configuration_ui.py` | **必须前台** | 产品文件面板主动 activate/makeKeyAndOrderFront，且路径选择依赖系统键盘；本轮保留原验收步骤，未前台运行 |
+| `verify_output_ui.py` | **必须前台** | 不聚焦时 AXSetValue + AXConfirm 未提交动态端口，原连接状态断言失败；保留原 Tab 提交和全部输出验收步骤 |
+| `verify_precision_ui.py` | **必须前台** | 不聚焦时 AXSetValue + AXConfirm 未提交 0.25 步长，原步长断言失败；保留原 Tab 提交和全部精度验收步骤 |
+
+示例（逐个运行，不并行）：
+
+```bash
+python3 tools/mcp_integration.py --offscreen --connection-fixture --script tools/verify_connection_ui.py
+python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_endpoint_ui.py
+python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_functions_ui.py
+python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_review_fixes_ui.py
+python3 tools/mcp_integration.py --offscreen --language en --configuration-write --script tools/verify_builtin_names_ui.py
+```
+
+每次离屏运行在启动前开始有限采样，关闭后保存 `desktop-audit.json`：仅记录前台 PID 和本测试进程的窗口元数据，
+不读取其他应用像素。若目标进程抢焦点或出现与真实屏幕相交的非透明窗口，采样器立即结束该测试实例并使验收失败。
+`foregroundStable` 如为 false，须结合 PID 判断是否用户自行切换；不能声称该次前台应用全程未变。
+
+透明窗口的 WindowServer 筛选未能取得可截取的主窗口号，已实际验证端点场景；离屏截图使用 Debug 隔离 App 自身
+`cacheDisplay`，保存当前主视图或当前 sheet，不包含其他窗口、桌面像素或窗口边框。接口只在显式隔离 Debug 进程注册，
+不新增产品 UI 或 Provider 工具。前台截图也改为限定本进程窗口号，不再按屏幕区域截取。
 
 `mcp_integration.py` 为每次运行复制一个有唯一进程身份的 App，使用临时配置、内存凭据与
 Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体 MIDI。
