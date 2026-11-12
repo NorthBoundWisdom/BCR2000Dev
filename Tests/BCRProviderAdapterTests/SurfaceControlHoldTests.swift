@@ -232,6 +232,53 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(gateway.session.mock.inputDataValues[hold], 0)
     }
 
+    func testAnyToolCallReleasesDueLeasesBeforeItRuns() throws {
+        // A queue of unrelated or invalid requests cannot postpone an expiry behind itself: each
+        // call first releases what is already due, so the delay is at most the request in flight.
+        let clock = Clock()
+        let (gateway, _) = try host(clock: clock)
+        _ = try call(gateway, "input", press(gateway, true, holdSeconds: 0.5))
+        XCTAssertEqual(gateway.session.engine.value(of: "simulation.hold"), 1)
+        clock.time = 10.5
+        XCTAssertTrue(gateway.call("no_such_tool").isError) // not a surface tool, and it fails
+        XCTAssertEqual(gateway.session.engine.value(of: "simulation.hold"), 0)
+        XCTAssertEqual(gateway.session.mock.inputDataValues[hold], 0)
+        let current = try discovery(gateway)
+        XCTAssertEqual(current["latest_sequence"], .string("2"))
+        let page = try call(gateway, "events", ["instance_id": .string("fixture"),
+                                                "epoch": current["expected"]!.objectValue!["epoch"]!,
+                                                "after_sequence": .string("1"), "limit": .number(8)])
+        let expiry = try XCTUnwrap(page.objectValue?["events"]?.arrayValue?.first?.objectValue)
+        XCTAssertEqual(expiry["reason"], .string("hold_expired"))
+        XCTAssertEqual(expiry["time"]?.finiteNumber, 10.5) // recorded at the preflight, not later
+    }
+
+    func testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases() async throws {
+        // The timer uses an explicit small tolerance, so lag does not scale with the lease length.
+        for seconds in [0.2, 2.0] {
+            let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
+                                         configuration: SurfaceControlMCPModule.simulationConfiguration(),
+                                         saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+            let gateway = MCPApplicationGateway(session: session, permissions: .init(deviceControl: true),
+                                                includeAgent: false)
+            _ = try SurfaceControlMCPModule.install(on: gateway, instanceID: "fixture",
+                                                    permissions: .init(input: true))
+            let held = try call(gateway, "input", press(gateway, true, holdSeconds: seconds)).objectValue!
+            let deadline = try XCTUnwrap(held["hold_deadline"]?.finiteNumber)
+            try await Task.sleep(for: .seconds(seconds + 0.3))
+            XCTAssertEqual(session.engine.value(of: "simulation.hold"), 0)
+            // Read the journal directly: no request ran in between, so the timer recorded this event.
+            let current = try discovery(gateway)
+            let page = try call(gateway, "events", ["instance_id": .string("fixture"),
+                                                    "epoch": current["expected"]!.objectValue!["epoch"]!,
+                                                    "after_sequence": .string("1"), "limit": .number(8)])
+            let time = try XCTUnwrap(page.objectValue?["events"]?.arrayValue?.first?.objectValue?["time"]?
+                .finiteNumber)
+            XCTAssertGreaterThanOrEqual(time, deadline)
+            XCTAssertLessThan(time - deadline, 0.1, "hold_s \(seconds)")
+        }
+    }
+
     func testRealSchedulerExpiresAShortLease() async throws {
         let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
                                      configuration: SurfaceControlMCPModule.simulationConfiguration(),

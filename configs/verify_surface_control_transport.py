@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import secrets
 import selectors
+import socket
 import subprocess
 import sys
 import threading
@@ -152,6 +153,73 @@ def main():
         assert 0 <= lag < 0.5, lag  # recorded by the timer near the deadline, not by the later snapshot
         rejected(lambda: client.renew("button.1.3", 0.4), "hold_expired")
         passed("real_clock_hold_renew_and_scheduler_expiry", expiry_lag_s=round(lag, 3))
+
+        # Expiry latency under hostile load: stalled connections that never finish a request, plus
+        # unauthenticated and authenticated request floods, must not push the release past
+        # deadline + 0.5 s. Nothing here renews or reads the surface instance before the deadline.
+        port = int(first.ready["url"].split(":")[2].split("/")[0])
+        stalled = []
+        for _ in range(24):
+            connection = socket.create_connection(("127.0.0.1", port), timeout=2)
+            connection.sendall(
+                b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:" + str(port).encode() + b"\r\nContent-Length: 4096\r\n"
+            )
+            stalled.append(connection)
+        stop_flood, flood_counts = threading.Event(), {"unauthenticated": 0, "authenticated": 0}
+
+        def flood(kind, headers, body):
+            while not stop_flood.is_set():
+                try:
+                    link = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+                    link.request("POST", "/mcp", body, headers)
+                    link.getresponse().read()
+                    link.close()
+                    flood_counts[kind] += 1
+                except OSError:
+                    time.sleep(0.005)
+
+        json_headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+        legacy_call = json.dumps(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "provider_state", "arguments": {}}}
+        )
+        floods = [
+            threading.Thread(target=flood, args=("unauthenticated", json_headers, "{}"), daemon=True),
+            threading.Thread(target=flood, args=("unauthenticated", json_headers, "{}"), daemon=True),
+            threading.Thread(
+                target=flood,
+                args=("authenticated", {**json_headers, "Authorization": "Bearer " + first.token}, legacy_call),
+                daemon=True,
+            ),
+        ]
+        try:
+            held = client.input("button.1.3", "boolean", True, hold_s=1.0)
+            base = client.latest_sequence
+            for thread in floods:
+                thread.start()
+            time.sleep(1.8)
+        finally:
+            stop_flood.set()
+            for thread in floods:
+                thread.join(timeout=5)
+            for connection in stalled:
+                connection.close()
+        page = client.call(
+            "surface_control_events",
+            {"instance_id": client.instance_id, "epoch": client.expected["epoch"], "after_sequence": base, "limit": 8},
+        )
+        expiry = page["events"][0]
+        loaded_lag = expiry["time"] - held["hold_deadline"]
+        assert expiry["reason"] == "hold_expired" and expiry["value"] is False
+        assert 0 <= loaded_lag <= 0.5, loaded_lag
+        assert flood_counts["unauthenticated"] > 20, flood_counts
+        client.snapshot()  # resynchronize the client's sequence after the host-recorded expiry
+        passed(
+            "hold_expiry_within_half_second_under_stalled_connections_and_request_floods",
+            expiry_lag_s=round(loaded_lag, 3),
+            bound_s=0.5,
+            stalled_connections=len(stalled),
+            flood_requests=dict(flood_counts),
+        )
         rejected(lambda: denied.client.input("pushEncoder.1.1", "scalar", 100), "permission_denied")
         rejected(lambda: denied.client.renew("button.1.3", 0.4), "permission_denied")
         passed("permissions_default_off")

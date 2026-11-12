@@ -95,7 +95,14 @@ public final class MCPApplicationGateway {
         onChange?()
     }
 
+    private var callPreflights: [@MainActor () -> Void] = []
+    /// Host-only: runs before every tool call, whatever the tool. Used for time-driven duties that
+    /// must not wait behind a queue of requests (for example releasing an expired simulated hold).
+    /// A preflight cannot fail or change the call that follows.
+    public func addCallPreflight(_ preflight: @escaping @MainActor () -> Void) { callPreflights.append(preflight) }
+
     public func call(_ name: String, arguments: JSONValue = .object([:])) -> MCPToolResult {
+        for preflight in callPreflights { preflight() }
         do {
             guard let definition = definitions[name] else { throw ProviderDomainError(
                 "unsupported",

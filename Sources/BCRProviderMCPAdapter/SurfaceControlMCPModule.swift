@@ -26,6 +26,9 @@ public enum SurfaceControlMCPModule {
             },
             holdScheduler: holdScheduler
         )
+        // Any request, including legacy and unrelated tools, first releases due leases: a flood of
+        // queued requests then delays an expiry by at most one request, not by the whole queue.
+        gateway.addCallPreflight { [weak adapter] in adapter?.processDueHoldsBeforeRequest() }
         let tools = SurfaceControlTools.descriptors.map { descriptor in JSONValue.object([
             "name": .string(descriptor.name),
             "description": .string("Optional simulation surface control " + ControlDiscovery.contractVersion),
