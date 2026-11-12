@@ -1023,12 +1023,8 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func saveBackup(_ dump: Data) throws -> URL {
-        let directory = supportDirectory.appending(path: "Backups", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appending(path: "temporary-preset-\(Int(Date().timeIntervalSince1970)).syx")
-        try dump.write(to: url, options: .withoutOverwriting)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        return url
+        try PresetBackupStore(directory: supportDirectory.appending(path: "Backups", directoryHint: .isDirectory))
+            .save(dump, protecting: presetRestorePoint?.backupFile)
     }
 
     // MARK: Session presentation

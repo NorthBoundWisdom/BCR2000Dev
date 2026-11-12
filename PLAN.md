@@ -191,3 +191,11 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
   缺失包、截断输出、独立 failed 用例、非零退出均有回归。
 - 过程：初次回归发现旧 mock 入口不匹配及一次误替换，已纠正并完整重跑；未更改既有断言。
 - 未验证/偏离：负例使用临时假 swift 输出，不改生产 Swift 测试。未连接设备。
+
+### A2 — `fc7a587`
+
+- 改动：BulkAssignmentView、OutputSettingsView（含输出读数）以及 ConsoleViewModel 两条提示接入显示翻译。
+- 验证：Swift 五包 517 项、失败 0；BuildWorkflow 76 项、失败 0；边界、strings lint、App build、
+  双语 1200×760 startup smoke、英文隔离 MCP 双版本冒烟通过。既有测试未改。
+- 未验证：未逐项点击英文批量分配/输出窗口；显示函数已有双向翻译与存储不变测试。
+  没有存储格式、分组引用或功能逻辑变化，无设备操作。

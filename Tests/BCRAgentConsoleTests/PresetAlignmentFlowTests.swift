@@ -129,6 +129,24 @@ final class PresetAlignmentFlowTests: XCTestCase {
             .fileExists(atPath: directory.appending(path: "preset-alignment-restore.json").path))
     }
 
+    func testOpeningPreviewThreeTimesCreatesOneBackupAndNeverWritesTheDevice() async throws {
+        let (model, device, directory) = try setUp()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var paths = Set<URL>()
+        for _ in 0 ..< 3 {
+            model.beginPresetAlignment()
+            try await wait(model) { $0 == .preview }
+            paths.insert(try XCTUnwrap(model.presetAlignment?.backup))
+            model.dismissPresetAlignment()
+        }
+        XCTAssertEqual(paths.count, 1)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: directory.appending(path: "Backups").path).count,
+            1
+        )
+        XCTAssertTrue(device.written.isEmpty)
+    }
+
     func testAlignmentRequiresConnectedHardware() throws {
         let (model, device, directory) = try setUp()
         defer { try? FileManager.default.removeItem(at: directory) }
