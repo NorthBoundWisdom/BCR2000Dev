@@ -35,7 +35,7 @@ struct OutputReadoutView: View {
                 ForEach(controller.settings.limits) { limit in
                     if let definition = model.configuration.parameter(limit.id) {
                         GridRow {
-                            Text(definition.name).lineLimit(1)
+                            Text(BuiltInNamePresentation.displayName(definition.name)).lineLimit(1)
                             Text(model.engine.value(of: limit.id).map { definition.formatted($0) } ?? "—")
                             Text(controller.outputs[limit.id].map { definition.formatted(
                                 $0,
@@ -90,7 +90,7 @@ struct OutputSettingsView: View {
             .formStyle(.columns)
             Picker(L10n.text("使能参数"), selection: $draft.enableParameter) {
                 ForEach(controller.session.engine.configuration.parameters.filter { $0.kind == .toggle }) {
-                    Text($0.name).tag($0.id)
+                    Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
                 }
             }
             HStack {
@@ -128,7 +128,8 @@ struct OutputSettingsView: View {
                     .font(.caption.bold())
                     ForEach($draft.limits) { $limit in
                         GridRow {
-                            Text(controller.session.engine.configuration.parameter(limit.id)?.name ?? limit.id.rawValue)
+                            Text(controller.session.engine.configuration.parameter(limit.id)
+                                .map { BuiltInNamePresentation.displayName($0.name) } ?? limit.id.rawValue)
                                 .frame(width: 145, alignment: .leading).lineLimit(1)
                             numberField($limit.minimum, label: L10n.text("\(limit.id.rawValue) 软下限"))
                             numberField($limit.maximum, label: L10n.text("\(limit.id.rawValue) 软上限"))

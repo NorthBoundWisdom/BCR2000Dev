@@ -115,14 +115,19 @@ private struct BulkAssignmentPreview: View {
         switch assignment.target {
         case let .switchPage(id): title = configuration.pages.first(where: { $0.id == id })?.name ?? L10n.text("基础页面")
         case let .runMacro(id): title = configuration.macros.first(where: { $0.id == id })?.name ?? L10n.text("宏")
-        case let .parameter(id): title = configuration.parameter(id)?.name ?? id.rawValue
+        case let .parameter(id): title = configuration.parameter(id)
+            .map { BuiltInNamePresentation.displayName($0.name) } ?? id.rawValue
         case let .agentPrimaryAction(slot): title = "Agent \(slot.rawValue)"
-        case let .resetGroup(group): title = L10n.text("复位 \(group)")
+        case let .resetGroup(group): title = L10n.text("复位 \(BuiltInNamePresentation.displayName(group))")
         case let .stepParameter(id, step, _): title = L10n
-            .text("\(configuration.parameter(id)?.name ?? id.rawValue) 步进 \(step)")
-        case let .setParameter(id, value): title = "\(configuration.parameter(id)?.name ?? id.rawValue) = \(value)"
+            .text(
+                "\(configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) } ?? id.rawValue) 步进 \(step)"
+            )
+        case let .setParameter(id, value): title = "\(configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) } ?? id.rawValue) = \(value)"
         case let .cycleParameter(id, values): title = L10n
-            .text("\(configuration.parameter(id)?.name ?? id.rawValue) 循环 \(values.count) 项")
+            .text(
+                "\(configuration.parameter(id).map { BuiltInNamePresentation.displayName($0.name) } ?? id.rawValue) 循环 \(values.count) 项"
+            )
         }
         let inverted = assignment.inverted ? L10n.text(" · 反向") : ""
         let behavior = !assignment.control.isContinuous && assignment.target.parameterID != nil && !assignment.target

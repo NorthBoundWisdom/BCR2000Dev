@@ -622,7 +622,10 @@ final class ConsoleViewModel: ObservableObject {
     @discardableResult
     func updateParameter(_ definition: ParameterDefinition) -> ParameterDefinition? {
         do {
-            notice = ConsoleNotice(level: .info, text: L10n.text("参数“\(definition.name)”已更新。"))
+            notice = ConsoleNotice(
+                level: .info,
+                text: L10n.text("参数“\(BuiltInNamePresentation.displayName(definition.name))”已更新。")
+            )
             try session.updateParameter(definition)
             return configuration.parameter(definition.id)
         } catch {
@@ -793,7 +796,10 @@ final class ConsoleViewModel: ObservableObject {
             let candidate = try candidate.migrated()
             // Commit the durable configuration before changing the live engine.
             try configurationFile.save(candidate)
-            notice = ConsoleNotice(level: .info, text: L10n.text("已导入“\(candidate.name)”；实体映射保留。"))
+            notice = ConsoleNotice(
+                level: .info,
+                text: L10n.text("已导入“\(BuiltInNamePresentation.displayName(candidate.name))”；实体映射保留。")
+            )
             try session.replaceConfiguration(candidate, persist: false)
             return true
         } catch { report(error); return false }
