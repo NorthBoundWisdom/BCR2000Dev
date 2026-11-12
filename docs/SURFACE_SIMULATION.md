@@ -21,6 +21,9 @@ changes the epoch. Absolute controls use integer scalar ranges
 integer detents and declare a separate absolute feedback range. Buttons use booleans. Mock
 assumptions remain software behavior, with no physical qualification implied.
 
+See [software chain startup](SURFACE_CHAIN_STARTUP.md) for pinned delivery startup, lease cadence,
+feedback budget, consumer stop evidence and cleanup.
+
 ## Isolated startup and readiness
 
 Supply a fresh 64-character lowercase hexadecimal credential through an anonymous stdin pipe

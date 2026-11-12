@@ -111,6 +111,7 @@ def package(output, configuration="release", skip_build=False):
     (output / "control-contract.json").write_bytes(contract)
     discovery = json.loads(contract)["discovery"]
     shutil.copy2(ROOT / "docs/SURFACE_SIMULATION.md", output / "SURFACE_SIMULATION.md")
+    shutil.copy2(ROOT / "docs/SURFACE_CHAIN_STARTUP.md", output / "SURFACE_CHAIN_STARTUP.md")
     shutil.copytree(
         ROOT / "Clients/Python/examples", output / "examples", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
