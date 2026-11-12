@@ -107,6 +107,11 @@ struct BCRAgentConsoleApp: App {
 
     init() {
         let smoke = CommandLine.arguments.contains("--startup-smoke")
+        let connectionFixture = CommandLine.arguments.contains("--connection-fixture")
+        guard !connectionFixture || CommandLine.arguments.contains("--integration-test") else {
+            FileHandle.standardError.write(Data(L10n.text("假设备验收需要隔离 Debug 实例。\n").utf8))
+            Darwin.exit(2)
+        }
         let providerConfiguration = ProviderConfiguration(
             robot: CommandLine.arguments.contains("--robot-sim"),
             chassis: CommandLine.arguments.contains("--chassis-sim")
@@ -130,9 +135,13 @@ struct BCRAgentConsoleApp: App {
                 do {
                     guard !smoke else { throw MCPHTTPParseError(reason: L10n.text("集成测试与 startup-smoke 不能同时启用")) }
                     let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
+                    let fixture = connectionFixture ? try IntegrationMIDIFixture(directory: context.directory) : nil
+                    if let fixture, try context.stores.hardwareMap.load() == nil {
+                        try context.stores.hardwareMap.save(fixture.hardwareMap)
+                    }
                     _model = StateObject(wrappedValue: ConsoleViewModel(
-                        stores: context.stores, startsMIDI: false,
-                        mcpCredentials: context.credentials, integrationTest: true,
+                        stores: context.stores, startsMIDI: fixture != nil,
+                        mcpCredentials: context.credentials, integrationTest: true, midiService: fixture,
                         // Native acceptance scripts exercise the arm example's parameters and safety gate.
                         initialPreset: .robotArm,
                         providerConfiguration: providerConfiguration

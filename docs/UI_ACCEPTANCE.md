@@ -16,6 +16,7 @@ python3 configs/macos_workflow.py build
 不并行运行，以免共享 MCP 端口或键盘焦点相互干扰。
 
 ```bash
+python3 tools/mcp_integration.py --connection-fixture --script tools/verify_connection_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_configuration_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_endpoint_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_functions_ui.py
@@ -28,6 +29,11 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体 MIDI。
 每次先在运行中的 App 上执行现代 / 兼容协议的 `mcp_smoke.py`，再执行指定脚本，结束后退出该实例。
 配置写入权限仅用于隔离验收，不改变用户服务权限。
+`--connection-fixture` 额外注入 Debug 专用的内存 MIDI 替身并允许隔离实例切换来源；不会创建 CoreMIDI 端口，
+只将计数与预设哈希写到该次隔离目录的 `connection-fixture.json`。普通隔离模式仍禁止实体 MIDI。
+稳定标识查找由 `native_ui.swift`（首次运行自动编译到忽略目录 build/tools）按 PID 执行；
+辅助功能权限错误会立即失败，找不到标识与控件无法操作分开报告。
+该模式的 hardware 标签代表测试替身，不是实机证据；单独传给普通实例会拒绝启动。
 隔离实例默认使用简体中文，以保持现有脚本的文字选择器稳定；可用 `--language en` 验证英文 MCP。
 此语言覆盖只作用于测试进程，不修改用户偏好。
 
@@ -43,6 +49,7 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 
 | 脚本 | 覆盖范围 | 2026-11-11 |
 | --- | --- | --- |
+| `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；选项、写入进度、回读及恢复 | 2026-11-12 中英文通过 |
 | `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 通过 |
 | `verify_endpoint_ui.py` | MIDI 端点设置；默认自动 Port 1；隔离模式禁止应用实体端口 | 通过 |
 | `verify_functions_ui.py` | 步进 / 指定 / 循环按键；参数吸附；整行分配预览确认及保留运行值 | 通过 |

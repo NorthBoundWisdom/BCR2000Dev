@@ -17,6 +17,7 @@ struct HardwareConnectionSheet: View {
                     Text(L10n.text("载入预设 \(program.preset)，切到分组 1，并把软件当前参数值写入控制器；不写永久预设存储。"))
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("初始化并连接")) { model.connectHardware(prompt.id, mode: .initialize) }
+                        .accessibilityIdentifier("connection.initialize")
                         .buttonStyle(.borderedProminent)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).panelStyle()
@@ -27,6 +28,7 @@ struct HardwareConnectionSheet: View {
                     Text(L10n.text("不切换预设，把软件当前参数值写入设备当前预设中已学习的控件。"))
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("写入并连接")) { model.connectHardware(prompt.id, mode: .write) }
+                        .accessibilityIdentifier("connection.write")
                         .buttonStyle(.bordered)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).panelStyle()
@@ -37,6 +39,7 @@ struct HardwareConnectionSheet: View {
                     Text(L10n.text("读取控制器当前旋钮值，不切换预设或改动设备；分组在顶部输入后确认。"))
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("按硬件现状连接")) { model.connectHardware(prompt.id, mode: .read) }
+                        .accessibilityIdentifier("connection.read")
                         .buttonStyle(.bordered)
                 }
                 .padding().frame(maxWidth: .infinity, alignment: .leading).panelStyle()
@@ -44,9 +47,12 @@ struct HardwareConnectionSheet: View {
             HStack {
                 Spacer()
                 Button(L10n.text("暂不连接")) { model.declineHardwareConnection(prompt.id) }
+                    .accessibilityIdentifier("connection.decline")
                     .keyboardShortcut(.cancelAction)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("connection.dialog")
         .padding(24)
         .frame(width: 520)
     }

@@ -23,6 +23,7 @@ def main():
     parser.add_argument("--port", type=int, default=18787)
     parser.add_argument("--script", type=Path, help="optional acceptance script after standard MCP probes")
     parser.add_argument("--configuration-write", action="store_true")
+    parser.add_argument("--connection-fixture", action="store_true", help="Use the Debug-only in-memory MIDI fixture")
     parser.add_argument(
         "--language",
         choices=("en", "zh-Hans"),
@@ -45,6 +46,8 @@ def main():
             "writesPerSecond": 1000,
         },
     }
+    if args.connection_fixture:
+        settings["permissions"]["deviceControl"] = True
     (directory / "mcp-settings.json").write_text(json.dumps(settings))
     token = secrets.token_hex(32)
     environment = os.environ.copy()
@@ -56,6 +59,8 @@ def main():
             "BCR_MCP_URL": f"http://127.0.0.1:{args.port}/mcp",
         }
     )
+    if args.connection_fixture:
+        environment["BCR_CONNECTION_FIXTURE"] = "1"
     # Give this artifact a unique app/process identity so native automation cannot
     # accidentally resolve the production app with the same bundle identifier/name.
     bundle = directory / "Integration.app"
@@ -78,7 +83,13 @@ def main():
     )
     with (directory / "app.log").open("w") as log:
         app = subprocess.Popen(
-            [str(executable), "--integration-test", "-AppleLanguages", f"({args.language})"],
+            [
+                str(executable),
+                "--integration-test",
+                *(["--connection-fixture"] if args.connection_fixture else []),
+                "-AppleLanguages",
+                f"({args.language})",
+            ],
             env=environment,
             stdout=log,
             stderr=subprocess.STDOUT,

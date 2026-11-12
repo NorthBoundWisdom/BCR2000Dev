@@ -821,3 +821,4 @@
 "对齐设备预设…" = "Align Device Preset…";
 "设备预设操作" = "Device Preset Actions";
 "设备预设操作；圆点表示有对齐前的预设备份。" = "Device preset actions; a dot indicates a preset backup from before alignment.";
+"假设备验收需要隔离 Debug 实例。\n" = "The device fixture requires an isolated Debug instance.\n";

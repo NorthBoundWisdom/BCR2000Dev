@@ -26,17 +26,22 @@ struct PresetAlignmentSheet: View {
                 if state.canRestore || (model.presetRestorePoint != nil && state.phase != .preview) {
                     Button(L10n.text("恢复写入前的预设")) { model.restorePresetBeforeAlignment() }
                         .disabled(state.phase.isBusy)
+                        .accessibilityIdentifier("preset.restore")
                 }
                 Button(state.phase == .finished ? L10n.text("完成") : L10n.text("关闭")) { model.dismissPresetAlignment() }
+                    .accessibilityIdentifier("preset.close")
                     .keyboardShortcut(.cancelAction)
                     .disabled(state.phase.isBusy)
                 if state.phase == .preview {
                     Button(L10n.text("写入设备")) { model.applyPresetAlignment() }
                         .buttonStyle(.borderedProminent)
                         .disabled(state.plan?.isEmpty ?? true)
+                        .accessibilityIdentifier("preset.write")
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("preset.dialog")
         .padding(24)
         .frame(width: 560)
         .interactiveDismissDisabled(state.phase.isBusy)
@@ -46,23 +51,33 @@ struct PresetAlignmentSheet: View {
         switch state.phase {
         case .reading:
             ProgressView(L10n.text("正在读取设备当前预设（只读）…"))
+                .accessibilityIdentifier("preset.reading")
         case .preview:
-            options
-            changes
+            VStack(alignment: .leading, spacing: 14) {
+                options
+                changes
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("preset.preview")
         case let .writing(done, total):
             ProgressView(value: Double(done), total: Double(max(total, 1))) {
                 Text(L10n.text("正在逐行写入并等待设备确认：\(done)/\(total)；请暂勿操作设备。"))
             }
+            .accessibilityIdentifier("preset.writing")
         case .verifying:
             ProgressView(L10n.text("正在回读核对…"))
+                .accessibilityIdentifier("preset.verifying")
         case .restoring:
             ProgressView(L10n.text("正在恢复写入前的预设…"))
+                .accessibilityIdentifier("preset.restoring")
         case .finished:
             Label(L10n.text("设备与软件已对齐。"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
+                .accessibilityIdentifier("preset.finished")
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityIdentifier("preset.failed")
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -77,10 +92,15 @@ struct PresetAlignmentSheet: View {
         }
         return VStack(alignment: .leading, spacing: 6) {
             Toggle(L10n.text("补齐未配置及与旋钮同址的按键"), isOn: binding(\.completeButtons))
+                .accessibilityIdentifier("preset.option.completeButtons")
             Toggle(L10n.text("按参数范围设置顶部旋钮灯环（±范围用居中，0 起的单位量用进度条）"), isOn: binding(\.ringModes))
+                .accessibilityIdentifier("preset.option.ringModes")
             Toggle(L10n.text("按键统一发送按下/松开，开关状态和灯由软件决定"), isOn: binding(\.buttonBehavior))
+                .accessibilityIdentifier("preset.option.buttonBehavior")
             Toggle(L10n.text("锁定 PRESET 与编程键，防止设备换预设后与软件不一致"), isOn: binding(\.lockPreset))
+                .accessibilityIdentifier("preset.option.lockPreset")
             Toggle(L10n.text("启用实体按键的已分配功能（如使能、Agent 键）"), isOn: binding(\.enableButtonFunctions))
+                .accessibilityIdentifier("preset.option.enableButtonFunctions")
             if state.options.enableButtonFunctions {
                 Text(L10n.text("启用后按下实体按键会立即执行功能，包括输出使能；请确认分配无误。"))
                     .font(.caption)
