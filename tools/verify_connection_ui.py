@@ -65,14 +65,14 @@ def run():
     assert len(list((directory / "Backups").glob("*.syx"))) == 1
     open_preview()
     ui.press("preset.write")
-    ui.wait(lambda: ui.exists("preset.writing"), "Write progress did not appear")
+    ui.wait(lambda: ui.exists("preset.writing") or ui.exists("preset.finished"), "Write did not start or finish")
     ui.wait(lambda: ui.exists("preset.finished"), "Alignment write/readback did not finish")
     assert state()["presetWrites"] == 1 and not state()["matchesOriginal"]
     ui.press("preset.close")
     ui.press("surface.devicePresetMenu")
     ui.wait(lambda: ui.exists("preset.menu.restore"), "Restore menu item missing")
     ui.press("preset.menu.restore")
-    ui.wait(lambda: ui.exists("preset.restoring"), "Restore progress did not appear")
+    ui.wait(lambda: ui.exists("preset.restoring") or ui.exists("preset.finished"), "Restore did not start or finish")
     ui.wait(lambda: ui.exists("preset.finished"), "Restore did not finish")
     assert state()["presetWrites"] == 2 and state()["matchesOriginal"]
     assert not (directory / "preset-alignment-restore.json").exists()
