@@ -1,0 +1,51 @@
+# 硬件连接确认：待做实机验证
+
+对应提交 `162f552`（feat(startup): confirm sync direction before writing to a connected BCR2000）。
+自动化测试已通过；以下实机步骤尚未执行（2026-11-12 暂缓）。结果记入 [实机记录](docs/HARDWARE_VALIDATION.md) 后删除本文件。
+
+## 前提
+
+- 本机配置在 `~/Library/Application Support/BCRAgentConsole/`。新版首次保存会把 `hardware-map.json`
+  从 v6 升到 v7，旧版 app 将无法读取；v6 备份在 `Backups/hardware-map.v6.before-162f552.json`。
+- 本机没有 `hardware-startup.json`，确认窗只有“写入并连接”“按硬件现状连接”“暂不连接”，不会出现“初始化并连接”。
+- 现有映射没有 `pressMode`，按键只会短暂闪一下，不测按住效果。
+- 构建：`python3 configs/macos_workflow.py build`；先退出旧版 app，并拔掉 BCR2000。
+
+## 步骤与预期
+
+全程重点观察：**确认前设备 LED 是否有任何变化**（不应有），以及确认窗是否出现。
+
+### A. 先开软件，再插设备
+
+1. 不插设备，`open build/app/BCRAgentConsole.app` → 不弹窗，保持 Mock。
+2. “设备”下拉框选“实体” → 黄色提示“尚未找到 BCR2000 Port 1，连接后需确认同步方向”，仍为 Mock。
+3. 插上 USB → 显示“检测到硬件，等待连接稳定…”，约 0.3 秒后弹出确认窗；设备 LED 不变。
+4. 点“暂不连接” → 保持 Mock，设备不变。
+
+### B. 读硬件
+
+1. 在设备上拧几个旋钮，让 LED 环停在不同位置。
+2. 下拉框选“实体”，在确认窗点“按硬件现状连接”，读取期间不碰旋钮
+   → 几秒内进入实体模式，软件旋钮值与 LED 环一致。
+3. 若约 6 秒后报“启动读取硬件失败”，记录下来：可能是预设中的 `.request off` 使读取请求失效。
+
+### C. 拔插
+
+1. 实体模式下拔 USB → 自动回到 Mock，面板上没有残留的按下状态。
+2. 重新插上 → 再次弹出确认窗，确认前设备不变。
+3. 点“写入并连接” → 设备 LED 环立即变为软件值，不切换预设。
+
+### D. 插着设备启动
+
+1. 退出 app，设备保持插着，再启动 → 约 0.3 秒后弹出确认窗，弹窗前设备不变。
+
+### E. 按键（可选）
+
+1. 实体模式下按几个按键和旋钮按下 → 面板对应按键闪一下，不触发 Agent。
+2. 按住按键时拔线，重插后 → 面板上没有残留的按下状态。
+
+## 仍需实测确定
+
+- `.request off` 是否影响下次“按硬件现状连接”的读取。
+- 配置 `hardware-startup.json` 后，切换预设后固定等待 150ms 是否足够（不够会在第一行设置超时）。
+- headless 服务（`BCRProviderService`）连接后仍自动整体回写，本次未改。
