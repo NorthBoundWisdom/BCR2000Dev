@@ -130,7 +130,7 @@ def package(output, configuration="release", skip_build=False):
     ).stdout
     (example / "control-contract.json").write_bytes(example_contract)
     example_discovery = json.loads(example_contract)["discovery"]
-    role_profile = json.loads((example / "chassis-roles.json").read_text())["profiles"][0]
+    role_profile = json.loads((example / "integrations/pipe/chassis-roles.json").read_text())["profiles"][0]
     if any(
         role_profile[field] != example_discovery["expected"][field]
         for field in ("profile_id", "profile_version", "mapping_revision")
@@ -174,12 +174,21 @@ def package(output, configuration="release", skip_build=False):
         "mapping_revision": discovery["expected"]["mapping_revision"],
         "simulation_examples": {
             "held_enable_axes": {
+                "kind": "generic",
                 "configuration": "examples/simulation/chassis-controls.json",
-                "roles": "examples/simulation/chassis-roles.json",
                 "contract": "examples/simulation/control-contract.json",
                 "readme": "examples/simulation/README.md",
                 "mapping_revision": example_discovery["expected"]["mapping_revision"],
-            }
+            },
+            "pipe_chassis_roles": {
+                "kind": "integration",
+                "consumer": "pipe",
+                "public_contract": False,
+                "roles": "examples/simulation/integrations/pipe/chassis-roles.json",
+                "readme": "examples/simulation/integrations/pipe/README.md",
+                "configuration": "examples/simulation/chassis-controls.json",
+                "mapping_revision": example_discovery["expected"]["mapping_revision"],
+            },
         },
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "surface_plugins_files_sha256": {

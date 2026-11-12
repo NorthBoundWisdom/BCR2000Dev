@@ -119,8 +119,7 @@ cannot be combined with `--simulation-profile`, a configuration seed, hardware m
 hardware source or a disabled console. `--describe-surface` uses the supplied file without opening
 devices or listening on a port. Invalid files fail before credentials or user persistence are read.
 
-See [the held-enable, axes and feedback example](../examples/simulation/README.md) and its pinned
-consumer role mapping. Both modes use the same accepted-input/momentary rule for holds. The default contract 1.2
+See [the held-enable, axes and feedback example](../examples/simulation/README.md) and optional consumer mappings under its `integrations/<consumer>/` directory. Both modes use the same accepted-input/momentary rule for holds. The default contract 1.2
 mapping revision is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
 overly broad holds, and the previous 1.1 revision `2813b4891860c6da` remains
 verified by reconstructing its historical button hold declarations and removing the later
@@ -210,9 +209,13 @@ copied byte for byte from the materialized `build/seed/SurfacePlugins`:
 `--simulation-profile` configuration, printed by the delivered binary's `--describe-surface`
 (placeholder instance and epoch; a live instance is still pinned through discovery).
 
-The delivery also includes `examples/simulation/` with the configurable parameters, role mapping,
-README and a separately generated `control-contract.json`. Both manifests' `simulation_examples`
-entry pins those paths and the example mapping revision `3d93301a62d6f9b6`. The top-level
+The delivery also includes `examples/simulation/` with the generic configurable parameters,
+README and a separately generated `control-contract.json`. The optional Pipe role mapping and its
+read-only assembly check documentation live in `examples/simulation/integrations/pipe/`.
+They use a consumer-owned schema, are outside the public delivery convention, and may become
+stale when the consumer format changes. Both manifests' `simulation_examples` distinguish the
+`kind: generic` configuration from `kind: integration`, `consumer: pipe`, `public_contract: false`
+role mapping. Both pin the example mapping revision `3d93301a62d6f9b6`. The top-level
 `mapping_revision` continues to describe the default profile (`ef0e106767594759`). Packaging rejects
 an example role pin that does not match the delivered executable's description.
 

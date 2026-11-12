@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--provider", type=Path, required=True)
     parser.add_argument("--configuration", type=Path, default=ROOT / "examples/simulation/chassis-controls.json")
-    parser.add_argument("--roles", type=Path, default=ROOT / "examples/simulation/chassis-roles.json")
+    parser.add_argument("--roles", type=Path, default=ROOT / "examples/simulation/integrations/pipe/chassis-roles.json")
     parser.add_argument("--pipe-root", type=Path, default=Path.home() / "Documents/RobimPipe/robimweld_pipe")
     parser.add_argument("--sdk", type=Path, default=ROOT / "build/seed/SurfacePlugins/clients/python")
     args = parser.parse_args()

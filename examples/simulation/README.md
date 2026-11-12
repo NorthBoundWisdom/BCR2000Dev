@@ -41,27 +41,9 @@ persistence or fallback is performed for this simulation input file.
 Both simulation modes declare hold leases only on buttons accepting input with a momentary binding.
 The default `--simulation-profile` contract 1.2 mapping revision is `ef0e106767594759`
 (former 1.2: `bd169e1fddae247e`; former 1.1: `2813b4891860c6da`).
-This example's contract 1.2 mapping revision is **`3d93301a62d6f9b6`**, pinned in `chassis-roles.json`.
+This example's contract 1.2 mapping revision is **`3d93301a62d6f9b6`**.
 The example's former 1.1 revision was `2b2ae6638f08af35`. All seven assigned controls declare
 `accepts_input: true`; every other unbound control declares false.
-The role mapping is consumer-owned; it conveys simulation roles and no hardware authority.
-
-Read-only Pipe assembly check (does not start Pipe, import with bytecode writing disabled):
-
-```sh
-python3 -B configs/verify_simulation_roles.py --provider build/swiftpm/debug/BCRProviderService
-```
-
-Use `--pipe-root` if the consumer checkout is elsewhere, and `--sdk` to select the verified SDK.
-Missing Pipe source is reported as SKIP. An incompatible consumer is reported as a failure with its
-actual error; the check does not change the consumer or patch its version/capability tables.
-
-The current Pipe consumer was verified against this example under contract 1.1 before the upgrade.
-Its existing contract allowlist contains only 1.1, and its capability vocabulary lacks
-`feedback.unsequenced` and `controls.input_declared`. With the supplied 1.2 mapping it currently
-rejects assembly as `invalid_mapping_config: Unsupported contract version allowlist`. The consumer
-must add contract 1.2 support, both capabilities and the new profile/mapping pins before using this
-delivery. No consumer source or validation table is patched by this repository.
-The remaining consumer updates include `delivery.py`'s fixed SDK_VERSION (currently 1.1.0),
-`chassis_roles.schema.json`'s contract version enum (currently only 1.1), and its reviewed profile
-version/mapping pins. These are consumer-owned changes; the supplied SDK itself is 1.2.0.
+Consumer-specific assembly mappings and checks belong under `integrations/<consumer>/`.
+They are optional integration examples, outside the public delivery convention; consumer format
+changes can make them stale. The simulation configuration above remains a generic host example.
