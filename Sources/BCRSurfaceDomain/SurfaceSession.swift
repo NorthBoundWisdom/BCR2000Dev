@@ -27,6 +27,7 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
     case pageChanged
     case connected(MIDIConnectionSnapshot)
     case touched(BCRControlID)
+    case buttonActivity(BCRControlID)
     case learningInterruptedByConfiguration(BCRControlID)
     case learned(BCRControlID, MIDIControlID, next: BCRControlID?)
     case learnRejected(BCRControlID, HardwareBindingError)
@@ -494,6 +495,11 @@ public final class SurfaceSession {
                 if (learnFormat == .nrpn14) != isNRPN { continue }
             }
             let control = map.control(for: message.controlID)
+            if engine.learnTarget == nil, let control, !control.isContinuous,
+               !engine.isFeedbackEcho(message, at: now())
+            {
+                onEvent?(.buttonActivity(control))
+            }
             if engine.learnTarget == nil, let control { onEvent?(.touched(control)) }
             guard inputGeneration == inputEvents.generation else { continue }
             let previousCount = control.map { engine.state(of: $0).eventCount }

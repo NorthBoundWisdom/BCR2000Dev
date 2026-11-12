@@ -183,6 +183,7 @@ public struct SurfaceEngine: Sendable {
         guard let control = hardwareMap.control(for: midi) else {
             return [.unmappedInput(midi)]
         }
+        guard !hardwareMap.isVisualizationOnly(control) else { return [] }
         record(control, value: value, direction: .input, rawValue: message.dataValue)
         if control.isContinuous, let assignment = configuration.assignment(for: control),
            case let .parameter(id) = assignment.target, let definition = configuration.parameter(id)
@@ -725,6 +726,7 @@ public struct SurfaceEngine: Sendable {
             let presentation = hardwareMap.midi(for: control)?
                 .kind == .nrpn ? UInt8((Double(raw) * 127 / 16383).rounded()) : value
             record(control, value: presentation, direction: .output, rawValue: raw)
+            guard !hardwareMap.isVisualizationOnly(control) else { return nil }
             guard let midi = hardwareMap.midi(for: control) else {
                 return nil
             }

@@ -6,6 +6,7 @@ struct ControlPresentation {
     let control: BCRControlID
     let value: UInt8
     let ringLEDs: Set<Int>?
+    let hardwarePressed: Bool
     let label: String?
     let detail: String?
     let accent: Color
@@ -62,6 +63,8 @@ extension ConsoleViewModel {
             value: displayValue(of: control),
             ringLEDs: source == .mock ? mock.ringLEDs(of: control)
                 : engine.hardwareMap.ringMode(for: control)?.litLEDs(value: displayValue(of: control)),
+            hardwarePressed: hardwarePressedControls.contains(control.section == .pushEncoder
+                ? .pushEncoderButton(group: control.row, control.index) : control),
             label: label,
             detail: detail,
             accent: accent,
@@ -345,6 +348,9 @@ private struct KnobCell: View {
                     .overlay { Circle().stroke(Color.white.opacity(0.12)) }
                     .frame(width: m(38), height: m(38))
                     .shadow(color: .black.opacity(0.6), radius: 3, y: 2)
+                    .scaleEffect(presentation.hardwarePressed ? 0.92 : 1)
+                    .offset(y: presentation.hardwarePressed ? m(1.5) : 0)
+                    .animation(.easeOut(duration: 0.1), value: presentation.hardwarePressed)
                 Capsule()
                     .fill(Color.white.opacity(0.85))
                     .frame(width: m(2.5), height: m(11))
@@ -421,7 +427,7 @@ private struct PadCell: View {
             RoundedRectangle(cornerRadius: m(6))
                 .fill(
                     LinearGradient(
-                        colors: isDown ? [Color(white: 0.22), Color(white: 0.16)] : [
+                        colors: isDown || presentation.hardwarePressed ? [Color(white: 0.22), Color(white: 0.16)] : [
                             Color(white: 0.30),
                             Color(white: 0.18)
                         ],
@@ -438,7 +444,13 @@ private struct PadCell: View {
                         .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 4)
                 }
                 .frame(width: m(52), height: m(28))
-                .scaleEffect(isDown ? 0.95 : 1)
+                .scaleEffect(isDown || presentation.hardwarePressed ? 0.94 : 1)
+                .offset(y: isDown || presentation.hardwarePressed ? m(1.5) : 0)
+                .overlay {
+                    RoundedRectangle(cornerRadius: m(6))
+                        .stroke(Color.white.opacity(presentation.hardwarePressed ? 0.5 : 0), lineWidth: 1.5)
+                }
+                .animation(.easeOut(duration: 0.1), value: isDown || presentation.hardwarePressed)
                 .modifier(PressGesture(isDown: $isDown, onPress: onPress, onRelease: onRelease))
             CellLabels(presentation: presentation)
         }
@@ -471,7 +483,12 @@ private struct PushButtonCell: View {
         }
         .foregroundStyle(presentation.label == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(presentation.accent))
         .frame(width: m(70), height: m(16))
-        .background(isDown ? Color.white.opacity(0.16) : Color.black.opacity(0.3), in: Capsule())
+        .background(
+            isDown || presentation.hardwarePressed ? Color.white.opacity(0.25) : Color.black.opacity(0.3),
+            in: Capsule()
+        )
+        .scaleEffect(isDown || presentation.hardwarePressed ? 0.94 : 1)
+        .animation(.easeOut(duration: 0.1), value: isDown || presentation.hardwarePressed)
         .overlay {
             Capsule().stroke(
                 presentation.isLearnTarget ? Theme.learn

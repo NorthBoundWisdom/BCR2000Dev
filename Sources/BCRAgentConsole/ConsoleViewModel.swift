@@ -64,6 +64,8 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var visibleGroup = 1
     private(set) var observedHardwareGroup: Int?
     @Published private(set) var readingStartupSnapshot = false
+    @Published private(set) var hardwarePressedControls: Set<BCRControlID> = []
+    private var pressTasks: [BCRControlID: Task<Void, Never>] = [:]
     private var startupSnapshotTask: Task<Void, Never>?
     private var attemptedStartupSnapshot = false
     private let startupHardwareMap: HardwareMap
@@ -315,6 +317,8 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func selectSource(_ newSource: DeviceSource) {
+        for task in pressTasks.values { task.cancel() }
+        pressTasks.removeAll(); hardwarePressedControls.removeAll()
         startupSnapshotTask?.cancel()
         startupSnapshotTask = nil
         readingStartupSnapshot = false
@@ -646,6 +650,15 @@ final class ConsoleViewModel: ObservableObject {
             }
             guard followsTouch else { return }
             pendingTouchedControl = control
+        case let .buttonActivity(control):
+            guard source == .hardware else { return }
+            pressTasks[control]?.cancel()
+            hardwarePressedControls.insert(control)
+            pressTasks[control] = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
+                self?.hardwarePressedControls.remove(control)
+                self?.pressTasks[control] = nil
+            }
         case let .learningInterruptedByConfiguration(control):
             let previous = notice?.text ?? ""
             notice = ConsoleNotice(level: notice?.level ?? .info,

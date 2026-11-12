@@ -37,7 +37,7 @@ final class LEDRingTests: XCTestCase {
         let old = HardwareMap(version: 4, entries: [.init(control: .encoder(row: 1, 1),
                                                           midi: .init(kind: .controlChange, channel: 0, number: 1))])
         let decoded = try JSONDecoder().decode(HardwareMap.self, from: JSONEncoder().encode(old)).migrated()
-        XCTAssertEqual(decoded.version, 5)
+        XCTAssertEqual(decoded.version, HardwareMap.currentVersion)
         XCTAssertEqual(decoded.entries, old.entries)
         XCTAssertNil(decoded.ringMode(for: .encoder(row: 1, 1)))
     }

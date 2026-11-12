@@ -5,6 +5,16 @@ import Foundation
 struct BCRProfileTool {
     static func main() throws {
         let args = CommandLine.arguments
+        if args.count == 4, args[1] == "--buttons" {
+            let result = try ProfileConversion.prepareButtons(
+                capture: URL(fileURLWithPath: args[2]),
+                profile: URL(fileURLWithPath: args[3])
+            )
+            print(
+                "Staged \(result.mappings) mappings; \(result.missing) unconfigured and \(result.unsupported) unsupported buttons; original profile unchanged"
+            )
+            return
+        }
         guard args.count == 3 else { throw NSError(
             domain: "BCRProfileTool",
             code: 2,

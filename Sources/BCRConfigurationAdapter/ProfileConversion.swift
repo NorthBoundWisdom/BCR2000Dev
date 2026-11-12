@@ -4,6 +4,24 @@ import Foundation
 
 /// Offline conversion of explicitly captured device data; no device writes or source layout contract.
 public enum ProfileConversion {
+    public static func prepareButtons(capture: URL,
+                                      profile: URL) throws -> (mappings: Int, missing: Int, unsupported: Int)
+    {
+        let map = try JSONDecoder().decode(
+            HardwareMap.self,
+            from: Data(contentsOf: profile.appending(path: "hardware-map.json"))
+        )
+        let plan = try BCRPresetButtonLearning.prepare(
+            dump: Data(contentsOf: capture.appending(path: "current-preset.syx")),
+            existingMap: map
+        )
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let destination = capture.appending(path: "learned-button-hardware-map.json")
+        try encoder.encode(plan.hardwareMap).write(to: destination, options: .withoutOverwriting)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        return (plan.hardwareMap.boundCount, plan.unconfigured.count, plan.unsupported.count)
+    }
+
     private struct SnapshotEntry: Decodable { let channel: UInt8; let number: UInt8; let value: UInt8 }
     public static func prepare(capture: URL, profile: URL) throws -> (mappings: Int, parameters: Int) {
         let decoder = JSONDecoder()

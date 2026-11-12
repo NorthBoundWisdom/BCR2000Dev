@@ -724,3 +724,5 @@
 "查看分组" = "VIEW GROUP";
 "最后输入组 {0}" = "Last input group {0}";
 "硬件组未确认" = "Hardware group unknown";
+"按压预览绑定只能用于按钮" = "Press-preview bindings are only valid for buttons";
+"此硬件按键仅显示按压；重新学习后才启用所分配的功能。" = "This hardware button only shows press feedback. Learn it again to enable its assigned action.";

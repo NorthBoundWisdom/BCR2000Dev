@@ -106,7 +106,7 @@ public enum BCRPresetEncoderLearning {
         return Plan(hardwareMap: map, configuration: result)
     }
 
-    private static func decodeLines(_ data: Data) throws -> [String] {
+    static func decodeLines(_ data: Data) throws -> [String] {
         guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { throw Failure.invalid(L10n.text("预设大小无效")) }
         let bytes = Array(data)
         var offset = 0

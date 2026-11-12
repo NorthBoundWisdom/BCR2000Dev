@@ -5,11 +5,18 @@ public struct HardwareMapEntry: Hashable, Codable, Sendable {
     public let control: BCRControlID
     public let midi: MIDIControlID
     public let ringMode: LEDRingMode?
+    public let visualizationOnly: Bool?
 
-    public init(control: BCRControlID, midi: MIDIControlID, ringMode: LEDRingMode? = nil) {
+    public init(
+        control: BCRControlID,
+        midi: MIDIControlID,
+        ringMode: LEDRingMode? = nil,
+        visualizationOnly: Bool = false
+    ) {
         self.control = control
         self.midi = midi
         self.ringMode = ringMode
+        self.visualizationOnly = visualizationOnly ? true : nil
     }
 }
 
@@ -37,7 +44,8 @@ public struct HardwareMap: Equatable, Codable, Sendable {
     /// Version 4 adds 14-bit NRPN identities; v3 is migrated without losing bindings.
     /// Version 3 replaces the slot-only `ControllerProfile` with a full physical surface map.
     /// Version 5 preserves explicitly learned LED display modes; old maps retain unknown modes.
-    public static let currentVersion = 5
+    /// Version 6 adds button observations that cannot execute functions or send feedback.
+    public static let currentVersion = 6
 
     public var version: Int
     public private(set) var entries: [HardwareMapEntry]
@@ -68,13 +76,17 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         entries.first { $0.control == control }?.ringMode
     }
 
+    public func isVisualizationOnly(_ control: BCRControlID) -> Bool {
+        entries.first { $0.control == control }?.visualizationOnly == true
+    }
+
     public func control(for midi: MIDIControlID) -> BCRControlID? {
         entries.first { $0.midi == midi }?.control
     }
 
     /// Binds `control` to `midi`, replacing an earlier binding of the same control.
     public mutating func bind(
-        _ control: BCRControlID, to midi: MIDIControlID, ringMode: LEDRingMode? = nil
+        _ control: BCRControlID, to midi: MIDIControlID, ringMode: LEDRingMode? = nil, visualizationOnly: Bool = false
     ) throws(HardwareBindingError) {
         if control.isContinuous, midi.kind == .note {
             throw HardwareBindingError.encoderRequiresControlChange(control)
@@ -85,7 +97,13 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         var candidate = self
         candidate.entries.removeAll { $0.control == control }
         let mode = ringMode ?? (self.midi(for: control) == midi ? self.ringMode(for: control) : nil)
-        candidate.entries.append(HardwareMapEntry(control: control, midi: midi, ringMode: mode))
+        if visualizationOnly && control.isContinuous { throw .invalidMap(L10n.text("按压预览绑定只能用于按钮")) }
+        candidate.entries.append(HardwareMapEntry(
+            control: control,
+            midi: midi,
+            ringMode: mode,
+            visualizationOnly: visualizationOnly
+        ))
         candidate.entries.sort { $0.control < $1.control }
         do { try candidate.validate() } catch { throw .invalidMap(error.localizedDescription) }
         self = candidate

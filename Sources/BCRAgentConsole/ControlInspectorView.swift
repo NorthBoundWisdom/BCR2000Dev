@@ -70,6 +70,9 @@ struct ControlInspectorView: View {
                 Label(midi.description, systemImage: "checkmark.circle.fill")
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.green)
+                if model.engine.hardwareMap.isVisualizationOnly(control) {
+                    FieldNote(L10n.text("此硬件按键仅显示按压；重新学习后才启用所分配的功能。"))
+                }
             } else {
                 Label(L10n.text("未学习"), systemImage: "questionmark.circle")
                     .foregroundStyle(.orange)
