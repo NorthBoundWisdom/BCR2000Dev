@@ -62,3 +62,6 @@ Its existing contract allowlist contains only 1.1, and its capability vocabulary
 rejects assembly as `invalid_mapping_config: Unsupported contract version allowlist`. The consumer
 must add contract 1.2 support, both capabilities and the new profile/mapping pins before using this
 delivery. No consumer source or validation table is patched by this repository.
+The remaining consumer updates include `delivery.py`'s fixed SDK_VERSION (currently 1.1.0),
+`chassis_roles.schema.json`'s contract version enum (currently only 1.1), and its reviewed profile
+version/mapping pins. These are consumer-owned changes; the supplied SDK itself is 1.2.0.

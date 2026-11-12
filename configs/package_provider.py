@@ -114,6 +114,28 @@ def package(output, configuration="release", skip_build=False):
     shutil.copytree(
         ROOT / "Clients/Python/examples", output / "examples", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
+    # The configurable example is a separate mapping; the top-level manifest remains the default profile.
+    example = output / "examples/simulation"
+    shutil.copytree(ROOT / "examples/simulation", example)
+    example_contract = subprocess.run(
+        [
+            str(output / "BCRProviderService"),
+            "--simulation-configuration",
+            str(example / "chassis-controls.json"),
+            "--describe-surface",
+        ],
+        check=True,
+        capture_output=True,
+        cwd=output,
+    ).stdout
+    (example / "control-contract.json").write_bytes(example_contract)
+    example_discovery = json.loads(example_contract)["discovery"]
+    role_profile = json.loads((example / "chassis-roles.json").read_text())["profiles"][0]
+    if any(
+        role_profile[field] != example_discovery["expected"][field]
+        for field in ("profile_id", "profile_version", "mapping_revision")
+    ):
+        raise ValueError("Simulation example role mapping pin differs from the delivered binary")
     shutil.copy2(ROOT / "Clients/Python/README.md", output / "SDK_README.md")
     shutil.copytree(
         ROOT / "Support/NativeDiagnostics",
@@ -150,6 +172,15 @@ def package(output, configuration="release", skip_build=False):
         "profile_id": discovery["profile"]["id"],
         "profile_version": discovery["profile"]["version"],
         "mapping_revision": discovery["expected"]["mapping_revision"],
+        "simulation_examples": {
+            "held_enable_axes": {
+                "configuration": "examples/simulation/chassis-controls.json",
+                "roles": "examples/simulation/chassis-roles.json",
+                "contract": "examples/simulation/control-contract.json",
+                "readme": "examples/simulation/README.md",
+                "mapping_revision": example_discovery["expected"]["mapping_revision"],
+            }
+        },
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "surface_plugins_files_sha256": {
             source: hashlib.sha256((shared / source).read_bytes()).hexdigest()

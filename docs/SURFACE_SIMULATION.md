@@ -206,6 +206,12 @@ copied byte for byte from the materialized `build/seed/SurfacePlugins`:
 `--simulation-profile` configuration, printed by the delivered binary's `--describe-surface`
 (placeholder instance and epoch; a live instance is still pinned through discovery).
 
+The delivery also includes `examples/simulation/` with the configurable parameters, role mapping,
+README and a separately generated `control-contract.json`. Both manifests' `simulation_examples`
+entry pins those paths and the example mapping revision `3d93301a62d6f9b6`. The top-level
+`mapping_revision` continues to describe the default profile (`bd169e1fddae247e`). Packaging rejects
+an example role pin that does not match the delivered executable's description.
+
 The delivery has two manifests that describe the same files:
 
 - `manifest.json` is the pin. It keeps every Provider 1.0 field unchanged (`artifact:
