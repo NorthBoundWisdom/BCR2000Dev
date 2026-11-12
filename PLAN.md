@@ -245,3 +245,21 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 - Swift 五包 525 项、失败 0；BuildWorkflow 76 项、失败 0；边界和 App build 通过。
   现有测试断言未改，保护参数定义未改。初轮脚本尝试修改使能定义被正确拒绝，另一次误选样本分组，修正脚本后通过。
 - 与初稿偏离：自查时发现上述同类漏点，按 A2 的“剩余界面”目标一并补齐，未引入名称存储或业务逻辑变化。
+
+### A7 — `21b8ea4`
+
+- 改动：PLAN、TODO、HARDWARE_CONNECT_TEST、CONTROL_MAP、UI_ACCEPTANCE 同步现状并删除 UI_POLISH。
+  远端 USB/签署证据保留在 C1；原 13 的 A–E、G 及 F 剩余项保留在 B 组和连接清单；原 12 由 A5 完成。
+- 验证：最终 Swift 五包 525 项、失败 0（PluginHost 11、AgentCore 271、AgentConsole 158、ProviderDomain 26、
+  ProviderAdapter 59）；BuildWorkflow 76 项、Python SDK 6 项，失败均 0。边界、全仓格式、命令校验、
+  双语 strings lint、最终 App 双语 1200×760 startup smoke、相关本地 Markdown 链接检查全部通过。
+- 未验证：B–D 的设备、驱动签署、真实 LED/显示屏计时与初始化连接分支仍按文中标记待做。没有把假设备当作实机证据。
+- 执行记录在下一次文档提交补齐上一提交的真实编号，避免自引用提交号；此记录提交只补元数据，不改变实现。
+
+### 最终交接
+
+- A1–A7 完成；A2 和 A4 的补充分别独立提交为 153c0a3、ec225b4，过程与验证见上。
+- 本轮全部工作在 main；与远端同步到 6acc14b，锁定依赖 6071354e454bf1c5584e4608aa4ecf022c58238a。
+  保留模拟侧所有提交，没有修改 Schemas/Clients/模拟实现，没有 push、tag 或真实 MIDI/SysEx IO。
+- 审查入口：逐项提交、两项补充及本执行记录；README 六张图片均为应用自身窗口，四张 Mock、两张内存假设备。
+  A2 补充只改变英文内置名称显示，中文截图仍对应最终布局。
