@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     artifact = args.artifact.resolve()
+    args.output = args.output.resolve()
     args.output.mkdir(parents=True, mode=0o700, exist_ok=False)
     manifest_path = artifact / "manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -37,14 +38,14 @@ def main():
         assert not Path(name).is_absolute() and ".." not in Path(name).parts
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
-    assert manifest["surface_control_contract"] == "1.2" and manifest["surface_control_sdk"] == "1.2.0"
-    sdk = artifact / "surface-control-sdk-1.2.0.zip"
+    assert manifest["surface_control_contract"] == "1.3" and manifest["surface_control_sdk"] == "1.3.0"
+    sdk = artifact / "surface-control-sdk-1.3.0.zip"
     sys.path.insert(0, str(sdk))
     import surface_control
     from surface_control import Client, CommandCursor, SurfaceError
 
     # The delivered SDK is the locked shared package source, byte for byte.
-    assert surface_control.__version__ == "1.2.0" and surface_control.__file__.startswith(str(sdk) + "/")
+    assert surface_control.__version__ == "1.3.0" and surface_control.__file__.startswith(str(sdk) + "/")
 
     cases = []
     hosts = []
@@ -62,7 +63,9 @@ def main():
             raise AssertionError("Expected a stable rejection")
 
     class Host:
-        def __init__(self, name, *, port=0, allow=True, configuration=None):
+        def __init__(
+            self, name, *, port=0, allow=True, configuration=None, principal=None, write_limits=None, aggregate=1000
+        ):
             self.token = secrets.token_hex(32)
             self.error = (args.output / (name + ".stderr.log")).open("w")
             self.process = subprocess.Popen(
@@ -77,8 +80,8 @@ def main():
                     ),
                     "--surface-instance-id",
                     "transport." + name.split("-")[0],
-                    "--write-limit",
-                    "1000",
+                    *(["--write-limits", write_limits] if write_limits else ["--write-limit", str(aggregate)]),
+                    *(["--surface-principal-file", str(principal)] if principal else []),
                     "--allow-device-control",
                     "--allow-simulation-control",
                     "--token-stdin",
@@ -123,7 +126,7 @@ def main():
 
     mapping = {name: "simulation." + name for name in ("arm", "start", "pause", "cancel")}
     try:
-        example = Path(__file__).resolve().parents[1] / "examples/simulation/chassis-controls.json"
+        example = artifact / "examples/simulation/chassis-controls.json"
         configured = Host("configured", configuration=example)
         profile = configured.client.discover()["profile"]
         rows = {row["id"]: row for row in profile["controls"]}
@@ -210,15 +213,15 @@ def main():
         thread = threading.Thread(target=feedback_writer, daemon=True)
         thread.start()
         assert initial_written.wait(5) and not writer_errors
-        rejected(lambda: client.input("pushEncoder.1.1", "scalar", 80), "stale_sequence")
+        rejected(lambda: client.input("pushEncoder.1.1", "scalar", 80, cas="global"), "stale_sequence")
         stale_rejections = 1
         client.refresh_sequence()
-        assert client.input("pushEncoder.1.1", "scalar", 80)["disposition"] == "accepted"
+        assert client.input("pushEncoder.1.1", "scalar", 80, cas="global")["disposition"] == "accepted"
         continue_writes.set()
         for index in range(24):
             while True:
                 try:
-                    result = client.input("pushEncoder.1.1", "scalar", 81 + index % 2)
+                    result = client.input("pushEncoder.1.1", "scalar", 81 + index % 2, cas="global")
                     assert result["disposition"] == "accepted"
                     break
                 except SurfaceError as error:
@@ -236,6 +239,178 @@ def main():
             input_accepted=25,
             stale_sequence_rejections=stale_rejections,
         )
+        client.reset()
+        writer = Client(first.ready["url"], first.token, "transport.a")
+        writer.discover()
+        auto_feedback, auto_errors = [], []
+
+        def auto_feedback_writer():
+            try:
+                for index in range(25):
+                    auto_feedback.append(writer.feedback("button.1.1", "indicator", "on" if index % 2 else "off"))
+                    time.sleep(0.006)
+            except Exception as error:
+                auto_errors.append(type(error).__name__)
+
+        auto_thread = threading.Thread(target=auto_feedback_writer, daemon=True)
+        auto_thread.start()
+        auto_inputs = []
+        for index in range(25):
+            auto_inputs.append(client.input("pushEncoder.1.1", "scalar", 80 + index % 2))
+            time.sleep(0.004)
+        auto_thread.join(timeout=5)
+        assert not auto_thread.is_alive() and not auto_errors and len(auto_feedback) == 25
+        after_auto = client.snapshot()
+        assert after_auto["latest_sequence"] == "50" and after_auto["latest_input_sequence"] == "25"
+        assert all(event["disposition"] == "accepted" for event in auto_inputs)
+        page_auto = client.call(
+            "surface_control_events",
+            {
+                "instance_id": client.instance_id,
+                "epoch": client.expected["epoch"],
+                "after_sequence": "0",
+                "limit": 1024,
+            },
+        )
+        assert [event["sequence"] for event in page_auto["events"]] == [str(i) for i in range(1, 51)]
+        assert len({event["writer_id"] for event in page_auto["events"]}) == 1
+        passed(
+            "independent_input_cas_during_feedback_and_continuous_journal",
+            feedback_accepted=25,
+            input_accepted=25,
+            input_sequence="25",
+            journal_sequence="50",
+        )
+
+        principal = args.output / "principals.json"
+        identity = Host("identity-one", principal=principal)
+        record = json.loads(principal.read_text())
+        assert principal.stat().st_mode & 0o7777 == 0o600
+        assert set(record) == {"schema_version", "remote_writer_id", "interface_writer_id", "system_writer_id"}
+        event_one = identity.client.input("pushEncoder.1.1", "scalar", 100)
+        peer = Client(identity.ready["url"], identity.token, "transport.identity")
+        peer.discover()
+        event_peer = peer.input("pushEncoder.1.1", "scalar", 101)
+        assert event_one["writer_id"] == event_peer["writer_id"] == record["remote_writer_id"]
+        identity.stop()
+        restarted = Host("identity-two", principal=principal)
+        assert restarted.token != identity.token
+        assert restarted.client.expected["epoch"] != identity.client.expected["epoch"]
+        event_restarted = restarted.client.input("button.1.3", "boolean", True, hold_s=0.1)
+        assert event_restarted["writer_id"] == event_one["writer_id"]
+        rejected(
+            lambda: restarted.client.call(
+                "surface_control_input",
+                {
+                    "expected": restarted.client.expected,
+                    "expected_input_sequence": restarted.client.latest_input_sequence,
+                    "control_id": "button.1.3",
+                    "encoding": "boolean",
+                    "value": False,
+                    "writer_id": record["system_writer_id"],
+                },
+            ),
+            "invalid_argument",
+        )
+        held_input_sequence = restarted.client.latest_input_sequence
+        time.sleep(0.2)
+        identity_page = restarted.client.call(
+            "surface_control_events",
+            {
+                "instance_id": restarted.client.instance_id,
+                "epoch": restarted.client.expected["epoch"],
+                "after_sequence": "0",
+                "limit": 1024,
+            },
+        )
+        assert identity_page["events"][-1]["reason"] == "hold_expired"
+        assert identity_page["events"][-1]["writer_id"] == record["system_writer_id"] != record["remote_writer_id"]
+        rejected(
+            lambda: restarted.client.call(
+                "surface_control_input",
+                {
+                    "expected": restarted.client.expected,
+                    "expected_input_sequence": held_input_sequence,
+                    "control_id": "button.1.3",
+                    "encoding": "boolean",
+                    "value": True,
+                },
+            ),
+            "stale_input_sequence",
+        )
+        restarted.stop()
+        passed("trusted_writer_across_connections_restart_and_credential_rotation_with_system_expiry")
+        never_created = args.output / "must-not-create-principals.json"
+        failed_auth = subprocess.run(
+            [
+                str(artifact / "BCRProviderService"),
+                "--simulation-profile",
+                "--surface-principal-file",
+                str(never_created),
+                "--token-stdin",
+            ],
+            input=b"invalid",
+            capture_output=True,
+            timeout=5,
+        )
+        assert failed_auth.returncode == 2 and not never_created.exists()
+        for options in [
+            ["--write-limits", "input=1"],
+            ["--write-limits", "input=1,feedback=1,renew=1,admin=0"],
+            ["--write-limits", "input=1,feedback=1,renew=1,admin=1,input=2"],
+            ["--write-limits", "input=1,feedback=1,renew=1,admin=1", "--write-limit", "1"],
+        ]:
+            invalid = subprocess.run(
+                [str(artifact / "BCRProviderService"), "--simulation-profile", "--describe-surface", *options],
+                capture_output=True,
+                timeout=5,
+            )
+            assert invalid.returncode == 2
+        description = subprocess.run(
+            [
+                str(artifact / "BCRProviderService"),
+                "--simulation-profile",
+                "--describe-surface",
+                "--surface-principal-file",
+                str(never_created),
+            ],
+            capture_output=True,
+            timeout=5,
+        )
+        assert description.returncode == 0 and not never_created.exists()
+        passed("principal_creation_after_auth_only_and_strict_category_startup_flags")
+
+        category = Host("category", write_limits="input=3,feedback=1,renew=1,admin=1")
+        c = category.client
+        d = c.discover()
+        assert d["write_limits"] == {
+            "window_s": 1,
+            "input_per_window": 3,
+            "feedback_per_window": 1,
+            "renew_per_window": 1,
+            "admin_per_window": 1,
+        }
+        rejected(lambda: c.feedback("button.1.1", "indicator", "invalid"), "invalid_value")
+        c.feedback("button.1.1", "indicator", "on")
+        rejected(lambda: c.feedback("button.1.1", "indicator", "off"), "rate_limited")
+        c.input("button.1.3", "boolean", True, hold_s=0.1)
+        c.renew("button.1.3", 0.1)
+        rejected(lambda: c.renew("button.1.3", 0.1), "rate_limited")
+        c.input("button.1.3", "boolean", False)
+        c.input("button.1.3", "boolean", True, hold_s=0.1)
+        rejected(lambda: c.input("pushEncoder.1.1", "scalar", 100), "rate_limited")
+        time.sleep(0.2)
+        assert c.snapshot()["inputs"]["button.1.3"] is False
+        c.reset()
+        rejected(c.reset, "rate_limited")
+        category.stop()
+        aggregate = Host("aggregate", aggregate=1)
+        assert "write_limits" not in aggregate.client.discover()
+        aggregate.client.feedback("button.1.1", "indicator", "on")
+        rejected(lambda: aggregate.client.input("pushEncoder.1.1", "scalar", 100), "rate_limited")
+        aggregate.stop()
+        passed("independent_category_limits_rest_expiry_and_legacy_aggregate_budget")
+
         held = client.input("button.1.3", "boolean", True, hold_s=0.4)
         assert held["disposition"] == "accepted" and held["hold_deadline"] == held["time"] + 0.4
         sequence = client.latest_sequence

@@ -34,6 +34,9 @@ private struct Options {
     var surfaceInstanceID: String?
     var surfacePermissions = BCRSurfaceControlAdapter.Permissions()
     var permissions = MCPPermissions()
+    var surfacePrincipalFile: URL?
+    var surfaceWriteLimits: BCRSurfaceControlAdapter.WriteLimits?
+    var aggregateWriteLimitSpecified = false
     static func parse(_ arguments: [String]) throws -> Options {
         var result = Options(); var i = 0
         func value() throws -> String {
@@ -81,7 +84,15 @@ private struct Options {
             case "--hardware-map": result.hardwareMap = URL(fileURLWithPath: try value()).standardizedFileURL
             case "--export-contract": result.exportContract = URL(fileURLWithPath: try value(), isDirectory: true)
                 .standardizedFileURL
+            case "--surface-principal-file":
+                guard result.surfacePrincipalFile == nil
+                else { throw BootError(reason: "Repeated principal file option") }
+                result.surfacePrincipalFile = URL(fileURLWithPath: try value()).standardizedFileURL
+            case "--write-limits":
+                guard result.surfaceWriteLimits == nil else { throw BootError(reason: "Repeated write limits option") }
+                result.surfaceWriteLimits = try BCRSurfaceControlAdapter.parseWriteLimits(value())
             case "--write-limit":
+                result.aggregateWriteLimitSpecified = true
                 guard let limit = Int(try value()),
                       (1 ... 10000).contains(limit)
                 else { throw BootError(reason: "Invalid write limit") }; result.permissions
@@ -89,6 +100,16 @@ private struct Options {
             default: throw BootError(reason: "Unknown provider service option; use --help")
             }
             i += 1
+        }
+        guard !(result.aggregateWriteLimitSpecified && result.surfaceWriteLimits != nil) else {
+            throw BootError(reason: "--write-limit and --write-limits are mutually exclusive")
+        }
+        guard (result.surfacePrincipalFile == nil && result.surfaceWriteLimits == nil) || result
+            .usesSimulationConfiguration
+        else {
+            throw BootError(
+                reason: "Surface principal and category limits require an explicit simulation profile/configuration"
+            )
         }
         guard !result.permissions.configurationWrite || result.permissions.parameterWrite
         else { throw BootError(reason: "Read-only mode cannot grant configuration writes") }
@@ -156,6 +177,9 @@ private struct BCRProviderService {
     --simulation-configuration PATH Strict simulation-only SurfaceConfiguration v7; implies memory-only Mock
     --describe-surface            Print the simulation profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
+    --surface-principal-file PATH Explicit private host-issued principal record; default memory only
+    --write-limits input=N,feedback=N,renew=N,admin=N
+                                  Surface-only independent budgets, mutually exclusive with --write-limit
     --allow-surface-input --allow-surface-feedback --allow-surface-reset
                                   Separate simulation permissions; default OFF, never hardware
     Credentials: BCR_PROVIDER_TOKEN environment, or --token-stdin. Never pass tokens in argv.
@@ -191,7 +215,7 @@ private struct BCRProviderService {
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(
                     encoder.encode(BCRSurfaceControlAdapter.publishedContract(
-                        surface: session
+                        surface: session, writeLimits: options.surfaceWriteLimits
                     )) + Data("\n".utf8)
                 )
                 return
@@ -226,6 +250,11 @@ private struct BCRProviderService {
             else {
                 throw BootError(reason: "Set a valid BCR_PROVIDER_TOKEN or use the dedicated stdin pipe")
             }
+            // The sole bearer is valid before it is bound to a host-issued remote principal.
+            // Static describe/export return earlier and never read or create the private record.
+            let principals = try options.surfacePrincipalFile
+                .map { try SurfaceControlPrincipals.loadOrCreate(at: $0) } ??
+                SurfaceControlPrincipals()
             if let directory = options.dataDirectory {
                 try FileManager.default.createDirectory(
                     at: directory,
@@ -305,7 +334,8 @@ private struct BCRProviderService {
                                               options.surfacePermissions.input || options.surfacePermissions
                                               .feedback || options.surfacePermissions.reset,
                                           surfaceInstanceID: options.surfaceInstanceID,
-                                          surfacePermissions: options.surfacePermissions)
+                                          surfacePermissions: options.surfacePermissions, surfacePrincipals: principals,
+                                          surfaceWriteLimits: options.surfaceWriteLimits)
             try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),
@@ -334,7 +364,8 @@ private struct BCRProviderService {
             server.stop(); application.stopClock()
             print("{\"event\":\"provider.stopped\"}")
         } catch {
-            let message = (error as? ProviderDomainError)?.message ?? (error as? BootError)?.reason ?? "Provider startup failed; check local configuration and port ownership"
+            let message = (error as? ProviderDomainError)?.message ?? (error as? BootError)?
+                .reason ?? (error as? SurfaceControlPrincipals.RecordError)?.reason ?? "Provider startup failed; check local configuration and port ownership"
             FileHandle.standardError.write(Data((message + "\n").utf8))
             exit(2)
         }

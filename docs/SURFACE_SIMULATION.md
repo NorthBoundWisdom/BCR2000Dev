@@ -1,10 +1,10 @@
-# Optional Surface Control simulation 1.2
+# Optional Surface Control simulation 1.3
 
 The `surface_control_*` tools are a separate, optional software control contract. Provider 1.0,
 its Schema, SDK `bcr_provider`, console journal, errors and business plugin tools retain their
 existing behavior. A simulation event never qualifies as a physical operator input.
 
-The profile `bcr2000.mock` version `1.2` (contract `1.2`, SurfacePlugins `6071354`) describes stable
+The profile `bcr2000.mock` version `1.3` (contract `1.3`, SurfacePlugins `cc37282`) describes stable
 controls such as `pushEncoder.1.1`; clients discover mappings instead of interpreting the ID geometry.
 The contract, generic Python SDK, schemas and fixtures have one source, the locked SurfacePlugins
 package; this host only adapts its Mock and session to them.
@@ -122,8 +122,8 @@ cannot be combined with `--simulation-profile`, a configuration seed, hardware m
 hardware source or a disabled console. `--describe-surface` uses the supplied file without opening
 devices or listening on a port. Invalid files fail before credentials or user persistence are read.
 
-See [the held-enable, axes and feedback example](../examples/simulation/README.md) and optional consumer mappings under its `integrations/<consumer>/` directory. Both modes use the same accepted-input/momentary rule for holds. The default contract 1.2
-mapping revision is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
+See [the held-enable, axes and feedback example](../examples/simulation/README.md) and optional consumer mappings under its `integrations/<consumer>/` directory. Both modes use the same accepted-input/momentary rule for holds. The current contract 1.3
+mapping revision (unchanged from the corrected 1.2 profile) is `ef0e106767594759`; its former 1.2 revision `bd169e1fddae247e` declared
 overly broad holds, and the previous 1.1 revision `2813b4891860c6da` remains
 verified by reconstructing its historical button hold declarations and removing the later
 `accepts_input` fields in a compatibility test.
@@ -194,7 +194,7 @@ A display overlay is per control and persists: while it is set, that control sho
 instead of its parameter (target or actual) feedback, even when the mapped parameter later changes
 through input, GUI or Provider writes. Inputs and parameter values are not affected. The overlay is
 removed only by `surface_control_reset`, a source change, or a configuration/assignment/page/Mock
-encoding change; there is no per-control clear operation in contract 1.0, 1.1 or 1.2. Changing source/configuration clears the
+encoding change; there is no per-control clear operation in contract 1.0, 1.1, 1.2 or 1.3. Changing source/configuration clears the
 simulation display before any physical feedback. Reset explicitly creates a fresh all-off Mock
 context and clears the new journal; source, mapping, page and configuration changes also revoke
 old context. No input is replayed after reset/restart or an event gap.
@@ -205,9 +205,9 @@ old context. No input is replayed after reset/restart or an event gap.
 Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.2
 delivery. Surface files sit at the delivery root under the same names as the XTouch delivery,
 copied byte for byte from the materialized `build/seed/SurfacePlugins`:
-`surface-control-sdk-1.2.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
+`surface-control-sdk-1.3.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
 `surface-control-scenario.schema.json`, `surface-control-software-v1.json`,
-`surface-control-software-v1.1.json`, `surface-control-software-v1.2.json`, `surface-control.md` and `surface-control-scenarios.md`.
+`surface-control-software-v1.1.json`, `surface-control-software-v1.2.json`, `surface-control-software-v1.3.json`, `surface-control.md` and `surface-control-scenarios.md`.
 `control-contract.json` is the static published discovery and tool descriptors of the
 `--simulation-profile` configuration, printed by the delivered binary's `--describe-surface`
 (placeholder instance and epoch; a live instance is still pinned through discovery).
@@ -248,3 +248,48 @@ SurfacePlugins (`integrations/pipe/`, `clients/python/tests/`) and are not part 
 that example runs as the owner of its simulation instance and therefore needs reset permission.
 Transport ambiguity, stale input, identity change or gap ends a consumer with no automatic write retry;
 inspect the existing journal and explicitly create a new context to continue.
+
+
+## Contract 1.3 input CAS and trusted writers
+
+The `input.independent_sequence` capability adds `latest_input_sequence` to discovery, snapshots
+and event pages. Every event carries its post-event `input_sequence`. Accepted or ignored inputs
+and system hold expiry advance it; display feedback and silent renewals do not. Input requests
+choose exactly one of `expected_input_sequence` or legacy global `expected_sequence`. The latter
+keeps its old meaning: intervening feedback still makes it stale. `stale_input_sequence` is a
+definite rejection without execution. Reset still uses global CAS and clears both sequences.
+
+SDK 1.3.0 `Client.input(..., cas="auto")` selects input CAS by capability; callers can explicitly
+choose `cas="global"` or `cas="input"`. `refresh_sequence` remains a read-only global refresh;
+`refresh_input_sequence` refreshes only input CAS. Neither moves an EventCursor's journal cursor.
+Unknown transport outcomes never trigger replay. Binary role cursor supersession remains unchanged.
+
+`events.writer_id` attaches a host-issued opaque principal to every event. All connections using
+the process's sole authenticated bearer share one remote principal; this does not identify
+individual clients. Interface input and system hold expiry use distinct host principals. Expiry
+is never attributed to whichever client happened to poll. Remote writer fields are rejected.
+By default all three IDs are generated in memory (16 random bytes each) and no file is written.
+
+An operator may specify `--surface-principal-file PATH` with an explicit simulation profile or
+configuration. After credential validation, the host safely loads an owned regular non-symlink
+0600 record or atomically creates it without replacing any existing entry. The strict version-1
+record contains only schema_version and distinct remote_writer_id/interface_writer_id/system_writer_id,
+never a credential or credential fingerprint. Reusing the record keeps principals across process
+restart or an explicit credential rotation; instance/epoch fencing remains independent. A client
+cannot select the record or ID. Manage this private file outside public delivery manifests.
+Static `--describe-surface` never reads or creates this record.
+
+## Optional category write budgets
+
+`--write-limits input=60,feedback=20,renew=60,admin=5` explicitly selects independent surface-only
+1-second budgets shared across this instance's clients, with no borrowing. All four positive
+integer fields (1..10000) are required; unknown/duplicate/missing fields fail startup. This flag
+requires an explicit simulation profile/configuration and conflicts with explicit `--write-limit`.
+Only this mode advertises `writes.independent_limits` and discovery `write_limits`. Reset consumes
+admin budget. Failed validation consumes no quota; clock rollback gives no free quota. System
+expiry consumes no external budget. Exhausted feedback/renew budgets do not consume input quota.
+
+With no new flag, the existing default aggregate 60 writes/s and `--write-limit N` behavior remain.
+Provider 1.0 and business plugin tool schemas, errors and aggregate budgeting are unchanged even
+when surface category mode is selected. The host checks identity, clock, counters, encoding and
+permissions before consuming quota or applying input/display effects.

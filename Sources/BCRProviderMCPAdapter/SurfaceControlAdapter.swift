@@ -61,6 +61,12 @@ public final class BCRSurfaceControlAdapter {
     /// Leases revoked while the Mock was not the active source. Their rest values are applied
     /// before the Mock is reseeded, so a revoked button never stays held (deadman stays safe).
     private var deferredRests: [ControlHoldExpiry] = []
+    public typealias WriteLimits = ControlWriteLimits
+    public let principals: SurfaceControlPrincipals
+    private let writeLimits: ControlWriteLimits?
+    private enum WriteCategory: Hashable { case input, feedback, renew, admin }
+    private var budgetWindow: Double?
+    private var budgetUsed: [WriteCategory: Int] = [:]
     private var core: SurfaceControlSession
     private var outputEnableParameter: ParameterID?
     private var contextRevision: UInt64
@@ -76,8 +82,10 @@ public final class BCRSurfaceControlAdapter {
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
                 holdScheduler: @escaping HoldScheduler = BCRSurfaceControlAdapter.defaultHoldScheduler,
-                automaticHoldExpiry: Bool = true) throws
+                automaticHoldExpiry: Bool = true,
+                principals: SurfaceControlPrincipals = .init(), writeLimits: ControlWriteLimits? = nil) throws
     {
+        self.principals = principals; self.writeLimits = writeLimits
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
         diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
@@ -86,8 +94,8 @@ public final class BCRSurfaceControlAdapter {
             SurfaceControlSession(
                 instanceID: instanceID,
                 epoch: UUID().uuidString,
-                profile: Self.profile(surface),
-                eventCapacity: eventCapacity
+                profile: Self.profile(surface, writeLimits: writeLimits),
+                eventCapacity: eventCapacity, writeLimits: writeLimits
             ),
             surface: surface,
             at: monotonic()
@@ -113,12 +121,13 @@ public final class BCRSurfaceControlAdapter {
     /// revision) plus the tool descriptors. The instance and epoch are placeholders; a live
     /// instance is always pinned through `surface_control_discover`. Opens no device.
     public static func publishedContract(surface: SurfaceSession, instanceID: String = "example.simulation",
-                                         epoch: String = "discovery-only") throws -> JSONValue
+                                         epoch: String = "discovery-only",
+                                         writeLimits: ControlWriteLimits? = nil) throws -> JSONValue
     {
         let session = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: epoch,
-            profile: profile(surface)
+            profile: profile(surface, writeLimits: writeLimits), writeLimits: writeLimits
         )
         return try .object(["discovery": .encoded(session.discovery()),
                             "tools": .array(SurfaceControlTools.descriptors.map { try .encoded($0) })])
@@ -129,7 +138,7 @@ public final class BCRSurfaceControlAdapter {
         (error as? ControlContractError)?.code ?? (error as? ProviderDomainError)?.code ?? "invalid_argument"
     }
 
-    private static func profile(_ surface: SurfaceSession) -> ControlProfile {
+    private static func profile(_ surface: SurfaceSession, writeLimits: ControlWriteLimits? = nil) -> ControlProfile {
         let controls = BCRLayout.allControls.map { control -> ControlDescriptor in
             let assignment = surface.engine.configuration.assignment(for: control)
             let relative = control.isContinuous && assignment?.encoderMode != nil && assignment?
@@ -160,7 +169,9 @@ public final class BCRSurfaceControlAdapter {
                 acceptsInput: acceptsInput
             )
         }
-        var capabilities = ["simulation", "controls.stable_ids", "feedback.unsequenced", "controls.input_declared"]
+        var capabilities = ["simulation", "controls.stable_ids", "feedback.unsequenced", "controls.input_declared",
+                            "input.independent_sequence", "events.writer_id"]
+        if writeLimits != nil { capabilities.append("writes.independent_limits") }
         let inputs = Set(controls.map(\.input_kind))
         for kind in [ControlInputKind.absolute, .relative, .button] where inputs.contains(kind) {
             capabilities.append("input." + kind.rawValue)
@@ -172,7 +183,7 @@ public final class BCRSurfaceControlAdapter {
         }
         capabilities += ["x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
                          "x.bcr.indicator_blink_static"]
-        return ControlProfile(id: "bcr2000.mock", version: "1.2", controls: controls, capabilities: capabilities)
+        return ControlProfile(id: "bcr2000.mock", version: "1.3", controls: controls, capabilities: capabilities)
     }
 
     private static func seeded(_ session: SurfaceControlSession, surface: SurfaceSession,
@@ -205,12 +216,17 @@ public final class BCRSurfaceControlAdapter {
         // the reset clock checks still apply; all held Mock controls return to rest before reseeding.
         let leases = core.dueHoldExpiries(at: .infinity)
         for lease in leases
-            where lease.deadline <= now { try next.recordHoldExpiry(controlID: lease.controlID, at: now) }
+            where lease.deadline <= now
+        { try next.recordHoldExpiry(
+            controlID: lease.controlID,
+            at: now,
+            writerID: principals.systemWriterID
+        ) }
         try next.reset(
             expected: next.expected,
             expectedSequence: next.discovery().latest_sequence,
             epoch: UUID().uuidString,
-            profile: Self.profile(surface),
+            profile: Self.profile(surface, writeLimits: writeLimits),
             at: now
         )
         if surface.source == .mock {
@@ -256,11 +272,17 @@ public final class BCRSurfaceControlAdapter {
         let now = monotonic()
         let due = core.dueHoldExpiries(at: now)
         var events: [ControlEvent] = []
+        // Reserve/check every required counter and trusted identity on a copy before any host effect.
+        var preflight = core
+        for lease in due {
+            try preflight.recordHoldExpiry(controlID: lease.controlID, at: now, writerID: principals.systemWriterID)
+        }
         for lease in due {
             try applyRest(lease)
             do {
                 try events.append(core.recordHoldExpiry(controlID: lease.controlID,
-                                                        mappedValue: mappedValue(control(lease.controlID)), at: now))
+                                                        mappedValue: mappedValue(control(lease.controlID)), at: now,
+                                                        writerID: principals.systemWriterID))
             } catch { failClosed("hold_expiry_record_failed", error: error); throw error }
         }
         rescheduleHoldTimer()
@@ -308,9 +330,48 @@ public final class BCRSurfaceControlAdapter {
               !surface.diagnosticReadbackActive else { throw ControlContractError("unsupported_source") }
     }
 
-    private func consume(_ gateway: MCPApplicationGateway) throws {
-        do { try gateway.consumeWrites(1) }
-        catch { throw ControlContractError("rate_limited") }
+    /// CLI syntax only; the public budget value/validation belongs to the shared contract.
+    nonisolated public static func parseWriteLimits(_ raw: String) throws -> ControlWriteLimits {
+        var values: [String: Int] = [:]
+        for pair in raw.split(separator: ",", omittingEmptySubsequences: false) {
+            let parts = pair.split(separator: "=", omittingEmptySubsequences: false)
+            guard parts.count == 2, ["input", "feedback", "renew", "admin"].contains(String(parts[0])),
+                  values[String(parts[0])] == nil, !parts[1].isEmpty,
+                  parts[1].utf8.allSatisfy({ (48 ... 57).contains($0) }),
+                  let value = Int(parts[1]), (1 ... 10000).contains(value)
+            else {
+                throw ControlContractError("invalid_argument")
+            }
+            values[String(parts[0])] = value
+        }
+        guard values.count == 4 else { throw ControlContractError("invalid_argument") }
+        let limits = ControlWriteLimits(inputPerWindow: values["input"]!, feedbackPerWindow: values["feedback"]!,
+                                        renewPerWindow: values["renew"]!, adminPerWindow: values["admin"]!)
+        try limits.validate()
+        return limits
+    }
+
+    private func consume(_ gateway: MCPApplicationGateway, category: WriteCategory, at now: Double) throws {
+        guard let limits = writeLimits else {
+            do { try gateway.consumeWrites(1) }
+            catch { throw ControlContractError("rate_limited") }
+            return
+        }
+        guard now.isFinite, budgetWindow.map({ now >= $0 }) ?? true else {
+            throw ControlContractError("invalid_time")
+        }
+        let maximum: Int
+        switch category {
+        case .input: maximum = limits.input_per_window
+        case .feedback: maximum = limits.feedback_per_window
+        case .renew: maximum = limits.renew_per_window
+        case .admin: maximum = limits.admin_per_window
+        }
+        if budgetWindow == nil || now - budgetWindow! >= Double(limits.window_s) {
+            budgetWindow = now; budgetUsed.removeAll()
+        }
+        guard budgetUsed[category, default: 0] < maximum else { throw ControlContractError("rate_limited") }
+        budgetUsed[category, default: 0] += 1
     }
 
     private func control(_ id: String) throws -> BCRControlID {
@@ -358,7 +419,7 @@ public final class BCRSurfaceControlAdapter {
                 mappedValue: mapped.map(JSONValue.double),
                 reason: changed ? nil : "no_change",
                 origin: .interface,
-                at: now
+                at: now, writerID: principals.interfaceWriterID
             )
             rescheduleHoldTimer()
         } catch { failClosed("observation_failed", error: error) }
@@ -371,7 +432,8 @@ public final class BCRSurfaceControlAdapter {
     {
         do {
             let event = try core.recordInput(input, disposition: disposition, mappedValue: mappedValue,
-                                             reason: reason, origin: .remote, at: now)
+                                             reason: reason, origin: .remote, at: now,
+                                             writerID: principals.remoteWriterID)
             rescheduleHoldTimer()
             return try .encoded(event)
         } catch { failClosed("input_record_failed", error: error); throw error }
@@ -402,13 +464,17 @@ public final class BCRSurfaceControlAdapter {
             guard permissions.input, gateway.permissions.parameterWrite, gateway.permissions.deviceControl else {
                 throw ControlContractError("permission_denied")
             }
-            let now = monotonic(); let descriptor = try core.validateInput(input, at: now)
+            let now = monotonic(); let descriptor = try core.validateInput(
+                input,
+                at: now,
+                writerID: principals.remoteWriterID
+            )
             let control = try control(input.control_id)
             guard let id = surface.engine.configuration.assignment(for: control)?.target.parameterID,
                   let definition = surface.engine.configuration.parameter(id), definition.agentWritable,
                   !surface.isMCPProtectedParameter(id) else { throw ControlContractError("permission_denied") }
             let unchanged = core.isUnchanged(input)
-            try consume(gateway)
+            try consume(gateway, category: .input, at: now)
             if unchanged {
                 return try commitInput(input, disposition: .ignored,
                                        mappedValue: surface.engine.value(of: id).map(JSONValue.double),
@@ -436,7 +502,7 @@ public final class BCRSurfaceControlAdapter {
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
             guard permissions.feedback,
                   gateway.permissions.parameterWrite else { throw ControlContractError("permission_denied") }
-            let now = monotonic(); try core.validateFeedback(update, at: now)
+            let now = monotonic(); try core.validateFeedback(update, at: now, writerID: principals.remoteWriterID)
             let control = try control(update.control_id)
             let raw: UInt16
             if update.kind == "indicator" {
@@ -446,9 +512,9 @@ public final class BCRSurfaceControlAdapter {
             else { raw = UInt16(update.value.finiteNumber!) }
             try surface.validateSimulationDisplayFeedback(control, rawValue: raw)
             var next = core
-            let event = try next.recordFeedback(update, origin: .remote, at: now)
+            let event = try next.recordFeedback(update, origin: .remote, at: now, writerID: principals.remoteWriterID)
             let result = try JSONValue.encoded(event)
-            try consume(gateway)
+            try consume(gateway, category: .feedback, at: now)
             handlingRemote = true
             defer { handlingRemote = false }
             try surface.setSimulationDisplayFeedback(control, rawValue: raw)
@@ -462,7 +528,7 @@ public final class BCRSurfaceControlAdapter {
             }
             let now = monotonic()
             try core.validateRenew(request, at: now)
-            try consume(gateway)
+            try consume(gateway, category: .renew, at: now)
             let result = try core.renew(request, at: now)
             rescheduleHoldTimer()
             return try .encoded(result)
@@ -476,7 +542,7 @@ public final class BCRSurfaceControlAdapter {
             var next = core
             try next.reset(expected: expected, expectedSequence: expectedSequence, epoch: UUID().uuidString, at: now)
             try surface.validateSimulationReset()
-            try consume(gateway)
+            try consume(gateway, category: .admin, at: now)
             handlingRemote = true
             defer { handlingRemote = false }
             // Session side first; it validates before its first change. The core commits last.

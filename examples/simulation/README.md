@@ -39,9 +39,9 @@ unknown parameters, invalid numbers and invalid modes fail startup with a diagno
 persistence or fallback is performed for this simulation input file.
 
 Both simulation modes declare hold leases only on buttons accepting input with a momentary binding.
-The default `--simulation-profile` contract 1.2 mapping revision is `ef0e106767594759`
+The default `--simulation-profile` contract 1.3 mapping revision (unchanged from corrected 1.2) is `ef0e106767594759`
 (former 1.2: `bd169e1fddae247e`; former 1.1: `2813b4891860c6da`).
-This example's contract 1.2 mapping revision is **`3d93301a62d6f9b6`**.
+This example's contract 1.3 mapping revision (unchanged from corrected 1.2) is **`3d93301a62d6f9b6`**.
 The example's former 1.1 revision was `2b2ae6638f08af35`. All seven assigned controls declare
 `accepts_input: true`; every other unbound control declares false.
 Consumer-specific assembly mappings and checks belong under `integrations/<consumer>/`.

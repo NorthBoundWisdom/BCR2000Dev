@@ -9,7 +9,7 @@ and its own watchdog. Surface inputs are always `source: simulation`, never phys
 Verify `manifest.json` and every `files_sha256` entry before importing the bundled SDK. Record the
 manifest SHA-256, `source_commit`, `surface_plugins_revision`, contract/SDK versions, profile and
 `mapping_revision` in the chain report. Run commands from the delivery directory. The generic
-held-enable/axes configuration has profile `bcr2000.mock` version `1.2`, mapping
+held-enable/axes configuration has profile `bcr2000.mock` version `1.3`, mapping
 `3d93301a62d6f9b6`; its parameters and controls are listed in `examples/simulation/README.md`.
 
 ```sh
@@ -35,6 +35,11 @@ Parameter writes are allowed by default; `--read-only` disables them. Input addi
 `--allow-surface-feedback`. For a trial that owns and resets this instance, also add
 `--allow-simulation-control --allow-surface-reset`; leave those grants absent for ordinary chains.
 No real-device connection or output transport is enabled by this startup.
+For independently capped writers add `--write-limits input=60,feedback=20,renew=60,admin=5`
+and remove explicit `--write-limit 60`; the old aggregate remains the default. To keep host-issued
+principals across restarts, add an explicit operator-managed `--surface-principal-file PATH`.
+The host creates/loads a private owned 0600 record after validating the sole bearer; never include
+it or the credential file in public artifacts. Without the option principals remain memory-only.
 
 The taskless arm/start/pause/cancel demonstration uses `--simulation-profile` in place of
 `--simulation-configuration ...`. Its default mapping is `ef0e106767594759`, with ordinary
@@ -55,8 +60,10 @@ Keep display feedback at **at most 4 updates/s per control**, preferably coalesc
 values. Input, feedback and renewal share the default 60 writes/s process budget. Three feedback
 channels at 4 Hz plus a 10 Hz lease renewal consume 22 writes/s before axes and other writers;
 size the remaining input cadence accordingly. `--write-limit N` changes the common budget.
-Unsequenced feedback still advances the input CAS sequence. On `stale_sequence`, no input was
-executed: explicitly `refresh_sequence`, reassess current intent, then choose whether to submit a
+Unsequenced feedback advances the journal sequence; SDK 1.3.0 auto mode uses independent input
+CAS so feedback does not conflict. Explicit legacy `cas="global"` retains old behavior. On
+`stale_sequence` or `stale_input_sequence`, no input was
+executed: explicitly refresh the selected CAS (`refresh_sequence` or `refresh_input_sequence`), reassess current intent, then choose whether to submit a
 new input. Never automatically replay a request with an unknown transport result.
 
 ## Stop and clean up

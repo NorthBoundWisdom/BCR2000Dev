@@ -143,6 +143,7 @@ private func scenarioFingerprint(_ host: BCRFixtureHost, at requested: Double) t
     })
     return .object(["expected": try .encoded(host.expected), "sequence": .string(snapshot.latest_sequence),
                     "inputs": .object(snapshot.inputs), "feedback": try .encoded(snapshot.feedback),
+                    "input_sequence": snapshot.latest_input_sequence.map(JSONValue.string) ?? .null,
                     "holds": try .encoded(snapshot.holds ?? [:]),
                     "journal": try .encoded(page.events),
                     "parameters": .object(parameters), "controls": .object(states),
@@ -162,6 +163,10 @@ final class SharedSurfaceScenarioTests: XCTestCase {
 
     func testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations() throws {
         try run(fixture: "surface-control-software-v1.2", steps: 83)
+    }
+
+    func testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters() throws {
+        try run(fixture: "surface-control-software-v1.3", steps: 97)
     }
 
     private func run(fixture name: String, steps expectedSteps: Int) throws {
@@ -217,7 +222,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 }
                 do {
                     switch operation {
-                    case "snapshot", "refresh_sequence": _ = try host.snapshot(at: time)
+                    case "snapshot", "refresh_sequence", "refresh_input_sequence": _ = try host.snapshot(at: time)
                     case "input", "feedback":
                         let role = try XCTUnwrap(step.value(for: "role")?.stringValue)
                         let control = try mapped(role)
@@ -242,8 +247,9 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                         if operation == "input" {
                             let request = ControlInput(
                                 expected: suppliedExpected,
-                                expectedSequence: step.value(for: "expected_sequence")?
-                                    .stringValue ?? sequences[selected]!,
+                                expectedSequence: step.value(for: "expected_input_sequence") == nil ?
+                                    (step.value(for: "expected_sequence")?.stringValue ?? sequences[selected]!) : nil,
+                                expectedInputSequence: step.value(for: "expected_input_sequence")?.stringValue,
                                 controlID: control.id,
                                 encoding: step.value(for: "encoding")?.stringValue ?? control.encoding.rawValue,
                                 value: value,
@@ -303,7 +309,25 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 if actualError == nil, !(operation == "feedback" && step.value(for: "omit_sequence") == .bool(true)) {
                     sequences[selected] = snapshot.latest_sequence
                 }
+                func writerKind(_ id: String?) -> String? {
+                    guard let id else { return nil }
+                    if id == host.adapter.principals.remoteWriterID { return "remote" }
+                    if id == host.adapter.principals.interfaceWriterID { return "interface" }
+                    if id == host.adapter.principals.systemWriterID { return "system" }
+                    return nil
+                }
+                let writer = writerKind(event?.writer_id ?? expired.last?.writer_id)
                 var checks: [Bool] = [actualError == expected["error"]?.stringValue]
+                if let inputSequence = expected["latest_input_sequence"]?.stringValue {
+                    checks.append((page?.latest_input_sequence ?? snapshot.latest_input_sequence) == inputSequence)
+                }
+                if let kind = expected["writer_kind"]?.stringValue { checks.append(writer == kind) }
+                if let sequences = expected["event_input_sequences"]?.arrayValue {
+                    checks.append(page?.events.map { $0.input_sequence.map(JSONValue.string) ?? .null } == sequences)
+                }
+                if let kinds = expected["event_writer_kinds"]?.arrayValue {
+                    checks.append(page?.events.map { writerKind($0.writer_id).map(JSONValue.string) ?? .null } == kinds)
+                }
                 if let disposition = expected["disposition"]?
                     .stringValue { checks.append(event?.disposition.rawValue == disposition) }
                 if expected["atomic"] == .bool(true) { checks.append(before == after) }
@@ -367,6 +391,8 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                     "disposition": event.map { .string($0.disposition.rawValue) } ?? .null,
                     "accepted_input_count": .number(accepted[selected]!),
                     "sequence": .string(snapshot.latest_sequence),
+                    "input_sequence": snapshot.latest_input_sequence.map(JSONValue.string) ?? .null,
+                    "writer_kind": writer.map(JSONValue.string) ?? .null,
                     "epoch_changed": .bool(beforeEpoch != (try host.expected).epoch)
                 ]))
                 hosts[selected] = host
@@ -392,7 +418,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
             "host_dirty": .bool(!(try commandOutput(["git", "status", "--porcelain"], root: root)).isEmpty),
             "shared_revision": sharedLock.value(for: "revision")!,
             "profile_id": .string("bcr2000.mock"),
-            "profile_version": .string("1.2"),
+            "profile_version": .string("1.3"),
             "contract_version": .string(ControlDiscovery.contractVersion),
             "roles": try .encoded(roles),
             "scope": .string("inprocess_real_mock_session"),

@@ -24,9 +24,9 @@ def run(*args):
     return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True).strip()
 
 
-# Surface control 1.2 deliverables have exactly one source: the locked shared package.
-SURFACE_CONTRACT = "1.2"
-SURFACE_SDK = "1.2.0"
+# Surface control 1.3 deliverables have exactly one source: the locked shared package.
+SURFACE_CONTRACT = "1.3"
+SURFACE_SDK = "1.3.0"
 # Same root-level names as the other host's delivery, so one consumer loader fits both.
 SURFACE_FILES = {
     "control-tools.json": "docs/surface-control-tools.json",
@@ -34,6 +34,7 @@ SURFACE_FILES = {
     "surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
     "surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",
     "surface-control-software-v1.2.json": "fixtures/surface-control-software-v1.2.json",
+    "surface-control-software-v1.3.json": "fixtures/surface-control-software-v1.3.json",
     "surface-control.md": "docs/surface-control.md",
     "surface-control-scenarios.md": "docs/surface-control-scenarios.md",
 }
