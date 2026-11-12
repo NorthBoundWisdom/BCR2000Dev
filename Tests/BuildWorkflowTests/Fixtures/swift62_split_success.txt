@@ -1,0 +1,1365 @@
+Test Suite 'All tests' started at 2026-11-12 23:06:48.924.
+Test Suite 'BCRProviderDomainTests.xctest' started at 2026-11-12 23:06:48.925.
+Test Suite 'ConsoleContractTests' started at 2026-11-12 23:06:48.925.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testAbsoluteToggleCrossesThresholdDespiteFeedbackSnappingAtEveryTick]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testAbsoluteToggleCrossesThresholdDespiteFeedbackSnappingAtEveryTick]' passed (0.037 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testBoundedInventoryPublishesGapInsteadOfSilentlySkipping]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testBoundedInventoryPublishesGapInsteadOfSilentlySkipping]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testDiagnosticFramesAreReadbackNotOperatorEventsAndCannotChangeParameters]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testDiagnosticFramesAreReadbackNotOperatorEventsAndCannotChangeParameters]' passed (0.006 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testEpochChangesAndOldCursorCannotReplayAfterSourceOrMappingChange]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testEpochChangesAndOldCursorCannotReplayAfterSourceOrMappingChange]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testPageSwitchInputCannotBeAcceptedUnderTheNewPageGeneration]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testPageSwitchInputCannotBeAcceptedUnderTheNewPageGeneration]' passed (0.002 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testSoftwareAndMockInputsRemainDistinctAndNoOutputIsAUserInput]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testSoftwareAndMockInputsRemainDistinctAndNoOutputIsAUserInput]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testSynchronousMappingChangeDuringInputCannotPublishOrApplyItAsNewContext]' started.
+Test Case '-[BCRProviderDomainTests.ConsoleContractTests testSynchronousMappingChangeDuringInputCannotPublishOrApplyItAsNewContext]' passed (0.001 seconds).
+Test Suite 'ConsoleContractTests' passed at 2026-11-12 23:06:48.975.
+Executed 7 tests, with 0 failures (0 unexpected) in 0.049 (0.050) seconds
+Test Suite 'SharedSimulationCompatibilityTests' started at 2026-11-12 23:06:48.975.
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testCustomLegacyModelFieldsAreForwardedToSharedTypedModel]' started.
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testCustomLegacyModelFieldsAreForwardedToSharedTypedModel]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testLegacyErrorCodeAndExactMessagesArePreservedAtTheFacade]' started.
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testLegacyErrorCodeAndExactMessagesArePreservedAtTheFacade]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testLegacyWrapperUsesSharedStateAndOpaqueHostTokensWithInstanceIsolation]' started.
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testLegacyWrapperUsesSharedStateAndOpaqueHostTokensWithInstanceIsolation]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testSharedLifecycleStopBlocksLegacyWritesAndLegacyAdvanceFinishesBraking]' started.
+Test Case '-[BCRProviderDomainTests.SharedSimulationCompatibilityTests testSharedLifecycleStopBlocksLegacyWritesAndLegacyAdvanceFinishesBraking]' passed (0.007 seconds).
+Test Suite 'SharedSimulationCompatibilityTests' passed at 2026-11-12 23:06:48.985.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'SimulationTests' started at 2026-11-12 23:06:48.985.
+Test Case '-[BCRProviderDomainTests.SimulationTests testAckermannSteeringIsNotYawRateAndCannotRotateInPlace]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testAckermannSteeringIsNotYawRateAndCannotRotateInPlace]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testChassisAccelerationBrakingAndCommandExpiryAreIntegrated]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testChassisAccelerationBrakingAndCommandExpiryAreIntegrated]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testChassisStopBarrierPreventsReauthorizationAndRetargetUntilZeroSpeed]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testChassisStopBarrierPreventsReauthorizationAndRetargetUntilZeroSpeed]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testControlGenerationTokenAndSequenceAreCheckedIndependently]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testControlGenerationTokenAndSequenceAreCheckedIndependently]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testDomainResetClockAndFaultDoNotAffectAnotherDomain]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testDomainResetClockAndFaultDoNotAffectAnotherDomain]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testExpiredLeaseStopsAndRejectsOldControl]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testExpiredLeaseStopsAndRejectsOldControl]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testIndependentModelsHaveDeterministicMotionAndBoundedTrace]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testIndependentModelsHaveDeterministicMotionAndBoundedTrace]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testInvalidChassisValuesAndTimeAreRejectedWithoutMutation]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testInvalidChassisValuesAndTimeAreRejectedWithoutMutation]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testInvalidRobotCommandsDoNotConsumeSequenceOrClamp]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testInvalidRobotCommandsDoNotConsumeSequenceOrClamp]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testLegacyProfileProtectionAndExplicitNewPolicyRemainSeparate]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testLegacyProfileProtectionAndExplicitNewPolicyRemainSeparate]' passed (0.001 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testRobotStopDeceleratesAndDoesNotResume]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testRobotStopDeceleratesAndDoesNotResume]' passed (0.011 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testRobotTargetIsSeparateFromActualAndForwardPoseUsesActualJoints]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testRobotTargetIsSeparateFromActualAndForwardPoseUsesActualJoints]' passed (0.002 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testShortenedLeaseStopsAtExactBoundaryAndDoesNotContinueSteering]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testShortenedLeaseStopsAtExactBoundaryAndDoesNotContinueSteering]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testSurfaceDomainDefaultIsNeutralAndNeedsNoAgentBackend]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testSurfaceDomainDefaultIsNeutralAndNeedsNoAgentBackend]' passed (0.000 seconds).
+Test Case '-[BCRProviderDomainTests.SimulationTests testUnknownInitialStateDoesNotBecomeZeroAndSourceIsSimulation]' started.
+Test Case '-[BCRProviderDomainTests.SimulationTests testUnknownInitialStateDoesNotBecomeZeroAndSourceIsSimulation]' passed (0.000 seconds).
+Test Suite 'SimulationTests' passed at 2026-11-12 23:06:49.003.
+Executed 15 tests, with 0 failures (0 unexpected) in 0.017 (0.018) seconds
+Test Suite 'BCRProviderDomainTests.xctest' passed at 2026-11-12 23:06:49.003.
+Executed 26 tests, with 0 failures (0 unexpected) in 0.076 (0.078) seconds
+Test Suite 'All tests' passed at 2026-11-12 23:06:49.003.
+Executed 26 tests, with 0 failures (0 unexpected) in 0.076 (0.079) seconds
+Test Suite 'All tests' started at 2026-11-12 23:06:49.147.
+Test Suite 'BCRProviderAdapterTests.xctest' started at 2026-11-12 23:06:49.148.
+Test Suite 'EventRetentionTests' started at 2026-11-12 23:06:49.148.
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testContinuousMotionIsThrottledButStateAndCriticalFinalTransitionStayCurrent]' started.
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testContinuousMotionIsThrottledButStateAndCriticalFinalTransitionStayCurrent]' passed (0.125 seconds).
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testSilentWritesEnforceTheirOwnClockAndFailuresAreAtomicWithoutObservers]' started.
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testSilentWritesEnforceTheirOwnClockAndFailuresAreAtomicWithoutObservers]' passed (0.001 seconds).
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testTenThousandIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE]' started.
+Test Case '-[BCRProviderAdapterTests.EventRetentionTests testTenThousandIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE]' passed (19.854 seconds).
+Test Suite 'EventRetentionTests' passed at 2026-11-12 23:07:09.128.
+Executed 3 tests, with 0 failures (0 unexpected) in 19.979 (19.980) seconds
+Test Suite 'ProviderModuleTests' started at 2026-11-12 23:07:09.128.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testAgentAndConsolePermissionCannotEnableRobotOrChassis]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testAgentAndConsolePermissionCannotEnableRobotOrChassis]' passed (0.253 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyMockInputCannotInvokeActionOrReadonlyParameter]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyMockInputCannotInvokeActionOrReadonlyParameter]' passed (0.228 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyMockInputRequiresBothPermissionsAndCannotSelectHardware]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyMockInputRequiresBothPermissionsAndCannotSelectHardware]' passed (0.240 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyProviderInstancesKeepInputsAndEpochsIsolated]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyProviderInstancesKeepInputsAndEpochsIsolated]' passed (0.510 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyUnicodeParameterDoesNotImplicitlyEnableSurfaceContract]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testLegacyUnicodeParameterDoesNotImplicitlyEnableSurfaceContract]' passed (0.087 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testManualTimeAndDeviceResetDoNotMutateConsoleOrAnotherDevice]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testManualTimeAndDeviceResetDoNotMutateConsoleOrAnotherDevice]' passed (0.228 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testModuleRegistrationRejectsCollisionsAtomically]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testModuleRegistrationRejectsCollisionsAtomically]' passed (0.223 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testOptionalModulesHaveNoSyntheticFallbackOrAgentRuntime]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testOptionalModulesHaveNoSyntheticFallbackOrAgentRuntime]' passed (0.073 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testReadOnlyRevocationProducesAutonomousBoundedStopAndNoRevival]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testReadOnlyRevocationProducesAutonomousBoundedStopAndNoRevival]' passed (1.101 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testRealtimeLeaseWatchdogAdvancesWithoutAStatePoll]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testRealtimeLeaseWatchdogAdvancesWithoutAStatePoll]' passed (0.661 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testRevokingOneDomainInvalidatesItsControlWithoutResettingPeer]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testRevokingOneDomainInvalidatesItsControlWithoutResettingPeer]' passed (0.236 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testStrictSchemasRejectExtraFieldsBeforeStateMutation]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testStrictSchemasRejectExtraFieldsBeforeStateMutation]' passed (0.227 seconds).
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testSyntheticConsoleInputCannotWriteProtectedValueOrPretendHardware]' started.
+Test Case '-[BCRProviderAdapterTests.ProviderModuleTests testSyntheticConsoleInputCannotWriteProtectedValueOrPretendHardware]' passed (0.252 seconds).
+Test Suite 'ProviderModuleTests' passed at 2026-11-12 23:07:13.449.
+Executed 13 tests, with 0 failures (0 unexpected) in 4.320 (4.321) seconds
+Test Suite 'SharedRuntimeMCPTests' started at 2026-11-12 23:07:13.449.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testNewRemoteAndOldTypedCommandsMutateOneValueAndKeepRawAndLegacyEnvelopesSeparate]' started.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testNewRemoteAndOldTypedCommandsMutateOneValueAndKeepRawAndLegacyEnvelopesSeparate]' passed (0.239 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testOutputEnableCannotForgeAuthorityAndSharedReadsDoNotAppendEvents]' started.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testOutputEnableCannotForgeAuthorityAndSharedReadsDoNotAppendEvents]' passed (0.250 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testRegressedAndNonfiniteClockFaultsRemainVisibleAndDoNotCrashOrAcceptOrdinaryWrites]' started.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testRegressedAndNonfiniteClockFaultsRemainVisibleAndDoNotCrashOrAcceptOrdinaryWrites]' passed (0.307 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testSimulationAdministrationAndClockModeCannotBeBypassedByNewTools]' started.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testSimulationAdministrationAndClockModeCannotBeBypassedByNewTools]' passed (0.435 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testUnknownAndMissingRoutesMatchSharedErrorsWithoutMutatingJournal]' started.
+Test Case '-[BCRProviderAdapterTests.SharedRuntimeMCPTests testUnknownAndMissingRoutesMatchSharedErrorsWithoutMutatingJournal]' passed (0.216 seconds).
+Test Suite 'SharedRuntimeMCPTests' passed at 2026-11-12 23:07:14.897.
+Executed 5 tests, with 0 failures (0 unexpected) in 1.447 (1.448) seconds
+Test Suite 'SharedSurfaceScenarioTests' started at 2026-11-12 23:07:14.897.
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract11FixtureDrivesHoldRenewAndAdvance]' started.
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract11FixtureDrivesHoldRenewAndAdvance]' passed (2.431 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations]' started.
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations]' passed (2.915 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters]' started.
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters]' passed (3.217 seconds).
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedVersionedFixtureDrivesRealBCRMockAndSession]' started.
+Test Case '-[BCRProviderAdapterTests.SharedSurfaceScenarioTests testSharedVersionedFixtureDrivesRealBCRMockAndSession]' passed (1.415 seconds).
+Test Suite 'SharedSurfaceScenarioTests' passed at 2026-11-12 23:07:24.875.
+Executed 4 tests, with 0 failures (0 unexpected) in 9.978 (9.978) seconds
+Test Suite 'SimulationConfigurationTests' started at 2026-11-12 23:07:24.875.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testChangingOutputEnableParameterRotatesPublishedInputPolicy]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testChangingOutputEnableParameterRotatesPublishedInputPolicy]' passed (0.018 seconds).
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testExampleProducesUsableInputsAndOnlyMomentaryHold]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testExampleProducesUsableInputsAndOnlyMomentaryHold]' passed (0.042 seconds).
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testInputDeclarationsMatchEveryControlAndProtectionRule]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testInputDeclarationsMatchEveryControlAndProtectionRule]' passed (0.039 seconds).
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testLegacySimulationMappingRemainsPinned]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testLegacySimulationMappingRemainsPinned]' passed (0.023 seconds).
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testStrictConfigurationRejectsUnknownFieldsInvalidBindingsAndProtectedParameters]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testStrictConfigurationRejectsUnknownFieldsInvalidBindingsAndProtectedParameters]' passed (0.006 seconds).
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testStrictFieldAllowlistsMatchCompleteCodableEncoding]' started.
+Test Case '-[BCRProviderAdapterTests.SimulationConfigurationTests testStrictFieldAllowlistsMatchCompleteCodableEncoding]' passed (0.000 seconds).
+Test Suite 'SimulationConfigurationTests' passed at 2026-11-12 23:07:25.004.
+Executed 6 tests, with 0 failures (0 unexpected) in 0.128 (0.129) seconds
+Test Suite 'SurfaceControl13Tests' started at 2026-11-12 23:07:25.004.
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testCategoryBudgetsDoNotBorrowAndLegacyAggregateRemainsSeparate]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testCategoryBudgetsDoNotBorrowAndLegacyAggregateRemainsSeparate]' passed (0.032 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testCategoryLimitParsingIsStrictAndDefaultKeepsAggregateDescription]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testCategoryLimitParsingIsStrictAndDefaultKeepsAggregateDescription]' passed (0.006 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testIndependentInputCASAndTrustedRemoteInterfaceExpiryWriters]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControl13Tests testIndependentInputCASAndTrustedRemoteInterfaceExpiryWriters]' passed (0.012 seconds).
+Test Suite 'SurfaceControl13Tests' passed at 2026-11-12 23:07:25.055.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.050 (0.051) seconds
+Test Suite 'SurfaceControlHoldTests' started at 2026-11-12 23:07:25.055.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testAnyToolCallReleasesDueLeasesBeforeItRuns]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testAnyToolCallReleasesDueLeasesBeforeItRuns]' passed (0.020 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testLeaseRenewAndSchedulerExpiryReturnTheMockToRest]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testLeaseRenewAndSchedulerExpiryReturnTheMockToRest]' passed (0.040 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testPendingExpiryWithoutAutomaticProcessingFailsClosedWithPassThroughCode]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testPendingExpiryWithoutAutomaticProcessingFailsClosedWithPassThroughCode]' passed (0.007 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold]' passed (0.031 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRealSchedulerExpiresAShortLease]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRealSchedulerExpiresAShortLease]' passed (0.618 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases]' passed (2.860 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRenewPermissionsBudgetAndUnsupportedHold]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRenewPermissionsBudgetAndUnsupportedHold]' passed (0.056 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRequestsProcessDueLeasesFirstEvenWithoutTheTimer]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRequestsProcessDueLeasesFirstEvenWithoutTheTimer]' passed (0.019 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRestValueClearsLeaseAndContextChangeReleasesHeldButton]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testRestValueClearsLeaseAndContextChangeReleasesHeldButton]' passed (0.081 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testToggleAndUnboundButtonsDoNotOfferLeases]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlHoldTests testToggleAndUnboundButtonsDoNotOfferLeases]' passed (0.030 seconds).
+Test Suite 'SurfaceControlHoldTests' passed at 2026-11-12 23:07:28.819.
+Executed 10 tests, with 0 failures (0 unexpected) in 3.763 (3.764) seconds
+Test Suite 'SurfaceControlPrincipalsTests' started at 2026-11-12 23:07:28.819.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlPrincipalsTests testExplicitRecordIsPrivateStableAndContainsNoCredential]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlPrincipalsTests testExplicitRecordIsPrivateStableAndContainsNoCredential]' passed (0.004 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlPrincipalsTests testUnsafeFilesAndInvalidRecordsFailWithoutReplacement]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlPrincipalsTests testUnsafeFilesAndInvalidRecordsFailWithoutReplacement]' passed (0.004 seconds).
+Test Suite 'SurfaceControlPrincipalsTests' passed at 2026-11-12 23:07:28.827.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'SurfaceControlRegressionTests' started at 2026-11-12 23:07:28.827.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testAbsoluteInputAfterFeedbackUsesRequestedPositionNotDisplay]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testAbsoluteInputAfterFeedbackUsesRequestedPositionNotDisplay]' passed (0.031 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testButtonsDeclareOnlyIndicatorFeedback]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testButtonsDeclareOnlyIndicatorFeedback]' passed (0.030 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testEveryMappingChangePathRotatesEpochAndOrdinaryWritesDoNot]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testEveryMappingChangePathRotatesEpochAndOrdinaryWritesDoNot]' passed (0.277 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFailedValidationLeavesEngineJournalAndBudgetUntouched]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFailedValidationLeavesEngineJournalAndBudgetUntouched]' passed (0.026 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFeedbackOverlayDoesNotSwallowEqualAbsoluteInput]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFeedbackOverlayDoesNotSwallowEqualAbsoluteInput]' passed (0.020 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFeedbackOverlayDoesNotSwallowEqualNRPNInput]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testFeedbackOverlayDoesNotSwallowEqualNRPNInput]' passed (0.029 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testLegacyMockInputIsDeniedWhileSurfaceControlIsEnabled]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testLegacyMockInputIsDeniedWhileSurfaceControlIsEnabled]' passed (0.102 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testLegacyMockInputUnchangedWithoutSurfaceControl]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testLegacyMockInputUnchangedWithoutSurfaceControl]' passed (0.075 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testObservationFailureRecoversWithFreshEpoch]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testObservationFailureRecoversWithFreshEpoch]' passed (0.042 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testResetCommitsSessionThenCoreAndHostErrorsKeepTheirCode]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testResetCommitsSessionThenCoreAndHostErrorsKeepTheirCode]' passed (0.038 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testUnexpectedAgentInputRevokesContextInsteadOfRecordingRemoteInput]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlRegressionTests testUnexpectedAgentInputRevokesContextInsteadOfRecordingRemoteInput]' passed (0.030 seconds).
+Test Suite 'SurfaceControlRegressionTests' passed at 2026-11-12 23:07:29.529.
+Executed 11 tests, with 0 failures (0 unexpected) in 0.701 (0.702) seconds
+Test Suite 'SurfaceControlTests' started at 2026-11-12 23:07:29.529.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDefaultPermissionsProtectedParameterAndContextChangesFailClosed]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDefaultPermissionsProtectedParameterAndContextChangesFailClosed]' passed (0.036 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDiscoverSeedAndRawMockInputUseStableIDsAndSeparateInventory]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDiscoverSeedAndRawMockInputUseStableIDsAndSeparateInventory]' passed (0.032 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDisplayFeedbackCannotChangeInputParameterOrTriggerActionAndClearsBeforeHardware]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDisplayFeedbackCannotChangeInputParameterOrTriggerActionAndClearsBeforeHardware]' passed (0.020 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDisplayOverlayIsRevokedOnPageAssignmentProgramsAndEncodingChanges]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testDisplayOverlayIsRevokedOnPageAssignmentProgramsAndEncodingChanges]' passed (0.128 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testGUIInputAndResetKeepRawInputSeparateFromFeedback]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testGUIInputAndResetKeepRawInputSeparateFromFeedback]' passed (0.039 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testNewToolsReportRateLimitWithoutConsumingInputSequence]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testNewToolsReportRateLimitWithoutConsumingInputSequence]' passed (0.025 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testRepeatedCASAndInvalidRequestsCannotPartiallyCommit]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testRepeatedCASAndInvalidRequestsCannotPartiallyCommit]' passed (0.027 seconds).
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testSameValueConsumesSequenceAsIgnoredAndDoesNotRenewInput]' started.
+Test Case '-[BCRProviderAdapterTests.SurfaceControlTests testSameValueConsumesSequenceAsIgnoredAndDoesNotRenewInput]' passed (0.018 seconds).
+Test Suite 'SurfaceControlTests' passed at 2026-11-12 23:07:29.854.
+Executed 8 tests, with 0 failures (0 unexpected) in 0.324 (0.325) seconds
+Test Suite 'BCRProviderAdapterTests.xctest' passed at 2026-11-12 23:07:29.854.
+Executed 65 tests, with 0 failures (0 unexpected) in 40.699 (40.706) seconds
+Test Suite 'All tests' passed at 2026-11-12 23:07:29.854.
+Executed 65 tests, with 0 failures (0 unexpected) in 40.699 (40.707) seconds
+Test Suite 'All tests' started at 2026-11-12 23:07:30.068.
+Test Suite 'BCRPluginHostTests.xctest' started at 2026-11-12 23:07:30.069.
+Test Suite 'MockAgentHostTests' started at 2026-11-12 23:07:30.069.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testDeclineInterruptsWaitingSlotAndPreservesOtherSlotAndCancelledTimeline]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testDeclineInterruptsWaitingSlotAndPreservesOtherSlotAndCancelledTimeline]' passed (0.005 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testEveryInjectedTimelineStageMatchesSharedPluginSnapshotAndLegacyProgress]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testEveryInjectedTimelineStageMatchesSharedPluginSnapshotAndLegacyProgress]' passed (0.002 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot]' passed (0.001 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testLargeTickReplaysAllStagesAndFeedbackInOriginalOrder]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testLargeTickReplaysAllStagesAndFeedbackInOriginalOrder]' passed (0.001 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testMainActorDriverAdvancesWithoutAWindowOrRefreshCallback]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testMainActorDriverAdvancesWithoutAWindowOrRefreshCallback]' passed (0.029 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testSameReferenceSequenceAsTheOtherHostMatchesSharedRegistryAndRemoteApprovalRejection]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testSameReferenceSequenceAsTheOtherHostMatchesSharedRegistryAndRemoteApprovalRejection]' passed (0.002 seconds).
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testSemanticFeedbackMappingPinsAllSevenLegacyValues]' started.
+Test Case '-[BCRPluginHostTests.MockAgentHostTests testSemanticFeedbackMappingPinsAllSevenLegacyValues]' passed (0.000 seconds).
+Test Suite 'MockAgentHostTests' passed at 2026-11-12 23:07:30.110.
+Executed 7 tests, with 0 failures (0 unexpected) in 0.040 (0.041) seconds
+Test Suite 'PluginRegistrationTests' started at 2026-11-12 23:07:30.110.
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup]' started.
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup]' passed (0.000 seconds).
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testDuplicateRegistrationAndStartupFailureLeaveNoPartialRegistration]' started.
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testDuplicateRegistrationAndStartupFailureLeaveNoPartialRegistration]' passed (0.000 seconds).
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testResetOrStopOfOnePluginDoesNotChangeAnother]' started.
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testResetOrStopOfOnePluginDoesNotChangeAnother]' passed (0.000 seconds).
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testSurfaceIDsCannotCollideAcrossNestedPluginNamespaces]' started.
+Test Case '-[BCRPluginHostTests.PluginRegistrationTests testSurfaceIDsCannotCollideAcrossNestedPluginNamespaces]' passed (0.000 seconds).
+Test Suite 'PluginRegistrationTests' passed at 2026-11-12 23:07:30.112.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'BCRPluginHostTests.xctest' passed at 2026-11-12 23:07:30.112.
+Executed 11 tests, with 0 failures (0 unexpected) in 0.041 (0.043) seconds
+Test Suite 'All tests' passed at 2026-11-12 23:07:30.112.
+Executed 11 tests, with 0 failures (0 unexpected) in 0.041 (0.044) seconds
+Test Suite 'All tests' started at 2026-11-12 23:07:30.273.
+Test Suite 'BCRAgentCoreTests.xctest' started at 2026-11-12 23:07:30.273.
+Test Suite 'AgentCompatibilityFacadeTests' started at 2026-11-12 23:07:30.273.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityFacadeTests testLegacyDateNameTextAndCodableProjectionRemainIntact]' started.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityFacadeTests testLegacyDateNameTextAndCodableProjectionRemainIntact]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityFacadeTests testLegacyStateIsTheSharedEnumAndEveryTransitionUsesSharedPolicy]' started.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityFacadeTests testLegacyStateIsTheSharedEnumAndEveryTransitionUsesSharedPolicy]' passed (0.000 seconds).
+Test Suite 'AgentCompatibilityFacadeTests' passed at 2026-11-12 23:07:30.275.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'AgentCompatibilityTests' started at 2026-11-12 23:07:30.275.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityTests testEveryAgentStateWritesExactValueToAllBoundLEDsAndRings]' started.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityTests testEveryAgentStateWritesExactValueToAllBoundLEDsAndRings]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityTests testLegacyAgentPrimaryActionJSONRoundTripsWithoutChangingContent]' started.
+Test Case '-[BCRAgentCoreTests.AgentCompatibilityTests testLegacyAgentPrimaryActionJSONRoundTripsWithoutChangingContent]' passed (0.001 seconds).
+Test Suite 'AgentCompatibilityTests' passed at 2026-11-12 23:07:30.277.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'AgentStateMachineTests' started at 2026-11-12 23:07:30.277.
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testActiveStatesCanBeInterrupted]' started.
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testActiveStatesCanBeInterrupted]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testMockLifecycleRequiresApprovalBeforeCompletion]' started.
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testMockLifecycleRequiresApprovalBeforeCompletion]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testRejectsImpossibleIdleToCompletedTransition]' started.
+Test Case '-[BCRAgentCoreTests.AgentStateMachineTests testRejectsImpossibleIdleToCompletedTransition]' passed (0.000 seconds).
+Test Suite 'AgentStateMachineTests' passed at 2026-11-12 23:07:30.281.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'BCRPresetEncoderLearningTests' started at 2026-11-12 23:07:30.281.
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testAllEncodersRouteInputAndSoftwareFeedbackThroughEngine]' started.
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testAllEncodersRouteInputAndSoftwareFeedbackThroughEngine]' passed (0.014 seconds).
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testLearnsAllGroupsAndRowsFromActualDefinitionsPreservingAssignments]' started.
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testLearnsAllGroupsAndRowsFromActualDefinitionsPreservingAssignments]' passed (0.015 seconds).
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testRejectsMissingSnapshotConflictsUnsupportedModesAndTruncatedDump]' started.
+Test Case '-[BCRAgentCoreTests.BCRPresetEncoderLearningTests testRejectsMissingSnapshotConflictsUnsupportedModesAndTruncatedDump]' passed (0.010 seconds).
+Test Suite 'BCRPresetEncoderLearningTests' passed at 2026-11-12 23:07:30.321.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.039 (0.040) seconds
+Test Suite 'BuiltInNamePresentationTests' started at 2026-11-12 23:07:30.321.
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testCustomAndUnknownNamesRemainVerbatim]' started.
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testCustomAndUnknownNamesRemainVerbatim]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testEveryBuiltInNameTranslatesInBothDirections]' started.
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testEveryBuiltInNameTranslatesInBothDirections]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testNoOpEditOfATranslatedFieldKeepsTheStoredSpelling]' started.
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testNoOpEditOfATranslatedFieldKeepsTheStoredSpelling]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testSameConfigurationCanDisplayBothLanguagesWithoutChangingEncodedValuesOrGroupReferences]' started.
+Test Case '-[BCRAgentCoreTests.BuiltInNamePresentationTests testSameConfigurationCanDisplayBothLanguagesWithoutChangingEncodedValuesOrGroupReferences]' passed (0.000 seconds).
+Test Suite 'BuiltInNamePresentationTests' passed at 2026-11-12 23:07:30.325.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.004 (0.004) seconds
+Test Suite 'ButtonPreviewTests' started at 2026-11-12 23:07:30.325.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testExistingFunctionalBindingRemainsFunctionalAndConflictingIdentityIsRejected]' started.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testExistingFunctionalBindingRemainsFunctionalAndConflictingIdentityIsRejected]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testLearnsButtonIdentitiesForPreviewWithoutAssigningOrExecutingActions]' started.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testLearnsButtonIdentitiesForPreviewWithoutAssigningOrExecutingActions]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testPreviewKeepsSoftwareIndicatorStateWithoutHardwareFeedback]' started.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testPreviewKeepsSoftwareIndicatorStateWithoutHardwareFeedback]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testReleaseMatchingRecentFeedbackIsStillReported]' started.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testReleaseMatchingRecentFeedbackIsStillReported]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testSharedEncoderIdentityIsReportedInsteadOfGuessingButtonActivity]' started.
+Test Case '-[BCRAgentCoreTests.ButtonPreviewTests testSharedEncoderIdentityIsReportedInsteadOfGuessingButtonActivity]' passed (0.000 seconds).
+Test Suite 'ButtonPreviewTests' passed at 2026-11-12 23:07:30.328.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'CodexApprovalGateTests' started at 2026-11-12 23:07:30.328.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testConflictingDecisionIsRejected]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testConflictingDecisionIsRejected]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDefaultRequestRemainsActionableAfterReadingDetails]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDefaultRequestRemainsActionableAfterReadingDetails]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDuplicateDecisionIsIdempotent]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDuplicateDecisionIsIdempotent]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDuplicateRequestCannotRenewAnExpiredApprovalWindow]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testDuplicateRequestCannotRenewAnExpiredApprovalWindow]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testExpiredRequestCannotBeApproved]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testExpiredRequestCannotBeApproved]' passed (2.021 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testExpiredRequestCanStillBeDeclinedAfterFailedApprove]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testExpiredRequestCanStillBeDeclinedAfterFailedApprove]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testVisibilityMismatchRejected]' started.
+Test Case '-[BCRAgentCoreTests.CodexApprovalGateTests testVisibilityMismatchRejected]' passed (0.000 seconds).
+Test Suite 'CodexApprovalGateTests' passed at 2026-11-12 23:07:32.351.
+Executed 7 tests, with 0 failures (0 unexpected) in 2.022 (2.023) seconds
+Test Suite 'CodexModelCatalogStoreTests' started at 2026-11-12 23:07:32.351.
+Test Case '-[BCRAgentCoreTests.CodexModelCatalogStoreTests testCatalogPersistedWithMetadataAndEfforts]' started.
+Test Case '-[BCRAgentCoreTests.CodexModelCatalogStoreTests testCatalogPersistedWithMetadataAndEfforts]' passed (0.002 seconds).
+Test Suite 'CodexModelCatalogStoreTests' passed at 2026-11-12 23:07:32.353.
+Executed 1 test, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'CodexProcessIntegrationTests' started at 2026-11-12 23:07:32.353.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testDuplicateResponseFailsConnectionRatherThanReusingIt]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testDuplicateResponseFailsConnectionRatherThanReusingIt]' passed (0.107 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testEarlyExitFailsPendingRequest]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testEarlyExitFailsPendingRequest]' passed (0.035 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testErrorResponseDoesNotBreakFollowingRequests]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testErrorResponseDoesNotBreakFollowingRequests]' passed (0.048 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testMalformedJSONFailsPendingRequest]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testMalformedJSONFailsPendingRequest]' passed (0.028 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testRealProcessMatchesOutOfOrderResponses]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testRealProcessMatchesOutOfOrderResponses]' passed (0.047 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testStopAllReleasesConcurrentPendingRequests]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessIntegrationTests testStopAllReleasesConcurrentPendingRequests]' passed (0.052 seconds).
+Test Suite 'CodexProcessIntegrationTests' passed at 2026-11-12 23:07:32.671.
+Executed 6 tests, with 0 failures (0 unexpected) in 0.317 (0.317) seconds
+Test Suite 'CodexProcessSupervisorTests' started at 2026-11-12 23:07:32.671.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testAbnormalExitRestartsOnlyUpToConfiguredLimit]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testAbnormalExitRestartsOnlyUpToConfiguredLimit]' passed (0.054 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testFailedLaunchClosesReaderAndAllowsRetry]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testFailedLaunchClosesReaderAndAllowsRetry]' passed (0.022 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testFinalLineFromImmediatelyExitingProcessIsDelivered]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testFinalLineFromImmediatelyExitingProcessIsDelivered]' passed (0.084 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testNormalExitDoesNotRestart]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testNormalExitDoesNotRestart]' passed (0.152 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testProtocolOverflowFailsVisiblyInsteadOfDroppingResponses]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testProtocolOverflowFailsVisiblyInsteadOfDroppingResponses]' passed (0.122 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testProtocolPayloadIsNotRedactedButDiagnosticsAre]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testProtocolPayloadIsNotRedactedButDiagnosticsAre]' passed (0.075 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testRoundTripDuplicateStartStopAndRestart]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testRoundTripDuplicateStartStopAndRestart]' passed (0.045 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testSplitUTF8BytesAreReassembledBeforeDecoding]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testSplitUTF8BytesAreReassembledBeforeDecoding]' passed (0.080 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStopKillsProcessThatIgnoresTermination]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStopKillsProcessThatIgnoresTermination]' passed (0.551 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStoppingDuringBackoffPreventsRestart]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStoppingDuringBackoffPreventsRestart]' passed (0.348 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStopReleasesPendingReader]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testStopReleasesPendingReader]' passed (0.025 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testUnstartedReaderReturnsEOFAndWritesFail]' started.
+Test Case '-[BCRAgentCoreTests.CodexProcessSupervisorTests testUnstartedReaderReturnsEOFAndWritesFail]' passed (0.001 seconds).
+Test Suite 'CodexProcessSupervisorTests' passed at 2026-11-12 23:07:34.231.
+Executed 12 tests, with 0 failures (0 unexpected) in 1.559 (1.560) seconds
+Test Suite 'CodexProtocolTests' started at 2026-11-12 23:07:34.231.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testJSONValueAndEnvelopeRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testJSONValueAndEnvelopeRoundTrip]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testModelListPageParsing]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testModelListPageParsing]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testNumericRequestIDsAreJSONScalarsAndProtocolLogsHidePayloads]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testNumericRequestIDsAreJSONScalarsAndProtocolLogsHidePayloads]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testRequestTimeoutReportsError]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testRequestTimeoutReportsError]' passed (0.021 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testSanitizeSensitiveLog]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testSanitizeSensitiveLog]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testServerEventParsing]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testServerEventParsing]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testTransportMatchesRequestAndResponseWithTimeout]' started.
+Test Case '-[BCRAgentCoreTests.CodexProtocolTests testTransportMatchesRequestAndResponseWithTimeout]' passed (0.011 seconds).
+Test Suite 'CodexProtocolTests' passed at 2026-11-12 23:07:34.264.
+Executed 7 tests, with 0 failures (0 unexpected) in 0.033 (0.033) seconds
+Test Suite 'CodexSessionCoordinatorTests' started at 2026-11-12 23:07:34.264.
+Test Case '-[BCRAgentCoreTests.CodexSessionCoordinatorTests testStartLoadsModelsThroughPaginatedModelListAndCachesCatalog]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionCoordinatorTests testStartLoadsModelsThroughPaginatedModelListAndCachesCatalog]' passed (0.025 seconds).
+Test Suite 'CodexSessionCoordinatorTests' passed at 2026-11-12 23:07:34.289.
+Executed 1 test, with 0 failures (0 unexpected) in 0.025 (0.025) seconds
+Test Suite 'CodexSessionIntegrationTests' started at 2026-11-12 23:07:34.289.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testCancelledApprovalIntentDoesNotConsumeOrSendRequest]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testCancelledApprovalIntentDoesNotConsumeOrSendRequest]' passed (0.070 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testExpiredApprovalIsDeclinedAndSlotCanStartAgain]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testExpiredApprovalIsDeclinedAndSlotCanStartAgain]' passed (0.142 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedApprovalSendIsRetryableWithConcurrentRequestStillWaiting]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedApprovalSendIsRetryableWithConcurrentRequestStillWaiting]' passed (0.061 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedApproveCanBeChangedToDecline]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedApproveCanBeChangedToDecline]' passed (0.063 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedTurnIsNotReportedAsCompleted]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testFailedTurnIsNotReportedAsCompleted]' passed (0.057 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testHandshakeThreadTurnApprovalInterruptStopAndFreshReconnect]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testHandshakeThreadTurnApprovalInterruptStopAndFreshReconnect]' passed (0.128 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testNumericAndStringApprovalIDsDoNotCollide]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testNumericAndStringApprovalIDsDoNotCollide]' passed (0.070 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testProtocolAndStateMachineSoak]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testProtocolAndStateMachineSoak]' passed (1.057 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testReadOnlyTurnRejectsRelativeWorkspace]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testReadOnlyTurnRejectsRelativeWorkspace]' passed (0.051 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testSameCoordinatorReconnectCreatesFreshServerThread]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testSameCoordinatorReconnectCreatesFreshServerThread]' passed (0.120 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testStopAllResetsAllEightActiveSlots]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testStopAllResetsAllEightActiveSlots]' passed (0.053 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testTwoApprovalsForOneTurnBothReceiveReplies]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionIntegrationTests testTwoApprovalsForOneTurnBothReceiveReplies]' passed (0.062 seconds).
+Test Suite 'CodexSessionIntegrationTests' passed at 2026-11-12 23:07:36.224.
+Executed 12 tests, with 0 failures (0 unexpected) in 1.934 (1.935) seconds
+Test Suite 'CodexSessionStateMachineTests' started at 2026-11-12 23:07:36.224.
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testCompletionWithUnknownThreadIsError]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testCompletionWithUnknownThreadIsError]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testDuplicateStartAndLateCompletionAfterInterruptAreHarmless]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testDuplicateStartAndLateCompletionAfterInterruptAreHarmless]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testHandleCommandApprovalEventTransitionsStateToAwaitingApproval]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testHandleCommandApprovalEventTransitionsStateToAwaitingApproval]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testTurnStartedThenCompleted]' started.
+Test Case '-[BCRAgentCoreTests.CodexSessionStateMachineTests testTurnStartedThenCompleted]' passed (0.000 seconds).
+Test Suite 'CodexSessionStateMachineTests' passed at 2026-11-12 23:07:36.226.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'ConfigurationPresetCoreTests' started at 2026-11-12 23:07:36.226.
+Test Case '-[BCRAgentCoreTests.ConfigurationPresetCoreTests testEveryPresetBuildsItsNamedConfiguration]' started.
+Test Case '-[BCRAgentCoreTests.ConfigurationPresetCoreTests testEveryPresetBuildsItsNamedConfiguration]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.ConfigurationPresetCoreTests testStarterIsValidNeutralAndRoundTrips]' started.
+Test Case '-[BCRAgentCoreTests.ConfigurationPresetCoreTests testStarterIsValidNeutralAndRoundTrips]' passed (0.001 seconds).
+Test Suite 'ConfigurationPresetCoreTests' passed at 2026-11-12 23:07:36.228.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'EncoderPrecisionTests' started at 2026-11-12 23:07:36.228.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testAll14BitPositionsRoundTripWithoutSevenBitLoss]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testAll14BitPositionsRoundTripWithoutSevenBitLoss]' passed (0.256 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testBothRelativeModesMockLoopFineStepsAccelerationAndAbsoluteFeedback]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testBothRelativeModesMockLoopFineStepsAccelerationAndAbsoluteFeedback]' passed (0.010 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNAcrossCallbacksChannelsAndSameChannelSelectorReplacement]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNAcrossCallbacksChannelsAndSameChannelSelectorReplacement]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNBindingRejectsReservedCCConflictAtomicallyAndDefaultPresetUnchanged]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNBindingRejectsReservedCCConflictAtomicallyAndDefaultPresetUnchanged]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNEchoSuppressionUsesAll14Bits]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNEchoSuppressionUsesAll14Bits]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNEncodingIsFourCCsAndRejectsInvalidSemanticValues]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNEncodingIsFourCCsAndRejectsInvalidSemanticValues]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNExplicitLearningAcrossCallbacksPersistsAndOrdinaryLearningDoesNotGuess]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNExplicitLearningAcrossCallbacksPersistsAndOrdinaryLearningDoesNotGuess]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNIncompleteTimeoutClockResetRPNAndUnrelatedMessages]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNIncompleteTimeoutClockResetRPNAndUnrelatedMessages]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNMockWireLoopRetainsOneUnitResolutionAndSoftwareFeedback]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNMockWireLoopRetainsOneUnitResolutionAndSoftwareFeedback]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNRelativeModesAndActualFeedbackKeepTargetIndependent]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNRelativeModesAndActualFeedbackKeepTargetIndependent]' passed (0.007 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNSoftwareFineAdjustAccumulatesAndAssignmentChangeClearsRemainder]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testNRPNSoftwareFineAdjustAccumulatesAndAssignmentChangeClearsRemainder]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeAssignmentMCPValidationAndFineWriteToNRPNMock]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeAssignmentMCPValidationAndFineWriteToNRPNMock]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeEncodingNeutralSignsMagnitudeAnd14Bit]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeEncodingNeutralSignsMagnitudeAnd14Bit]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeInversionAndModeSwitchPreserveTarget]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testRelativeInversionAndModeSwitchPreserveTarget]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testSlowRelativeTicksAccumulateAcrossSnappingAndExternalWritesClearRemainders]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testSlowRelativeTicksAccumulateAcrossSnappingAndExternalWritesClearRemainders]' passed (0.048 seconds).
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testValidationAndLegacyMigration]' started.
+Test Case '-[BCRAgentCoreTests.EncoderPrecisionTests testValidationAndLegacyMigration]' passed (0.001 seconds).
+Test Suite 'EncoderPrecisionTests' passed at 2026-11-12 23:07:36.571.
+Executed 16 tests, with 0 failures (0 unexpected) in 0.341 (0.342) seconds
+Test Suite 'FeedbackSchedulerTests' started at 2026-11-12 23:07:36.571.
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testCoalescesControlsAndRespectsGlobalRate]' started.
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testCoalescesControlsAndRespectsGlobalRate]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testErrorCooldownClockRollbackAndClearPreventReplay]' started.
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testErrorCooldownClockRollbackAndClearPreventReplay]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testInvalidPolicyFails]' started.
+Test Case '-[BCRAgentCoreTests.FeedbackSchedulerTests testInvalidPolicyFails]' passed (0.000 seconds).
+Test Suite 'FeedbackSchedulerTests' passed at 2026-11-12 23:07:36.572.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'FunctionSystemTests' started at 2026-11-12 23:07:36.572.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testBulkPreviewPreservesValuesMappingAndAgentStateAndRejectsStalePlan]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testBulkPreviewPreservesValuesMappingAndAgentStateAndRejectsStalePlan]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testConfigurationReplacementKeepsMockStepButtonResponsive]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testConfigurationReplacementKeepsMockStepButtonResponsive]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testCycleOrderWrapAndUnlistedValue]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testCycleOrderWrapAndUnlistedValue]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testEveryTriggerTypeRejectsEncodersAndInvalidFunctionValues]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testEveryTriggerTypeRejectsEncodersAndInvalidFunctionValues]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testOldConfigurationMigrationAndNewTargetsRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testOldConfigurationMigrationAndNewTargetsRoundTrip]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testPositiveNegativeWrappingAndDebounce]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testPositiveNegativeWrappingAndDebounce]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testSetPresetLEDTracksSoftwareAndRelease]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testSetPresetLEDTracksSoftwareAndRelease]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testSnappedInputCorrectsItsOwnMockRingAndOtherBindings]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testSnappedInputCorrectsItsOwnMockRingAndOtherBindings]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testStepButtonStopsAtLimitAndLEDReportsAvailabilityWhileHeld]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testStepButtonStopsAtLimitAndLEDReportsAvailabilityWhileHeld]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testStepQuantizationEndpointsTieAndCanonicalSevenBitRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.FunctionSystemTests testStepQuantizationEndpointsTieAndCanonicalSevenBitRoundTrip]' passed (0.006 seconds).
+Test Suite 'FunctionSystemTests' passed at 2026-11-12 23:07:36.601.
+Executed 10 tests, with 0 failures (0 unexpected) in 0.028 (0.029) seconds
+Test Suite 'HardwareConfirmationGatewayTests' started at 2026-11-12 23:07:36.601.
+Test Case '-[BCRAgentCoreTests.HardwareConfirmationGatewayTests testHeadlessDefaultAndInjectedHostConfirmation]' started.
+Test Case '-[BCRAgentCoreTests.HardwareConfirmationGatewayTests testHeadlessDefaultAndInjectedHostConfirmation]' passed (0.001 seconds).
+Test Suite 'HardwareConfirmationGatewayTests' passed at 2026-11-12 23:07:36.602.
+Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'HardwareMapTests' started at 2026-11-12 23:07:36.602.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testBindRejectsMIDIAlreadyOwnedByAnotherControl]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testBindRejectsMIDIAlreadyOwnedByAnotherControl]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testControlIDDecodingRejectsPositionsOutsideTheLayout]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testControlIDDecodingRejectsPositionsOutsideTheLayout]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testEncodersCannotLearnNotes]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testEncodersCannotLearnNotes]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testLayoutHas108UniquePhysicalControlsInPanelOrder]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testLayoutHas108UniquePhysicalControlsInPanelOrder]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testMapCodableRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testMapCodableRoundTrip]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testMockPresetBindsEveryControlToADistinctCC]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testMockPresetBindsEveryControlToADistinctCC]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testRebindingTheSameControlReplacesItsIdentity]' started.
+Test Case '-[BCRAgentCoreTests.HardwareMapTests testRebindingTheSameControlReplacesItsIdentity]' passed (0.000 seconds).
+Test Suite 'HardwareMapTests' passed at 2026-11-12 23:07:36.604.
+Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'HardwareStartupSnapshotTests' started at 2026-11-12 23:07:36.604.
+Test Case '-[BCRAgentCoreTests.HardwareStartupSnapshotTests testIncompleteAndConflictingSnapshotsAreAtomic]' started.
+Test Case '-[BCRAgentCoreTests.HardwareStartupSnapshotTests testIncompleteAndConflictingSnapshotsAreAtomic]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.HardwareStartupSnapshotTests testStartupAdoptsAbsoluteValuesWithoutFeedbackOrButtonActionsOrTouch]' started.
+Test Case '-[BCRAgentCoreTests.HardwareStartupSnapshotTests testStartupAdoptsAbsoluteValuesWithoutFeedbackOrButtonActionsOrTouch]' passed (0.000 seconds).
+Test Suite 'HardwareStartupSnapshotTests' passed at 2026-11-12 23:07:36.605.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'JSONParameterLinkTests' started at 2026-11-12 23:07:36.605.
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testHeartbeatFreshnessSessionAndReplayProtection]' started.
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testHeartbeatFreshnessSessionAndReplayProtection]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testOutputRequiresPeerAndStopCannotContainMotionValues]' started.
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testOutputRequiresPeerAndStopCannotContainMotionValues]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testPeerRestartInvalidatesOldStateEpoch]' started.
+Test Case '-[BCRAgentCoreTests.JSONParameterLinkTests testPeerRestartInvalidatesOldStateEpoch]' passed (0.000 seconds).
+Test Suite 'JSONParameterLinkTests' passed at 2026-11-12 23:07:36.606.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'LEDRingTests' started at 2026-11-12 23:07:36.606.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testBarAndPanMatchHardwareSamples]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testBarAndPanMatchHardwareSamples]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LEDRingTests testEndpointsAndAllValuesKeepAtLeastOneLEDInObservedModes]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testEndpointsAndAllValuesKeepAtLeastOneLEDInObservedModes]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LEDRingTests testLearnedModeRoundTripsAndRelearningAnotherIdentityClearsIt]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testLearnedModeRoundTripsAndRelearningAnotherIdentityClearsIt]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LEDRingTests testMockUsesItsExplicitRingProfileAndFeedback]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testMockUsesItsExplicitRingProfileAndFeedback]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LEDRingTests testObservedHardwareBoundaries]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testObservedHardwareBoundaries]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LEDRingTests testV4MapRetainsBindingsWithoutInventingRingMode]' started.
+Test Case '-[BCRAgentCoreTests.LEDRingTests testV4MapRetainsBindingsWithoutInventingRingMode]' passed (0.000 seconds).
+Test Suite 'LEDRingTests' passed at 2026-11-12 23:07:36.608.
+Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'LocalizationTests' started at 2026-11-12 23:07:36.608.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testExplicitLanguageLookupAcceptsSwiftPMLowercaseDirectory]' started.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testExplicitLanguageLookupAcceptsSwiftPMLowercaseDirectory]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.LocalizationTests testSavedNamesAndGroupBindingsRemainVerbatim]' started.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testSavedNamesAndGroupBindingsRemainVerbatim]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LocalizationTests testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders]' started.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders]' passed (0.010 seconds).
+Test Case '-[BCRAgentCoreTests.LocalizationTests testSystemPreferenceOrderAndFallback]' started.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testSystemPreferenceOrderAndFallback]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.LocalizationTests testTranslationAndInterpolationDoNotTranslateUserContent]' started.
+Test Case '-[BCRAgentCoreTests.LocalizationTests testTranslationAndInterpolationDoNotTranslateUserContent]' passed (0.000 seconds).
+Test Suite 'LocalizationTests' passed at 2026-11-12 23:07:36.621.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.013 (0.013) seconds
+Test Suite 'MCPTests' started at 2026-11-12 23:07:36.621.
+Test Case '-[BCRAgentCoreTests.MCPTests testAgentSlotErrorsAreExplicitAndDoNotInvokeHandler]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testAgentSlotErrorsAreExplicitAndDoNotInvokeHandler]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testAgentWriteClampsUpdatesMockAndMarksOrigin]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testAgentWriteClampsUpdatesMockAndMarksOrigin]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testAuditIsBoundedAndDoesNotRetainRequestArguments]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testAuditIsBoundedAndDoesNotRetainRequestArguments]' passed (0.005 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testBatchSuccessDuplicateAndUnknownParameterFailures]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testBatchSuccessDuplicateAndUnknownParameterFailures]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationPermissionCannotEscalateProtectedDefinitionsOrEnableValues]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationPermissionCannotEscalateProtectedDefinitionsOrEnableValues]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationPersistenceFailureIsReturnedToMCPCaller]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationPersistenceFailureIsReturnedToMCPCaller]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationToolsRequirePermissionAndValidateBeforeChangingState]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testConfigurationToolsRequirePermissionAndValidateBeforeChangingState]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testDeviceSourceAndLearningRefuseActiveExternalOutput]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testDeviceSourceAndLearningRefuseActiveExternalOutput]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testHeaderMismatchMalformedRequestsAndUnsupportedVersionsAreExplicit]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testHeaderMismatchMalformedRequestsAndUnsupportedVersionsAreExplicit]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testLearnUsesRealInputPathAndCannotOverwriteExistingBinding]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testLearnUsesRealInputPathAndCannotOverwriteExistingBinding]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testLegacyHandshakeSessionExpiryAndStop]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testLegacyHandshakeSessionExpiryAndStop]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testModernDiscoveryToolCallsAndVersionMetadata]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testModernDiscoveryToolCallsAndVersionMetadata]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testNestedSchemasRejectUnknownPropertiesAndFractionalControlIDs]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testNestedSchemasRejectUnknownPropertiesAndFractionalControlIDs]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testNewControlPermissionsDefaultOffAndAreEnforced]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testNewControlPermissionsDefaultOffAndAreEnforced]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testProtectedParametersReadOnlyAndAtomicBatchFailures]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testProtectedParametersReadOnlyAndAtomicBatchFailures]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testResetGroupResetsWritableParametersAndReportsProtectedSkips]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testResetGroupResetsWritableParametersAndReportsProtectedSkips]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testRestrictConfigurationWritePersistsBeforeRevocationAndCannotRegrant]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testRestrictConfigurationWritePersistsBeforeRevocationAndCannotRegrant]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testSourceAndLearnToolsRequireLocalConfigurationPermissionAndHardware]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testSourceAndLearnToolsRequireLocalConfigurationPermissionAndHardware]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testStepAndNewAssignmentTargetsAreAvailableThroughGenericSchemas]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testStepAndNewAssignmentTargetsAreAvailableThroughGenericSchemas]' passed (0.006 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testToolSchemasAndReadToolsAreClientNeutral]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testToolSchemasAndReadToolsAreClientNeutral]' passed (0.008 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testV1ParameterMigrationProtectsEnableAndRoundTripsV2]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testV1ParameterMigrationProtectsEnableAndRoundTripsV2]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.MCPTests testWriteRateLimitUsesInjectedClockAndCountsBatchMembers]' started.
+Test Case '-[BCRAgentCoreTests.MCPTests testWriteRateLimitUsesInjectedClockAndCountsBatchMembers]' passed (0.002 seconds).
+Test Suite 'MCPTests' passed at 2026-11-12 23:07:36.670.
+Executed 22 tests, with 0 failures (0 unexpected) in 0.047 (0.049) seconds
+Test Suite 'MIDIEndpointSelectionTests' started at 2026-11-12 23:07:36.670.
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testDefaultPrefersPortOneAndExplicitChoiceUsesStableIdentity]' started.
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testDefaultPrefersPortOneAndExplicitChoiceUsesStableIdentity]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testGenericInterfaceRequiresExplicitChoiceAndCannotCaptureAutoMode]' started.
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testGenericInterfaceRequiresExplicitChoiceAndCannotCaptureAutoMode]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testMissingSelectionNeverFallsBackAndAbsentPortOneIsVisible]' started.
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testMissingSelectionNeverFallsBackAndAbsentPortOneIsVisible]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testSelectionsRoundTripAndRejectInvalidSettings]' started.
+Test Case '-[BCRAgentCoreTests.MIDIEndpointSelectionTests testSelectionsRoundTripAndRejectInvalidSettings]' passed (0.000 seconds).
+Test Suite 'MIDIEndpointSelectionTests' passed at 2026-11-12 23:07:36.671.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MIDIModelsTests' started at 2026-11-12 23:07:36.671.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testControlChangeUMPEncodingMatchesMIDI10Layout]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testControlChangeUMPEncodingMatchesMIDI10Layout]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testIgnoresUnsupportedUMPMessageTypes]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testIgnoresUnsupportedUMPMessageTypes]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testMIDI1ByteEncodingMatchesVoiceMessage]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testMIDI1ByteEncodingMatchesVoiceMessage]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testNoteOnAndOffRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testNoteOnAndOffRoundTrip]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testStateFeedbackUsesSameLearnedControl]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testStateFeedbackUsesSameLearnedControl]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testStreamDecoderSkipsContinuationWords]' started.
+Test Case '-[BCRAgentCoreTests.MIDIModelsTests testStreamDecoderSkipsContinuationWords]' passed (0.000 seconds).
+Test Suite 'MIDIModelsTests' passed at 2026-11-12 23:07:36.672.
+Executed 6 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MockBCR2000Tests' started at 2026-11-12 23:07:36.672.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testActiveGroupIsClamped]' started.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testActiveGroupIsClamped]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testButtonsSendMomentaryPressAndRelease]' started.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testButtonsSendMomentaryPressAndRelease]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testFeedbackMovesTheInternalValueLikeU1Mode]' started.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testFeedbackMovesTheInternalValueLikeU1Mode]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testMockAndEngineStayInSyncInBothDirections]' started.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testMockAndEngineStayInSyncInBothDirections]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testTurningSendsAbsoluteCCAndClampsAtLimits]' started.
+Test Case '-[BCRAgentCoreTests.MockBCR2000Tests testTurningSendsAbsoluteCCAndClampsAtLimits]' passed (0.000 seconds).
+Test Suite 'MockBCR2000Tests' passed at 2026-11-12 23:07:36.674.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds
+Test Suite 'MotionSafetyTests' started at 2026-11-12 23:07:36.674.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testAlreadyEnabledStartupAndReconnectRequireObservedOffThenOn]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testAlreadyEnabledStartupAndReconnectRequireObservedOffThenOn]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testDisabledAndDisconnectedNeverProduceMotionFrames]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testDisabledAndDisconnectedNeverProduceMotionFrames]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testDisableTimeoutAndDisconnectNeverRepeatMovement]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testDisableTimeoutAndDisconnectNeverRepeatMovement]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testEveryReadyFrameContainsAllLimitedOutputsIncludingUnchangedJoints]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testEveryReadyFrameContainsAllLimitedOutputsIncludingUnchangedJoints]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testFloatWireQuantizationStaysInsideSoftAndVelocityLimits]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testFloatWireQuantizationStaysInsideSoftAndVelocityLimits]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testInvalidTargetActualAndClockNeverReachSink]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testInvalidTargetActualAndClockNeverReachSink]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testLimitValidationRejectsUnsafeSettings]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testLimitValidationRejectsUnsafeSettings]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testMissingHeartbeatAndActualStateFailClosedAtBoundary]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testMissingHeartbeatAndActualStateFailClosedAtBoundary]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testPerCycleAndVelocityCapsAndInitialEnableDoNotJump]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testPerCycleAndVelocityCapsAndInitialEnableDoNotJump]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testReconnectAndReenableSeedFromFreshActualRatherThanOldCommands]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testReconnectAndReenableSeedFromFreshActualRatherThanOldCommands]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testSoftLimitsRemainEffectiveAndClockIsInjected]' started.
+Test Case '-[BCRAgentCoreTests.MotionSafetyTests testSoftLimitsRemainEffectiveAndClockIsInjected]' passed (0.000 seconds).
+Test Suite 'MotionSafetyTests' passed at 2026-11-12 23:07:36.677.
+Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'OSCCodecTests' started at 2026-11-12 23:07:36.677.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testActualLEDProjectionNeverChangesTargetAndToggleRemainsTargetOwned]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testActualLEDProjectionNeverChangesTargetAndToggleRemainsTargetOwned]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testActualReadoutDoesNotSnapOrHideOutOfRangeValues]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testActualReadoutDoesNotSnapOrHideOutOfRangeValues]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testBundleLengthAndNestingAreBounded]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testBundleLengthAndNestingAreBounded]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testFloatMessageMatchesBigEndianAlignedWireBytes]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testFloatMessageMatchesBigEndianAlignedWireBytes]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testIntegerStringAndNestedBundleRoundTrip]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testIntegerStringAndNestedBundleRoundTrip]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testMalformedPaddingTruncationTypesAndNonfiniteNumbersAreRejected]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testMalformedPaddingTruncationTypesAndNonfiniteNumbersAreRejected]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testParameterIDsUseAnUnambiguousASCIIPathComponent]' started.
+Test Case '-[BCRAgentCoreTests.OSCCodecTests testParameterIDsUseAnUnambiguousASCIIPathComponent]' passed (0.000 seconds).
+Test Suite 'OSCCodecTests' passed at 2026-11-12 23:07:36.679.
+Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'ParameterChangeAccumulatorTests' started at 2026-11-12 23:07:36.679.
+Test Case '-[BCRAgentCoreTests.ParameterChangeAccumulatorTests testCoalescesLatestValuesRemovalsAndResets]' started.
+Test Case '-[BCRAgentCoreTests.ParameterChangeAccumulatorTests testCoalescesLatestValuesRemovalsAndResets]' passed (0.000 seconds).
+Test Suite 'ParameterChangeAccumulatorTests' passed at 2026-11-12 23:07:36.679.
+Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'PersistenceValidationTests' started at 2026-11-12 23:07:36.679.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testConfigurationReplacementStopsLearningWithVisibleEventAndRejectsInvalidState]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testConfigurationReplacementStopsLearningWithVisibleEventAndRejectsInvalidState]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testDecodedDuplicateParametersAndInvalidAgentSlotsAreRejected]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testDecodedDuplicateParametersAndInvalidAgentSlotsAreRejected]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testEveryInvalidParameterRuleIsRejected]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testEveryInvalidParameterRuleIsRejected]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testLargeFiniteRangeHasFiniteMidpoint]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testLargeFiniteRangeHasFiniteMidpoint]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testMIDIDecoderRejectsInvalidChannelsAndNumbers]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testMIDIDecoderRejectsInvalidChannelsAndNumbers]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testRemovingLastGroupParameterClearsDanglingResetAction]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testRemovingLastGroupParameterClearsDanglingResetAction]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testWholeConfigurationReportsMultipleConcreteIssues]' started.
+Test Case '-[BCRAgentCoreTests.PersistenceValidationTests testWholeConfigurationReportsMultipleConcreteIssues]' passed (0.000 seconds).
+Test Suite 'PersistenceValidationTests' passed at 2026-11-12 23:07:36.685.
+Executed 11 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'PluginSurfaceCompatibilityTests' started at 2026-11-12 23:07:36.685.
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testGenericSessionActionCallbackPreservesSynchronousLEDUpdateOnHeldPress]' started.
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testGenericSessionActionCallbackPreservesSynchronousLEDUpdateOnHeldPress]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testInjectedProductionBindingsOnlyEmitGenericActionAndPreserveFeedbackOrder]' started.
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testInjectedProductionBindingsOnlyEmitGenericActionAndPreserveFeedbackOrder]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testInvalidLegacySlotsFailAtCheckedAndPluginBindingBoundariesWithoutTrapping]' started.
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testInvalidLegacySlotsFailAtCheckedAndPluginBindingBoundariesWithoutTrapping]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testLegacyEnumPatternsStillMatchWithoutInjectedBindings]' started.
+Test Case '-[BCRAgentCoreTests.PluginSurfaceCompatibilityTests testLegacyEnumPatternsStillMatchWithoutInjectedBindings]' passed (0.000 seconds).
+Test Suite 'PluginSurfaceCompatibilityTests' passed at 2026-11-12 23:07:36.688.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'PresetAlignmentTests' started at 2026-11-12 23:07:36.688.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testAlignedReadbackNeedsNoFurtherChanges]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testAlignedReadbackNeedsNoFurtherChanges]' passed (0.016 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testBarAndPanRingsFollowTheManual]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testBarAndPanRingsFollowTheManual]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testButtonsReportPressAndReleaseInsteadOfCounting]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testButtonsReportPressAndReleaseInsteadOfCounting]' passed (0.010 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testEnablingFunctionsIsExplicit]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testEnablingFunctionsIsExplicit]' passed (0.016 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testLockAndOptionsAreIndependent]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testLockAndOptionsAreIndependent]' passed (0.007 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testMismatchedEncoderIdentityIsRefusedInsteadOfRewritten]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testMismatchedEncoderIdentityIsRefusedInsteadOfRewritten]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testMissingAndSharedButtonsGetFreeUniqueIdentities]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testMissingAndSharedButtonsGetFreeUniqueIdentities]' passed (0.011 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testPlanIsTemporaryAndKeepsEncoderIdentities]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testPlanIsTemporaryAndKeepsEncoderIdentities]' passed (0.012 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testRejectsStoreOrIncompleteDumps]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testRejectsStoreOrIncompleteDumps]' passed (0.006 seconds).
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testRingModesFollowParameterMeaningOnTopEncodersOnly]' started.
+Test Case '-[BCRAgentCoreTests.PresetAlignmentTests testRingModesFollowParameterMeaningOnTopEncodersOnly]' passed (0.011 seconds).
+Test Suite 'PresetAlignmentTests' passed at 2026-11-12 23:07:36.781.
+Executed 10 tests, with 0 failures (0 unexpected) in 0.092 (0.093) seconds
+Test Suite 'SharedOutputCompatibilityTests' started at 2026-11-12 23:07:36.781.
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testHeartbeatGapRequiresExplicitOffOnEvenWhenFreshHeartbeatArrivesBeforeEvaluation]' started.
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testHeartbeatGapRequiresExplicitOffOnEvenWhenFreshHeartbeatArrivesBeforeEvaluation]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testRegressingHeartbeatLatchesVisibleClockFailure]' started.
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testRegressingHeartbeatLatchesVisibleClockFailure]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testSharedExamplePreservesAllLegacyMetadataAndExplicitProtection]' started.
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testSharedExamplePreservesAllLegacyMetadataAndExplicitProtection]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testSharedFailureParameterIDRestoresAllThreeLegacyDiagnosticMessages]' started.
+Test Case '-[BCRAgentCoreTests.SharedOutputCompatibilityTests testSharedFailureParameterIDRestoresAllThreeLegacyDiagnosticMessages]' passed (0.000 seconds).
+Test Suite 'SharedOutputCompatibilityTests' passed at 2026-11-12 23:07:36.783.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'SurfaceConfigurationTests' started at 2026-11-12 23:07:36.783.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testAssignmentToUnknownParameterIsRejected]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testAssignmentToUnknownParameterIsRejected]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testContinuousParameterMapsSevenBitValuesAcrossItsRange]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testContinuousParameterMapsSevenBitValuesAcrossItsRange]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testMakeParameterIDSkipsExistingIDs]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testMakeParameterIDSkipsExistingIDs]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testRemovingAParameterClearsItsAssignments]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testRemovingAParameterClearsItsAssignments]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testRobotArmDemoIsInternallyConsistentAndCodable]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testRobotArmDemoIsInternallyConsistentAndCodable]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testToggleParameterSnapsToItsEnds]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testToggleParameterSnapsToItsEnds]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testTriggersCannotBeAssignedToEncoders]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testTriggersCannotBeAssignedToEncoders]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testValidationRejectsEmptyNameAndInvertedRange]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceConfigurationTests testValidationRejectsEmptyNameAndInvertedRange]' passed (0.000 seconds).
+Test Suite 'SurfaceConfigurationTests' passed at 2026-11-12 23:07:36.785.
+Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'SurfaceEngineTests' started at 2026-11-12 23:07:36.785.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testAgentButtonTriggersOncePerPressWithDebounceAndShowsAgentLED]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testAgentButtonTriggersOncePerPressWithDebounceAndShowsAgentLED]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testButtonLearnsOnPressNotRelease]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testButtonLearnsOnPressNotRelease]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testConfigurationReplacementPreservesDeviceTimingPolicy]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testConfigurationReplacementPreservesDeviceTimingPolicy]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testConfigurationReplacementResetsParametersAndPreservesAgentSnapshot]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testConfigurationReplacementResetsParametersAndPreservesAgentSnapshot]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testContinuedMovementOfALearnedEncoderDoesNotBindTheNextControl]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testContinuedMovementOfALearnedEncoderDoesNotBindTheNextControl]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testEncoderInputMovesParameterAndMirrorsOnlyToOtherBoundControls]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testEncoderInputMovesParameterAndMirrorsOnlyToOtherBoundControls]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testEncoderLearningRejectsNoteMessagesVisibly]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testEncoderLearningRejectsNoteMessagesVisibly]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testFeedbackEchoWithinWindowIsIgnored]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testFeedbackEchoWithinWindowIsIgnored]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testLearningAnAssignedControlImmediatelyWritesSoftwareState]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testLearningAnAssignedControlImmediatelyWritesSoftwareState]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testLearningBindsAndAdvancesToNextUnboundControlInSection]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testLearningBindsAndAdvancesToNextUnboundControlInSection]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testMomentaryButtonIsOnOnlyWhileHeld]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testMomentaryButtonIsOnOnlyWhileHeld]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testResetGroupReturnsParametersToDefaults]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testResetGroupReturnsParametersToDefaults]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareAdjustOfUnassignedEncoderWritesRawRingValue]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareAdjustOfUnassignedEncoderWritesRawRingValue]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareAdjustStartsFromTheParameterPosition]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareAdjustStartsFromTheParameterPosition]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareParameterChangeWritesEveryBoundControl]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testSoftwareParameterChangeWritesEveryBoundControl]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testToggleButtonFlipsOnPressAndHoldsLEDOnRelease]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testToggleButtonFlipsOnPressAndHoldsLEDOnRelease]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testUnmappedInputIsReported]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceEngineTests testUnmappedInputIsReported]' passed (0.000 seconds).
+Test Suite 'SurfaceEngineTests' passed at 2026-11-12 23:07:36.788.
+Executed 17 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'SurfaceProgramsTests' started at 2026-11-12 23:07:36.788.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testHiddenPagesAndMacrosAreValidatedAndParameterDeletionCascades]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testHiddenPagesAndMacrosAreValidatedAndParameterDeletionCascades]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testMacroOrderClampingSnappingAndSinglePressDebounce]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testMacroOrderClampingSnappingAndSinglePressDebounce]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testPageSwitchPreservesValuesChangesAssignmentsAndRoundTrips]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testPageSwitchPreservesValuesChangesAssignmentsAndRoundTrips]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testPageWarningExcludesSelfSwitchAndV5SelectionMigratesToBase]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testPageWarningExcludesSelfSwitchAndV5SelectionMigratesToBase]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testVersionFourMigrationPreservesBaseAssignments]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceProgramsTests testVersionFourMigrationPreservesBaseAssignments]' passed (0.001 seconds).
+Test Suite 'SurfaceProgramsTests' passed at 2026-11-12 23:07:36.792.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'SurfaceSessionTests' started at 2026-11-12 23:07:36.792.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testAgentTriggerAndFeedbackRunThroughSessionAndSurviveConfigurationReset]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testAgentTriggerAndFeedbackRunThroughSessionAndSurviveConfigurationReset]' passed (0.004 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testChangingConnectedOutputRouteResendsSnapshotOnce]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testChangingConnectedOutputRouteResendsSnapshotOnce]' passed (0.009 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationEditsPersistAndWriteFeedback]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationEditsPersistAndWriteFeedback]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationReplacementClearsRemovedNRPNOnlyThroughLearnedHardwareIdentity]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationReplacementClearsRemovedNRPNOnlyThroughLearnedHardwareIdentity]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationValidationAndSaveErrorsAreObservable]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testConfigurationValidationAndSaveErrorsAreObservable]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testDisconnectedHardwareSwitchCountsDroppedFeedbackWithoutSending]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testDisconnectedHardwareSwitchCountsDroppedFeedbackWithoutSending]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testFeedbackEchoDoesNotCancelNewerQueuedSoftwareValue]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testFeedbackEchoDoesNotCancelNewerQueuedSoftwareValue]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testHardwareInputInMockModeIsLoggedButDoesNotTouchParametersOrAgent]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testHardwareInputInMockModeIsLoggedButDoesNotTouchParametersOrAgent]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testInjectedClockControlsFeedbackEchoSuppression]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testInjectedClockControlsFeedbackEchoSuppression]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testInjectedClockControlsTriggerDebounce]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testInjectedClockControlsTriggerDebounce]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningAdvancesRejectsConflictsAndPersistsOnlyAcceptedBindings]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningAdvancesRejectsConflictsAndPersistsOnlyAcceptedBindings]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningLastControlFinishesAndButtonReleaseDoesNotLearn]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningLastControlFinishesAndButtonReleaseDoesNotLearn]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningPersistenceFailureRemainsVisibleAndKeepsInMemoryMapping]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningPersistenceFailureRemainsVisibleAndKeepsInMemoryMapping]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningStopSwitchUnbindAndResetPersistHardwareMap]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testLearningStopSwitchUnbindAndResetPersistHardwareMap]' passed (0.011 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMockInputUpdatesParameterAndOnlyMirrorsOtherControl]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMockInputUpdatesParameterAndOnlyMirrorsOtherControl]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMonitorIsBoundedClearsAndKeepsMonotonicIDs]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMonitorIsBoundedClearsAndKeepsMonotonicIDs]' passed (0.040 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMonitorRecordsActualFeedbackDelivery]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testMonitorRecordsActualFeedbackDelivery]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testNewParameterUsesControlKindAndPersistsAssignment]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testNewParameterUsesControlKindAndPersistsAssignment]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testParameterObserversSeeBatchesAndCanUnsubscribe]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testParameterObserversSeeBatchesAndCanUnsubscribe]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testPhysicalInputCancelsOlderQueuedOriginFeedback]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testPhysicalInputCancelsOlderQueuedOriginFeedback]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testPresetReplacementClearsRemovedEnableLEDThroughFeedbackPipeline]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testPresetReplacementClearsRemovedEnableLEDThroughFeedbackPipeline]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect]' passed (0.002 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testReconnectWritesCurrentSnapshotAndDoesNotReplayOldFeedback]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testReconnectWritesCurrentSnapshotAndDoesNotReplayOldFeedback]' passed (0.003 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSendFailureReportsErrorAndCountsEveryDroppedMessage]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSendFailureReportsErrorAndCountsEveryDroppedMessage]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSoftwareParameterAndResetWriteAllMockBindings]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSoftwareParameterAndResetWriteAllMockBindings]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSwitchBackToMockPreservesParametersAndSeparateHardwareMap]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSwitchBackToMockPreservesParametersAndSeparateHardwareMap]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSwitchingPagesDoesNotPersistOrExportSessionSelection]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSwitchingPagesDoesNotPersistOrExportSessionSelection]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSynchronousAgentFeedbackSurvivesHeldPressIncludingRunningToInterrupted]' started.
+Test Case '-[BCRAgentCoreTests.SurfaceSessionTests testSynchronousAgentFeedbackSurvivesHeldPressIncludingRunningToInterrupted]' passed (0.004 seconds).
+Test Suite 'SurfaceSessionTests' passed at 2026-11-12 23:07:36.895.
+Executed 28 tests, with 0 failures (0 unexpected) in 0.101 (0.103) seconds
+Test Suite 'WorkspacePolicyTests' started at 2026-11-12 23:07:36.895.
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testCanonicalWorkspaceRootForExistingDirectory]' started.
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testCanonicalWorkspaceRootForExistingDirectory]' passed (0.001 seconds).
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testMissingWorkspaceRootThrows]' started.
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testMissingWorkspaceRootThrows]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testRelativeWorkspaceIsRejectedBeforeURLResolution]' started.
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testRelativeWorkspaceIsRejectedBeforeURLResolution]' passed (0.000 seconds).
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testWorkspaceWriteRequiresStrictWritableRootMatch]' started.
+Test Case '-[BCRAgentCoreTests.WorkspacePolicyTests testWorkspaceWriteRequiresStrictWritableRootMatch]' passed (0.001 seconds).
+Test Suite 'WorkspacePolicyTests' passed at 2026-11-12 23:07:36.897.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'BCRAgentCoreTests.xctest' passed at 2026-11-12 23:07:36.897.
+Executed 271 tests, with 0 failures (0 unexpected) in 6.603 (6.624) seconds
+Test Suite 'All tests' passed at 2026-11-12 23:07:36.897.
+Executed 271 tests, with 0 failures (0 unexpected) in 6.603 (6.625) seconds
+Test Suite 'All tests' started at 2026-11-12 23:07:37.127.
+Test Suite 'BCRAgentConsoleTests.xctest' started at 2026-11-12 23:07:37.128.
+Test Suite 'AgentLEDBlinkPatternTests' started at 2026-11-12 23:07:37.128.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkPatternTests testStatesMapToDistinctRhythms]' started.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkPatternTests testStatesMapToDistinctRhythms]' passed (0.001 seconds).
+Test Suite 'AgentLEDBlinkPatternTests' passed at 2026-11-12 23:07:37.129.
+Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'AgentLEDBlinkTests' started at 2026-11-12 23:07:37.129.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testAttentionBlinksOnAndOffThenSteadyStateStopsTraffic]' started.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testAttentionBlinksOnAndOffThenSteadyStateStopsTraffic]' passed (1.120 seconds).
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testBlinkingIsOptInAndPersisted]' started.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testBlinkingIsOptInAndPersisted]' passed (0.191 seconds).
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testDisabledKeepsOriginalLevels]' started.
+Test Case '-[BCRAgentConsoleTests.AgentLEDBlinkTests testDisabledKeepsOriginalLevels]' passed (0.109 seconds).
+Test Suite 'AgentLEDBlinkTests' passed at 2026-11-12 23:07:38.550.
+Executed 3 tests, with 0 failures (0 unexpected) in 1.421 (1.421) seconds
+Test Suite 'ArmPreviewTests' started at 2026-11-12 23:07:38.550.
+Test Case '-[BCRAgentConsoleTests.ArmPreviewTests testExtremeFiniteAnglesFormatWithoutIntegerNarrowingAndHaveFiniteGeometry]' started.
+Test Case '-[BCRAgentConsoleTests.ArmPreviewTests testExtremeFiniteAnglesFormatWithoutIntegerNarrowingAndHaveFiniteGeometry]' passed (0.000 seconds).
+Test Suite 'ArmPreviewTests' passed at 2026-11-12 23:07:38.551.
+Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'BCRDisplayModelTests' started at 2026-11-12 23:07:38.551.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testButtonsShowOnAndOffAndCountersShowTheirValue]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testButtonsShowOnAndOffAndCountersShowTheirValue]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testPresetNumberComesFromAUniqueName]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testPresetNumberComesFromAUniqueName]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testProfileReadsNameAndShowValueFromThePreset]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testProfileReadsNameAndShowValueFromThePreset]' passed (0.001 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testRendersLikeTheFourDigitDisplay]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testRendersLikeTheFourDigitDisplay]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testSameNamedPresetsAreResolvedByContentWithoutValues]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testSameNamedPresetsAreResolvedByContentWithoutValues]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testShowValueOffLeavesTheDisplayUnchanged]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testShowValueOffLeavesTheDisplayUnchanged]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testTransfersShowBusyOverEverythingElse]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testTransfersShowBusyOverEverythingElse]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testValueIsShownBrieflyThenReturnsToPreset]' started.
+Test Case '-[BCRAgentConsoleTests.BCRDisplayModelTests testValueIsShownBrieflyThenReturnsToPreset]' passed (0.000 seconds).
+Test Suite 'BCRDisplayModelTests' passed at 2026-11-12 23:07:38.554.
+Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'CodexAgentControllerTests' started at 2026-11-12 23:07:38.554.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testConnectionFailureIsVisibleAndDoesNotFallBackToMock]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testConnectionFailureIsVisibleAndDoesNotFallBackToMock]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testExplicitBackendConnectionTurnStopAndReconnect]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testExplicitBackendConnectionTurnStopAndReconnect]' passed (0.120 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testImmediateQueuedInterruptDoesNotCancelNextStart]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testImmediateQueuedInterruptDoesNotCancelNextStart]' passed (0.087 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testMultiSlotPublicationUpdatesEveryLED]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testMultiSlotPublicationUpdatesEveryLED]' passed (0.086 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testOldReviewCannotAuthorizeReusedRPCIDAfterReconnect]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testOldReviewCannotAuthorizeReusedRPCIDAfterReconnect]' passed (0.121 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testPreferencesPersistWithoutPromptOrAutomaticConnection]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testPreferencesPersistWithoutPromptOrAutomaticConnection]' passed (0.003 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testPrimaryAndSlotApproveIntentsOnlyOpenReviewAndCannotAuthorize]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testPrimaryAndSlotApproveIntentsOnlyOpenReviewAndCannotAuthorize]' passed (0.066 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testQueuedInterruptIsScopedToOneSlot]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testQueuedInterruptIsScopedToOneSlot]' passed (0.261 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testRelativeExecutableIsRejectedInsteadOfGuessingGUIPath]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testRelativeExecutableIsRejectedInsteadOfGuessingGUIPath]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testReviewChoosesExactRequestAndRejectNeedsNoPresentation]' started.
+Test Case '-[BCRAgentConsoleTests.CodexAgentControllerTests testReviewChoosesExactRequestAndRejectNeedsNoPresentation]' passed (0.070 seconds).
+Test Suite 'CodexAgentControllerTests' passed at 2026-11-12 23:07:39.371.
+Executed 10 tests, with 0 failures (0 unexpected) in 0.816 (0.817) seconds
+Test Suite 'ConfigurationLibraryTests' started at 2026-11-12 23:07:39.371.
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testCorruptFileCannotBeOverwritten]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testCorruptFileCannotBeOverwritten]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testDecodingRejectsEmptySavedName]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testDecodingRejectsEmptySavedName]' passed (0.001 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testFailedSaveDoesNotPublishUndurableEntry]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testFailedSaveDoesNotPublishUndurableEntry]' passed (0.004 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testSaveReopenDeleteAndKeepCurrentConfigurationIndependent]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationLibraryTests testSaveReopenDeleteAndKeepCurrentConfigurationIndependent]' passed (0.003 seconds).
+Test Suite 'ConfigurationLibraryTests' passed at 2026-11-12 23:07:39.381.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.010 (0.010) seconds
+Test Suite 'ConfigurationPersistenceTests' started at 2026-11-12 23:07:39.381.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testClampedDefinitionSaveCanBeAdoptedAsCleanDraft]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testClampedDefinitionSaveCanBeAdoptedAsCleanDraft]' passed (0.107 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testFailedBackupBlocksSaveAndKeepsInvalidOriginal]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testFailedBackupBlocksSaveAndKeepsInvalidOriginal]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testImportSaveFailureDoesNotReplaceLiveState]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testImportSaveFailureDoesNotReplaceLiveState]' passed (0.103 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidHardwareMapIsPreservedAndNeverFallsBackToMockPreset]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidHardwareMapIsPreservedAndNeverFallsBackToMockPreset]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidImportDoesNotReplaceConfigurationParametersOrMapping]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidImportDoesNotReplaceConfigurationParametersOrMapping]' passed (0.092 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidLoadPreservesOriginalAndBacksUpExactBytesBeforeLaterSave]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testInvalidLoadPreservesOriginalAndBacksUpExactBytesBeforeLaterSave]' passed (0.004 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testMigrationIsVisibleAndOriginalIsUntouchedUntilExplicitSave]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testMigrationIsVisibleAndOriginalIsUntouchedUntilExplicitSave]' passed (0.003 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testMigrationNoticeOffersSaveThatBacksUpAndStopsRecurring]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testMigrationNoticeOffersSaveThatBacksUpAndStopsRecurring]' passed (0.197 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testOnlyPlainInfoNoticesDismissThemselves]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testOnlyPlainInfoNoticesDismissThemselves]' passed (0.088 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testOversizedOriginalIsNeverReplaced]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testOversizedOriginalIsNeverReplaced]' passed (0.004 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testPageWarningDoesNotHideProgramSaveFailure]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testPageWarningDoesNotHideProgramSaveFailure]' passed (0.098 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testRetrySaveClearsVisibleStorageFailureWithoutRequiringAnotherEdit]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testRetrySaveClearsVisibleStorageFailureWithoutRequiringAnotherEdit]' passed (0.101 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testV3HardwareMapMigratesVisiblyAndBacksUpExactBytes]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testV3HardwareMapMigratesVisiblyAndBacksUpExactBytes]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testValidImportExportsOnlyVersionedConfigurationAndKeepsHardwareMap]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPersistenceTests testValidImportExportsOnlyVersionedConfigurationAndKeepsHardwareMap]' passed (0.098 seconds).
+Test Suite 'ConfigurationPersistenceTests' passed at 2026-11-12 23:07:40.283.
+Executed 14 tests, with 0 failures (0 unexpected) in 0.900 (0.902) seconds
+Test Suite 'ConfigurationPresetTests' started at 2026-11-12 23:07:40.283.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPresetTests testFreshInstallOpensNeutralStarterAndExampleIsLoadedExplicitly]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPresetTests testFreshInstallOpensNeutralStarterAndExampleIsLoadedExplicitly]' passed (0.115 seconds).
+Test Case '-[BCRAgentConsoleTests.ConfigurationPresetTests testSavedConfigurationWinsOverTheInitialPreset]' started.
+Test Case '-[BCRAgentConsoleTests.ConfigurationPresetTests testSavedConfigurationWinsOverTheInitialPreset]' passed (0.192 seconds).
+Test Suite 'ConfigurationPresetTests' passed at 2026-11-12 23:07:40.590.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.307 (0.307) seconds
+Test Suite 'ConsoleLayoutTests' started at 2026-11-12 23:07:40.590.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testMinimumWindowKeepsNaturalPanelStacked]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testMinimumWindowKeepsNaturalPanelStacked]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testPanelHeightFitsWhenSideBySide]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testPanelHeightFitsWhenSideBySide]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testScaleIsCappedAndContentNeverExceedsAvailableWidth]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testScaleIsCappedAndContentNeverExceedsAvailableWidth]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testTallNarrowWindowGrowsPanelButKeepsWorkspaceVisible]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testTallNarrowWindowGrowsPanelButKeepsWorkspaceVisible]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testWideWindowPlacesWorkspaceBesideAScaledPanel]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleLayoutTests testWideWindowPlacesWorkspaceBesideAScaledPanel]' passed (0.000 seconds).
+Test Suite 'ConsoleLayoutTests' passed at 2026-11-12 23:07:40.591.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'ConsoleRefreshTests' started at 2026-11-12 23:07:40.591.
+Test Case '-[BCRAgentConsoleTests.ConsoleRefreshTests testHardwareBurstsPublishOnceAndFollowLatestTouchOnNextFrame]' started.
+Test Case '-[BCRAgentConsoleTests.ConsoleRefreshTests testHardwareBurstsPublishOnceAndFollowLatestTouchOnNextFrame]' passed (0.284 seconds).
+Test Suite 'ConsoleRefreshTests' passed at 2026-11-12 23:07:40.875.
+Executed 1 test, with 0 failures (0 unexpected) in 0.284 (0.284) seconds
+Test Suite 'CoreMIDIAvailabilityTests' started at 2026-11-12 23:07:40.875.
+Test Case '-[BCRAgentConsoleTests.CoreMIDIAvailabilityTests testExplicitlyOfflineEndpointsAreExcluded]' started.
+Test Case '-[BCRAgentConsoleTests.CoreMIDIAvailabilityTests testExplicitlyOfflineEndpointsAreExcluded]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.CoreMIDIAvailabilityTests testOptionalUnknownPropertyIsNotMisreportedAsOffline]' started.
+Test Case '-[BCRAgentConsoleTests.CoreMIDIAvailabilityTests testOptionalUnknownPropertyIsNotMisreportedAsOffline]' passed (0.000 seconds).
+Test Suite 'CoreMIDIAvailabilityTests' passed at 2026-11-12 23:07:40.875.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'DeviceDisplayTests' started at 2026-11-12 23:07:40.875.
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testDuplicateNamesResolveOnceThenUseTheCache]' started.
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testDuplicateNamesResolveOnceThenUseTheCache]' passed (0.845 seconds).
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testHardwareModeReadsPresetNumberAndShowValueWithoutWriting]' started.
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testHardwareModeReadsPresetNumberAndShowValueWithoutWriting]' passed (1.455 seconds).
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testUnknownPresetNameIsNotGuessed]' started.
+Test Case '-[BCRAgentConsoleTests.DeviceDisplayTests testUnknownPresetNameIsNotGuessed]' passed (0.278 seconds).
+Test Suite 'DeviceDisplayTests' passed at 2026-11-12 23:07:43.454.
+Executed 3 tests, with 0 failures (0 unexpected) in 2.578 (2.579) seconds
+Test Suite 'FeedbackSettingsTests' started at 2026-11-12 23:07:43.454.
+Test Case '-[BCRAgentConsoleTests.FeedbackSettingsTests testPollingRunsOnlyForEnabledNonemptyQueueAndReleasesController]' started.
+Test Case '-[BCRAgentConsoleTests.FeedbackSettingsTests testPollingRunsOnlyForEnabledNonemptyQueueAndReleasesController]' passed (0.033 seconds).
+Test Suite 'FeedbackSettingsTests' passed at 2026-11-12 23:07:43.487.
+Executed 1 test, with 0 failures (0 unexpected) in 0.033 (0.033) seconds
+Test Suite 'FunctionEditorTests' started at 2026-11-12 23:07:43.487.
+Test Case '-[BCRAgentConsoleTests.FunctionEditorTests testBulkModelReportsStalePreviewAndCurrentValuesSurviveSuccess]' started.
+Test Case '-[BCRAgentConsoleTests.FunctionEditorTests testBulkModelReportsStalePreviewAndCurrentValuesSurviveSuccess]' passed (0.081 seconds).
+Test Case '-[BCRAgentConsoleTests.FunctionEditorTests testCycleTextValidationKeepsExistingAssignmentOnBadInput]' started.
+Test Case '-[BCRAgentConsoleTests.FunctionEditorTests testCycleTextValidationKeepsExistingAssignmentOnBadInput]' passed (0.083 seconds).
+Test Suite 'FunctionEditorTests' passed at 2026-11-12 23:07:43.652.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.164 (0.165) seconds
+Test Suite 'HardwareConnectionStatusTests' started at 2026-11-12 23:07:43.652.
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testDeclineDoesNotSurviveDisconnectOrExplicitSourceSelection]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testDeclineDoesNotSurviveDisconnectOrExplicitSourceSelection]' passed (0.737 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testDeclineRemainsQueryableAndANewRequestReplacesIt]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testDeclineRemainsQueryableAndANewRequestReplacesIt]' passed (1.026 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testRemoteRequestIsPendingUntilUserConfirmsThenReportsHardware]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareConnectionStatusTests testRemoteRequestIsPendingUntilUserConfirmsThenReportsHardware]' passed (0.697 seconds).
+Test Suite 'HardwareConnectionStatusTests' passed at 2026-11-12 23:07:46.112.
+Executed 3 tests, with 0 failures (0 unexpected) in 2.460 (2.460) seconds
+Test Suite 'HardwarePressAnimationTests' started at 2026-11-12 23:07:46.112.
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testHardwareCounterAndZeroPulsesDepressKnobAndButtonWithoutActions]' started.
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testHardwareCounterAndZeroPulsesDepressKnobAndButtonWithoutActions]' passed (0.315 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testHeldPressIsClearedWhenTheRouteDisappears]' started.
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testHeldPressIsClearedWhenTheRouteDisappears]' passed (0.083 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testMomentaryPressHoldsAndReleaseOnlyReturnsOnce]' started.
+Test Case '-[BCRAgentConsoleTests.HardwarePressAnimationTests testMomentaryPressHoldsAndReleaseOnlyReturnsOnce]' passed (0.545 seconds).
+Test Suite 'HardwarePressAnimationTests' passed at 2026-11-12 23:07:47.056.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.943 (0.944) seconds
+Test Suite 'HardwareStartupTests' started at 2026-11-12 23:07:47.056.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testControlsLearnedThisRunAreOfferedAfterReconnect]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testControlsLearnedThisRunAreOfferedAfterReconnect]' passed (0.403 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testFailedStartupReadStaysInMockWithoutWritingDefaults]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testFailedStartupReadStaysInMockWithoutWritingDefaults]' passed (0.468 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testFirstRunWithoutLearnedControlsEntersHardwareWithoutWriting]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testFirstRunWithoutLearnedControlsEntersHardwareWithoutWriting]' passed (0.478 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testNoticeActionAndPickerRequireConfirmationInsteadOfWriting]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testNoticeActionAndPickerRequireConfirmationInsteadOfWriting]' passed (0.719 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testRemoteHardwareSwitchIsRefusedAndAsksTheUser]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testRemoteHardwareSwitchIsRefusedAndAsksTheUser]' passed (0.722 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testRequestIsTheReadOnlyBCRSnapshotCommand]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testRequestIsTheReadOnlyBCRSnapshotCommand]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testStartupReadsHardwareWithoutInferringGroupFromAllGroupValues]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testStartupReadsHardwareWithoutInferringGroupFromAllGroupValues]' passed (0.522 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testUserEditDuringReadIsPreservedInsteadOfBeingOverwritten]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testUserEditDuringReadIsPreservedInsteadOfBeingOverwritten]' passed (0.583 seconds).
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testWriteOptionEntersHardwareOnlyAfterConfirmation]' started.
+Test Case '-[BCRAgentConsoleTests.HardwareStartupTests testWriteOptionEntersHardwareOnlyAfterConfirmation]' passed (0.399 seconds).
+Test Suite 'HardwareStartupTests' passed at 2026-11-12 23:07:51.352.
+Executed 9 tests, with 0 failures (0 unexpected) in 4.295 (4.296) seconds
+Test Suite 'IntegrationMIDIFixtureTests' started at 2026-11-12 23:07:51.352.
+Test Case '-[BCRAgentConsoleTests.IntegrationMIDIFixtureTests testReadOnlySetupAndExplicitPresetWriteStayInsideTheIsolatedFixture]' started.
+Test Case '-[BCRAgentConsoleTests.IntegrationMIDIFixtureTests testReadOnlySetupAndExplicitPresetWriteStayInsideTheIsolatedFixture]' passed (1.128 seconds).
+Test Suite 'IntegrationMIDIFixtureTests' passed at 2026-11-12 23:07:52.479.
+Executed 1 test, with 0 failures (0 unexpected) in 1.128 (1.128) seconds
+Test Suite 'IntegrationTestContextTests' started at 2026-11-12 23:07:52.479.
+Test Case '-[BCRAgentConsoleTests.IntegrationTestContextTests testContextUsesOnlyItsExplicitDirectoryAndInjectedCredential]' started.
+Test Case '-[BCRAgentConsoleTests.IntegrationTestContextTests testContextUsesOnlyItsExplicitDirectoryAndInjectedCredential]' passed (0.067 seconds).
+Test Case '-[BCRAgentConsoleTests.IntegrationTestContextTests testInvalidIntegrationEnvironmentFailsInsteadOfUsingUserData]' started.
+Test Case '-[BCRAgentConsoleTests.IntegrationTestContextTests testInvalidIntegrationEnvironmentFailsInsteadOfUsingUserData]' passed (0.000 seconds).
+Test Suite 'IntegrationTestContextTests' passed at 2026-11-12 23:07:52.546.
+Executed 2 tests, with 0 failures (0 unexpected) in 0.067 (0.067) seconds
+Test Suite 'LEDDisplayTests' started at 2026-11-12 23:07:52.546.
+Test Case '-[BCRAgentConsoleTests.LEDDisplayTests testMockInputShowsItsValueThenUnknownPreset]' started.
+Test Case '-[BCRAgentConsoleTests.LEDDisplayTests testMockInputShowsItsValueThenUnknownPreset]' passed (1.782 seconds).
+Test Case '-[BCRAgentConsoleTests.LEDDisplayTests testSourceChangeClearsDisplayedValue]' started.
+Test Case '-[BCRAgentConsoleTests.LEDDisplayTests testSourceChangeClearsDisplayedValue]' passed (0.122 seconds).
+Test Suite 'LEDDisplayTests' passed at 2026-11-12 23:07:54.450.
+Executed 2 tests, with 0 failures (0 unexpected) in 1.903 (1.904) seconds
+Test Suite 'LanguagePreferencesTests' started at 2026-11-12 23:07:54.450.
+Test Case '-[BCRAgentConsoleTests.LanguagePreferencesTests testPreferencePersistsAndReturningToSystemRemovesOnlyAppOverride]' started.
+Test Case '-[BCRAgentConsoleTests.LanguagePreferencesTests testPreferencePersistsAndReturningToSystemRemovesOnlyAppOverride]' passed (0.003 seconds).
+Test Suite 'LanguagePreferencesTests' passed at 2026-11-12 23:07:54.453.
+Executed 1 test, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'MCPHTTPServerTests' started at 2026-11-12 23:07:54.453.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testAuthenticationOriginHostAndModernHeaderValidation]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testAuthenticationOriginHostAndModernHeaderValidation]' passed (0.025 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testLegacySessionHeaderNotificationAndDeletion]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testLegacySessionHeaderNotificationAndDeletion]' passed (0.007 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testLoopbackModernDiscoveryWriteReadAndSourceAttribution]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testLoopbackModernDiscoveryWriteReadAndSourceAttribution]' passed (0.005 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testOccupiedPortFailsVisiblyAndStopClosesListener]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testOccupiedPortFailsVisiblyAndStopClosesListener]' passed (0.004 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testParserRejectsSmugglingAndWaitsForCompleteBody]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testParserRejectsSmugglingAndWaitsForCompleteBody]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testPendingKeychainReadLeavesMainActorResponsiveAndStopPreventsLateStartup]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testPendingKeychainReadLeavesMainActorResponsiveAndStopPreventsLateStartup]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testSettingsDefaultOffAndCredentialIsNotTouchedForReadOnlyConfiguration]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testSettingsDefaultOffAndCredentialIsNotTouchedForReadOnlyConfiguration]' passed (0.001 seconds).
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testV1ConfigurationMigrationIsVisibleAndDoesNotOverwriteSource]' started.
+Test Case '-[BCRAgentConsoleTests.MCPHTTPServerTests testV1ConfigurationMigrationIsVisibleAndDoesNotOverwriteSource]' passed (0.073 seconds).
+Test Suite 'MCPHTTPServerTests' passed at 2026-11-12 23:07:54.572.
+Executed 8 tests, with 0 failures (0 unexpected) in 0.118 (0.119) seconds
+Test Suite 'MIDIEndpointSettingsTests' started at 2026-11-12 23:07:54.572.
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testChoicePersistsStopsOutputAndPreservesParameterValues]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testChoicePersistsStopsOutputAndPreservesParameterValues]' passed (0.077 seconds).
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testCorruptSettingsPreventStartUntilExplicitlyRepaired]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testCorruptSettingsPreventStartUntilExplicitlyRepaired]' passed (0.073 seconds).
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testIsolatedModeCannotConfigureOrStartRealMIDI]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIEndpointSettingsTests testIsolatedModeCannotConfigureOrStartRealMIDI]' passed (0.075 seconds).
+Test Suite 'MIDIEndpointSettingsTests' passed at 2026-11-12 23:07:54.797.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.225 (0.225) seconds
+Test Suite 'MIDIStartupProgramTests' started at 2026-11-12 23:07:54.797.
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testFramesAreTemporaryBCLWithoutStore]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testFramesAreTemporaryBCLWithoutStore]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testRejectsUnknownOrUnsafeSettings]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testRejectsUnknownOrUnsafeSettings]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testSysExAssemblerJoinsUMPChunksPerGroup]' started.
+Test Case '-[BCRAgentConsoleTests.MIDIStartupProgramTests testSysExAssemblerJoinsUMPChunksPerGroup]' passed (0.000 seconds).
+Test Suite 'MIDIStartupProgramTests' passed at 2026-11-12 23:07:54.798.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'MonotonicReceiptTests' started at 2026-11-12 23:07:54.798.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testBoundedRealReceiveOverflowIsVisibleAndClosesWithoutAnOwnerStop]' started.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testBoundedRealReceiveOverflowIsVisibleAndClosesWithoutAnOwnerStop]' passed (1.445 seconds).
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testDualCallbacksConsumeOnlyTheMonotonicProductionChannel]' started.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testDualCallbacksConsumeOnlyTheMonotonicProductionChannel]' passed (0.003 seconds).
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testProductionOSCStaysReadyAcrossWallClockJumps]' started.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testProductionOSCStaysReadyAcrossWallClockJumps]' passed (0.307 seconds).
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testProductionWebSocketAndROSBridgeStayReadyAcrossWallClockJumps]' started.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testProductionWebSocketAndROSBridgeStayReadyAcrossWallClockJumps]' passed (0.603 seconds).
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testRealIOReceiptRetainsItsAgeWhileMainActorIsBlocked]' started.
+Test Case '-[BCRAgentConsoleTests.MonotonicReceiptTests testRealIOReceiptRetainsItsAgeWhileMainActorIsBlocked]' passed (1.427 seconds).
+Test Suite 'MonotonicReceiptTests' passed at 2026-11-12 23:07:58.584.
+Executed 5 tests, with 0 failures (0 unexpected) in 3.786 (3.786) seconds
+Test Suite 'OutputControllerTests' started at 2026-11-12 23:07:58.584.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDelayedTrustedObservationKeepsItsOriginalAgeAcrossTheTimeBridge]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDelayedTrustedObservationKeepsItsOriginalAgeAcrossTheTimeBridge]' passed (0.005 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDisabledOutputWithNoContinuousParametersStartsWithoutAnOutputError]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDisabledOutputWithNoContinuousParametersStartsWithoutAnOutputError]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDisabledSavedInvalidLimitsArePreservedWithoutANewStartupError]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testDisabledSavedInvalidLimitsArePreservedWithoutANewStartupError]' passed (0.004 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testGUICompositionInjectsTheSameOwnerIntoAgentSimulatorsAndOutput]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testGUICompositionInjectsTheSameOwnerIntoAgentSimulatorsAndOutput]' passed (0.240 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testHardwareMockSoftwareAndMCPUseTheSameGateAndDisableStops]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testHardwareMockSoftwareAndMCPUseTheSameGateAndDisableStops]' passed (0.009 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testInjectedAdapterCannotSilentlyIgnoreSelectedTransport]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testInjectedAdapterCannotSilentlyIgnoreSelectedTransport]' passed (0.007 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testJSONTransportKeepsDoublePointOneAndProducesSafeJSONWireValue]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testJSONTransportKeepsDoublePointOneAndProducesSafeJSONWireValue]' passed (0.003 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOSCRejectsUnrepresentableInitialActualWithoutChangingTheObservation]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOSCRejectsUnrepresentableInitialActualWithoutChangingTheObservation]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOutputSettingsDecodeFailureRemainsVisibleEvenWithNoContinuousParameters]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOutputSettingsDecodeFailureRemainsVisibleEvenWithNoContinuousParameters]' passed (0.001 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOutputSettingsRejectUnknownEnableAndUnsafeLimits]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testOutputSettingsRejectUnknownEnableAndUnsafeLimits]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testRealFloat32ActualStillProducesAnOSCValueWithinTheSoftLimit]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testRealFloat32ActualStillProducesAnOSCValueWithinTheSoftLimit]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testReloadingIdenticalConfigurationStopsOutputBeforeAnotherMotionFrame]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testReloadingIdenticalConfigurationStopsOutputBeforeAnotherMotionFrame]' passed (0.010 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testSavedEnabledOutputDoesNotAutoRestoreAndStartupHighRequiresNewEdge]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testSavedEnabledOutputDoesNotAutoRestoreAndStartupHighRequiresNewEdge]' passed (0.006 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testSharedRuntimeDisableUsesOneMonotonicDomainAndRequiresRealEnableOffOn]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testSharedRuntimeDisableUsesOneMonotonicDomainAndRequiresRealEnableOffOn]' passed (0.005 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTenThousandReadyTelemetryTicksKeepEarlyAgentAndFaultEventsWhileNumericOutputsUpdate]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTenThousandReadyTelemetryTicksKeepEarlyAgentAndFaultEventsWhileNumericOutputsUpdate]' passed (1.821 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTimeoutConfigurationChangeAndActualProjectionAreVisible]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTimeoutConfigurationChangeAndActualProjectionAreVisible]' passed (0.011 seconds).
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTransportFailureAlwaysStopsOutput]' started.
+Test Case '-[BCRAgentConsoleTests.OutputControllerTests testTransportFailureAlwaysStopsOutput]' passed (0.004 seconds).
+Test Suite 'OutputControllerTests' passed at 2026-11-12 23:08:00.718.
+Executed 17 tests, with 0 failures (0 unexpected) in 2.132 (2.134) seconds
+Test Suite 'OutputTransportRouterTests' started at 2026-11-12 23:08:00.718.
+Test Case '-[BCRAgentConsoleTests.OutputTransportRouterTests testSwitchStopsOldAdapterAndRejectsStaleCapturedCallbacks]' started.
+Test Case '-[BCRAgentConsoleTests.OutputTransportRouterTests testSwitchStopsOldAdapterAndRejectsStaleCapturedCallbacks]' passed (0.000 seconds).
+Test Suite 'OutputTransportRouterTests' passed at 2026-11-12 23:08:00.718.
+Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'ParameterDraftTests' started at 2026-11-12 23:08:00.718.
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testDirtyDraftRetainsEditsAndRequiresExplicitConflictResolution]' started.
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testDirtyDraftRetainsEditsAndRequiresExplicitConflictResolution]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testExternalRevertClearsConflictWithoutDiscardingLocalEdits]' started.
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testExternalRevertClearsConflictWithoutDiscardingLocalEdits]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testPristineDraftRefreshesWhenSameParameterChangesExternally]' started.
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testPristineDraftRefreshesWhenSameParameterChangesExternally]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testReloadAndMatchingExternalSaveClearDraft]' started.
+Test Case '-[BCRAgentConsoleTests.ParameterDraftTests testReloadAndMatchingExternalSaveClearDraft]' passed (0.000 seconds).
+Test Suite 'ParameterDraftTests' passed at 2026-11-12 23:08:00.719.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'PipedMCPCredentialStoreTests' started at 2026-11-12 23:08:00.719.
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testConfigurationRestrictionIsPersistedByTheAppController]' started.
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testConfigurationRestrictionIsPersistedByTheAppController]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testExplicitPipeTokenIsKeptInMemory]' started.
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testExplicitPipeTokenIsKeptInMemory]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testInvalidPipeDataIsRejectedWithoutEchoingInput]' started.
+Test Case '-[BCRAgentConsoleTests.PipedMCPCredentialStoreTests testInvalidPipeDataIsRejectedWithoutEchoingInput]' passed (0.000 seconds).
+Test Suite 'PipedMCPCredentialStoreTests' passed at 2026-11-12 23:08:00.722.
+Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'PresetAlignmentFlowTests' started at 2026-11-12 23:08:00.722.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testAlignmentRequiresConnectedHardware]' started.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testAlignmentRequiresConnectedHardware]' passed (0.084 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testFailedWriteOffersRestoreOfTheBackup]' started.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testFailedWriteOffersRestoreOfTheBackup]' passed (0.114 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testOpeningPreviewThreeTimesCreatesOneBackupAndNeverWritesTheDevice]' started.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testOpeningPreviewThreeTimesCreatesOneBackupAndNeverWritesTheDevice]' passed (0.104 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testPreviewWritesNothingUntilConfirmedThenVerifiesAndInstallsMap]' started.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testPreviewWritesNothingUntilConfirmedThenVerifiesAndInstallsMap]' passed (0.105 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testRestoreWorksAfterClosingTheWindowAndAcrossRestarts]' started.
+Test Case '-[BCRAgentConsoleTests.PresetAlignmentFlowTests testRestoreWorksAfterClosingTheWindowAndAcrossRestarts]' passed (0.190 seconds).
+Test Suite 'PresetAlignmentFlowTests' passed at 2026-11-12 23:08:01.320.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.597 (0.598) seconds
+Test Suite 'PresetBackupStoreTests' started at 2026-11-12 23:08:01.320.
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testCorruptHashNamedBackupIsNeverOverwrittenOrDeleted]' started.
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testCorruptHashNamedBackupIsNeverOverwrittenOrDeleted]' passed (0.002 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testEqualContentsReuseOneFileWithPrivatePermissions]' started.
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testEqualContentsReuseOneFileWithPrivatePermissions]' passed (0.003 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testRetentionPinsRestorePointAndLeavesUnownedFilesAndSymlinksUntouched]' started.
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testRetentionPinsRestorePointAndLeavesUnownedFilesAndSymlinksUntouched]' passed (0.021 seconds).
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testValidLegacyTimestampBackupIsReused]' started.
+Test Case '-[BCRAgentConsoleTests.PresetBackupStoreTests testValidLegacyTimestampBackupIsReused]' passed (0.002 seconds).
+Test Suite 'PresetBackupStoreTests' passed at 2026-11-12 23:08:01.348.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.028 (0.029) seconds
+Test Suite 'SSEStreamTests' started at 2026-11-12 23:08:01.348.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testBackpressureActuallyClosesTheClientConnection]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testBackpressureActuallyClosesTheClientConnection]' passed (0.207 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testBurstCoalescesIntoOneLatestValueEvent]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testBurstCoalescesIntoOneLatestValueEvent]' passed (0.111 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testConsoleBurstPreservesOrderAndSeparatesEpochs]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testConsoleBurstPreservesOrderAndSeparatesEpochs]' passed (0.054 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testConsoleOverflowDisconnectsRatherThanDroppingAnInputSilently]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testConsoleOverflowDisconnectsRatherThanDroppingAnInputSilently]' passed (0.058 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testDeletingLegacySessionClosesItsEventStream]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testDeletingLegacySessionClosesItsEventStream]' passed (0.012 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testObserverIsRemovedWhenServerIsReleased]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testObserverIsRemovedWhenServerIsReleased]' passed (0.007 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testSnapshotAndDeltaBudgetsAreIndependent]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testSnapshotAndDeltaBudgetsAreIndependent]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testSnapshotLargerThanDeltaQuotaCanSubscribe]' started.
+Test Case '-[BCRAgentConsoleTests.SSEStreamTests testSnapshotLargerThanDeltaQuotaCanSubscribe]' passed (0.008 seconds).
+Test Suite 'SSEStreamTests' passed at 2026-11-12 23:08:01.804.
+Executed 8 tests, with 0 failures (0 unexpected) in 0.454 (0.455) seconds
+Test Suite 'SurfaceAgentIntentTests' started at 2026-11-12 23:08:01.804.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testFailedPluginInitializationRejectsActionsVisiblyAndFailsMCPCommand]' started.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testFailedPluginInitializationRejectsActionsVisiblyAndFailsMCPCommand]' passed (0.072 seconds).
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testMockPrimaryActionBranchesForEveryState]' started.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testMockPrimaryActionBranchesForEveryState]' passed (0.596 seconds).
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressStartsAndInterruptsCodex]' started.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressStartsAndInterruptsCodex]' passed (0.409 seconds).
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressStillApprovesMock]' started.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressStillApprovesMock]' passed (0.080 seconds).
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressWhileCodexAwaitsApprovalOnlyNotifiesAndKeepsLED]' started.
+Test Case '-[BCRAgentConsoleTests.SurfaceAgentIntentTests testSurfacePressWhileCodexAwaitsApprovalOnlyNotifiesAndKeepsLED]' passed (0.128 seconds).
+Test Suite 'SurfaceAgentIntentTests' passed at 2026-11-12 23:08:03.089.
+Executed 5 tests, with 0 failures (0 unexpected) in 1.285 (1.285) seconds
+Test Suite 'WebSocketParameterAdapterTests' started at 2026-11-12 23:08:03.089.
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testMalformedMessageClosesConnectionEvenWithoutOwnerStopCallback]' started.
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testMalformedMessageClosesConnectionEvenWithoutOwnerStopCallback]' passed (0.196 seconds).
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testPeerEpochChangeNotifiesSafetyOwner]' started.
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testPeerEpochChangeNotifiesSafetyOwner]' passed (0.073 seconds).
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testQueueOverflowAndSendFailureTearDownWithoutOwnerIntervention]' started.
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testQueueOverflowAndSendFailureTearDownWithoutOwnerIntervention]' passed (0.407 seconds).
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testWebSocketAndROSBridgeHeartbeatStateCommandsAndStop]' started.
+Test Case '-[BCRAgentConsoleTests.WebSocketParameterAdapterTests testWebSocketAndROSBridgeHeartbeatStateCommandsAndStop]' passed (0.139 seconds).
+Test Suite 'WebSocketParameterAdapterTests' passed at 2026-11-12 23:08:03.904.
+Executed 4 tests, with 0 failures (0 unexpected) in 0.815 (0.815) seconds
+Test Suite 'WindowTitlebarTests' started at 2026-11-12 23:08:03.904.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testContentDoubleClickDoesNotZoom]' started.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testContentDoubleClickDoesNotZoom]' passed (0.135 seconds).
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testDoubleClickInCustomTitlebarZooms]' started.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testDoubleClickInCustomTitlebarZooms]' passed (0.018 seconds).
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testOtherWindowIsNotIntercepted]' started.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testOtherWindowIsNotIntercepted]' passed (0.024 seconds).
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testSingleClickPassesThroughForNativeWindowDragging]' started.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testSingleClickPassesThroughForNativeWindowDragging]' passed (0.013 seconds).
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testTrafficLightButtonsKeepTheirOwnActions]' started.
+Test Case '-[BCRAgentConsoleTests.WindowTitlebarTests testTrafficLightButtonsKeepTheirOwnActions]' passed (0.010 seconds).
+Test Suite 'WindowTitlebarTests' passed at 2026-11-12 23:08:04.105.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.200 (0.201) seconds
+Test Suite 'WorkspacePanelSettingsTests' started at 2026-11-12 23:08:04.105.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testChoicePersistsAcrossLaunches]' started.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testChoicePersistsAcrossLaunches]' passed (0.181 seconds).
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testDecodingRejectsUnknownCoreDuplicateAndFutureVersions]' started.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testDecodingRejectsUnknownCoreDuplicateAndFutureVersions]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testRejectedOrCorruptSettingsStayVisibleAndKeepPanelsHidden]' started.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testRejectedOrCorruptSettingsStayVisibleAndKeepPanelsHidden]' passed (0.083 seconds).
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testRunningOutputKeepsItsReadoutVisible]' started.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testRunningOutputKeepsItsReadoutVisible]' passed (0.000 seconds).
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testSpecialistPanelsAreHiddenUntilEnabled]' started.
+Test Case '-[BCRAgentConsoleTests.WorkspacePanelSettingsTests testSpecialistPanelsAreHiddenUntilEnabled]' passed (0.000 seconds).
+Test Suite 'WorkspacePanelSettingsTests' passed at 2026-11-12 23:08:04.371.
+Executed 5 tests, with 0 failures (0 unexpected) in 0.265 (0.266) seconds
+Test Suite 'BCRAgentConsoleTests.xctest' passed at 2026-11-12 23:08:04.371.
+Executed 158 tests, with 0 failures (0 unexpected) in 27.226 (27.242) seconds
+Test Suite 'All tests' passed at 2026-11-12 23:08:04.371.
+Executed 158 tests, with 0 failures (0 unexpected) in 27.226 (27.243) seconds

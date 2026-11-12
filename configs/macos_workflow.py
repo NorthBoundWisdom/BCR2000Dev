@@ -45,38 +45,115 @@ def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_R
     return completed.stdout.strip() if capture else ""
 
 
-def summarize_tests(output: str, expected: list[str], returncode: int) -> bool:
-    """SwiftPM may exit successfully after an earlier xctest executable failed. Check every bundle."""
+def summarize_tests(output: str, expected: list[str], returncode: int, *, aggregate_name: str | None = None) -> bool:
+    """Verify either SwiftPM's per-target bundles or its single package XCTest bundle."""
     bundles = {}
+    bundle_starts = set()
     pending = None
     failed_cases = []
+    case_starts, case_ends = {}, {}
+    case_errors = []
     for line in output.splitlines():
+        started = re.search(r"Test Suite '([^']+\.xctest)' started\b", line)
+        if started:
+            if started[1] in bundle_starts:
+                case_errors.append(f"duplicate bundle start: {started[1]}")
+            bundle_starts.add(started[1])
         match = re.search(r"Test Suite '([^']+\.xctest)' (passed|failed)\b", line)
         if match:
             pending = match[1]
-            bundles[pending] = {"status": match[2], "tests": None, "failures": None}
-        elif pending and (match := re.search(r"Executed (\d+) tests?, with (\d+) failures?", line)):
-            bundles[pending].update(tests=int(match[1]), failures=int(match[2]))
+            if pending in bundles:
+                case_errors.append(f"duplicate bundle terminal: {pending}")
+            bundles[pending] = {"status": match[2], "tests": None, "failures": None, "unexpected": None}
+        elif pending and (
+            match := re.search(r"Executed (\d+) tests?, with (\d+) failures?(?: \((\d+) unexpected\))?", line)
+        ):
+            bundles[pending].update(
+                tests=int(match[1]),
+                failures=int(match[2]),
+                unexpected=int(match[3]) if match[3] is not None else None,
+            )
             pending = None
+        case = re.search(r"Test Case '([^']+)' (started|passed|failed)\b", line)
+        if case:
+            name, status = case[1], case[2]
+            module = re.match(r"-\[([^. ]+)\.", name) or re.match(r"([^. ]+)\.", name)
+            module = module[1] if module else None
+            if status == "started":
+                if name in case_starts:
+                    case_errors.append(f"duplicate case start: {name}")
+                case_starts[name] = module
+            else:
+                if name not in case_starts or name in case_ends:
+                    case_errors.append(f"missing start or duplicate case terminal: {name}")
+                case_ends[name] = status
         if re.search(r"Test Case .* failed\b", line):
             failed_cases.append(line.strip())
     print("\nSwift test bundle summary:", flush=True)
     success = returncode == 0 and bool(expected) and not failed_cases
     total = failures = 0
-    for name in dict.fromkeys([*expected, *bundles]):
-        result = bundles.get(name)
-        if result is None or result["tests"] is None:
-            print(f"  FAIL {name}: missing complete test results", flush=True)
-            success = False
-            continue
-        passed = result["status"] == "passed" and result["failures"] == 0
+    if aggregate_name and set(bundles) == {aggregate_name}:
+        result = bundles[aggregate_name]
+        expected_modules = {name.removesuffix(".xctest") for name in expected}
+        complete = set(case_starts) == set(case_ends) and bool(case_starts)
+        known_modules = set(case_starts.values()) == expected_modules
+        counts_match = result["tests"] == len(case_starts) == len(case_ends)
+        passed = (
+            aggregate_name in bundle_starts
+            and complete
+            and known_modules
+            and counts_match
+            and not case_errors
+            and all(status == "passed" for status in case_ends.values())
+            and result["status"] == "passed"
+            and result["failures"] == 0
+            and result["unexpected"] == 0
+        )
+        for module in sorted(expected_modules):
+            names = {name for name, owner in case_starts.items() if owner == module}
+            terminals = names.intersection(case_ends)
+            valid = bool(names) and names == terminals and all(case_ends[name] == "passed" for name in names)
+            print(
+                f"  {'PASS' if valid else 'FAIL'} {module}: {len(names)} started, {len(terminals)} complete", flush=True
+            )
+        if not complete or not known_modules or not counts_match:
+            print("  FAIL aggregate case coverage/counts are incomplete or inconsistent", flush=True)
         print(
-            f"  {'PASS' if passed else 'FAIL'} {name}: {result['tests']} tests, {result['failures']} failures",
+            f"  {'PASS' if passed else 'FAIL'} {aggregate_name}: {result['tests']} tests, "
+            f"{result['failures']} failures, {result['unexpected']} unexpected",
             flush=True,
         )
+        for error in case_errors:
+            print(f"  FAIL {error}", flush=True)
         success = success and passed
-        total += result["tests"]
-        failures += result["failures"]
+        total, failures = result["tests"] or 0, result["failures"] or 0
+    else:
+        if set(bundles) != set(expected):
+            success = False
+        if case_starts or case_ends:
+            complete = set(case_starts) == set(case_ends)
+            counts_match = all(
+                sum(owner == name.removesuffix(".xctest") for owner in case_starts.values())
+                == (bundles.get(name) or {}).get("tests")
+                for name in expected
+            )
+            if not complete or not counts_match or case_errors:
+                print("  FAIL split-bundle case coverage/counts are incomplete or inconsistent", flush=True)
+                success = False
+        for name in dict.fromkeys([*expected, *bundles]):
+            result = bundles.get(name)
+            if result is None or result["tests"] is None or result["tests"] == 0:
+                print(f"  FAIL {name}: missing complete test results", flush=True)
+                success = False
+                continue
+            passed = result["status"] == "passed" and result["failures"] == 0 and result["unexpected"] in (None, 0)
+            print(
+                f"  {'PASS' if passed else 'FAIL'} {name}: {result['tests']} tests, {result['failures']} failures",
+                flush=True,
+            )
+            success = success and passed
+            total += result["tests"]
+            failures += result["failures"]
     for failure in failed_cases:
         print(f"  FAIL {failure}", flush=True)
     print(
@@ -88,10 +165,10 @@ def summarize_tests(output: str, expected: list[str], returncode: int) -> bool:
 
 def _run_tests(command: list[str | Path]) -> None:
     # This repository declares its test targets literally; fail closed if the manifest shape changes.
-    expected = [
-        name + ".xctest"
-        for name in re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', (REPO_ROOT / "Package.swift").read_text())
-    ]
+    manifest = (REPO_ROOT / "Package.swift").read_text()
+    expected = [name + ".xctest" for name in re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)]
+    package = re.search(r'\bPackage\(\s*name:\s*"([^"]+)"', manifest)
+    aggregate_name = package[1] + "PackageTests.xctest" if package else None
     command = [str(part) for part in command]
     print(">>", " ".join(command), flush=True)
     with subprocess.Popen(
@@ -102,7 +179,7 @@ def _run_tests(command: list[str | Path]) -> None:
             print(line, end="", flush=True)
             output.append(line)
         returncode = process.wait()
-    if not summarize_tests("".join(output), expected, returncode):
+    if not summarize_tests("".join(output), expected, returncode, aggregate_name=aggregate_name):
         raise RuntimeError("Swift test bundle verification failed; see the summary above.")
 
 

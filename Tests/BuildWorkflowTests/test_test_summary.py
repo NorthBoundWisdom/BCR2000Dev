@@ -49,6 +49,115 @@ class TestSummaryTests(unittest.TestCase):
             with self.subTest(log=log, code=code):
                 self.assertFalse(self.summary(log, returncode=code)[0])
 
+    def fixture(self, name):
+        return (Path(__file__).parent / "Fixtures" / name).read_text()
+
+    def aggregate_summary(self, output, returncode=0):
+        expected = [
+            "BCRPluginHostTests",
+            "BCRAgentCoreTests",
+            "BCRAgentConsoleTests",
+            "BCRProviderDomainTests",
+            "BCRProviderAdapterTests",
+        ]
+        rendered = io.StringIO()
+        with contextlib.redirect_stdout(rendered):
+            passed = macos_workflow.summarize_tests(
+                output,
+                [name + ".xctest" for name in expected],
+                returncode,
+                aggregate_name="BCRAgentConsolePackageTests.xctest",
+            )
+        return passed, rendered.getvalue()
+
+    def test_real_aggregate_complete_passing_cases_are_accepted(self):
+        passed, output = self.aggregate_summary(self.fixture("swift6_aggregate_success.txt"))
+        self.assertTrue(passed)
+        self.assertIn("Total: 529 tests, 0 failures; PASS", output)
+        self.assertIn("BCRAgentConsoleTests: 157 started, 157 complete", output)
+
+    def test_real_aggregate_failures_survive_zero_exit(self):
+        passed, output = self.aggregate_summary(self.fixture("swift6_aggregate_failure.txt"))
+        self.assertFalse(passed)
+        self.assertIn("531 tests, 3 failures", output)
+        self.assertIn("FAIL Test Case", output)
+
+    def test_real_split_bundles_are_accepted(self):
+        expected = [
+            "BCRPluginHostTests",
+            "BCRAgentCoreTests",
+            "BCRAgentConsoleTests",
+            "BCRProviderDomainTests",
+            "BCRProviderAdapterTests",
+        ]
+        passed, output = self.summary(
+            self.fixture("swift62_split_success.txt"), [name + ".xctest" for name in expected]
+        )
+        self.assertTrue(passed)
+        self.assertIn("Total: 531 tests, 0 failures; PASS", output)
+
+    def test_aggregate_missing_start_terminal_module_or_duplicate_is_rejected(self):
+        valid = self.fixture("swift6_aggregate_success.txt")
+        lines = valid.splitlines()
+        started = next(line for line in lines if "Test Case" in line and "started" in line)
+        terminal = next(line for line in lines if "Test Case" in line and "passed" in line)
+        mutations = [
+            valid.replace(started + "\n", "", 1),
+            valid.replace(terminal + "\n", "", 1),
+            "\n".join(line for line in lines if "BCRPluginHostTests." not in line),
+            started + "\n" + valid,
+            valid.replace(terminal, terminal + "\n" + terminal, 1),
+            valid.replace(
+                "Test Suite 'BCRAgentConsolePackageTests.xctest' started", "Test Suite 'Other.xctest' started"
+            ),
+            valid.replace("BCRProviderDomainTests.", "UnknownModule."),
+            valid.split("Test Suite 'BCRAgentConsolePackageTests.xctest' passed", 1)[0],
+            "",
+        ]
+        for output in mutations:
+            with self.subTest(sample=output[:100]):
+                self.assertFalse(self.aggregate_summary(output)[0])
+
+    def test_aggregate_empty_count_mismatch_unexpected_and_nonzero_fail_closed(self):
+        valid = self.fixture("swift6_aggregate_success.txt")
+        for output in [
+            valid.replace("Executed 529 tests", "Executed 530 tests"),
+            valid.replace("0 failures (0 unexpected)", "0 failures (1 unexpected)"),
+            valid.replace("0 failures (0 unexpected)", "1 failures (0 unexpected)"),
+            valid.replace("Executed 529 tests", "Executed 0 tests"),
+            "\n".join(line for line in valid.splitlines() if "Test Case" not in line),
+        ]:
+            self.assertFalse(self.aggregate_summary(output)[0])
+        self.assertFalse(self.aggregate_summary(valid, returncode=1)[0])
+
+    def test_aggregate_cli_reads_the_actual_package_name_and_target_modules(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            modules = [
+                "BCRPluginHostTests",
+                "BCRAgentCoreTests",
+                "BCRAgentConsoleTests",
+                "BCRProviderDomainTests",
+                "BCRProviderAdapterTests",
+            ]
+            (root / "Package.swift").write_text(
+                'Package(name: "BCRAgentConsole", targets: ['
+                + ",".join('.testTarget(name: "' + name + '")' for name in modules)
+                + "])"
+            )
+            executable = root / "swift"
+            executable.write_text(
+                "#!/bin/sh\ncat <<'RESULTS'\n" + self.fixture("swift6_aggregate_success.txt") + "RESULTS\nexit 0\n"
+            )
+            executable.chmod(0o755)
+            with (
+                patch.object(macos_workflow, "REPO_ROOT", root),
+                patch.object(macos_workflow, "ensure_dependency"),
+                patch.dict("os.environ", {"PATH": str(root) + ":/usr/bin:/bin"}),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(macos_workflow.main(["test"]), 0)
+
     def test_cli_returns_nonzero_and_names_failed_bundle_with_fake_swift(self):
         # Exercise the real streaming runner and CLI, without modifying a production Swift test.
         with tempfile.TemporaryDirectory() as temporary:
