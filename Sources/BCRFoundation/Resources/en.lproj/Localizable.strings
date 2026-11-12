@@ -818,3 +818,6 @@
 "当前预设已锁定：STORE、LEARN、EDIT、EXIT 不再进入设备编程模式，也未分配功能。恢复原预设或重新载入预设即解除。" = "This preset is locked: STORE, LEARN, EDIT and EXIT no longer enter the device's programming modes and have no function assigned. Restore the original preset or reload a preset to unlock.";
 "收到设备消息时闪烁（设备自己的 MIDI IN 灯指示 DIN 接口，软件无法读取）。" = "Flashes when a message arrives from the device (the device's own MIDI IN LED shows its DIN port, which the app cannot read).";
 "MIDI OUT A / OUT B 指示 DIN 接口流量，设备不向软件报告，仅作对照显示。" = "MIDI OUT A / OUT B show DIN port traffic. The device does not report them to the app; shown for reference only.";
+"对齐设备预设…" = "Align Device Preset…";
+"设备预设操作" = "Device Preset Actions";
+"设备预设操作；圆点表示有对齐前的预设备份。" = "Device preset actions; a dot indicates a preset backup from before alignment.";

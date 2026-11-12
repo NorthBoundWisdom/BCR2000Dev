@@ -172,28 +172,38 @@ struct SurfacePanelView: View {
                 .foregroundStyle(model.source == .mock ? Theme.parameter : Theme.selection)
                 .background((model.source == .mock ? Theme.parameter : Theme.selection).opacity(0.14), in: Capsule())
             if model.source == .hardware {
-                Button {
-                    model.beginPresetAlignment()
-                } label: {
-                    Label(L10n.text("对齐设备预设"), systemImage: "slider.horizontal.below.square.and.square.filled")
-                        .font(m.font(9.5, weight: .semibold))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(!model.canAlignPreset)
-                .help(L10n.text("读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。"))
-                if model.presetRestorePoint != nil {
+                Menu {
+                    Button {
+                        model.beginPresetAlignment()
+                    } label: {
+                        Label(L10n.text("对齐设备预设…"), systemImage: "slider.horizontal.below.square.and.square.filled")
+                    }
+                    .disabled(!model.canAlignPreset)
+                    .help(L10n.text("读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。"))
                     Button {
                         model.restorePresetBeforeAlignment()
                     } label: {
                         Label(L10n.text("恢复原预设"), systemImage: "arrow.uturn.backward")
-                            .font(m.font(9.5, weight: .semibold))
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                     .disabled(!model.canRestorePreset)
                     .help(L10n.text("把最近一次对齐前备份的临时预设写回设备，并恢复当时的本机映射。"))
+                } label: {
+                    Image(systemName: "slider.horizontal.below.square.and.square.filled")
+                        .font(m.font(11, weight: .semibold))
+                        .padding(m(4))
+                        .overlay(alignment: .topTrailing) {
+                            if model.presetRestorePoint != nil {
+                                Circle().fill(Theme.selection).frame(width: m(4), height: m(4))
+                                    .allowsHitTesting(false)
+                            }
+                        }
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(L10n.text("设备预设操作；圆点表示有对齐前的预设备份。"))
+                .accessibilityLabel(L10n.text("设备预设操作"))
+                .accessibilityIdentifier("surface.devicePresetMenu")
             }
             Spacer()
             Text(model.source == .mock

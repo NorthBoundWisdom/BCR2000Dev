@@ -125,7 +125,18 @@ accessibilityLabel），菜单项为“对齐设备预设…”和“恢复原�
 
 ### 执行记录
 
-（执行窗口在此追加）
+#### 任务 3 — `81f376d`
+
+- 改动：`Sources/BCRExamples/ConfigurationPresets.swift` 提供精确匹配中英文内置名称的纯显示函数；
+  `SurfacePanelView.swift`、`ControlInspectorView.swift`、`ContentView.swift` 及检查器子视图
+  `TriggerParameterEditor.swift` 接入；新增 `Tests/BCRAgentCoreTests/BuiltInNamePresentationTests.swift`。
+- 验证：Swift 五包 506 项、失败 0；BuildWorkflow 71 项、失败 0；Python SDK 6 项、失败 0。
+  域边界、命令校验、全仓格式、双语 strings lint、App build、双语 1200×760 startup smoke、
+  隔离 Mock 下当前/旧版 MCP 冒烟全部通过。
+- 未验证：没有人工逐控件视觉交互，没有设备/MIDI 实测。
+- 偏离：现有 `L10n.language` 是进程内不可变常量（语言设置重启生效），测试用显式 language 参数在同一配置上
+  验证中英显示变化与 JSON 完全不变，未改全局语言机制。额外覆盖检查器触发参数选择器，避免同一检查器残留中文。
+  复用已有翻译键，无需新增 UI 文案。清单留待审查窗口勾选。
 
 ## 远端设备（ethanmacair）
 
