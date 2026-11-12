@@ -302,7 +302,7 @@ public final class CoreMIDIService: MIDIService {
     /// Runs one SysEx exchange while ordinary input is held back and the route must stay unchanged.
     private func exclusiveSysEx<T>(
         holdsInput: Bool = true,
-        _ body: (CoreMIDITransport, UInt) async throws -> T
+        _ body: @MainActor (CoreMIDITransport, UInt) async throws -> T
     ) async throws -> T {
         guard startupID == nil, snapshotID == nil, connection.isConnected,
               let transport else { throw CoreMIDIServiceError.outputUnavailable }
