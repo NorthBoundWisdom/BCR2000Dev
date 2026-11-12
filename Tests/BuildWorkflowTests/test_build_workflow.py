@@ -161,7 +161,7 @@ class BuildConfigurationTests(unittest.TestCase):
                 patch.dict(os.environ, inherited),
                 patch.object(macos_workflow, "REPO_ROOT", self.root),
                 patch.object(macos_workflow, "build", side_effect=build),
-                patch.object(macos_workflow, "_run", side_effect=run),
+                patch.object(macos_workflow, "_run_tests", side_effect=run),
                 patch.object(macos_workflow, "ensure_dependency") as dependency,
             ):
                 before = dict(os.environ)

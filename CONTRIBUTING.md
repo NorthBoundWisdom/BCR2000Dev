@@ -68,7 +68,7 @@ Swift 使用 `configs/.swiftformat`（Swift 6、4 空格、120 列），Python �
 
 ```bash
 python3 configs/format_repo.py --all --check
-swift test --build-path build/swiftpm            # 必须全部通过
+python3 configs/macos_workflow.py test          # 汇总全部测试包，任一包/用例失败或缺结果即失败
 python3 configs/check_domain_boundaries.py
 PYTHONPATH=Clients/Python python3 -m unittest discover -s Clients/Python/tests
 python3 -m unittest discover -s Tests/BuildWorkflowTests

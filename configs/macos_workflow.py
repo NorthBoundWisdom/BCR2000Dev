@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -42,6 +43,67 @@ def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_R
             print(completed.stderr, file=sys.stderr)
         raise RuntimeError(f"Command failed ({completed.returncode}): {command[0]}")
     return completed.stdout.strip() if capture else ""
+
+
+def summarize_tests(output: str, expected: list[str], returncode: int) -> bool:
+    """SwiftPM may exit successfully after an earlier xctest executable failed. Check every bundle."""
+    bundles = {}
+    pending = None
+    failed_cases = []
+    for line in output.splitlines():
+        match = re.search(r"Test Suite '([^']+\.xctest)' (passed|failed)\b", line)
+        if match:
+            pending = match[1]
+            bundles[pending] = {"status": match[2], "tests": None, "failures": None}
+        elif pending and (match := re.search(r"Executed (\d+) tests?, with (\d+) failures?", line)):
+            bundles[pending].update(tests=int(match[1]), failures=int(match[2]))
+            pending = None
+        if re.search(r"Test Case .* failed\b", line):
+            failed_cases.append(line.strip())
+    print("\nSwift test bundle summary:", flush=True)
+    success = returncode == 0 and bool(expected) and not failed_cases
+    total = failures = 0
+    for name in dict.fromkeys([*expected, *bundles]):
+        result = bundles.get(name)
+        if result is None or result["tests"] is None:
+            print(f"  FAIL {name}: missing complete test results", flush=True)
+            success = False
+            continue
+        passed = result["status"] == "passed" and result["failures"] == 0
+        print(
+            f"  {'PASS' if passed else 'FAIL'} {name}: {result['tests']} tests, {result['failures']} failures",
+            flush=True,
+        )
+        success = success and passed
+        total += result["tests"]
+        failures += result["failures"]
+    for failure in failed_cases:
+        print(f"  FAIL {failure}", flush=True)
+    print(
+        f"Total: {total} tests, {failures} failures; {'PASS' if success else 'FAIL'} (swift exit {returncode})",
+        flush=True,
+    )
+    return success
+
+
+def _run_tests(command: list[str | Path]) -> None:
+    # This repository declares its test targets literally; fail closed if the manifest shape changes.
+    expected = [
+        name + ".xctest"
+        for name in re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', (REPO_ROOT / "Package.swift").read_text())
+    ]
+    command = [str(part) for part in command]
+    print(">>", " ".join(command), flush=True)
+    with subprocess.Popen(
+        command, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+    ) as process:
+        output = []
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            output.append(line)
+        returncode = process.wait()
+    if not summarize_tests("".join(output), expected, returncode):
+        raise RuntimeError("Swift test bundle verification failed; see the summary above.")
 
 
 def _architectures(architecture: str) -> tuple[str, ...]:
@@ -542,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("This workflow requires macOS and Xcode's Swift 6 toolchain.")
         if args.action == "test":
             ensure_dependency(REPO_ROOT)
-            _run(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT])
+            _run_tests(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT])
         elif args.action == "package":
             package(
                 args.architecture,
