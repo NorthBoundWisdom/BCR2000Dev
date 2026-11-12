@@ -4,10 +4,12 @@ import Foundation
 public struct HardwareMapEntry: Hashable, Codable, Sendable {
     public let control: BCRControlID
     public let midi: MIDIControlID
+    public let ringMode: LEDRingMode?
 
-    public init(control: BCRControlID, midi: MIDIControlID) {
+    public init(control: BCRControlID, midi: MIDIControlID, ringMode: LEDRingMode? = nil) {
         self.control = control
         self.midi = midi
+        self.ringMode = ringMode
     }
 }
 
@@ -34,7 +36,8 @@ public enum HardwareBindingError: Error, Equatable, LocalizedError, Sendable {
 public struct HardwareMap: Equatable, Codable, Sendable {
     /// Version 4 adds 14-bit NRPN identities; v3 is migrated without losing bindings.
     /// Version 3 replaces the slot-only `ControllerProfile` with a full physical surface map.
-    public static let currentVersion = 4
+    /// Version 5 preserves explicitly learned LED display modes; old maps retain unknown modes.
+    public static let currentVersion = 5
 
     public var version: Int
     public private(set) var entries: [HardwareMapEntry]
@@ -61,12 +64,18 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         entries.first { $0.control == control }?.midi
     }
 
+    public func ringMode(for control: BCRControlID) -> LEDRingMode? {
+        entries.first { $0.control == control }?.ringMode
+    }
+
     public func control(for midi: MIDIControlID) -> BCRControlID? {
         entries.first { $0.midi == midi }?.control
     }
 
     /// Binds `control` to `midi`, replacing an earlier binding of the same control.
-    public mutating func bind(_ control: BCRControlID, to midi: MIDIControlID) throws(HardwareBindingError) {
+    public mutating func bind(
+        _ control: BCRControlID, to midi: MIDIControlID, ringMode: LEDRingMode? = nil
+    ) throws(HardwareBindingError) {
         if control.isContinuous, midi.kind == .note {
             throw HardwareBindingError.encoderRequiresControlChange(control)
         }
@@ -75,7 +84,8 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         }
         var candidate = self
         candidate.entries.removeAll { $0.control == control }
-        candidate.entries.append(HardwareMapEntry(control: control, midi: midi))
+        let mode = ringMode ?? (self.midi(for: control) == midi ? self.ringMode(for: control) : nil)
+        candidate.entries.append(HardwareMapEntry(control: control, midi: midi, ringMode: mode))
         candidate.entries.sort { $0.control < $1.control }
         do { try candidate.validate() } catch { throw .invalidMap(error.localizedDescription) }
         self = candidate
@@ -96,7 +106,8 @@ public struct HardwareMap: Equatable, Codable, Sendable {
         let entries = BCRLayout.allControls.enumerated().map { offset, control in
             HardwareMapEntry(
                 control: control,
-                midi: MIDIControlID(kind: .controlChange, channel: 0, number: UInt8(offset + 1))
+                midi: MIDIControlID(kind: .controlChange, channel: 0, number: UInt8(offset + 1)),
+                ringMode: control.isContinuous ? (control.section == .pushEncoder ? .twoDot : .oneDot) : nil
             )
         }
         return HardwareMap(entries: entries)

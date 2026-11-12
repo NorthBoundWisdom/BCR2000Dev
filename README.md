@@ -247,6 +247,9 @@ Apple 开发者证书与对应授权 / profile 签署——自用可用付费账
 **FreeCM 插件（可选）**：`configs/freecm.commands.jsonc` 保留 Config / Build / Run / Test / Package 入口，
 `configs/source_root_workflow.py` 保留插件初始化、更新和构建清理入口。Config 编译依赖，Build 构建主仓库应用；构建本身不需要 FreeCM。
 
+灯环按实际预设学习的模式显示：当前顶部为 15 灯单双点交替，下方为 15 灯单点；零值仍亮第 1 灯。
+模式未知或尚未校准时显示问号，校准记录见 [控件映射](docs/CONTROL_MAP.md)。
+
 ## 验证
 
 ```bash

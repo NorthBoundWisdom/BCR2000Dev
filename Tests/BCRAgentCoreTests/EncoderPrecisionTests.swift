@@ -240,7 +240,7 @@ final class EncoderPrecisionTests: XCTestCase {
             version: 3,
             entries: [.init(control: encoder, midi: .init(kind: .controlChange, channel: 0, number: 1))]
         )
-        XCTAssertEqual(try map.migrated().version, 4)
+        XCTAssertEqual(try map.migrated().version, HardwareMap.currentVersion)
         XCTAssertThrowsError(try JSONDecoder().decode(
             MIDIControlID.self,
             from: Data(#"{"kind":"nrpn","channel":0,"number":16384}"#.utf8)

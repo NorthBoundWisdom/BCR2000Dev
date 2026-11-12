@@ -17,6 +17,8 @@ BCR旧配置与Provider1.0保持兼容；正式发布/硬件仍按独立边界�
 
 ## 当前基线
 
+- 灯环移除旧 13 灯累积条，按实际预设的 15 灯单点/单双点模式显示；低端五个边界样本已实测，其余档位和其他模式仍待人工验收。
+
 - 现行文档与历史交接已分离；六项隔离 Mock 的 [原生 UI 验收](docs/UI_ACCEPTANCE.md) 全部通过。
 - 108 个物理控件模型（`BCRLayout`）、实体学习映射（`HardwareMap`）、功能分配与参数
   （`SurfaceConfiguration`）、双向同步引擎（`SurfaceEngine`）位于 `BCRSurfaceDomain`，

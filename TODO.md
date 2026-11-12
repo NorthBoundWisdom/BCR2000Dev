@@ -11,6 +11,7 @@
 - BCR/XTouch同SHA的M1/M2/M3软件接入与新旧接口验证已完成；远端发布/CI和实机仍待处理，见 [共享插件接入](docs/SHARED_PLUGINS.md)。
 - FreeCM Config 已接到 `build/seed` 依赖获取与编译，Build 构建主仓库；依赖锁参与配置就绪检查。
 - 仓库整理 Z2–Z6 已完成；六项隔离 Mock UI 验收均通过，入口见 [原生 UI 验收](docs/UI_ACCEPTANCE.md)。
+- 当前灯环两类模式的低端边界已校准；全量视觉扫描与其他显示模式保留待验，见 [控件映射](docs/CONTROL_MAP.md)。
 - 中英双语与语言设置完成：默认跟随系统，可选择简体中文 / English，重启生效。
 
 - Mock 下 WP1、WP3–WP7 及审查修正全部完成并已推送；手工端点选择、OSC 幂等帧、细调余量已完成。

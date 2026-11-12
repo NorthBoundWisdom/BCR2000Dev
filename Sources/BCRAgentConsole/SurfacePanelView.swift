@@ -5,6 +5,7 @@ import SwiftUI
 struct ControlPresentation {
     let control: BCRControlID
     let value: UInt8
+    let ringLEDs: Set<Int>?
     let label: String?
     let detail: String?
     let accent: Color
@@ -59,6 +60,8 @@ extension ConsoleViewModel {
         return ControlPresentation(
             control: control,
             value: displayValue(of: control),
+            ringLEDs: source == .mock ? mock.ringLEDs(of: control)
+                : engine.hardwareMap.ringMode(for: control)?.litLEDs(value: displayValue(of: control)),
             label: label,
             detail: detail,
             accent: accent,
@@ -325,7 +328,7 @@ private struct KnobCell: View {
     var body: some View {
         VStack(spacing: m(3)) {
             ZStack {
-                LEDRing(value: presentation.value)
+                LEDRing(litLEDs: presentation.ringLEDs)
                 Circle()
                     .fill(
                         LinearGradient(
@@ -358,22 +361,25 @@ private struct KnobCell: View {
 }
 
 private struct LEDRing: View {
-    let value: UInt8
+    let litLEDs: Set<Int>?
     @Environment(\.panelMetrics) private var m
-    private let count = 13
+    private let count = LEDRingMode.count
 
     var body: some View {
-        let lit = Int((Double(value) / 127 * Double(count)).rounded())
         ZStack {
             ForEach(0 ..< count, id: \.self) { led in
                 Circle()
-                    .fill(led < lit ? Theme.led : Theme.ledOff)
+                    .fill(litLEDs?.contains(led) == true ? Theme.led : Theme.ledOff)
                     .frame(width: m(4), height: m(4))
-                    .shadow(color: led < lit ? Theme.led.opacity(0.9) : .clear, radius: 2.5)
+                    .shadow(color: litLEDs?.contains(led) == true ? Theme.led.opacity(0.9) : .clear, radius: 2.5)
                     .offset(y: m(-27))
                     .rotationEffect(.degrees(-135 + Double(led) * 270 / Double(count - 1)))
             }
+            if litLEDs == nil {
+                Text("?").font(.caption2).foregroundStyle(.secondary).offset(y: m(26))
+            }
         }
+        .help(litLEDs == nil ? L10n.text("灯环模式未知或尚未校准，请读取当前预设") : "")
     }
 }
 

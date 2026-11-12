@@ -32,6 +32,10 @@ public struct MockBCR2000: Sendable {
         values[control] ?? 0
     }
 
+    public func ringLEDs(of control: BCRControlID) -> Set<Int>? {
+        preset.ringMode(for: control)?.litLEDs(value: value(of: control))
+    }
+
     /// Turns an encoder by `delta` detents. Returns nothing if the value is already at a limit.
     public mutating func turn(_ control: BCRControlID, by delta: Int) -> MIDIVoiceMessage? {
         guard control.isContinuous, let midi = preset.midi(for: control) else {

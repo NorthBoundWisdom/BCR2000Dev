@@ -29,6 +29,7 @@ public enum BCRPresetEncoderLearning {
               lines.filter({ $0.hasPrefix(".egroups ") }) == [".egroups 4"]
         else { throw Failure.invalid(L10n.text("需要完整的单个当前预设")) }
         var identities: [Int: MIDIControlID] = [:]
+        var ringModes: [Int: LEDRingMode] = [:]
         var encoder: Int?
         var seenEncoders = Set<Int>()
         var inPreset = false
@@ -60,9 +61,9 @@ public enum BCRPresetEncoderLearning {
                 }
             case ".mode":
                 guard words.count == 2,
-                      ["off", "1dot", "1dot/off", "12dot", "12dot/off", "bar", "bar/off",
-                       "spread", "pan", "qual", "cut", "damp"].contains(words[1])
+                      let mode = LEDRingMode(rawValue: words[1]), ringModes[encoder] == nil
                 else { throw Failure.invalid(L10n.text("未知灯环模式")) }
+                ringModes[encoder] = mode
             case ".resolution":
                 guard words.count == 5, words.dropFirst().allSatisfy({ UInt16($0).map { $0 > 0 } ?? false })
                 else { throw Failure.invalid(L10n.text("无效的旋钮分辨率")) }
@@ -74,7 +75,7 @@ public enum BCRPresetEncoderLearning {
             }
         }
         guard identities.count == 56 else { throw Failure.invalid(L10n.text("预设未提供全部 56 个旋钮定义")) }
-        var map = existingMap
+        var map = try existingMap.migrated()
         var result = configuration
         for number in 1 ... 56 {
             let control: BCRControlID = number <= 32
@@ -86,7 +87,8 @@ public enum BCRPresetEncoderLearning {
             if let previous = map.midi(for: control), previous != midi {
                 throw Failure.invalid(L10n.text("\(control.shortName) 与已有学习身份不同，保留原映射"))
             }
-            try map.bind(control, to: midi)
+            guard let ringMode = ringModes[number] else { throw Failure.invalid(L10n.text("未知灯环模式")) }
+            try map.bind(control, to: midi, ringMode: ringMode)
             if let assignment = result.assignment(for: control) {
                 guard assignment.encoderMode == .absolute else {
                     throw Failure.invalid(L10n.text("\(control.shortName) 的已有功能不是绝对模式"))

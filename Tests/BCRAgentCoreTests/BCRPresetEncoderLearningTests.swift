@@ -24,13 +24,14 @@ final class BCRPresetEncoderLearningTests: XCTestCase {
     }
 
     func testLearnsAllGroupsAndRowsFromActualDefinitionsPreservingAssignments() throws {
-        var existing = HardwareMap()
+        var existing = HardwareMap(version: 4)
         try existing.bind(.pushEncoder(group: 1, 1), to: MIDIControlID(kind: .controlChange, channel: 6, number: 119))
         let configuration = SurfaceConfiguration.robotArmDemo()
         let plan = try BCRPresetEncoderLearning.prepare(
             dump: dump(lines()), snapshot: snapshot, existingMap: existing, configuration: configuration
         )
         XCTAssertEqual(plan.hardwareMap.boundCount, 56)
+        XCTAssertEqual(plan.hardwareMap.version, HardwareMap.currentVersion)
         XCTAssertEqual(plan.configuration.parameters.count, 57)
         for assignment in configuration.assignments {
             XCTAssertEqual(plan.configuration.assignment(for: assignment.control), assignment)
@@ -38,6 +39,7 @@ final class BCRPresetEncoderLearningTests: XCTestCase {
         for (index, control) in (BCRLayout.controls(in: .pushEncoder) + BCRLayout.controls(in: .encoder)).enumerated() {
             XCTAssertEqual(plan.hardwareMap.midi(for: control)?.number, UInt16(119 - index))
             XCTAssertNotNil(plan.configuration.assignment(for: control))
+            XCTAssertEqual(plan.hardwareMap.ringMode(for: control), .twoDot)
         }
         let repeated = try BCRPresetEncoderLearning.prepare(
             dump: dump(lines()), snapshot: snapshot, existingMap: plan.hardwareMap, configuration: plan.configuration

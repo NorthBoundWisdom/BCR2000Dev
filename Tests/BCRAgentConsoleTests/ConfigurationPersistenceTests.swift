@@ -213,7 +213,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let read = file.load()
         XCTAssertFalse(read.failed)
         XCTAssertTrue(read.message?.contains(L10n.language == .chinese ? "迁移" : "migrated") == true)
-        XCTAssertEqual(read.value.version, 4)
+        XCTAssertEqual(read.value.version, HardwareMap.currentVersion)
         XCTAssertEqual(read.value.entries, map.entries)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), original)
         try file.save(read.value)
