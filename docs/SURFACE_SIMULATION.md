@@ -4,7 +4,7 @@ The `surface_control_*` tools are a separate, optional software control contract
 its Schema, SDK `bcr_provider`, console journal, errors and business plugin tools retain their
 existing behavior. A simulation event never qualifies as a physical operator input.
 
-The profile `bcr2000.mock` version `1.2` (contract `1.2`, SurfacePlugins `8a9f3b3`) describes stable
+The profile `bcr2000.mock` version `1.2` (contract `1.2`, SurfacePlugins `6071354`) describes stable
 controls such as `pushEncoder.1.1`; clients discover mappings instead of interpreting the ID geometry.
 The contract, generic Python SDK, schemas and fixtures have one source, the locked SurfacePlugins
 package; this host only adapts its Mock and session to them.
