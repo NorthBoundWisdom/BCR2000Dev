@@ -1,10 +1,10 @@
 # BCR2000 Agent Console 开发 TODO
 
-> 阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+> 工作区统一后续排期见 `AstroController/TODO.md`（工作区文件）。阶段目标与验收标准见 [ROADMAP.md](ROADMAP.md)，开发与提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 > 本文只保留未完成事项；已完成事项见 git 历史与 `docs/` 下的交接、实测记录。
 
 通用领域隔离与外部设备/模拟器供应方接口的新增需求见 [领域与接口 TODO](TODO_DOMAIN_INTERFACES.md)。
-该文档用于职责、合同与验收范围评审，不代表这些能力已实现，也不自动启动全部开发。
+该文档保留已交付的设计与验收依据；共享插件迁移已完成，剩余工作不自动启动。
 
 状态（截至 2026-11-12）：
 
@@ -70,7 +70,7 @@ App 与工具只发送只读查询 SysEx，不改写设备 Preset，不回放备
 
 D3 软件部分、D4、P0-S4/P0-S5、页面/层/宏、配置库、WebSocket/ROS 2 rosbridge、
 MCP Agent/设备控制工具与 stdio 桥接均已实现并通过非硬件回归。
-本机未提交增量另补未绑定控件学习/停止、配置写权限关闭与程序化凭据管道启动。
+已实现并提交未绑定控件学习/停止、配置写权限关闭与程序化凭据管道启动。
 详细范围、测试入口与限制见 [非硬件验收](docs/OFFLINE_ACCEPTANCE.md)、[Codex](docs/CODEX.md)、
 [网络输出](docs/NETWORK_OUTPUT.md)、[MCP](docs/MCP.md)。
 30 分钟 JSONL soak 已通过：墙钟 1800.091 秒、264,873 个 Turn、八个槽位，无分叉/失败。

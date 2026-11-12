@@ -232,20 +232,20 @@ public struct PluginUpdate: Sendable {
 | 编号 | 决定 |
 | --- | --- |
 | D1 | 包/目录 `SurfacePlugins`；targets `SurfacePluginContracts`、`SurfacePluginConformance`、`AgentPlugin`，后续各业务插件独立产品 |
-| D2 | JSON锁提交remote+完整revision；stdlib/Git物化到build/dependencies/SurfacePlugins，清单只读验证该固定路径不联网。SOURCE仅获取已提交对象，旧PATH仅获取兼容 |
-| D3 | BCR 参数基线：可选step、0锚点网格、包含端点、平分取较小值、toggle中点分界；XTouch后续对齐 |
+| D2 | JSON锁提交remote+完整revision；stdlib/GitBCR物化到build/seed/SurfacePlugins（XTouch仍为build/dependencies/SurfacePlugins），清单只读验证该固定路径不联网。SOURCE仅获取已提交对象，旧PATH仅获取兼容 |
+| D3 | BCR 参数基线：可选step、0锚点网格、包含端点、平分取较小值、toggle中点分界；XTouch已对齐 |
 | D4 | 共享七态转换表，可配置槽位默认8，越界错误；Mock改注入时间 |
 | D5 | BCR逐值0/40/127/96/72/20/8，XTouch running/on、waitingApproval/blink、其余off；呈现留各宿主 |
-| D6 | 每任务仅本地Conventional Commit，不push/tag/创建远端 |
+| D6 | 每任务Conventional Commit；三main已按用户授权推送，版本标签/Release另行决定 |
 | D7 | 各仓测试记录数量；硬件未连接，不能宣称实机已验证 |
 | D8 | BCR旧枚举case/callback和无注入fallback仅为兼容；生产注入配置适配的通用动作/指示绑定，storage只IndicatorID；不复制整个引擎。新增triggerAction要求旧穷举switch补case，保留旧case构造/pattern/方法行为 |
-| D9 | build受管输入不是额外开发克隆；stdlib/Git管理器检查归属/dirty/SHA/symlink，原子物化，不reset外部source；B/C helper逐字相同、无FreeCM依赖 |
-| D10 | 本轮完成两宿主M1/M2/M3软件与S6收敛/发布准备；不连接真实执行器，不push/tag |
+| D9 | build受管输入不是额外开发克隆；stdlib/Git管理器检查归属/dirty/SHA/symlink，原子物化，不reset外部source；B/C均无FreeCM依赖；BCR后续迁入build/seed，当前helper不再逐字相同 |
+| D10 | 本轮完成两宿主M1/M2/M3软件与S6收敛/发布准备；不连接真实执行器；三main推送已完成，未打版本标签 |
 | D11 | 独立心跳/新鲜实际值/off-on完整共享gate；无可信遥测拒发，不用last-sent或request伪造actual |
 | D12 | XTouch独立externallyProtected仅新v2防旧App忽略；旧v1原shape，BCR格式不变 |
 | D13 | 仅OSC Float32初始/重seed必须actual精确可表示；失败invalidActual+ID停帧，不epsilon/改actual；JSON类按Double |
 
-U1：远端已有初始main，共享实现尚未推送；当前锁定commit从本地Git获取，不依赖0.1.0标签，推送/发布等用户决定；U2：用户已恢复本工作区XTouch接入，旧检出不读写；
+U1：共享实现及三main已推送；固定commit构建不依赖0.1.0标签，正式版本标签/Release仍待决定；U2：用户已恢复本工作区XTouch接入，旧检出不读写；
 U3：按本轮完成全部计划，XTouch机器人/底盘/输出均可显式装配，默认关闭可选模拟器；U4：三个仓库统一MIT/NorthBoundWisdom，已确定。
 
 ## 6. 阶段任务
@@ -328,7 +328,8 @@ XTouch 既有测试全部通过，触摸、召回、重连相关测试没有改�
 ### S6 收敛
 
 - [x] S6-1 删除已替换的重复实现和本轮临时桥（含独立PluginRegistry）；保留明确legacy facade。
-- [ ] 共享包推送/正式版本发布：按D6等待用户决定，本轮不推送/打标签；固定commit构建不依赖tag。
+- [x] 共享实现及三main推送已完成；固定commit在远端可达。
+- [ ] 正式版本标签/Release：待用户决定；固定commit构建不依赖tag。
 - [x] S6-2 已评估：本轮不再共享控制台引擎。参数规则/业务核心/remote registry已消除可验证重复；
   BCR的Quick Learn、echo/NRPN/反馈调度与XTouch触摸/召回/层/电机代次具有不同硬件保护，不应为少量兼容绑定代码合并。
   未来出现可逐项对照的新重复再另开计划，不在本任务扩大引擎范围。

@@ -71,7 +71,7 @@ python3 tools/mcp_integration.py --script tools/verify_shared_plugins.py
 ```
 
 这是隔离软件/Mock/参考模拟证据；真实硬件、C03/C05、真实执行器和人工GUI布局未验证。
-Root另用独立官方Linux容器验证共享103、XTouch Core/L10n84、manager11；远端CI与尚未推送SHA的HTTPS获取未执行。
+Root另用独立官方Linux容器验证共享103、XTouch Core/L10n84、manager11；共享SHA已推送；当前HEAD的远端CI及干净环境HTTPS获取需另核对。
 
 ## 发布前事件策略修正
 

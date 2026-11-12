@@ -97,7 +97,7 @@ B2 与 B3 的自包含 Provider 产物分别通过原样 14 组黑盒验收，�
 两宿主JSON锁和实际物化缓存同为 `add3c2404e4d2dbe3f9d0861bbda01c013018669`。
 BCR 最终408个Swift测试、66个工作流测试、6个客户端测试；既有Provider14组黑盒以及新工具现代/2025协议HTTP验收通过。
 Root独立Linux对共享最终103测试、XTouch Core/L10n 84测试及共同Gitmanager11测试验证通过，证据在工作区reports/REVIEW。
-GitHub远端CI/尚未推送SHA获取与真实硬件未验，不把本地Docker结果称为远端CI。真实执行器从未连接。
+共享SHA已推送；当前HEAD的远端CI/干净环境HTTPS获取与完整硬件验收需另核对，不把本地Docker结果称为远端CI。真实执行器从未连接。
 
 统一工具、权限、游标与时间域详见 [共享远程工具](SHARED_REMOTE_TOOLS.md)。
 
