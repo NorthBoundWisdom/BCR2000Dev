@@ -52,7 +52,9 @@ struct SurfaceProgramsView: View {
                 ForEach($actions) { $action in
                     HStack {
                         Picker(L10n.text("参数"), selection: $action.parameter) {
-                            ForEach(model.configuration.parameters) { Text($0.name).tag($0.id) }
+                            ForEach(model.configuration.parameters) {
+                                Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
+                            }
                         }
                         Toggle(L10n.text("步进"), isOn: $action.step)
                         TextField(L10n.text("值"), value: $action.value, format: .number).frame(width: 90)

@@ -24,7 +24,7 @@ struct BulkAssignmentSection: View {
             FieldRow(L10n.text("参数组")) {
                 Picker(L10n.text("参数组"), selection: $group) {
                     ForEach(model.configuration.parameterGroups, id: \.self) {
-                        Text($0.isEmpty ? L10n.text("未分组") : $0).tag($0)
+                        Text($0.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName($0)).tag($0)
                     }
                 }
             }

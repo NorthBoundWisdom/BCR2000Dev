@@ -101,7 +101,7 @@ private struct ParameterListView: View {
                     Text(
                         L10n
                             .text(
-                                "“\(pendingImport.name)”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
+                                "“\(BuiltInNamePresentation.displayName(pendingImport.name))”包含 \(pendingImport.parameters.count) 个参数、\(pendingImport.assignments.count) 项分配；实体映射保留。"
                             )
                     )
                 }
@@ -120,7 +120,7 @@ private struct ParameterListView: View {
             ForEach(model.configuration.parameterGroups, id: \.self) { group in
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(group.isEmpty ? L10n.text("未分组") : group)
+                        Text(group.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName(group))
                             .font(.subheadline.bold())
                         Spacer()
                         Button(L10n.text("复位到默认")) { model.resetGroup(group) }
@@ -210,7 +210,7 @@ private struct ParameterRow: View {
     }
 
     private var name: some View {
-        Text(definition.name).lineLimit(1)
+        Text(BuiltInNamePresentation.displayName(definition.name)).lineLimit(1)
     }
 
     private var valueText: some View {
