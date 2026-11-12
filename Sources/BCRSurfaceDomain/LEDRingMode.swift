@@ -27,7 +27,14 @@ public enum LEDRingMode: String, Codable, Sendable, CaseIterable {
             let position = (value * 28 + 63) / 127
             let first = position / 2
             return position.isMultiple(of: 2) ? [first] : [first, first + 1]
-        case .bar, .barOff, .spread, .pan, .qual, .cut, .damp: return nil
+        // Bar and pan follow the user manual (§ LED display); boundaries are not hardware-calibrated.
+        case .bar, .barOff:
+            if self == .barOff, value == 0 { return [] }
+            return Set(0 ... dot)
+        case .pan:
+            let center = (LEDRingMode.count - 1) / 2
+            return Set(min(dot, center) ... max(dot, center))
+        case .spread, .qual, .cut, .damp: return nil
         }
     }
 }

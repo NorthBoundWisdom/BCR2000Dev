@@ -171,6 +171,18 @@ struct SurfacePanelView: View {
                 .padding(.vertical, m(3))
                 .foregroundStyle(model.source == .mock ? Theme.parameter : Theme.selection)
                 .background((model.source == .mock ? Theme.parameter : Theme.selection).opacity(0.14), in: Capsule())
+            if model.source == .hardware {
+                Button {
+                    model.beginPresetAlignment()
+                } label: {
+                    Label(L10n.text("对齐设备预设"), systemImage: "slider.horizontal.below.square.and.square.filled")
+                        .font(m.font(9.5, weight: .semibold))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(!model.canAlignPreset)
+                .help(L10n.text("读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。"))
+            }
             Spacer()
             Text(model.source == .mock
                 ? L10n.text("拖动旋钮 / 按下按键 = 模拟实体操作")

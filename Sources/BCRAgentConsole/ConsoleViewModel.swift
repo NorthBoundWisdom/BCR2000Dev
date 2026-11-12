@@ -33,6 +33,26 @@ struct ConsoleNotice: Equatable {
     var action: Action?
 }
 
+/// Read → preview → confirm → write → verify of the device's temporary preset.
+struct PresetAlignmentState {
+    enum Phase: Equatable {
+        case reading, preview, writing(done: Int, total: Int), verifying, finished, restoring, failed(String)
+        var isBusy: Bool {
+            switch self {
+            case .reading, .writing, .verifying, .restoring: true
+            case .preview, .finished, .failed: false
+            }
+        }
+    }
+
+    var phase: Phase
+    var options = BCRPresetAlignment.Options()
+    var plan: BCRPresetAlignment.Plan?
+    var planError: String?
+    var backup: URL?
+    var canRestore = false
+}
+
 struct HardwareConnectionPrompt: Identifiable {
     enum Mode: Equatable { case initialize, write, read }
     let id = UUID()
@@ -87,6 +107,11 @@ final class ConsoleViewModel: ObservableObject {
     private var startupRoute: MIDIConnectionSnapshot?
     private(set) var observedHardwareGroup: Int?
     @Published private(set) var connectingHardware = false
+    @Published private(set) var presetAlignment: PresetAlignmentState?
+    private var presetDump: Data?
+    private var mapBeforeAlignment: HardwareMap?
+    private var alignmentTask: Task<Void, Never>?
+    private let supportDirectory: URL
     @Published private(set) var hardwarePressedControls: Set<BCRControlID> = []
     private var pressTasks: [BCRControlID: Task<Void, Never>] = [:]
     private var pressStarted: [BCRControlID: Double] = [:]
@@ -115,6 +140,7 @@ final class ConsoleViewModel: ObservableObject {
             .appending(path: "configuration-library.json"))
         slots = AgentStateMachine().slots
 
+        supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
         self.configurationFile = configurationFile
         let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)
@@ -643,6 +669,140 @@ final class ConsoleViewModel: ObservableObject {
         } catch {
             notice = ConsoleNotice(level: .error, text: L10n.text("配置导出失败：\(error.localizedDescription)"))
         }
+    }
+
+    // MARK: Preset alignment
+
+    var canAlignPreset: Bool {
+        canConfigureMIDI && midi.supportsStartupConfiguration && source == .hardware && connection.isConnected
+            && !isLearning && !connectingHardware && presetAlignment?.phase.isBusy != true
+    }
+
+    /// Reads the current temporary preset (read-only) and prepares a preview. Nothing is written.
+    func beginPresetAlignment() {
+        guard canAlignPreset else {
+            notice = ConsoleNotice(level: .warning, text: L10n.text("请先在实体模式下连接 BCR2000，并停止学习。"))
+            return
+        }
+        presetAlignment = PresetAlignmentState(phase: .reading)
+        presetDump = nil; mapBeforeAlignment = nil
+        let route = connection
+        alignmentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let dump = try await self.midi.readCurrentPreset()
+                try Task.checkCancellation()
+                guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
+                self.presetDump = dump
+                self.presetAlignment?.backup = try self.saveBackup(dump)
+                self.presetAlignment?.phase = .preview
+                self.recomputeAlignment()
+            } catch is CancellationError {
+                self.presetAlignment = nil
+            } catch {
+                self.presetAlignment?.phase = .failed(L10n.text("读取设备预设失败：\(error.localizedDescription)"))
+            }
+        }
+    }
+
+    func setAlignmentOptions(_ options: BCRPresetAlignment.Options) {
+        guard presetAlignment?.phase == .preview else { return }
+        presetAlignment?.options = options
+        recomputeAlignment()
+    }
+
+    private func recomputeAlignment() {
+        guard let dump = presetDump, var state = presetAlignment else { return }
+        do {
+            state.plan = try BCRPresetAlignment.prepare(dump: dump, hardwareMap: session.learnedHardwareMap,
+                                                        configuration: configuration, options: state.options)
+            state.planError = nil
+        } catch {
+            state.plan = nil
+            state.planError = error.localizedDescription
+        }
+        presetAlignment = state
+    }
+
+    /// Writes the previewed temporary preset, reads it back and installs the matching map.
+    func applyPresetAlignment() {
+        guard var state = presetAlignment, state.phase == .preview, let plan = state.plan, !plan.isEmpty,
+              canConfigureMIDI, source == .hardware, connection.isConnected else { return }
+        // Address the device that produced the dump (its ID is byte 4 of every BCL frame).
+        let device = presetDump.flatMap { $0.count > 4 && $0[4] < 16 ? $0[4] : nil } ?? 0x7F
+        let frames = plan.frames(device: device), options = state.options, route = connection
+        state.phase = .writing(done: 0, total: frames.count)
+        presetAlignment = state
+        let previousMap = session.learnedHardwareMap
+        alignmentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.midi.sendPresetFrames(frames) { [weak self] done in
+                    self?.presetAlignment?.phase = .writing(done: done, total: frames.count)
+                }
+                self.mapBeforeAlignment = previousMap
+                self.presetAlignment?.canRestore = true
+                self.presetAlignment?.phase = .verifying
+                let readback = try await self.midi.readCurrentPreset()
+                guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
+                let check = try BCRPresetAlignment.prepare(dump: readback, hardwareMap: plan.hardwareMap,
+                                                           configuration: self.configuration, options: options)
+                guard check.isEmpty else { throw BCRPresetAlignment.Failure.invalid(L10n.text("回读与写入内容不一致")) }
+                try self.session.installHardwareMap(plan.hardwareMap)
+                // Rewritten encoder sections reset to their defaults; the software values are authoritative.
+                self.session.synchronize()
+                self.presetAlignment?.phase = .finished
+                self.notice = ConsoleNotice(
+                    level: .info,
+                    text: L10n.text("设备临时预设已对齐（\(plan.changes.count) 项）；未写入永久存储。")
+                )
+            } catch is CancellationError {
+                self.presetAlignment?.phase = .failed(L10n.text("写入已取消；设备可能停在部分修改的临时预设，可恢复写入前的预设。"))
+            } catch {
+                self.presetAlignment?.phase = .failed(
+                    L10n.text("写入设备预设失败：\(error.localizedDescription)")
+                        + L10n.text(" 永久存储未改动，可恢复写入前的预设或重新载入设备预设。")
+                )
+                self.presetAlignment?.canRestore = true
+            }
+        }
+    }
+
+    /// Sends back the preset read before writing and reinstalls the previous map.
+    func restorePresetBeforeAlignment() {
+        guard let dump = presetDump, let state = presetAlignment, state.canRestore, !state.phase.isBusy,
+              canConfigureMIDI, connection.isConnected else { return }
+        let frames = Array(dump).split(separator: 0xF7, omittingEmptySubsequences: true).map { Array($0) + [0xF7] }
+        let previousMap = mapBeforeAlignment
+        presetAlignment?.phase = .restoring
+        alignmentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.midi.sendPresetFrames(frames) { _ in }
+                if let previousMap { try self.session.installHardwareMap(previousMap) }
+                self.session.synchronize()
+                self.presetAlignment?.canRestore = false
+                self.presetAlignment?.phase = .finished
+                self.notice = ConsoleNotice(level: .info, text: L10n.text("已恢复写入前的设备临时预设和本机映射。"))
+            } catch {
+                self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)"))
+            }
+        }
+    }
+
+    func dismissPresetAlignment() {
+        guard presetAlignment?.phase.isBusy != true else { return }
+        alignmentTask?.cancel(); alignmentTask = nil
+        presetAlignment = nil
+    }
+
+    private func saveBackup(_ dump: Data) throws -> URL {
+        let directory = supportDirectory.appending(path: "Backups", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appending(path: "temporary-preset-\(Int(Date().timeIntervalSince1970)).syx")
+        try dump.write(to: url, options: .withoutOverwriting)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        return url
     }
 
     // MARK: Session presentation

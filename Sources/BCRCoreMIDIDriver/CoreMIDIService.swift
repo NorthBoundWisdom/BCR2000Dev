@@ -28,11 +28,20 @@ public protocol MIDIService: SurfaceDevice {
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
     var supportsStartupConfiguration: Bool { get }
     func configureStartup(_ program: MIDIStartupProgram) async throws
+    /// Read-only dump of the current temporary preset (BCL frames, `$rev` … `$end`).
+    func readCurrentPreset() async throws -> Data
+    /// Sends BCL frames one at a time, each acknowledged by the device. No store unless a frame says so.
+    func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws
 }
 
 public extension MIDIService {
     var supportsStartupConfiguration: Bool { false }
     func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
+    func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
+    func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
+        throw MIDIStartupError.invalidProgram
+    }
+
     var supportsSnapshotReadback: Bool { false }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
         throw HardwareSnapshotError.invalid
@@ -70,6 +79,12 @@ public final class CoreMIDIService: MIDIService {
     private var ackTimeout: Task<Void, Never>?
     private var sysEx = MIDISysEx7Assembler()
     private var inputGeneration: UInt = 0
+    private var dumpID: UUID?
+    private var dumpFrames: [[UInt8]] = []
+    private var dumpActivity: Double = 0
+    private var dumpContinuation: CheckedContinuation<Data, any Error>?
+    private var dumpTask: Task<Void, Never>?
+    static let presetDumpRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x40, 0x7F, 0xF7]
 
     public init(selection: MIDIEndpointSelection = .init()) { self.selection = selection }
 
@@ -92,6 +107,9 @@ public final class CoreMIDIService: MIDIService {
                 Task { @MainActor [weak self] in
                     if self?.inputGeneration != generation, let ack = self?.ackID {
                         self?.finishAck(ack, result: .failure(CoreMIDIServiceError.outputUnavailable))
+                    }
+                    if self?.inputGeneration != generation, let dump = self?.dumpID {
+                        self?.finishDump(dump, result: .failure(CoreMIDIServiceError.outputUnavailable))
                     }
                     if self?.inputGeneration != generation, let id = self?.snapshotID { self?.finishSnapshot(
                         id,
@@ -177,14 +195,71 @@ public final class CoreMIDIService: MIDIService {
 
     public func configureStartup(_ program: MIDIStartupProgram) async throws {
         let frames = try program.frames()
+        try await exclusiveSysEx { transport, generation in
+            try transport.sendBytes(program.selectBytes, expectedGeneration: generation)
+            try await Task.sleep(for: .milliseconds(150))
+            try await self.acknowledged(frames, transport: transport, generation: generation, progress: { _ in })
+        }
+    }
+
+    public func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
+        guard !frames.isEmpty, frames.allSatisfy({ $0.count >= 10 && $0.first == 0xF0 && $0.last == 0xF7 &&
+                $0[1 ..< $0.count - 1].allSatisfy { $0 < 0x80 } && $0[5] == 0x15 && $0[6] == 0x20 })
+        else { throw MIDIStartupError.invalidProgram }
+        try await exclusiveSysEx { transport, generation in
+            try await self.acknowledged(frames, transport: transport, generation: generation, progress: progress)
+        }
+    }
+
+    public func readCurrentPreset() async throws -> Data {
+        try await exclusiveSysEx { transport, generation in
+            let id = UUID()
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<
+                    Data,
+                    any Error
+                >) in
+                    self.dumpID = id; self.dumpFrames = []; self.dumpContinuation = continuation
+                    self.dumpActivity = ProcessInfo.processInfo.systemUptime
+                    let started = self.dumpActivity
+                    do { try transport.sendBytes(Self.presetDumpRequest, expectedGeneration: generation) }
+                    catch { self.finishDump(id, result: .failure(error)); return }
+                    self.dumpTask = Task { @MainActor [weak self] in
+                        while true {
+                            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                            guard let self, self.dumpID == id else { return }
+                            let now = ProcessInfo.processInfo.systemUptime
+                            if now - self.dumpActivity > 3 || now - started > 45 {
+                                self.finishDump(id, result: .failure(MIDIStartupError.noReply)); return
+                            }
+                        }
+                    }
+                }
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.finishDump(id, result: .failure(CancellationError())) }
+            }
+        }
+    }
+
+    /// Runs one SysEx exchange while ordinary input is held back and the route must stay unchanged.
+    private func exclusiveSysEx<T>(
+        _ body: (CoreMIDITransport, UInt) async throws -> T
+    ) async throws -> T {
         guard startupID == nil, snapshotID == nil, connection.isConnected,
               let transport else { throw CoreMIDIServiceError.outputUnavailable }
-        let id = UUID(), route = connection, generation = inputGeneration
+        let id = UUID(), generation = inputGeneration
         startupID = id; sysEx = MIDISysEx7Assembler()
-        defer { startupID = nil; sysEx = MIDISysEx7Assembler() }
+        defer { if startupID == id { startupID = nil; sysEx = MIDISysEx7Assembler() } }
         try Task.checkCancellation()
-        try transport.sendBytes(program.selectBytes, expectedGeneration: generation)
-        try await Task.sleep(for: .milliseconds(150))
+        return try await body(transport, generation)
+    }
+
+    private func acknowledged(
+        _ frames: [[UInt8]], transport: CoreMIDITransport, generation: UInt,
+        progress: @MainActor (Int) -> Void
+    ) async throws {
+        let route = connection
         for (index, frame) in frames.enumerated() {
             try Task.checkCancellation()
             guard connection.hasSameRoute(as: route),
@@ -204,13 +279,37 @@ public final class CoreMIDIService: MIDIService {
             } onCancel: {
                 Task { @MainActor [weak self] in self?.finishAck(ack, result: .failure(CancellationError())) }
             }
+            progress(index + 1)
         }
+    }
+
+    private func finishDump(_ id: UUID, result: Result<Data, any Error>) {
+        guard dumpID == id else { return }
+        let continuation = dumpContinuation
+        dumpID = nil; dumpContinuation = nil; dumpFrames = []
+        dumpTask?.cancel(); dumpTask = nil
+        continuation?.resume(with: result)
     }
 
     private func receiveSysEx(_ chunks: [MIDISysEx7Chunk], generation: UInt) {
         guard generation == inputGeneration else { return }
         for chunk in chunks {
-            guard let frame = sysEx.consume(chunk), frame.count == 11,
+            guard let frame = sysEx.consume(chunk) else { continue }
+            if let id = dumpID, frame.count >= 10, frame.prefix(4) == [0xF0, 0, 0x20, 0x32],
+               frame[5] == 0x15, frame[6] == 0x20
+            {
+                guard Int(frame[7]) * 128 + Int(frame[8]) == dumpFrames.count else {
+                    finishDump(id, result: .failure(HardwareSnapshotError.invalid)); continue
+                }
+                dumpFrames.append(frame)
+                dumpActivity = ProcessInfo.processInfo.systemUptime
+                let text = String(decoding: frame[9 ..< frame.count - 1], as: UTF8.self)
+                if text.trimmingCharacters(in: .whitespaces) == "$end" {
+                    finishDump(id, result: .success(Data(dumpFrames.joined())))
+                }
+                continue
+            }
+            guard frame.count == 11,
                   frame.prefix(4) == [0xF0, 0, 0x20, 0x32], frame[5] == 0x15, frame[6] == 0x21,
                   Int(frame[7]) * 128 + Int(frame[8]) == ackIndex, let id = ackID else { continue }
             finishAck(id, result: frame[9] == 0 ? .success(()) : .failure(MIDIStartupError.rejected(Int(frame[9]))))

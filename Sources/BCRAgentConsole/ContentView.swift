@@ -33,6 +33,11 @@ struct ContentView: View {
         // The header's first row occupies the title strip instead of leaving it empty.
         .ignoresSafeArea(.container, edges: .top)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: Binding(get: { model.presetAlignment != nil }, set: { shown in
+            if !shown { model.dismissPresetAlignment() }
+        })) {
+            if let state = model.presetAlignment { PresetAlignmentSheet(model: model, state: state) }
+        }
         .sheet(item: Binding(get: { model.pendingHardwareConnection }, set: { value in
             if value == nil, let prompt = model.pendingHardwareConnection { model.declineHardwareConnection(prompt.id) }
         })) { prompt in

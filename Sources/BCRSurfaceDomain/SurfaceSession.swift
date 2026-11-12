@@ -454,6 +454,18 @@ public final class SurfaceSession {
     /// The persisted physical map, independent of which source is active.
     public var learnedHardwareMap: HardwareMap { hardwareMap }
 
+    /// Installs a map the device has just been aligned to (identities, ring and press modes).
+    public func installHardwareMap(_ map: HardwareMap) throws {
+        try map.validate()
+        invalidateInputEpoch("mapping_changed")
+        if engine.learnTarget != nil { engine.stopLearning() }
+        hardwareMap = map
+        if source == .hardware { engine.replaceHardwareMap(map) }
+        do { try saveHardwareMap(map) }
+        catch { onEvent?(.failed(.hardwareMapPersistence, error.localizedDescription)) }
+        publishChange()
+    }
+
     public func resetHardwareMap() {
         guard source == .hardware else { return }
         engine.resetHardwareMap()
