@@ -38,6 +38,7 @@ SURFACE_FILES = {
     "surface-control-software-v1.3.json": "fixtures/surface-control-software-v1.3.json",
     "surface-control.md": "docs/surface-control.md",
     "surface-control-scenarios.md": "docs/surface-control-scenarios.md",
+    "surface-control-delivery.md": "docs/surface-control-delivery.md",
     "surface-control-conformance.md": "docs/surface-control-conformance.md",
     "surface-control-conformance-report.schema.json": "docs/surface-control-conformance-report.schema.json",
     "versioning.md": "docs/versioning.md",
