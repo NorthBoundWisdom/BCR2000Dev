@@ -13,6 +13,10 @@ if os.environ.get("BCR_CONNECTION_FIXTURE") != "1":
     raise RuntimeError("This script requires the explicit isolated connection fixture; never run against hardware")
 
 ui = NativeUI(os.environ["BCR_INTEGRATION_APP_PID"])
+if ui.offscreen:
+    raise RuntimeError(
+        "Full connection acceptance requires foreground: native confirmation can activate the App; strict offscreen audit rejected it"
+    )
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 
@@ -69,7 +73,10 @@ error "Unassigned B2-2 button missing"''')
             pass
     else:
         ui.run("set frontmost to true\nkey code 53")
-    ui.wait(lambda: not ui.exists("hardware.buttonFunctions.confirm"), "Cancel did not dismiss confirmation")
+    ui.wait_settled(
+        lambda: not ui.exists("hardware.buttonFunctions.confirm") and ui.enabled("hardware.buttonFunctions.change"),
+        "Cancel did not dismiss confirmation",
+    )
     assert json.loads(path.read_text()) == original
     expected = json.loads(json.dumps(original))
     target = next(
@@ -86,9 +93,11 @@ error "Unassigned B2-2 button missing"''')
         except RuntimeError as error:
             press_error = error
         try:
-            ui.wait(
+            ui.wait_settled(
                 lambda: (
-                    json.loads(path.read_text()) == expected_map and not ui.exists("hardware.buttonFunctions.confirm")
+                    json.loads(path.read_text()) == expected_map
+                    and not ui.exists("hardware.buttonFunctions.confirm")
+                    and ui.enabled("hardware.buttonFunctions.change")
                 ),
                 message,
             )

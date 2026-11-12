@@ -22,8 +22,10 @@ def native_binary(stem="native_ui"):
 class DesktopAudit:
     """Finite sampling, scoped to the isolated PID, including startup and shutdown."""
 
-    def __init__(self, directory):
+    def __init__(self, directory, bundle_id=None):
         self.directory = Path(directory)
+        if bundle_id:
+            (self.directory / "desktop-audit-bundle.txt").write_text(bundle_id)
         self.process = subprocess.Popen(
             [str(native_binary("desktop_audit")), str(os.getpid()), str(directory)],
             stdout=subprocess.DEVNULL,
@@ -46,7 +48,7 @@ class DesktopAudit:
         if self.process.returncode:
             raise RuntimeError("Desktop sampler failed: " + errors)
         result = json.loads((self.directory / "desktop-audit.json").read_text())
-        if result["samples"] == 0 or result["targetWasFront"] or result["visibleSamples"]:
+        if result["samples"] == 0 or not result["targetPIDs"] or result["targetWasFront"] or result["visibleSamples"]:
             raise RuntimeError("Offscreen desktop audit failed: " + json.dumps(result))
         print("Offscreen desktop audit:", json.dumps(result), flush=True)
 
@@ -143,6 +145,20 @@ end tell"""
         subprocess.run(["screencapture", "-x", "-o", f"-l{identifiers[0]}", str(path)], check=True)
         subprocess.run(["sips", "--resampleWidth", str(width), str(path)], capture_output=True, check=True)
         print("Captured", path.name, flush=True)
+
+    @staticmethod
+    def wait_settled(check, message, duration=0.3, timeout=12):
+        deadline = time.monotonic() + timeout
+        stable_since = None
+        while time.monotonic() < deadline:
+            if check():
+                stable_since = stable_since or time.monotonic()
+                if time.monotonic() - stable_since >= duration:
+                    return
+            else:
+                stable_since = None
+            time.sleep(0.05)
+        raise RuntimeError(message)
 
     @staticmethod
     def wait(check, message, timeout=12):

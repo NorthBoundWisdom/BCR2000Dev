@@ -50,7 +50,7 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                 {
                     window.setContentSize(NSSize(width: 1_200, height: 760))
                     if OffscreenPresentation.isEnabled {
-                        // Ordered in for layout and rendering, but never key, frontmost or on a screen.
+                        // Ordered for layout only: transparent and click-through; frame parking is best effort.
                         OffscreenPresentation.conceal(window)
                         window.orderBack(nil)
                     } else {

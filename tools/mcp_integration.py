@@ -18,7 +18,7 @@ from mcp_smoke import Client
 from native_ui import DesktopAudit
 
 
-def main():
+def parse_arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", type=Path, default=Path("build/app/BCRAgentConsole.app"))
     parser.add_argument("--port", type=int, default=18787)
@@ -29,12 +29,12 @@ def main():
     presentation.add_argument(
         "--offscreen",
         action="store_true",
-        help="no Dock icon, no activation, window parked outside every screen (default without --script)",
+        help="transparent, click-through background test windows; frame parking is best effort (default without --script)",
     )
     presentation.add_argument(
         "--foreground",
         action="store_true",
-        help="ordinary visible window (default with --script: those send keystrokes or take screenshots)",
+        help="ordinary visible window (default with --script; some scenarios require foreground)",
     )
     parser.add_argument(
         "--language",
@@ -42,11 +42,44 @@ def main():
         default="zh-Hans",
         help="isolated app language (Chinese by default for existing UI acceptance scripts)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:
         parser.error("--port must be 1024–65535")
-    # Protocol-only probes never need the desktop. Scripted acceptance drives the front window.
-    offscreen = args.offscreen or (not args.foreground and args.script is None)
+    return args
+
+
+def uses_offscreen(args):
+    # Keep scripted runs foreground by default: the documented matrix still has foreground-only scenarios.
+    return args.offscreen or (not args.foreground and args.script is None)
+
+
+def app_arguments(executable, args):
+    return [
+        str(executable),
+        "--integration-test",
+        *(["--connection-fixture"] if args.connection_fixture else []),
+        *(["--offscreen"] if uses_offscreen(args) else []),
+        "-AppleLanguages",
+        f"({args.language})",
+    ]
+
+
+def stop_app(app, offscreen):
+    if offscreen:
+        # An isolated fixture has no user documents to save or interactive quit flow to preserve.
+        app.kill()
+    else:
+        app.terminate()
+    try:
+        app.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        app.kill()
+        app.wait()
+
+
+def main(argv=None):
+    args = parse_arguments(argv)
+    offscreen = uses_offscreen(args)
     root = Path("build/mcp-integration").resolve()
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="case-", dir=root))
@@ -99,15 +132,9 @@ def main():
     audit = DesktopAudit(directory) if offscreen else None
     try:
         with (directory / "app.log").open("w") as log:
+            (directory / "lifecycle-phase.txt").write_text("launch")
             app = subprocess.Popen(
-                [
-                    str(executable),
-                    "--integration-test",
-                    *(["--connection-fixture"] if args.connection_fixture else []),
-                    *(["--offscreen"] if offscreen else []),
-                    "-AppleLanguages",
-                    f"({args.language})",
-                ],
+                app_arguments(executable, args),
                 env=environment,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -128,6 +155,7 @@ def main():
                     time.sleep(0.1)
                 else:
                     raise RuntimeError("isolated listener did not start on the configured port")
+                (directory / "lifecycle-phase.txt").write_text("protocol")
                 for flags in ([], ["--legacy"]):
                     subprocess.run(
                         [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
@@ -135,14 +163,11 @@ def main():
                         check=True,
                     )
                 if args.script:
+                    (directory / "lifecycle-phase.txt").write_text("script")
                     subprocess.run([sys.executable, str(args.script.resolve())], env=environment, check=True)
             finally:
-                app.terminate()
-                try:
-                    app.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    app.kill()
-                    app.wait()
+                (directory / "lifecycle-phase.txt").write_text("shutdown")
+                stop_app(app, offscreen)
     finally:
         if audit:
             audit.finish()

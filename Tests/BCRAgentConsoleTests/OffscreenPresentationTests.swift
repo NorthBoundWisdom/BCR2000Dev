@@ -31,4 +31,57 @@ final class OffscreenPresentationTests: XCTestCase {
         XCTAssertEqual(ordinary.alphaValue, 1)
         XCTAssertFalse(ordinary.ignoresMouseEvents)
     }
+
+    func testNotificationsConcealAllCurrentAndNewWindowsWithoutOrderingThemIn() {
+        _ = NSApplication.shared
+        let center = NotificationCenter()
+        let registry = OffscreenWindowRegistry()
+        let first = NSWindow(contentRect: NSRect(x: 20, y: 20, width: 200, height: 100),
+                             styleMask: [.titled], backing: .buffered, defer: true)
+        first.isReleasedWhenClosed = false
+        registry.windows = [first]
+        let tokens = OffscreenPresentation.observeWindows(center: center) { registry.windows }
+        defer { for token in tokens { center.removeObserver(token) } }
+        XCTAssertEqual(first.alphaValue, 0)
+        let second = NSWindow(contentRect: NSRect(x: 30, y: 30, width: 200, height: 100),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        second.isReleasedWhenClosed = false
+        registry.windows.append(second)
+        center.post(name: NSWindow.willBeginSheetNotification, object: first)
+        for window in registry.windows {
+            XCTAssertEqual(window.alphaValue, 0)
+            XCTAssertTrue(window.ignoresMouseEvents)
+            XCTAssertFalse(window.isVisible)
+        }
+        second.alphaValue = 1
+        second.ignoresMouseEvents = false
+        center.post(name: NSWindow.didUpdateNotification, object: second)
+        XCTAssertEqual(second.alphaValue, 0)
+        XCTAssertTrue(second.ignoresMouseEvents)
+    }
+
+    func testMaintenanceDoesNotChaseFramesAndStopsWhenObserversAreRemoved() {
+        _ = NSApplication.shared
+        let center = NotificationCenter()
+        let window = NSWindow(contentRect: NSRect(x: 20, y: 20, width: 200, height: 100),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let tokens = OffscreenPresentation.observeWindows(center: center) { [window] }
+        window.setFrameOrigin(.zero)
+        window.ignoresMouseEvents = false
+        center.post(name: NSWindow.didMoveNotification, object: window)
+        XCTAssertEqual(window.frame.origin, .zero, "SwiftUI-controlled coordinates do not define invisibility")
+        XCTAssertEqual(window.alphaValue, 0)
+        XCTAssertTrue(window.ignoresMouseEvents)
+        for token in tokens { center.removeObserver(token) }
+        window.alphaValue = 1
+        center.post(name: NSApplication.didUpdateNotification, object: nil)
+        XCTAssertEqual(window.alphaValue, 1)
+        XCTAssertFalse(window.isVisible)
+    }
+}
+
+@MainActor
+private final class OffscreenWindowRegistry {
+    var windows: [NSWindow] = []
 }

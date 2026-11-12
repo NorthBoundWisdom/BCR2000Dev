@@ -545,7 +545,7 @@ def smoke(bundle: Path, foreground: bool | None = None) -> None:
             # Launch Services supplies normal GUI activation on hosted macOS runners.
             # -n isolates each language probe; -W waits for its startup check to exit.
             # Offscreen (the local default): -g keeps the app in the background and --offscreen makes it
-            # an accessory app whose window is transparent and parked outside every screen.
+            # an accessory app with transparent, click-through windows (frame parking is best effort).
             # Argument-domain language overrides never modify user preferences.
             stdout = Path(temporary) / "stdout.log"
             stderr = Path(temporary) / "stderr.log"

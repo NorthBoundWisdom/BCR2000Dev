@@ -34,7 +34,7 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 
 | 脚本 | 模式 | 语言与依据 |
 | --- | --- | --- |
-| `verify_connection_ui.py` | 可离屏 | 中文/英文；离屏以 AX 执行读取和取消，不验证真实键盘快捷键 |
+| `verify_connection_ui.py` | **严格离屏未通过，需前台** | F3 采样在原生功能确认框路径捕获激活；禁止激活策略又使确认框不可访问。保留真实流程和全部断言，离屏提前拒绝，待用户决定测试呈现方案 |
 | `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
 | `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
 | `verify_functions_ui.py` | 可离屏 | 中文；步进/指定/循环、批量分配和保留参数值通过 |
@@ -46,7 +46,6 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 示例（逐个运行，不并行）：
 
 ```bash
-python3 tools/mcp_integration.py --offscreen --connection-fixture --script tools/verify_connection_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_endpoint_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_functions_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_review_fixes_ui.py
@@ -106,3 +105,19 @@ FeedbackSchedulerTests、JSONParameterLinkTests、WebSocketParameterAdapterTests
 
 使用 `BCR_UI_CAPTURE_DIRECTORY=build/ui-validation/connection` 运行连接脚本，可将 1200×760 的连接与对齐窗口截图
 保存到忽略目录；`BCR_CAPTURE_README=1` 仍以 1680×900 更新 README 图片。两种模式只捕获隔离 App 自身窗口。
+
+## 离屏维护说明
+
+不可见性由窗口透明和鼠标穿透提供，App 使用 accessory 策略并避免主动激活。屏幕外坐标是首次隐藏时的尽力放置，
+SwiftUI 后续可能将 frame 约束回屏幕范围，因此不能只用坐标判断不可见。
+维护使用 AppKit 的应用更新、窗口更新/移动/尺寸/屏幕及 sheet 通知。通知处理不持续追逐已透明窗口的坐标，
+避免形成同步 frame 约束循环。完整连接确认场景的激活问题在通知维护和原轮询方案中均出现，不能靠轮询保证不激活，现已提前拒绝该路径。
+针对允许的 smoke 与四个脚本使用通知维护，不再运行测试 App 内 50 ms 常驻轮询。
+桌面审计器的 50 ms 采样只在一次验收期间运行，另用于观测与及时终止不合格测试进程。
+
+### F3 尚未满足的验收
+
+历史连接脚本曾记录离屏通过，但新的生命周期采样实际捕获了原生确认框路径激活，不能据旧记录保证不抢焦点。
+原有 50 ms 维护与通知-only 都出现此问题；禁止激活的实验可渲染 smoke，但确认框未进入 AX 树。
+本轮未改变产品确认框或放宽任何状态断言；严格离屏下已提前拒绝完整连接场景，避免再次影响桌面。
+因此 F3 的“现有离屏连接验收仍通过”**未完成**，须先决定是否允许测试专用的非激活确认呈现，或将该场景正式保留前台。
