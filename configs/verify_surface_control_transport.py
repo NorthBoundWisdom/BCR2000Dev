@@ -21,6 +21,191 @@ import subprocess
 import sys
 import threading
 import time
+from urllib.parse import urlsplit
+
+
+# Read-only historical delivery inputs. Missing archives are explicit CI skips; altered archives fail.
+LEGACY_SDKS = (
+    (
+        "1.1.0",
+        "build/p3b-provider/surface-control-sdk-1.1.0.zip",
+        "1dcc3ce363c7d0b7db4a1c87d0c7827753987164e6c615b3306b00c51bcd7e85",
+    ),
+    (
+        "1.2.0",
+        "build/m-b4-provider-final/surface-control-sdk-1.2.0.zip",
+        "75edcfcb26560fd18fa6f91277d6a4d2cd6468f18b680a0421416bf8390c1bc1",
+    ),
+)
+
+
+def verify_legacy_clients(host, cases, passed):
+    """Keep SDK rejection distinct from successful backward-compatible wire exchanges."""
+    for version, relative, wanted in LEGACY_SDKS:
+        archive = Path(__file__).resolve().parents[1] / relative
+        if not archive.is_file():
+            cases.append(
+                {
+                    "name": "legacy_sdk_" + version,
+                    "status": "skip",
+                    "reason": "Frozen historical SDK archive unavailable",
+                    "source": relative,
+                    "expected_sha256": wanted,
+                }
+            )
+            print("SKIP legacy_sdk_" + version + ": frozen archive unavailable", flush=True)
+            continue
+        assert hashlib.sha256(archive.read_bytes()).hexdigest() == wanted, "Historical SDK hash mismatch"
+        # A fresh interpreter imports exactly the unmodified historical ZIP. Credentials travel
+        # through stdin and are never written to argv, evidence or the subprocess result.
+        probe = """
+import json, sys
+settings = json.load(sys.stdin)
+sys.path.insert(0, settings['archive'])
+import surface_control
+assert surface_control.__file__.startswith(settings['archive'] + '/')
+assert surface_control.__version__ == settings['version']
+c = surface_control.Client(settings['url'], settings['token'], settings['instance'])
+try:
+    c.discover()
+except surface_control.SurfaceError as e:
+    assert e.code == 'unsupported_contract', e.code
+    print(json.dumps({'discovery_error': e.code, 'sdk_version': surface_control.__version__}))
+else:
+    raise AssertionError('Historical SDK unexpectedly accepted contract 1.3')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            input=json.dumps(
+                {
+                    "archive": str(archive),
+                    "version": version,
+                    "url": host.ready["url"],
+                    "token": host.token,
+                    "instance": host.client.instance_id,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            timeout=10,
+            check=True,
+        )
+        evidence = json.loads(result.stdout)
+        passed(
+            "legacy_sdk_" + version + "_rejects_unknown_contract",
+            source=relative,
+            sdk_sha256=wanted,
+            compatibility="sdk_discovery_rejected",
+            **evidence,
+        )
+
+    # This path imports no SDK and sends only the identity/global-CAS fields that existed in
+    # 1.1/1.2. The server's actual contract/profile version remains 1.3 throughout.
+    endpoint = urlsplit(host.ready["url"])
+    for version in ("1.1", "1.2"):
+        counter = 0
+
+        def call(name, arguments=None):
+            nonlocal counter
+            counter += 1
+            protocol = "2026-07-28"
+            params = {
+                "name": name,
+                "arguments": arguments or {},
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": protocol,
+                    "io.modelcontextprotocol/clientCapabilities": {},
+                },
+            }
+            connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+            try:
+                connection.request(
+                    "POST",
+                    endpoint.path,
+                    json.dumps({"jsonrpc": "2.0", "id": counter, "method": "tools/call", "params": params}),
+                    {
+                        "Authorization": "Bearer " + host.token,
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                        "MCP-Protocol-Version": protocol,
+                        "Mcp-Method": "tools/call",
+                        "Mcp-Name": name,
+                        "BCR-Provider-Id": host.ready["provider_id"],
+                    },
+                )
+                response = connection.getresponse()
+                assert response.status == 200
+                assert response.getheader("BCR-Provider-Id") == host.ready["provider_id"]
+                reply = json.loads(response.read())
+                assert reply["id"] == counter and "error" not in reply
+                value = reply["result"]
+                assert not value.get("isError", False), value.get("structuredContent")
+                return value["structuredContent"]
+            finally:
+                connection.close()
+
+        discovery = call("surface_control_discover")
+        assert discovery["contract_version"] == "1.3"
+        expected = discovery["expected"]
+        snapshot = call("surface_control_snapshot", {"instance_id": expected["instance_id"]})
+        call("surface_control_reset", {"expected": expected, "expected_sequence": snapshot["latest_sequence"]})
+        discovery = call("surface_control_discover")
+        expected = discovery["expected"]
+        snapshot = call("surface_control_snapshot", {"instance_id": expected["instance_id"]})
+        event = call(
+            "surface_control_input",
+            {
+                "expected": expected,
+                "expected_sequence": snapshot["latest_sequence"],
+                "control_id": "pushEncoder.1.1",
+                "encoding": "scalar",
+                "value": 90,
+            },
+        )
+        assert event["disposition"] == "accepted"
+        feedback = {"expected": expected, "control_id": "button.1.1", "kind": "indicator", "value": "on"}
+        if version == "1.1":
+            feedback["expected_sequence"] = event["sequence"]
+        shown = call("surface_control_feedback", feedback)
+        assert shown["disposition"] == "accepted"
+        held = call(
+            "surface_control_input",
+            {
+                "expected": expected,
+                "expected_sequence": shown["sequence"],
+                "control_id": "button.1.3",
+                "encoding": "boolean",
+                "value": True,
+                "hold_s": 2,
+            },
+        )
+        renewed = call("surface_control_renew", {"expected": expected, "control_id": "button.1.3", "hold_s": 2})
+        assert renewed["hold_deadline"] >= held["hold_deadline"]
+        released = call(
+            "surface_control_input",
+            {
+                "expected": expected,
+                "expected_sequence": held["sequence"],
+                "control_id": "button.1.3",
+                "encoding": "boolean",
+                "value": False,
+            },
+        )
+        page = call(
+            "surface_control_events",
+            {"instance_id": expected["instance_id"], "epoch": expected["epoch"], "after_sequence": "0", "limit": 1024},
+        )
+        snapshot = call("surface_control_snapshot", {"instance_id": expected["instance_id"]})
+        assert len(page["events"]) == 4 and page["latest_sequence"] == released["sequence"] == "4"
+        assert snapshot["inputs"]["pushEncoder.1.1"] == 90
+        assert snapshot["inputs"]["button.1.3"] is False and not snapshot.get("holds")
+        passed(
+            "legacy_wire_" + version + "_roundtrip",
+            event_count=4,
+            global_sequence="4",
+            unsequenced_feedback=version == "1.2",
+            compatibility="protocol_roundtrip_passed",
+        )
 
 
 def main():
@@ -170,6 +355,9 @@ def main():
             assert result.returncode == 2 and result.stderr.strip()
         assert not (args.output / "must-not-exist").exists()
         passed("configurable_mock_inputs_feedback_holds_and_startup_fences")
+        legacy = Host("legacy")
+        verify_legacy_clients(legacy, cases, passed)
+        legacy.stop()
         first, second, denied = Host("a"), Host("b"), Host("denied", allow=False)
         for protocol in ("2025-11-25", "2026-07-28"):
             client = Client(first.ready["url"], first.token, "transport.a", protocol=protocol)

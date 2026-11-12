@@ -24,4 +24,6 @@ jobs:
       - run: python3 configs/macos_workflow.py build --distribution ad-hoc
       - run: python3 configs/macos_workflow.py smoke
       - run: python3 tools/mcp_integration.py
+      - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
+      - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
       - run: git diff --check
