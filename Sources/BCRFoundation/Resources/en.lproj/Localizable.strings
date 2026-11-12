@@ -802,3 +802,5 @@
 "Agent 按键灯" = "Agent button LEDs";
 "用闪烁表示 Agent 状态" = "Show Agent states by blinking";
 "按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。" = "Button LEDs are only on or off: idle off, running steady, queued slow blink, awaiting approval fast blink, error rapid blink. When off, the original levels are sent; whether the device distinguishes them is not yet verified.";
+"恢复原预设" = "Restore original preset";
+"把最近一次对齐前备份的临时预设写回设备，并恢复当时的本机映射。" = "Write back the temporary preset backed up before the last alignment and restore the local mapping from then.";

@@ -182,6 +182,18 @@ struct SurfacePanelView: View {
                 .controlSize(.small)
                 .disabled(!model.canAlignPreset)
                 .help(L10n.text("读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。"))
+                if model.presetRestorePoint != nil {
+                    Button {
+                        model.restorePresetBeforeAlignment()
+                    } label: {
+                        Label(L10n.text("恢复原预设"), systemImage: "arrow.uturn.backward")
+                            .font(m.font(9.5, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!model.canRestorePreset)
+                    .help(L10n.text("把最近一次对齐前备份的临时预设写回设备，并恢复当时的本机映射。"))
+                }
             }
             Spacer()
             Text(model.source == .mock

@@ -100,6 +100,35 @@ final class PresetAlignmentFlowTests: XCTestCase {
         XCTAssertEqual(model.engine.hardwareMap, mapBefore)
     }
 
+    func testRestoreWorksAfterClosingTheWindowAndAcrossRestarts() async throws {
+        let (model, device, directory) = try setUp()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = device.preset
+        let mapBefore = model.engine.hardwareMap
+        model.beginPresetAlignment()
+        try await wait(model) { $0 == .preview }
+        model.applyPresetAlignment()
+        try await wait(model) { $0 == .finished }
+        model.dismissPresetAlignment()
+        XCTAssertNil(model.presetAlignment)
+        XCTAssertNotNil(model.presetRestorePoint)
+        XCTAssertNotEqual(device.preset, original)
+
+        // A new app instance on the same profile still knows what to restore.
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let reopened = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        reopened.selectSource(.hardware)
+        XCTAssertTrue(reopened.canRestorePreset)
+        reopened.restorePresetBeforeAlignment()
+        try await wait(reopened) { $0 == .finished }
+        XCTAssertEqual(device.preset, original)
+        XCTAssertEqual(reopened.engine.hardwareMap, mapBefore)
+        XCTAssertNil(reopened.presetRestorePoint)
+        XCTAssertFalse(FileManager.default
+            .fileExists(atPath: directory.appending(path: "preset-alignment-restore.json").path))
+    }
+
     func testAlignmentRequiresConnectedHardware() throws {
         let (model, device, directory) = try setUp()
         defer { try? FileManager.default.removeItem(at: directory) }

@@ -54,6 +54,14 @@ struct PresetAlignmentState {
     var canRestore = false
 }
 
+/// Survives closing the alignment window and restarting the app: what to write back and which
+/// map belonged to it. The preset backup itself stays in `Backups/`.
+struct PresetRestorePoint: Codable, Equatable {
+    var backupFile: String
+    var hardwareMap: HardwareMap
+    var createdAt: Date
+}
+
 struct HardwareConnectionPrompt: Identifiable {
     enum Mode: Equatable { case initialize, write, read }
     let id = UUID()
@@ -117,6 +125,9 @@ final class ConsoleViewModel: ObservableObject {
     private let blinkPreference: JSONFileStore<Bool>
     private var presetDump: Data?
     private var mapBeforeAlignment: HardwareMap?
+    /// The last written alignment that can still be undone, independent of the window.
+    @Published private(set) var presetRestorePoint: PresetRestorePoint?
+    private let restorePointStore: JSONFileStore<PresetRestorePoint>
     private var alignmentTask: Task<Void, Never>?
     private let supportDirectory: URL
     @Published private(set) var hardwarePressedControls: Set<BCRControlID> = []
@@ -148,6 +159,8 @@ final class ConsoleViewModel: ObservableObject {
         slots = AgentStateMachine().slots
 
         supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
+        restorePointStore = JSONFileStore(fileURL: supportDirectory.appending(path: "preset-alignment-restore.json"))
+        presetRestorePoint = try? restorePointStore.load()
         blinkPreference = JSONFileStore(fileURL: supportDirectory.appending(path: "agent-led-blink.json"))
         blinksAgentLEDs = (try? blinkPreference.load()) ?? false
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
@@ -741,6 +754,11 @@ final class ConsoleViewModel: ObservableObject {
         state.phase = .writing(done: 0, total: frames.count)
         presetAlignment = state
         let previousMap = session.learnedHardwareMap
+        // The first acknowledged line may already change the device, so the restore point comes first.
+        if let backup = state.backup {
+            saveRestorePoint(PresetRestorePoint(backupFile: backup.lastPathComponent,
+                                                hardwareMap: previousMap, createdAt: .now))
+        }
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
@@ -775,19 +793,37 @@ final class ConsoleViewModel: ObservableObject {
         }
     }
 
-    /// Sends back the preset read before writing and reinstalls the previous map.
+    var canRestorePreset: Bool {
+        presetRestorePoint != nil && canConfigureMIDI && connection.isConnected && !isLearning
+            && !connectingHardware && presetAlignment?.phase.isBusy != true
+    }
+
+    /// Writes back the preset read before the last alignment and reinstalls the map from then.
+    /// Works from the window or later from the panel, including after an app restart.
     func restorePresetBeforeAlignment() {
-        guard let dump = presetDump, let state = presetAlignment, state.canRestore, !state.phase.isBusy,
-              canConfigureMIDI, connection.isConnected else { return }
+        guard canRestorePreset, let point = presetRestorePoint else { return }
+        let url = supportDirectory.appending(path: "Backups").appending(path: point.backupFile)
+        let dump: Data
+        do {
+            dump = try Data(contentsOf: url)
+            // Only a complete, well-formed preset dump (no store/recall) is written back.
+            _ = try BCRPresetAlignment.prepare(dump: dump, hardwareMap: HardwareMap(), configuration: .neutral(),
+                                               options: .init(completeButtons: false, ringModes: false,
+                                                              buttonBehavior: false, lockPreset: false))
+        } catch {
+            notice = ConsoleNotice(level: .error, text: L10n.text("恢复失败：\(error.localizedDescription)"))
+            return
+        }
         let frames = Array(dump).split(separator: 0xF7, omittingEmptySubsequences: true).map { Array($0) + [0xF7] }
-        let previousMap = mapBeforeAlignment
+        if presetAlignment == nil { presetAlignment = PresetAlignmentState(phase: .restoring, backup: url) }
         presetAlignment?.phase = .restoring
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await self.midi.sendPresetFrames(frames) { _ in }
-                if let previousMap { try self.session.installHardwareMap(previousMap) }
+                try self.session.installHardwareMap(point.hardwareMap)
                 self.session.synchronize()
+                self.saveRestorePoint(nil)
                 self.presetAlignment?.canRestore = false
                 self.presetAlignment?.phase = .finished
                 self.notice = ConsoleNotice(level: .info, text: L10n.text("已恢复写入前的设备临时预设和本机映射。"))
@@ -795,6 +831,14 @@ final class ConsoleViewModel: ObservableObject {
                 self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)"))
             }
         }
+    }
+
+    private func saveRestorePoint(_ point: PresetRestorePoint?) {
+        presetRestorePoint = point
+        do {
+            if let point { try restorePointStore.save(point) }
+            else { try? FileManager.default.removeItem(at: restorePointStore.fileURL) }
+        } catch { report(error) }
     }
 
     func dismissPresetAlignment() {

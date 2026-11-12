@@ -24,6 +24,14 @@ public enum BCRPresetAlignment {
         public var lockPreset = true
 
         public init() {}
+
+        public init(completeButtons: Bool, ringModes: Bool, buttonBehavior: Bool, lockPreset: Bool,
+                    enableButtonFunctions: Bool = false)
+        {
+            self.completeButtons = completeButtons; self.ringModes = ringModes
+            self.buttonBehavior = buttonBehavior; self.lockPreset = lockPreset
+            self.enableButtonFunctions = enableButtonFunctions
+        }
     }
 
     public struct Change: Equatable, Sendable {

@@ -23,7 +23,7 @@ struct PresetAlignmentSheet: View {
                         .help(backup.path)
                 }
                 Spacer()
-                if state.canRestore {
+                if state.canRestore || (model.presetRestorePoint != nil && state.phase != .preview) {
                     Button(L10n.text("恢复写入前的预设")) { model.restorePresetBeforeAlignment() }
                         .disabled(state.phase.isBusy)
                 }
