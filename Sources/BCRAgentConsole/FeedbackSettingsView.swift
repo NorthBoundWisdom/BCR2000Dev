@@ -62,11 +62,9 @@ final class FeedbackSettingsController: ObservableObject {
 
 struct FeedbackSettingsView: View {
     @ObservedObject var controller: FeedbackSettingsController
-    @ObservedObject var model: ConsoleViewModel
     @State private var draft: FeedbackPolicy
-    init(controller: FeedbackSettingsController, model: ConsoleViewModel) {
+    init(controller: FeedbackSettingsController) {
         self.controller = controller
-        self.model = model
         _draft = State(initialValue: controller.policy)
     }
 
@@ -80,15 +78,8 @@ struct FeedbackSettingsView: View {
                 .font(.caption).fixedSize(horizontal: false, vertical: true)
             if let error = controller.error { Text(error).foregroundStyle(.red) }
             Button(L10n.text("应用设置")) { controller.apply(draft) }
-            Section(L10n.text("Agent 按键灯")) {
-                Toggle(L10n.text("用闪烁表示 Agent 状态"), isOn: Binding(
-                    get: { model.blinksAgentLEDs }, set: { model.setBlinksAgentLEDs($0) }
-                ))
-                Text(L10n.text("按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。"))
-                    .font(.caption).fixedSize(horizontal: false, vertical: true)
-            }
         }
-        .formStyle(.grouped).padding(12).frame(width: 560, height: 470)
+        .formStyle(.grouped).padding(12).frame(width: 560, height: 350)
         .preferredColorScheme(.dark)
     }
 }

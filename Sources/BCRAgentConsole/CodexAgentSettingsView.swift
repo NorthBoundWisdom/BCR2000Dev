@@ -3,8 +3,17 @@ import SwiftUI
 
 struct CodexAgentSettingsView: View {
     @ObservedObject var controller: CodexAgentController
+    @ObservedObject var model: ConsoleViewModel
     var body: some View {
         Form {
+            Section(L10n.text("Agent 按键灯")) {
+                Toggle(L10n.text("用闪烁表示 Agent 状态"), isOn: Binding(
+                    get: { model.blinksAgentLEDs }, set: { model.setBlinksAgentLEDs($0) }
+                ))
+                AgentLEDBlinkPreview()
+                Text(L10n.text("按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。"))
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
+            }
             Picker(L10n.text("Agent 后端"), selection: Binding(get: { controller.backend }, set: { value in
                 Task { await controller.selectBackend(value) }
             })) {
@@ -63,6 +72,33 @@ struct CodexAgentSettingsView: View {
             guard response == .OK, let url = panel.url else { return }
             Task { @MainActor in controller.selectExecutable(url) }
         }
+    }
+}
+
+/// Presentation only: share the device's semantic rhythm without sending feedback or starting a timer off-page.
+private struct AgentLEDBlinkPreview: View {
+    @State private var isVisible = false
+    private let states: [AgentRunState] = [.idle, .queued, .running, .waitingApproval, .error]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isVisible)) { _ in
+            let time = ProcessInfo.processInfo.systemUptime
+            HStack(spacing: 18) {
+                ForEach(states, id: \.self) { state in
+                    let isOn = BCRIndicatorBlink.pattern(for: state.indicatorSemantic).isOn(at: time)
+                    VStack(spacing: 5) {
+                        Circle()
+                            .fill(isOn ? Theme.led : Theme.ledOff)
+                            .frame(width: 9, height: 9)
+                            .shadow(color: isOn ? Theme.led.opacity(0.7) : .clear, radius: 3)
+                            .accessibilityHidden(true)
+                        Text(state.displayName).font(.caption)
+                    }
+                }
+            }
+        }
+        .onAppear { isVisible = true }
+        .onDisappear { isVisible = false }
     }
 }
 

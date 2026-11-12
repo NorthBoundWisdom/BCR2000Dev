@@ -179,11 +179,14 @@ struct BCRAgentConsoleApp: App {
         Settings {
             TabView {
                 SurfaceProgramsView(model: model).tabItem { Label(L10n.text("页面与宏"), systemImage: "square.stack") }
-                FeedbackSettingsView(controller: model.feedbackSettings, model: model).tabItem { Label(
+                FeedbackSettingsView(controller: model.feedbackSettings).tabItem { Label(
                     L10n.text("反馈调度"),
                     systemImage: "speedometer"
                 ) }
-                CodexAgentSettingsView(controller: model.codex).tabItem { Label("Agent", systemImage: "cpu") }
+                CodexAgentSettingsView(controller: model.codex, model: model).tabItem { Label(
+                    "Agent",
+                    systemImage: "cpu"
+                ) }
                 LanguageSettingsView().tabItem { Label(L10n.text("语言"), systemImage: "globe") }
                 ConfigurationLibraryView(model: model, library: model.library)
                     .tabItem { Label(L10n.text("配置库"), systemImage: "folder") }
@@ -206,11 +209,15 @@ struct BCRAgentConsoleApp: App {
             ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), CGSize(width: 700, height: 720)),
             ("output", AnyView(OutputSettingsView(controller: model.output)), CGSize(width: 880, height: 720)),
             ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
-            ("agents", AnyView(CodexAgentSettingsView(controller: model.codex)), CGSize(width: 680, height: 660)),
+            (
+                "agents",
+                AnyView(CodexAgentSettingsView(controller: model.codex, model: model)),
+                CGSize(width: 680, height: 660)
+            ),
             ("programs", AnyView(SurfaceProgramsView(model: model)), CGSize(width: 700, height: 580)),
             (
                 "feedback",
-                AnyView(FeedbackSettingsView(controller: model.feedbackSettings, model: model)),
+                AnyView(FeedbackSettingsView(controller: model.feedbackSettings)),
                 CGSize(width: 560, height: 350)
             ),
             ("language", AnyView(LanguageSettingsView()), CGSize(width: 480, height: 240)),
