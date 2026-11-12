@@ -39,6 +39,9 @@ end tell"""
     def exists(self, identifier):
         return self.command("exists", identifier)
 
+    def enabled(self, identifier):
+        return self.command("enabled", identifier)
+
     def press(self, identifier):
         print("AXPress", identifier, flush=True)
         if not self.command("press", identifier):

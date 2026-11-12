@@ -822,3 +822,13 @@
 "设备预设操作" = "Device Preset Actions";
 "设备预设操作；圆点表示有对齐前的预设备份。" = "Device preset actions; a dot indicates a preset backup from before alignment.";
 "假设备验收需要隔离 Debug 实例。\n" = "The device fixture requires an isolated Debug instance.\n";
+"此硬件按键仅显示按压；启用功能前不会执行分配的操作。" = "This hardware button only shows presses; assigned actions run only after functions are enabled.";
+"启用此按键的功能" = "Enable This Button’s Functions";
+"改回仅显示按压" = "Show Presses Only";
+"当前无法更改按键功能，请结束学习或设备操作后重试。" = "Button functions cannot be changed now. Finish learning or the device operation, then try again.";
+"按键绑定已改变，请重新确认。" = "The button binding changed. Review and confirm again.";
+"只更改此按键是否执行功能，保留已有 MIDI 身份，不写设备。" = "Change whether this button runs its actions, preserving its MIDI identity without writing to the device.";
+"启用此按键的功能？" = "Enable this button’s functions?";
+"改回仅显示按压？" = "Show presses only?";
+"启用 {0} 后，实体按压会立即执行已分配功能，包括输出使能或 Agent 操作。只更改此按键，不修改 MIDI 身份或设备预设。" = "Enabling {0} lets physical presses immediately run assigned actions, including output enable or Agent actions. Only this button changes; its MIDI identity and the device preset are preserved.";
+"{0} 将仅显示按压，不再执行已分配功能；MIDI 身份与其他按键保持不变。" = "{0} will only show presses and stop running assigned actions. Its MIDI identity and other buttons are preserved.";

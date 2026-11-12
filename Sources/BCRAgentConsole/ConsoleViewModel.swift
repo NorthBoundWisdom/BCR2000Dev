@@ -721,6 +721,30 @@ final class ConsoleViewModel: ObservableObject {
         session.unbind(control)
     }
 
+    var canChangeHardwareButtonFunctions: Bool {
+        canConfigureMIDI && source == .hardware && connection.isConnected && !isLearning
+            && !connectingHardware && presetAlignment?.phase.isBusy != true
+    }
+
+    /// Called only after the inspector confirms the captured binding. No device writes or resync.
+    func setHardwareButtonFunctions(_ entry: HardwareMapEntry, enabled: Bool) {
+        guard canChangeHardwareButtonFunctions, !entry.control.isContinuous else {
+            notice = ConsoleNotice(level: .warning, text: L10n.text("当前无法更改按键功能，请结束学习或设备操作后重试。"))
+            return
+        }
+        var map = session.learnedHardwareMap
+        guard map.entries.first(where: { $0.control == entry.control }) == entry else {
+            notice = ConsoleNotice(level: .warning, text: L10n.text("按键绑定已改变，请重新确认。"))
+            return
+        }
+        do {
+            try map.bind(entry.control, to: entry.midi, ringMode: entry.ringMode,
+                         visualizationOnly: !enabled, pressMode: entry.pressMode)
+            try session.installHardwareMap(map)
+            // installHardwareMap reports persistence errors through the existing session event path.
+        } catch { report(error) }
+    }
+
     func resetHardwareMap() {
         guard source == .hardware else { return }
         notice = ConsoleNotice(level: .info, text: L10n.text("实体映射已清空，请重新学习。"))

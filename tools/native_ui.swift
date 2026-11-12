@@ -10,7 +10,7 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
 
 let arguments = CommandLine.arguments
 if arguments.count != 4 || Int32(arguments[1]) == nil || Int32(arguments[1])! <= 0 {
-    FileHandle.standardError.write(Data("Usage: native_ui <pid> <exists|press> <identifier>\n".utf8))
+    FileHandle.standardError.write(Data("Usage: native_ui <pid> <exists|enabled|press> <identifier>\n".utf8))
     exit(2)
 }
 
@@ -28,6 +28,9 @@ while let element = pending.popLast(), visited < 10000 {
     if attribute(element, kAXIdentifierAttribute) as? String == arguments[3] {
         switch arguments[2] {
         case "exists": print("found"); exit(0)
+        case "enabled":
+            if attribute(element, kAXEnabledAttribute) as? Bool == false { exit(3) }
+            print("enabled"); exit(0)
         case "press":
             guard attribute(element, kAXEnabledAttribute) as? Bool != false,
                   AXUIElementPerformAction(element, kAXPressAction as CFString) == .success

@@ -5,6 +5,7 @@ struct ControlInspectorView: View {
     @ObservedObject var model: ConsoleViewModel
     @State private var learnFormat: MIDILearnFormat = .voice
     @State private var confirmsMapReset = false
+    @State private var pendingButtonFunctionChange: HardwareMapEntry?
 
     var body: some View {
         ScrollView {
@@ -71,7 +72,7 @@ struct ControlInspectorView: View {
                     .font(.system(.body, design: .monospaced))
                     .foregroundStyle(.green)
                 if model.engine.hardwareMap.isVisualizationOnly(control) {
-                    FieldNote(L10n.text("此硬件按键仅显示按压；重新学习后才启用所分配的功能。"))
+                    FieldNote(L10n.text("此硬件按键仅显示按压；启用功能前不会执行分配的操作。"))
                 }
             } else {
                 Label(L10n.text("未学习"), systemImage: "questionmark.circle")
@@ -89,6 +90,18 @@ struct ControlInspectorView: View {
                     .help(L10n.text("仅切换所选 Mock 编码器的 14-bit NRPN 预设"))
                 }
             case .hardware:
+                if !control.isContinuous,
+                   let entry = model.engine.hardwareMap.entries.first(where: { $0.control == control })
+                {
+                    Button(entry.visualizationOnly == true
+                        ? L10n.text("启用此按键的功能") : L10n.text("改回仅显示按压"))
+                    {
+                        pendingButtonFunctionChange = entry
+                    }
+                    .disabled(!model.canChangeHardwareButtonFunctions)
+                    .accessibilityIdentifier("hardware.buttonFunctions.change")
+                    .help(L10n.text("只更改此按键是否执行功能，保留已有 MIDI 身份，不写设备。"))
+                }
                 FieldRow(L10n.text("学习消息格式")) {
                     Picker(L10n.text("学习消息格式"), selection: $learnFormat) {
                         Text("CC / Note").tag(MIDILearnFormat.voice)
@@ -126,6 +139,29 @@ struct ControlInspectorView: View {
             }
         }
         .panelStyle()
+        .confirmationDialog(
+            pendingButtonFunctionChange?.visualizationOnly == true
+                ? L10n.text("启用此按键的功能？") : L10n.text("改回仅显示按压？"),
+            isPresented: Binding(
+                get: { pendingButtonFunctionChange != nil },
+                set: { if !$0 { pendingButtonFunctionChange = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingButtonFunctionChange
+        ) { entry in
+            Button(entry.visualizationOnly == true ? L10n.text("启用此按键的功能") : L10n.text("改回仅显示按压")) {
+                model.setHardwareButtonFunctions(entry, enabled: entry.visualizationOnly == true)
+            }
+            .accessibilityIdentifier("hardware.buttonFunctions.confirm")
+            Button(L10n.text("取消"), role: .cancel) {}
+        } message: { entry in
+            if entry.visualizationOnly == true {
+                Text(L10n
+                    .text("启用 \(entry.control.shortName) 后，实体按压会立即执行已分配功能，包括输出使能或 Agent 操作。只更改此按键，不修改 MIDI 身份或设备预设。"))
+            } else {
+                Text(L10n.text("\(entry.control.shortName) 将仅显示按压，不再执行已分配功能；MIDI 身份与其他按键保持不变。"))
+            }
+        }
     }
 }
 
