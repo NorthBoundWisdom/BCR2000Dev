@@ -76,6 +76,15 @@ def package(output, configuration="release", skip_build=False):
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, path.read_bytes())
+    surface_sdk = output / "surface-control-sdk-1.0.0.zip"
+    with zipfile.ZipFile(surface_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted((ROOT / "Clients/Python/surface_control").glob("*.py")):
+            info = zipfile.ZipInfo("surface_control/" + path.name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
+    shutil.copytree(ROOT / "Schemas/SurfaceControl/1.0", output / "surface-control")
+    shutil.copy2(ROOT / "docs/SURFACE_SIMULATION.md", output / "SURFACE_SIMULATION.md")
     shutil.copytree(
         ROOT / "Clients/Python/examples", output / "examples", ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
     )
@@ -103,6 +112,9 @@ def package(output, configuration="release", skip_build=False):
         "contract_version": "1.0",
         "sdk_version": "1.0.0",
         "source_commit": run("git", "rev-parse", "HEAD"),
+        "surface_control_contract": "1.0",
+        "surface_control_sdk": "1.0.0",
+        "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "dirty": bool(run("git", "status", "--porcelain")),
         "configuration": configuration,
         "host_architecture": run("uname", "-m"),

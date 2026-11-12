@@ -116,7 +116,10 @@ public enum ProviderMCPModule {
         return tools
     }
 
-    public static func install(on service: AgentControlService, application: ProviderApplication) throws {
+    public static func install(on service: AgentControlService, application: ProviderApplication,
+                               surfaceInstanceID: String? = nil,
+                               surfacePermissions: BCRSurfaceControlAdapter.Permissions = .init()) throws
+    {
         try service.registerModule(
             id: "bcr.provider.1.0",
             tools: tools(configuration: application.configuration)
@@ -232,6 +235,8 @@ public enum ProviderMCPModule {
                 .chassisControl &&
                 !(new.parameterWrite && new.chassisControl) { application?.revokeControl(domain: "chassis") }
         }
+        try SurfaceControlMCPModule.install(on: service, instanceID: surfaceInstanceID ?? application.providerID,
+                                            permissions: surfacePermissions)
     }
 
     public static func capabilities(service: AgentControlService, application: ProviderApplication) -> JSONValue {

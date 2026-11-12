@@ -27,6 +27,9 @@ private struct Options {
     var hardwareMap: URL?
     var exportContract: URL?
     var tokenStdin = false
+    var simulationProfile = false
+    var surfaceInstanceID: String?
+    var surfacePermissions = BCRSurfaceControlAdapter.Permissions()
     var permissions = MCPPermissions()
     static func parse(_ arguments: [String]) throws -> Options {
         var result = Options(); var i = 0
@@ -56,6 +59,16 @@ private struct Options {
             case "--allow-chassis-control": result.permissions.chassisControl = true
             case "--allow-simulation-control": result.permissions.simulationControl = true
             case "--token-stdin": result.tokenStdin = true
+            case "--simulation-profile": result.simulationProfile = true
+            case "--surface-instance-id":
+                let id = try value()
+                guard !id.isEmpty, id.utf8.count <= 128,
+                      id.utf8.allSatisfy({ (33 ... 126).contains($0) })
+                else { throw BootError(reason: "Invalid surface instance identity") }
+                result.surfaceInstanceID = id
+            case "--allow-surface-input": result.surfacePermissions.input = true
+            case "--allow-surface-feedback": result.surfacePermissions.feedback = true
+            case "--allow-surface-reset": result.surfacePermissions.reset = true
             case "--data-dir": result.dataDirectory = URL(fileURLWithPath: try value(), isDirectory: true)
                 .standardizedFileURL
             case "--configuration": result.configuration = URL(fileURLWithPath: try value()).standardizedFileURL
@@ -75,6 +88,18 @@ private struct Options {
         else { throw BootError(reason: "Read-only mode cannot grant configuration writes") }
         guard result.console || (result.source == .mock && result.configuration == nil && result.hardwareMap == nil)
         else { throw BootError(reason: "Console options require an enabled console") }
+        guard !result
+            .simulationProfile ||
+            (result.console && result.source == .mock && result.configuration == nil && result.dataDirectory == nil)
+        else {
+            throw BootError(
+                reason: "Simulation profile requires a memory-only Mock console without a configuration seed"
+            )
+        }
+        guard !(result.surfacePermissions.input || result.surfacePermissions.feedback || result.surfacePermissions
+            .reset) ||
+            (result.console && result.source == .mock)
+        else { throw BootError(reason: "Surface simulation permissions require a Mock console") }
         return result
     }
 }
@@ -118,6 +143,10 @@ private struct BCRProviderService {
     --read-only --write-limit N    Default write limit 60/s; control grants default OFF
     --export-contract DIR         Export Schema and tool definitions, then exit (no devices opened)
     --token-stdin                 Read a 64-byte lowercase hex token from an anonymous pipe
+    --simulation-profile          Explicit ordinary-input simulation fixture; memory-only Mock
+    --surface-instance-id ID      Stable consumer-pinned simulation instance identity
+    --allow-surface-input --allow-surface-feedback --allow-surface-reset
+                                  Separate simulation permissions; default OFF, never hardware
     Credentials: BCR_PROVIDER_TOKEN environment, or --token-stdin. Never pass tokens in argv.
     No GUI, actual robot/chassis driver, vendor program or LAN listener is started.
     """
@@ -192,6 +221,7 @@ private struct BCRProviderService {
                 )
             }
             var profile = SurfaceConfiguration.neutral()
+            if options.simulationProfile { profile = SurfaceControlMCPModule.simulationConfiguration() }
             if let path = options.configuration ?? profileURL {
                 let read = profileStore(path).load()
                 guard !read.failed
@@ -238,7 +268,9 @@ private struct BCRProviderService {
             // Headless policy is explicit process configuration; closing it never grants another scope.
             gateway.onRestrictConfigurationWrite = {}
             let application = ProviderApplication(configuration: configuration)
-            try ProviderMCPModule.install(on: gateway, application: application)
+            try ProviderMCPModule.install(on: gateway, application: application,
+                                          surfaceInstanceID: options.surfaceInstanceID,
+                                          surfacePermissions: options.surfacePermissions)
             try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),

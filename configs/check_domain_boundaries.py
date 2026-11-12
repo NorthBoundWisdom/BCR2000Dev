@@ -65,6 +65,8 @@ ALLOWED = {
         "RemoteToolContracts",
     },
     "BCRProviderMCPAdapter": {
+        "SurfaceControlContracts",
+        "SurfacePluginContracts",
         "BCRFoundation",
         "BCRSurfaceDomain",
         "BCRRobotDomain",

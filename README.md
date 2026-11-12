@@ -302,3 +302,10 @@ Codex 进程管理已补基础生命週期回归：未启动及启动失败后�
 
 本项目采用 [MIT 许可证](LICENSE)。第三方代码保留各自的版权与许可声明，见
 [vendored validator 说明](configs/_vendor/README.md)。
+
+## 2026-11-12：公开软件 Surface 模拟
+
+新增可选 `surface_control_*` 1.0 合同、稳定 Mock profile、CAS 输入与独立显示反馈。
+显式 `--simulation-profile` 提供普通演练参数；输入/反馈/reset 权限默认关闭，不能绕过参数保护或注入 hardware。
+通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
+接入与边界见 [SURFACE_SIMULATION.md](docs/SURFACE_SIMULATION.md)。

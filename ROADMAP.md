@@ -197,3 +197,10 @@ Codex 进程管理已补基础生命週期回归：未启动及启动失败后�
 队列溢出、退出/退避/强制停止和真实子进程 RPC 异常路径有回归。重复审批不能延长过期窗口，
 中断后迟到的完成事件不覆盖状态。设置页增加命名配置库；MCP 增加本机 stdio 桥接。
 Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非硬件实现与回归；验收记录见相关文档。
+
+## 2026-11-12：公开软件 Surface 模拟
+
+新增可选 `surface_control_*` 1.0 合同、稳定 Mock profile、CAS 输入与独立显示反馈。
+显式 `--simulation-profile` 提供普通演练参数；输入/反馈/reset 权限默认关闭，不能绕过参数保护或注入 hardware。
+通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
+接入与边界见 [SURFACE_SIMULATION.md](docs/SURFACE_SIMULATION.md)。

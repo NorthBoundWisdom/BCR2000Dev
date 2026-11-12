@@ -81,6 +81,12 @@ public final class MockSurfaceDevice: SurfaceDevice {
         model.activeGroup = group
     }
 
+    public func resetInputState() {
+        let modes = model.encoderModes
+        model = MockBCR2000(preset: model.preset)
+        model.encoderModes = modes
+    }
+
     public func turn(_ control: BCRControlID, by delta: Int) {
         if let message = model.turn(control, by: delta) {
             if case .nrpn = message {

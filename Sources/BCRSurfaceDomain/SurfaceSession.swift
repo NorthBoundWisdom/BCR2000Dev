@@ -109,6 +109,15 @@ public final class SurfaceSession {
     /// Legacy-only callback for callers without injected plugin bindings (workspace D8).
     public var onTriggerAgent: (@MainActor (AgentSlotID) -> Void)?
     public var onTriggerAction: (@MainActor (ActionReference) -> Void)?
+    private var acceptedInputObservers: [UUID: @MainActor (BCRControlID, MIDIVoiceMessage, Double?, SurfaceWriteOrigin)
+        -> Void] = [:]
+    public func observeAcceptedInput(
+        _ observer: @escaping @MainActor (BCRControlID, MIDIVoiceMessage, Double?, SurfaceWriteOrigin) -> Void
+    ) -> UUID {
+        let token = UUID(); acceptedInputObservers[token] = observer; return token
+    }
+
+    public func removeAcceptedInputObserver(_ token: UUID) { acceptedInputObservers[token] = nil }
 
     private let hardwareDevice: any SurfaceDevice
     private let mockDevice: MockSurfaceDevice
@@ -204,6 +213,7 @@ public final class SurfaceSession {
         guard source == .mock, connection.isConnected, engine.learnTarget == nil,
               motionSafety == nil || motionSafety?.status == .disconnected else { throw HardwareSnapshotError.invalid }
         var candidate = engine
+        _ = candidate.clearDisplayFeedback(at: now())
         candidate.replaceHardwareMap(hardwareMap)
         try candidate.adoptHardwareSnapshot(messages)
         clearFeedbackQueue()
@@ -221,6 +231,7 @@ public final class SurfaceSession {
     public func selectSource(_ newSource: DeviceSource) {
         guard newSource != source else { return }
         clearFeedbackQueue()
+        _ = engine.clearDisplayFeedback(at: now())
         source = newSource
         diagnosticReadbackActive = false; diagnosticToken = nil
         invalidateInputEpoch("source_changed")
@@ -358,6 +369,30 @@ public final class SurfaceSession {
         if !effects.isEmpty { onChange?() }
     }
 
+    /// Explicit simulation display route. It never writes a parameter or injects input.
+    public func setSimulationDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
+        guard source == .mock, let midi = engine.hardwareMap.midi(for: control),
+              rawValue <= (midi.kind == .nrpn ? 16383 : 127)
+        else { throw ProviderDomainError("unsupported", "Simulation display feedback requires a valid Mock control") }
+        let effects = try engine.setDisplayFeedback(control, rawValue: rawValue, at: now())
+        withWriteOrigin(.external) { perform(effects) }
+        publishChange()
+    }
+
+    public func clearSimulationDisplayFeedback() throws {
+        guard source == .mock
+        else { throw ProviderDomainError("unsupported", "Simulation feedback requires Mock source") }
+        perform(engine.clearDisplayFeedback(at: now()))
+        publishChange()
+    }
+
+    /// A fresh simulator context starts with its own all-off raw controls, without operator events.
+    public func resetSimulationInputs() throws {
+        guard source == .mock else { throw ProviderDomainError("unsupported", "Simulation reset requires Mock source") }
+        mockDevice.resetInputState()
+        try replaceConfiguration(engine.configuration, persist: false)
+    }
+
     public func setLEDFeedbackSource(_ source: LEDFeedbackSource) {
         perform(engine.setLEDFeedbackSource(source, at: now()))
         publishChange()
@@ -374,7 +409,7 @@ public final class SurfaceSession {
 
     public func setAssignment(_ assignment: ControlAssignment?, for control: BCRControlID) throws {
         if let assignment { perform(try engine.assign(assignment, at: now())) }
-        else { engine.clearAssignment(for: control) }
+        else { perform(engine.clearAssignment(for: control, at: now())) }
         mockDevice.configureModes(engine.configuration)
         persistConfiguration()
         publishChange()
@@ -472,6 +507,9 @@ public final class SurfaceSession {
                previousCount != engine.state(of: control).eventCount
             {
                 let parameter = engine.configuration.assignment(for: control)?.target.parameterID
+                for observer in Array(acceptedInputObservers.values) {
+                    observer(control, message, parameter.flatMap { engine.value(of: $0) }, writeOrigin)
+                }
                 inputEvents.append(kind: "control.input", payload: .object([
                     "origin": .string(writeOrigin == .agent ? "agent" :
                         (writeOrigin == .external ? "external" : (inputSource == .hardware ? "hardware" : "software"))),

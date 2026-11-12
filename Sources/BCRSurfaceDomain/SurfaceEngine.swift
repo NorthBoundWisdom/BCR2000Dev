@@ -49,6 +49,8 @@ public enum SurfaceEffect: Equatable, Sendable {
 /// writes the result to every *other* control bound to it; software edits are written to all bound
 /// controls. Button LEDs are always owned by software.
 public struct SurfaceEngine: Sendable {
+    /// Display-only observations are independent of command parameters and actual telemetry.
+    private var displayFeedback: [BCRControlID: UInt16] = [:]
     public private(set) var hardwareMap: HardwareMap
     public private(set) var configuration: SurfaceConfiguration
     public private(set) var parameterValues: [ParameterID: Double]
@@ -305,6 +307,24 @@ public struct SurfaceEngine: Sendable {
         return feedback(to: controls, at: now)
     }
 
+    public mutating func setDisplayFeedback(_ control: BCRControlID, rawValue: UInt16,
+                                            at now: Date) throws -> [SurfaceEffect]
+    {
+        guard let midi = hardwareMap.midi(for: control), rawValue <= (midi.kind == .nrpn ? 16383 : 127)
+        else { throw ProviderDomainError("invalid_argument", "Display feedback exceeds the mapped encoding") }
+        displayFeedback[control] = rawValue
+        return feedback(to: [control], at: now)
+    }
+
+    public mutating func clearDisplayFeedback(at now: Date) -> [SurfaceEffect] {
+        let targets = Array(displayFeedback.keys).sorted()
+        displayFeedback.removeAll()
+        for control in targets where configuration.assignment(for: control) == nil {
+            record(control, value: 0, direction: .output)
+        }
+        return feedback(to: targets, at: now)
+    }
+
     /// Writes the software state to every bound, assigned control (connect / device switch).
     public mutating func fullFeedback(at now: Date = .now) -> [SurfaceEffect] {
         feedback(to: configuration.assignments.map(\.control), at: now)
@@ -339,12 +359,14 @@ public struct SurfaceEngine: Sendable {
     public mutating func assign(_ assignment: ControlAssignment, at now: Date = .now) throws -> [SurfaceEffect] {
         try configuration.assign(assignment)
         incrementRemainders[assignment.control] = nil
-        return feedback(to: [assignment.control], at: now)
+        return clearDisplayFeedback(at: now) + feedback(to: [assignment.control], at: now)
     }
 
-    public mutating func clearAssignment(for control: BCRControlID) {
+    @discardableResult
+    public mutating func clearAssignment(for control: BCRControlID, at now: Date = .now) -> [SurfaceEffect] {
         configuration.clearAssignment(for: control)
         incrementRemainders[control] = nil
+        return clearDisplayFeedback(at: now)
     }
 
     public mutating func addParameter(_ definition: ParameterDefinition) throws {
@@ -356,7 +378,11 @@ public struct SurfaceEngine: Sendable {
                                          at now: Date = .now) throws -> [SurfaceEffect]
     {
         try configuration.updateParameter(definition)
-        return setParameter(definition.id, to: parameterValues[definition.id] ?? definition.defaultValue, at: now)
+        return clearDisplayFeedback(at: now) + setParameter(
+            definition.id,
+            to: parameterValues[definition.id] ?? definition.defaultValue,
+            at: now
+        )
     }
 
     public mutating func removeParameter(_ id: ParameterID) {
@@ -398,7 +424,8 @@ public struct SurfaceEngine: Sendable {
         absoluteInputs.removeAll()
         let removed = old.filter { configuration.assignment(for: $0) == nil }
         for control in removed { record(control, value: 0, direction: .output) }
-        return [.programsChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
+        return [.programsChanged] + clearDisplayFeedback(at: now) + feedback(to: removed, at: now) +
+            fullFeedback(at: now)
     }
 
     public mutating func selectPage(_ id: String?, at now: Date = .now) throws -> [SurfaceEffect] {
@@ -410,7 +437,7 @@ public struct SurfaceEngine: Sendable {
         absoluteInputs.removeAll()
         let removed = oldControls.filter { configuration.assignment(for: $0) == nil }
         for control in removed { record(control, value: 0, direction: .output) }
-        return [.pageChanged] + feedback(to: removed, at: now) + fullFeedback(at: now)
+        return [.pageChanged] + clearDisplayFeedback(at: now) + feedback(to: removed, at: now) + fullFeedback(at: now)
     }
 
     public mutating func runMacro(_ id: String, at now: Date = .now) -> [SurfaceEffect] {
@@ -432,6 +459,7 @@ public struct SurfaceEngine: Sendable {
     // MARK: Hardware map / learning
 
     public mutating func replaceHardwareMap(_ map: HardwareMap) {
+        displayFeedback.removeAll()
         hardwareMap = map
         incrementRemainders.removeAll()
         absoluteInputs.removeAll()
@@ -633,6 +661,10 @@ public struct SurfaceEngine: Sendable {
     // MARK: Feedback
 
     private func feedbackValue(for control: BCRControlID) -> UInt8? {
+        if let raw = displayFeedback[control] {
+            return hardwareMap.midi(for: control)?
+                .kind == .nrpn ? UInt8((Double(raw) * 127 / 16383).rounded()) : UInt8(raw)
+        }
         guard let assignment = configuration.assignment(for: control) else {
             return controls[control]?.value
         }
@@ -667,6 +699,7 @@ public struct SurfaceEngine: Sendable {
     }
 
     private func feedbackDataValue(for control: BCRControlID) -> UInt16? {
+        if let raw = displayFeedback[control] { return raw }
         guard let midi = hardwareMap.midi(for: control), midi.kind == .nrpn else {
             return feedbackValue(for: control).map(UInt16.init)
         }

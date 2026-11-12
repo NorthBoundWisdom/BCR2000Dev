@@ -12,6 +12,8 @@ public struct MockBCR2000: Sendable {
     public private(set) var rawValues: [BCRControlID: UInt16] = [:]
     public var encoderModes: [BCRControlID: EncoderMode] = [:]
     public private(set) var values: [BCRControlID: UInt8] = [:]
+    /// Last actual simulated input, kept separate from received display feedback.
+    public private(set) var inputDataValues: [BCRControlID: UInt16] = [:]
     /// Which push-encoder group is shown on the top row. Group switching is local to the device
     /// and sends no MIDI, exactly like the real group buttons.
     public var activeGroup = 1 {
@@ -26,6 +28,7 @@ public struct MockBCR2000: Sendable {
 
     public init(preset: HardwareMap = .mockPreset()) {
         self.preset = preset
+        inputDataValues = Dictionary(uniqueKeysWithValues: BCRLayout.allControls.map { ($0, 0) })
     }
 
     public func value(of control: BCRControlID) -> UInt8 {
@@ -48,6 +51,7 @@ public struct MockBCR2000: Sendable {
             // Encoded tick magnitude models acceleration; 待 R1 实机验证.
             let raw = mode.encoded(delta: delta, maximum: maximum)
             guard delta != 0 else { return nil }
+            inputDataValues[control] = raw
             sentCount += 1
             // Relative sends do not replace the absolute LED position.
             return midi.kind == .nrpn
@@ -59,6 +63,7 @@ public struct MockBCR2000: Sendable {
             let next = UInt16(min(max(current + min(max(delta, -16383), 16383), 0), 16383))
             guard Int(next) != current else { return nil }
             rawValues[control] = next
+            inputDataValues[control] = next
             values[control] = UInt8((Double(next) * 127 / 16383).rounded())
             sentCount += 1
             return .nrpn(channel: midi.channel, number: midi.number, value: next)
@@ -69,6 +74,7 @@ public struct MockBCR2000: Sendable {
             return nil
         }
         values[control] = next
+        inputDataValues[control] = UInt16(next)
         sentCount += 1
         return MIDI1UMPCodec.feedback(control: midi, value: next)
     }
@@ -78,6 +84,7 @@ public struct MockBCR2000: Sendable {
             return nil
         }
         values[control] = 127
+        inputDataValues[control] = 127
         sentCount += 1
         return MIDI1UMPCodec.feedback(control: midi, value: 127)
     }
@@ -87,6 +94,7 @@ public struct MockBCR2000: Sendable {
             return nil
         }
         values[control] = 0
+        inputDataValues[control] = 0
         sentCount += 1
         switch midi.kind {
         case .nrpn:
@@ -105,6 +113,7 @@ public struct MockBCR2000: Sendable {
         else { throw HardwareBindingError.invalidMap(L10n.text("只有 Mock 编码器可切换 NRPN")) }
         let identity = enabled ? MIDIControlID(kind: .nrpn, channel: 15, number: original.number) : original
         try preset.bind(control, to: identity)
+        inputDataValues[control] = nil // A new wire encoding has no observed input yet.
     }
 
     /// Applies incoming feedback. Returns the updated control, or nil if the preset has no

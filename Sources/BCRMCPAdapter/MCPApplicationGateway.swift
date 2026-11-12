@@ -143,7 +143,7 @@ public final class MCPApplicationGateway {
         }
     }
 
-    func consumeWrites(_ count: Int) throws {
+    public func consumeWrites(_ count: Int) throws {
         let time = now()
         if rateWindow == nil || time < rateWindow! || time.timeIntervalSince(rateWindow!) >= 1 {
             rateWindow = time

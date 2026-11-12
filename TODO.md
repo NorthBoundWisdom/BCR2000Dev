@@ -97,3 +97,10 @@ MCP Agent/设备控制工具与 stdio 桥接均已实现并通过非硬件回归
 
 - [ ] 真实机械臂接入前的独立停机方案评审（硬件急停、执行端看门狗），未评审不得连接。
   该项必须结合具体执行端与独立硬件保护，不能用已完成的软件模拟测试替代。
+
+## 2026-11-12：公开软件 Surface 模拟
+
+新增可选 `surface_control_*` 1.0 合同、稳定 Mock profile、CAS 输入与独立显示反馈。
+显式 `--simulation-profile` 提供普通演练参数；输入/反馈/reset 权限默认关闭，不能绕过参数保护或注入 hardware。
+通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
+接入与边界见 [SURFACE_SIMULATION.md](docs/SURFACE_SIMULATION.md)。

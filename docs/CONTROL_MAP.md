@@ -279,3 +279,10 @@ Codex UI、参数 SSE、页面/宏、WebSocket 与 ROS 2 rosbridge 已完成非�
 
 当前预设名称可用 `Request Preset Name`（`0x42, 0x7F`）读取。实机回复 `0x21` 的编号为 `0x7F`，
 表示当前临时预设，不是面板上的 1…32 编号；不按名称或开机策略猜测当前预设号。
+
+## 2026-11-12：公开软件 Surface 模拟
+
+新增可选 `surface_control_*` 1.0 合同、稳定 Mock profile、CAS 输入与独立显示反馈。
+显式 `--simulation-profile` 提供普通演练参数；输入/反馈/reset 权限默认关闭，不能绕过参数保护或注入 hardware。
+通用 Python SDK 与可选 Pipe taskless 平台闭环示例随自包含交付件提供；既有 Provider1.0 与实体资格状态保持。
+接入与边界见 [SURFACE_SIMULATION.md](SURFACE_SIMULATION.md)。

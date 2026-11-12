@@ -99,7 +99,9 @@ let package = Package(
                 "BCRRobotDomain",
                 "BCRChassisDomain",
                 "BCRProviderApplication",
-                "BCRMCPAdapter"
+                "BCRMCPAdapter",
+                .product(name: "SurfaceControlContracts", package: "SurfacePlugins"),
+                .product(name: "SurfacePluginContracts", package: "SurfacePlugins")
             ]
         ),
         .target(name: "BCRCodexAdapter", dependencies: ["BCRFoundation", "BCRAgentDomain"]),
@@ -225,6 +227,8 @@ let package = Package(
                 "BCRSurfaceDomain",
                 "BCRProviderApplication",
                 "BCRMCPAdapter",
+                .product(name: "SurfaceControlContracts", package: "SurfacePlugins"),
+                .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
                 "BCRProviderMCPAdapter",
                 "BCRHTTPTransport"
             ]
