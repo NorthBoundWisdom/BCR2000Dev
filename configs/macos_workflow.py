@@ -245,8 +245,55 @@ def summarize_tests(
         flush=True,
     )
     if statistics is not None:
-        statistics.update(tests=total, failures=failures, started=len(case_starts), completed=len(case_ends))
+        statistics.update(
+            tests=total,
+            failures=failures,
+            started=len(case_starts),
+            completed=len(case_ends),
+            identifiers={_case_identifier(name) for name in case_starts},
+        )
     return success
+
+
+# Wall-clock assertions need a process with no earlier fixture's actor/timer cleanup.
+# Keep these exact selectors visible: renaming/removing one requires an explicit plan update.
+ISOLATED_TIMING_CASES = frozenset(
+    {
+        "BCRAgentConsoleTests.ConsoleRefreshTests/testHardwareBurstsPublishOnceAndFollowLatestTouchOnNextFrame",
+        "BCRProviderAdapterTests.SurfaceControlHoldTests/testRealSchedulerExpiresAShortLease",
+        "BCRProviderAdapterTests.SurfaceControlHoldTests/testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases",
+        "BCRProviderAdapterTests.SurfaceControlHoldTests/testSchedulerDeadlineIncludesTimeQueuedBeforeItsTaskStarts",
+    }
+)
+
+
+def _test_batches(inventory):
+    batches = []
+    discovered = set().union(*inventory.values())
+    if not ISOLATED_TIMING_CASES <= discovered:
+        raise RuntimeError("Swift test bundle verification failed: timing inventory is incomplete")
+    for module, cases in inventory.items():
+        required = {case for case in ISOLATED_TIMING_CASES if case.split(".", 1)[0] == module}
+        if not required <= cases:
+            raise RuntimeError("Swift test bundle verification failed: timing inventory is incomplete")
+        remainder = cases - required
+        if remainder:
+            selection = (
+                "^" + re.escape(module) + r"\."
+                if not required
+                else "^(?:" + "|".join(re.escape(case) for case in sorted(remainder)) + ")$"
+            )
+            batches.append((module, module, remainder, selection))
+        for case in sorted(required):
+            batches.append((module, case, {case}, "^" + re.escape(case) + "$"))
+    assigned = set()
+    for _, _, cases, selection in batches:
+        if not cases or assigned & cases or {case for case in discovered if re.search(selection, case)} != cases:
+            raise RuntimeError("Swift test bundle verification failed: overlapping or invalid test batches")
+        assigned.update(cases)
+    if assigned != discovered:
+        raise RuntimeError("Swift test bundle verification failed: incomplete test batch partition")
+    return batches
 
 
 def _run_tests(command: list[str | Path]) -> None:
@@ -274,45 +321,68 @@ def _run_tests(command: list[str | Path]) -> None:
     if not valid or any(not cases for cases in inventory.values()):
         raise RuntimeError("Swift test bundle verification failed: invalid or incomplete test inventory")
     expected_total = sum(len(cases) for cases in inventory.values())
-    print(f"Discovered {expected_total} tests across {len(modules)} modules; each runs in a fresh process.", flush=True)
+    batches = _test_batches(inventory)
+    print(
+        f"Discovered {expected_total} tests across {len(modules)} modules; "
+        f"{len(batches)} exact batches each run in a fresh process.",
+        flush=True,
+    )
     results = []
     all_bundles = {module + ".xctest" for module in modules}
-    for module in modules:
-        selection = "^" + re.escape(module) + r"\."
+    for module, label, cases, selection in batches:
         isolated = [*command, "--filter", selection]
         print(">>", " ".join(isolated), flush=True)
-        with subprocess.Popen(
-            isolated, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-        ) as process:
-            output = []
-            for line in process.stdout:
-                print(line, end="", flush=True)
-                output.append(line)
-            returncode = process.wait()
+        output, returncode = [], -1
+        try:
+            with subprocess.Popen(
+                isolated, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+            ) as process:
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+                    output.append(line)
+                returncode = process.wait()
+        except Exception as error:
+            # A broken batch must not prevent remaining discovered cases from being attempted.
+            print(f"FAIL test batch {label}: {type(error).__name__}", flush=True)
         statistics = {}
         passed = summarize_tests(
             "".join(output),
             [module + ".xctest"],
             returncode,
             aggregate_name=aggregate_name,
-            case_inventory=inventory[module],
+            case_inventory=cases,
             empty_bundles=all_bundles - {module + ".xctest"},
             statistics=statistics,
         )
-        results.append((module, passed, statistics))
-    total = sum(result["tests"] for _, _, result in results)
-    failures = sum(result["failures"] for _, _, result in results)
-    success = len(results) == len(modules) and all(passed for _, passed, _ in results) and total == expected_total
+        results.append((module, label, passed, statistics))
+    total = sum(result["tests"] for _, _, _, result in results)
+    failures = sum(result["failures"] for _, _, _, result in results)
+    observed = set()
+    disjoint = True
+    for _, _, _, result in results:
+        identifiers = result["identifiers"]
+        disjoint = disjoint and not bool(observed & identifiers)
+        observed.update(identifiers)
+    success = (
+        len(results) == len(batches)
+        and all(passed for _, _, passed, _ in results)
+        and total == expected_total
+        and disjoint
+        and observed == set().union(*inventory.values())
+    )
     print("\nIsolated Swift module summary:", flush=True)
-    for module, passed, result in results:
+    for module in modules:
+        module_results = [(passed, result) for owner, _, passed, result in results if owner == module]
+        completed = sum(result["completed"] for _, result in module_results)
+        passed = all(passed for passed, _ in module_results) and completed == len(inventory[module])
         print(
-            f"  {'PASS' if passed else 'FAIL'} {module}: {result['completed']} complete / "
+            f"  {'PASS' if passed else 'FAIL'} {module}: {completed} complete / "
             f"{len(inventory[module])} discovered tests",
             flush=True,
         )
     print(
         f"Total: {total} tests, {failures} failures; {'PASS' if success else 'FAIL'} "
-        f"({len(results)}/{len(modules)} modules, {expected_total} expected tests)",
+        f"({len(modules)}/{len(modules)} modules, {expected_total} expected tests)",
         flush=True,
     )
     if not success:

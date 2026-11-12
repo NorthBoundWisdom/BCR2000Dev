@@ -20,9 +20,13 @@ def main():
     pattern = sys.argv[sys.argv.index("--filter") + 1]
     selected = cases if options.get("ignore_filter") else [case for case in cases if re.search(pattern, case)]
     selected = [case for case in selected if case != options.get("omit")]
+    if options.get("duplicate_case") in selected:
+        selected.append(options["duplicate_case"])
+    if options.get("unknown_case"):
+        selected.append("Unknown.Spurious/testExtra")
     if options.get("empty"):
         selected = []
-    modules = list(dict.fromkeys(case.split(".", 1)[0] for case in cases))
+    modules = list(dict.fromkeys(case.split(".", 1)[0] for case in [*cases, *selected]))
 
     def emit(bundle, entries):
         print(f"Test Suite '{bundle}' started at fixture.")
@@ -47,6 +51,7 @@ def main():
             else options.get("package", "Fixture") + "PackageTests.xctest"
         )
         emit(bundle, selected)
+    raise SystemExit(options.get("exit_code", 0))
 
 
 if __name__ == "__main__":

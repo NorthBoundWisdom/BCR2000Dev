@@ -198,7 +198,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 let operation = try XCTUnwrap(step.value(for: "operation")?.stringValue)
                 let expected = try XCTUnwrap(step.value(for: "expect")?.objectValue)
                 let before = try scenarioFingerprint(host, at: scheduled)
-                let beforeInputs = try before.value(for: "inputs")?.objectValue ?? [:]
+                let beforeInputs = before.value(for: "inputs")?.objectValue ?? [:]
                 let beforeEpoch = (try host.expected).epoch
                 let beforeInstance = (try host.expected).instance_id
                 let countBefore = accepted[selected]!
