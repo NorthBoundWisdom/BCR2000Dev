@@ -92,10 +92,18 @@ idle and with 24 stalled connections plus unauthenticated and authenticated requ
   request in flight, never by the length of the backlog.
 
 The bound holds while the provider process is scheduled and its main actor is not blocked by
-host code. In the headless provider nothing else runs there. In a GUI host that installs the
-optional contract, a long synchronous main-thread operation (for example a modal file panel or a
-blocking device call) delays the timer by its duration; the release then happens on the first
-main-actor turn afterwards. A stopped or suspended process releases nothing until it runs again,
+host code. In the headless provider nothing else runs there.
+
+**Current GUI path:** `ConsoleViewModel` calls `ProviderMCPModule.install(on:application:)`
+without `enableSurfaceControl`; that parameter defaults to `false`. The GUI has no option or other
+installation call that enables the surface-control module. Consequently the current GUI cannot
+create surface-control holds and does not run this lease timer, even when its ordinary Provider
+server is enabled. The tested 0.5 s bound applies to the headless simulation service; no GUI
+main-thread blocking latency has been measured because that path is unreachable in this version.
+
+An embedding GUI that explicitly installs this optional module has a separate limitation: a long
+synchronous main-thread operation delays the timer by its duration; release then happens on the
+first main-actor turn afterwards. A stopped or suspended process releases nothing until it runs again,
 and a terminated process drops the simulated control entirely. A consumer that needs a hard stop
 must therefore also apply its own deadline from `hold_deadline` and treat a missing fresh
 observation as released; the lease is a deadman input, not a device stop acknowledgment.
