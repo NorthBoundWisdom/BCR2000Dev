@@ -179,7 +179,7 @@ struct BCRAgentConsoleApp: App {
         Settings {
             TabView {
                 SurfaceProgramsView(model: model).tabItem { Label(L10n.text("页面与宏"), systemImage: "square.stack") }
-                FeedbackSettingsView(controller: model.feedbackSettings).tabItem { Label(
+                FeedbackSettingsView(controller: model.feedbackSettings, model: model).tabItem { Label(
                     L10n.text("反馈调度"),
                     systemImage: "speedometer"
                 ) }
@@ -210,7 +210,7 @@ struct BCRAgentConsoleApp: App {
             ("programs", AnyView(SurfaceProgramsView(model: model)), CGSize(width: 700, height: 580)),
             (
                 "feedback",
-                AnyView(FeedbackSettingsView(controller: model.feedbackSettings)),
+                AnyView(FeedbackSettingsView(controller: model.feedbackSettings, model: model)),
                 CGSize(width: 560, height: 350)
             ),
             ("language", AnyView(LanguageSettingsView()), CGSize(width: 480, height: 240)),

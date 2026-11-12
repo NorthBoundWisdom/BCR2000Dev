@@ -3,6 +3,7 @@ import BCRAgentCore
 import BCRPluginHost
 import BCRProviderApplication
 import BCRProviderMCPAdapter
+import enum SurfacePluginContracts.IndicatorSemantic
 import UniformTypeIdentifiers
 import Combine
 import Foundation
@@ -108,6 +109,12 @@ final class ConsoleViewModel: ObservableObject {
     private(set) var observedHardwareGroup: Int?
     @Published private(set) var connectingHardware = false
     @Published private(set) var presetAlignment: PresetAlignmentState?
+    /// Show Agent states on the two-state button LEDs by rhythm (blinking) instead of raw levels.
+    @Published private(set) var blinksAgentLEDs: Bool
+    private var agentSemantics: [AgentSlotID: IndicatorSemantic] = [:]
+    private var blinkTask: Task<Void, Never>?
+    private var blinkLevels: [AgentSlotID: UInt8] = [:]
+    private let blinkPreference: JSONFileStore<Bool>
     private var presetDump: Data?
     private var mapBeforeAlignment: HardwareMap?
     private var alignmentTask: Task<Void, Never>?
@@ -141,6 +148,8 @@ final class ConsoleViewModel: ObservableObject {
         slots = AgentStateMachine().slots
 
         supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
+        blinkPreference = JSONFileStore(fileURL: supportDirectory.appending(path: "agent-led-blink.json"))
+        blinksAgentLEDs = (try? blinkPreference.load()) ?? false
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
         self.configurationFile = configurationFile
         let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)
@@ -286,9 +295,7 @@ final class ConsoleViewModel: ObservableObject {
                 let previous = Dictionary(uniqueKeysWithValues: self.slots.map { ($0.id, $0.state) })
                 self.slots = slots
                 for slot in slots where previous[slot.id] != slot.state {
-                    if let value = feedback[slot.id] {
-                        self.session.setIndicatorFeedback(AgentBindingTranslation.indicator(for: slot.id), value: value)
-                    }
+                    if let value = feedback[slot.id] { self.showAgentState(slot, level: value) }
                 }
             }
             if automaticallyAdvancesMock { host.startDriving() }
@@ -1037,10 +1044,53 @@ final class ConsoleViewModel: ObservableObject {
         let previous = Dictionary(uniqueKeysWithValues: slots.map { ($0.id, $0.state) })
         slots = newSlots
         for slot in newSlots where previous[slot.id] != slot.state {
-            session.setIndicatorFeedback(
-                AgentBindingTranslation.indicator(for: slot.id),
-                value: slot.state.feedbackValue
-            )
+            showAgentState(slot, level: slot.state.feedbackValue)
+        }
+    }
+
+    func setBlinksAgentLEDs(_ enabled: Bool) {
+        guard enabled != blinksAgentLEDs else { return }
+        blinksAgentLEDs = enabled
+        do { try blinkPreference.save(enabled) } catch { report(error) }
+        for slot in slots { showAgentState(slot, level: slot.state.feedbackValue) }
+    }
+
+    /// Writes one slot's state to its LEDs: the level directly, or a steady/blinking on-off pattern.
+    private func showAgentState(_ slot: AgentSlot, level: UInt8) {
+        agentSemantics[slot.id] = slot.state.indicatorSemantic
+        guard blinksAgentLEDs else {
+            blinkLevels[slot.id] = nil
+            session.setIndicatorFeedback(AgentBindingTranslation.indicator(for: slot.id), value: level)
+            updateBlinkTimer()
+            return
+        }
+        refreshBlink(slot.id, at: ProcessInfo.processInfo.systemUptime)
+        updateBlinkTimer()
+    }
+
+    private func refreshBlink(_ id: AgentSlotID, at time: Double) {
+        guard let semantic = agentSemantics[id] else { return }
+        let level: UInt8 = BCRIndicatorBlink.pattern(for: semantic).isOn(at: time) ? 127 : 0
+        guard blinkLevels[id] != level else { return }
+        blinkLevels[id] = level
+        session.setIndicatorFeedback(AgentBindingTranslation.indicator(for: id), value: level)
+    }
+
+    /// One shared timer only while some slot blinks; steady states send nothing periodic.
+    private func updateBlinkTimer() {
+        let blinking = blinksAgentLEDs && agentSemantics.values.contains { semantic in
+            if case .blink = BCRIndicatorBlink.pattern(for: semantic) { return true }
+            return false
+        }
+        guard blinking else { blinkTask?.cancel(); blinkTask = nil; return }
+        guard blinkTask == nil else { return }
+        blinkTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                guard let self else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                for id in self.agentSemantics.keys { self.refreshBlink(id, at: now) }
+            }
         }
     }
 

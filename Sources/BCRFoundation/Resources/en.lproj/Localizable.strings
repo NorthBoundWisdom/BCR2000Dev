@@ -799,3 +799,6 @@
 "已恢复写入前的设备临时预设和本机映射。" = "Restored the previous device temporary preset and local mapping.";
 "恢复失败：{0}" = "Restore failed: {0}";
 "读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。" = "Read the device's temporary preset and preview the changes the app needs; nothing is written until you confirm, and nothing is stored permanently.";
+"Agent 按键灯" = "Agent button LEDs";
+"用闪烁表示 Agent 状态" = "Show Agent states by blinking";
+"按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。" = "Button LEDs are only on or off: idle off, running steady, queued slow blink, awaiting approval fast blink, error rapid blink. When off, the original levels are sent; whether the device distinguishes them is not yet verified.";
