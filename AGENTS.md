@@ -56,7 +56,7 @@ python3 -m compileall -q configs
 python3 configs/source_root_workflow.py --help
 python3 configs/validate_repo_commands.py .
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
-swift test --build-path build/swiftpm
+swift test --build-path build/swiftpm  # 单独运行须检查全部测试包，或改用上面的 workflow test
 git diff --check
 ```
 
