@@ -832,3 +832,8 @@
 "改回仅显示按压？" = "Show presses only?";
 "启用 {0} 后，实体按压会立即执行已分配功能，包括输出使能或 Agent 操作。只更改此按键，不修改 MIDI 身份或设备预设。" = "Enabling {0} lets physical presses immediately run assigned actions, including output enable or Agent actions. Only this button changes; its MIDI identity and the device preset are preserved.";
 "{0} 将仅显示按压，不再执行已分配功能；MIDI 身份与其他按键保持不变。" = "{0} will only show presses and stop running assigned actions. Its MIDI identity and other buttons are preserved.";
+"新增 {0} · 改址 {1} · 灯环 {2} · 按键 {3} · 锁定 {4} · 启用 {5}" = "Add {0} · Remap {1} · Rings {2} · Buttons {3} · Lock {4} · Enable {5}";
+"{0}：{1} 项" = "{0}: {1} changes";
+"已展开" = "Expanded";
+"已折叠" = "Collapsed";
+"展开或收起此类修改" = "Expand or collapse these changes";

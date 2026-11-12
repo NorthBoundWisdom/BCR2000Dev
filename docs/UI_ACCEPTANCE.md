@@ -52,7 +52,7 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 | 脚本 | 覆盖范围 | 最近验收 |
 | --- | --- | --- |
 | `verify_builtin_names_ui.py` | 中文存储的参数/分组在英文工作区、批量预览、输出设置中翻译；浏览不改 JSON/MCP 原名 | 2026-11-12 通过 |
-| `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；选项、写入进度、单键功能确认/取消/启用/禁用、回读及恢复 | 2026-11-12 中英文通过 |
+| `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；分类汇总/展开/收起、选项、写入进度、单键功能确认/取消/启用/禁用、回读及恢复 | 2026-11-12 中英文通过 |
 | `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 2026-11-11 通过 |
 | `verify_endpoint_ui.py` | MIDI 端点设置；默认自动 Port 1；隔离模式禁止应用实体端口 | 2026-11-11 通过 |
 | `verify_functions_ui.py` | 步进 / 指定 / 循环按键；参数吸附；整行分配预览确认及保留运行值 | 2026-11-11 通过 |
@@ -68,3 +68,6 @@ FeedbackSchedulerTests、JSONParameterLinkTests、WebSocketParameterAdapterTests
 `tools/verify_parameter_events.py` / `tools/verify_stdio_bridge.py`。
 原生 Debug 视图快照输出到忽略的 build/ui-validation。2026-11-12 已通过屏幕录制权限更新 README 的四张 Mock 截图，
 并以 `BCR_CAPTURE_README=1` 运行连接验收脚本生成两张假设备截图；具体复现命令见 README。
+
+使用 `BCR_UI_CAPTURE_DIRECTORY=build/ui-validation/connection` 运行连接脚本，可将 1200×760 的连接与对齐窗口截图
+保存到忽略目录；`BCR_CAPTURE_README=1` 仍以 1680×900 更新 README 图片。两种模式只捕获隔离 App 自身窗口。

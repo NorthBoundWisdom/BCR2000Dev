@@ -5,6 +5,11 @@ import SwiftUI
 struct PresetAlignmentSheet: View {
     @ObservedObject var model: ConsoleViewModel
     let state: PresetAlignmentState
+    @State private var expandedChangeKinds: Set<String> = []
+
+    private static let changeKinds: [BCRPresetAlignment.Change.Kind] = [
+        .newButton, .readdressedButton, .ringMode, .buttonBehavior, .lock, .enabledFunction
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -92,14 +97,19 @@ struct PresetAlignmentSheet: View {
         }
         return VStack(alignment: .leading, spacing: 6) {
             Toggle(L10n.text("补齐未配置及与旋钮同址的按键"), isOn: binding(\.completeButtons))
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("preset.option.completeButtons")
             Toggle(L10n.text("按参数范围设置顶部旋钮灯环（±范围用居中，0 起的单位量用进度条）"), isOn: binding(\.ringModes))
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("preset.option.ringModes")
             Toggle(L10n.text("按键统一发送按下/松开，开关状态和灯由软件决定"), isOn: binding(\.buttonBehavior))
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("preset.option.buttonBehavior")
             Toggle(L10n.text("锁定 PRESET 与编程键，防止设备换预设后与软件不一致"), isOn: binding(\.lockPreset))
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("preset.option.lockPreset")
             Toggle(L10n.text("启用实体按键的已分配功能（如使能、Agent 键）"), isOn: binding(\.enableButtonFunctions))
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("preset.option.enableButtonFunctions")
             if state.options.enableButtonFunctions {
                 Text(L10n.text("启用后按下实体按键会立即执行功能，包括输出使能；请确认分配无误。"))
@@ -121,17 +131,21 @@ struct PresetAlignmentSheet: View {
                     .foregroundStyle(.secondary)
             } else {
                 Text(L10n.text("将修改 \(plan.changes.count) 项，共写入 \(plan.lines.count) 行 BCL：")).font(.headline)
+                let count = { (kind: BCRPresetAlignment.Change.Kind) in plan.changes.filter { $0.kind == kind }.count }
+                Text(L10n
+                    .text(
+                        "新增 \(count(.newButton)) · 改址 \(count(.readdressedButton)) · 灯环 \(count(.ringMode)) · 按键 \(count(.buttonBehavior)) · 锁定 \(count(.lock)) · 启用 \(count(.enabledFunction))"
+                    ))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .accessibilityIdentifier("preset.changes.summary")
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(plan.changes.enumerated()), id: \.offset) { _, change in
-                            HStack(spacing: 8) {
-                                Text(Self.title(change.kind)).foregroundStyle(.secondary)
-                                    .frame(width: 96, alignment: .leading)
-                                Text(change.control?.shortName ?? "—").monospaced()
-                                    .frame(width: 56, alignment: .leading)
-                                Text(change.detail).monospaced()
-                            }
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Self.changeKinds, id: \.rawValue) { kind in
+                            let items = plan.changes.filter { $0.kind == kind }
+                            if !items.isEmpty { changeGroup(kind, changes: items) }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,6 +158,45 @@ struct PresetAlignmentSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func changeGroup(_ kind: BCRPresetAlignment.Change.Kind,
+                             changes: [BCRPresetAlignment.Change]) -> some View
+    {
+        let expanded = expandedChangeKinds.contains(kind.rawValue)
+        return VStack(alignment: .leading, spacing: 5) {
+            Button {
+                if expanded { expandedChangeKinds.remove(kind.rawValue) }
+                else { expandedChangeKinds.insert(kind.rawValue) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .frame(width: 10).accessibilityHidden(true)
+                    Text(L10n.text("\(Self.title(kind))：\(changes.count) 项"))
+                        .font(.caption.bold())
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("preset.changeGroup.\(kind.rawValue)")
+            .accessibilityValue(expanded ? L10n.text("已展开") : L10n.text("已折叠"))
+            .help(L10n.text("展开或收起此类修改"))
+            if expanded {
+                ForEach(Array(changes.enumerated()), id: \.offset) { index, change in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(change.control?.shortName ?? "—").monospaced()
+                            .frame(width: 56, alignment: .leading)
+                        Text(change.detail).monospaced()
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .font(.caption)
+                    .padding(.leading, 16)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("preset.changeRow.\(kind.rawValue).\(index)")
                 }
             }
         }

@@ -33,6 +33,13 @@ def open_preview():
     ui.press("preset.menu.align")
     ui.wait(lambda: ui.exists("preset.preview"), "Read-only alignment preview did not appear")
     assert state()["presetWrites"] == 0
+    assert ui.exists("preset.changes.summary")
+    assert ui.exists("preset.changeGroup.newButton")
+    ui.press("preset.changeGroup.newButton")
+    ui.wait(lambda: ui.exists("preset.changeRow.newButton.0"), "Grouped changes did not expand")
+    ui.press("preset.changeGroup.newButton")
+    ui.wait(lambda: not ui.exists("preset.changeRow.newButton.0"), "Grouped changes did not collapse")
+    assert state()["presetWrites"] == 0
 
 
 def verify_button_function_confirmation():
@@ -96,15 +103,18 @@ error "Unassigned B2-2 button missing"''')
 
 
 def run():
-    capture = os.environ.get("BCR_CAPTURE_README") == "1"
-    size = "{1680, 900}" if capture else "{1200, 760}"
-    images = Path(__file__).resolve().parent.parent / "docs/images"
+    readme_capture = os.environ.get("BCR_CAPTURE_README") == "1"
+    capture_directory = os.environ.get("BCR_UI_CAPTURE_DIRECTORY")
+    capture = readme_capture or bool(capture_directory)
+    width = 1680 if readme_capture else 1200
+    size = "{1680, 900}" if readme_capture else "{1200, 760}"
+    images = Path(capture_directory) if capture_directory else Path(__file__).resolve().parent.parent / "docs/images"
     ui.run(f"set frontmost to true\nset position of mainWindow to {{40, 40}}\nset size of mainWindow to {size}")
     ui.wait(lambda: ui.exists("connection.dialog"), "Initial connection confirmation did not appear")
     assert state()["voiceWrites"] == state()["presetWrites"] == 0
     assert status()["hardwareConnection"]["confirmation"] == "pending"
     if capture:
-        ui.capture(images / "connection-confirmation.png")
+        ui.capture(images / "connection-confirmation.png", width=width)
     ui.press("connection.decline")
     ui.wait(lambda: status()["hardwareConnection"]["confirmation"] == "declined", "Decline was not observable")
     assert status()["source"] == "mock" and state()["voiceWrites"] == 0
@@ -117,7 +127,7 @@ def run():
     for iteration in range(3):
         open_preview()
         if capture and iteration == 0:
-            ui.capture(images / "preset-alignment.png")
+            ui.capture(images / "preset-alignment.png", width=width)
         ui.press("preset.option.enableButtonFunctions")
         ui.press("preset.option.enableButtonFunctions")
         ui.press("preset.close")
