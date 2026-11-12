@@ -60,7 +60,7 @@ public final class ProviderEventJournal {
             )
             return envelope(events: Array(events.suffix(limit)), reset: true)
         }
-        let earliest = events.first?.objectValue?["sequence"]?.intValue ?? sequence + 1
+        let earliest = events.first?.objectValue?["sequence"]?.roundedIntValue ?? sequence + 1
         try ProviderValidation.require(
             after >= earliest - 1,
             "event_gap",
@@ -72,7 +72,7 @@ public final class ProviderEventJournal {
             "The event cursor is ahead of the inventory"
         )
         return envelope(
-            events: Array(events.filter { ($0.objectValue?["sequence"]?.intValue ?? 0) > after }.prefix(limit)),
+            events: Array(events.filter { ($0.objectValue?["sequence"]?.roundedIntValue ?? 0) > after }.prefix(limit)),
             reset: expected == nil
         )
     }
@@ -84,7 +84,8 @@ public final class ProviderEventJournal {
     public func removeObserver(_ id: UUID) { observers[id] = nil }
     private func envelope(events: [JSONValue], reset: Bool) -> JSONValue {
         .object(["schema_version": .number(1), "generation": .string(generation), "source": .string(source.rawValue),
-                 "earliest_sequence": .number(self.events.first?.objectValue?["sequence"]?.intValue ?? sequence + 1),
+                 "earliest_sequence": .number(self.events.first?.objectValue?["sequence"]?
+                     .roundedIntValue ?? sequence + 1),
                  "latest_sequence": .number(sequence), "dropped": .number(dropped), "reset": .bool(reset),
                  "events": .array(events)])
     }

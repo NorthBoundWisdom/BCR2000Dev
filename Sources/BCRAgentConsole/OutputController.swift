@@ -72,7 +72,7 @@ final class OutputController: ObservableObject {
     private let adapter: any OutputTransport
     private let store: JSONFileStore<OutputSettings>
     let runtime: BCRPluginRuntime
-    static let instanceID = "output.parameters"
+    static let instanceID = OutputRemoteBinding.defaultInstanceID
     private var observer: UUID?
     private var wallAnchor: Date
     private var policyAnchor: Double
@@ -138,8 +138,9 @@ final class OutputController: ObservableObject {
         }
         adapter.onHeartbeat = { [weak self] received in
             guard let self, self.settings.enabled, !self.isStopping else { return }
-            do { try self.mutateGate("heartbeat") { $0.receiveHeartbeat(at: self.policyTime(received)) } }
-            catch { self.stop(failure: error.localizedDescription) }
+            do {
+                try self.mutateGate("heartbeat", journal: false) { $0.receiveHeartbeat(at: self.policyTime(received)) }
+            } catch { self.stop(failure: error.localizedDescription) }
         }
         adapter.onSamples = { [weak self] in self?.receive($0) }
         adapter.onDroppedPacket = { [weak self] in self?.droppedPackets += 1 }
@@ -286,7 +287,7 @@ final class OutputController: ObservableObject {
                 value: $0.value,
                 receivedAt: policyTime($0.receivedAt)
             ) }
-            try mutateGate("actual") { $0.receiveActual(policySamples) }
+            try mutateGate("actual", journal: false) { $0.receiveActual(policySamples) }
             if values.contains(where: { actual[$0.key] != $0.value }) {
                 actual.merge(values) { _, new in new }
                 try session.setActualFeedback(values)
@@ -324,8 +325,12 @@ final class OutputController: ObservableObject {
             // Only a real host enable-parameter edge changes the requested flag. A remote
             // disable therefore persists until an actual off/on; polling cannot undo it.
             if observedEnable != enabled { try gate.setRequestedEnabled(enabled); observedEnable = enabled }
+            let previous = gate.plugin.decision
             let decision = gate.evaluateRequested(targets: targets, at: policyNow)
-            try storeGate(gate, operation: "evaluate")
+            let current = gate.plugin.decision
+            let changed = previous?.status != current?.status || previous?.reason != current?.reason ||
+                previous?.parameterID != current?.parameterID || previous?.limited != current?.limited
+            try storeGate(gate, operation: "evaluate", journal: changed)
             if let command = decision.command, adapter.isConnected { try adapter.send(command) }
             if status != decision.status { status = decision.status }
             let displayReason = decision.status == .disabled && enabled && !gate.plugin.requestedEnabled
@@ -344,20 +349,29 @@ final class OutputController: ObservableObject {
         Date(timeIntervalSinceReferenceDate: policyAnchor + date.timeIntervalSince(wallAnchor))
     }
 
-    private func storeGate(_ gate: MotionSafetyGate, operation: String, safety: Bool = false) throws {
+    private func storeGate(
+        _ gate: MotionSafetyGate,
+        operation: String,
+        safety: Bool = false,
+        journal: Bool = true
+    ) throws {
         let binding = OutputRemoteBinding(instanceID: Self.instanceID, plugin: gate.plugin)
         if runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self) == nil {
             try runtime.install([binding])
         } else if safety {
             try runtime.replaceForSafety(binding, event: .init(code: "host.safety.output." + operation))
         } else {
-            try runtime.replace(binding, event: .init(code: "host.output." + operation))
+            try runtime.replace(binding, event: journal ? .init(code: "host.output." + operation) : nil)
         }
     }
 
-    private func mutateGate(_ operation: String, _ body: (inout MotionSafetyGate) throws -> Void) throws {
+    private func mutateGate(
+        _ operation: String,
+        journal: Bool = true,
+        _ body: (inout MotionSafetyGate) throws -> Void
+    ) throws {
         guard var gate else { throw MotionSafetyError(L10n.text("安全门尚未初始化")) }
-        try body(&gate); try storeGate(gate, operation: operation)
+        try body(&gate); try storeGate(gate, operation: operation, journal: journal)
     }
 
     private func applyRemoteDecision() {

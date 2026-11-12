@@ -34,9 +34,9 @@ enum MCPInputValidation {
             }
         case "array":
             guard let array = value.arrayValue else { throw MCPToolFailure(L10n.text("参数必须是数组")) }
-            if let minimum = schema["minItems"]?.intValue,
+            if let minimum = schema["minItems"]?.exactIntValue,
                array.count < minimum { throw MCPToolFailure(L10n.text("数组成员过少")) }
-            if let maximum = schema["maxItems"]?.intValue,
+            if let maximum = schema["maxItems"]?.exactIntValue,
                array.count > maximum { throw MCPToolFailure(L10n.text("数组成员过多")) }
             if let items = schema["items"] {
                 for value in array { try validate(value, schema: items, depth: depth + 1) }

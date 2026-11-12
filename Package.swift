@@ -88,7 +88,8 @@ let package = Package(
                 .product(name: "RobotRemoteBinding", package: "SurfacePlugins"),
                 .product(name: "ChassisRemoteBinding", package: "SurfacePlugins")
             ]
-                + [.product(name: "RemoteToolContracts", package: "SurfacePlugins")]
+                + [.product(name: "RemoteToolContracts", package: "SurfacePlugins"),
+                   .product(name: "SurfacePluginContracts", package: "SurfacePlugins")]
         ),
         .target(
             name: "BCRProviderMCPAdapter",

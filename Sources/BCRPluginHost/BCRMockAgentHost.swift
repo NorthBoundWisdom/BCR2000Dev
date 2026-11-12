@@ -12,7 +12,7 @@ import SurfacePluginContracts
 @MainActor
 public final class BCRMockAgentHost {
     public let runtime: BCRPluginRuntime
-    public static let instanceID = "agent.mock"
+    public static let instanceID = AgentRemoteBinding.defaultInstanceID
     private var observer: UUID?
     private let epoch: TimeInterval
     private var driver: Task<Void, Never>?
@@ -111,7 +111,7 @@ public final class BCRMockAgentHost {
             // A delayed host tick must preserve the original observable state/LED order.
             if var projection = lastPublished {
                 for event in update.events where event.code == "agent.updated" {
-                    guard let id = event.fields["slot"]?.intValue,
+                    guard let id = event.fields["slot"]?.exactIntValue,
                           let index = projection.firstIndex(where: { $0.id.rawValue == id }),
                           let rawState = event.fields["state"]?.stringValue,
                           let state = BCRAgentDomain.AgentRunState(rawValue: rawState),

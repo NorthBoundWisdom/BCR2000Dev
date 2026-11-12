@@ -442,7 +442,7 @@ public final class MCPHTTPServer {
             "params": batch
         ])
         do {
-            let sequence = batch.objectValue?["latest_sequence"]?.intValue ?? 0
+            let sequence = batch.objectValue?["latest_sequence"]?.roundedIntValue ?? 0
             let data = Data("id: \(sequence)\nevent: message\ndata: \(try message.jsonText)\n\n".utf8)
             enqueueEvent(data, to: id, snapshot: batch.objectValue?["reset"] == .bool(true))
         } catch { close(id) }

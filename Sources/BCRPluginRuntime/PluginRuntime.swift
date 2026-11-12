@@ -70,11 +70,16 @@ public final class BCRPluginRuntime {
     public func pluginID(for id: String) -> PluginID? { pluginIDs[id] }
     public func owners(of tool: String) -> Set<PluginID> { toolOwners[tool] ?? [] }
 
-    public func replace(_ binding: any RemoteBinding, event: PluginEvent, update: PluginUpdate? = nil) throws {
+    public func replace(_ binding: any RemoteBinding, event: PluginEvent?, update: PluginUpdate? = nil) throws {
         let time = try checkedTime()
         try registry.replace(binding, at: time, event: event)
         lastTrustedTime = time
-        notify(.init(instanceID: binding.instanceID, operation: event.code, update: update, isRemote: false))
+        if let event { notify(.init(
+            instanceID: binding.instanceID,
+            operation: event.code,
+            update: update,
+            isRemote: false
+        )) }
     }
 
     /// Emergency closing/fault transitions only. Ordinary writes never clamp a bad clock.
@@ -89,9 +94,12 @@ public final class BCRPluginRuntime {
     public func handle(_ id: String, input: PluginInput) throws -> PluginUpdate {
         let time: PluginTime
         if input == .stop { time = safetyTime() } else { time = try checkedTime() }
+        let before = registry.snapshot(instanceID: id)
         let update = try registry.handle(instanceID: id, input: input, at: time)
         lastTrustedTime = time
-        notify(.init(instanceID: id, operation: "host.input", update: update, isRemote: false))
+        if before != registry.snapshot(instanceID: id) || !update.events.isEmpty {
+            notify(.init(instanceID: id, operation: "host.input", update: update, isRemote: false))
+        }
         return update
     }
 

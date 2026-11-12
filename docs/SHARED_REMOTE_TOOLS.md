@@ -72,3 +72,15 @@ python3 tools/mcp_integration.py --script tools/verify_shared_plugins.py
 
 这是隔离软件/Mock/参考模拟证据；真实硬件、C03/C05、真实执行器和人工GUI布局未验证。
 Root另用独立官方Linux容器验证共享87、XTouch Core/L10n81、manager11；远端CI与尚未推送SHA的HTTPS获取未执行。
+
+## 发布前事件策略修正
+
+共享journal默认1024项，不是把容量单独放大来容忍周期性记账。`replace(at:event:nil)`显式静默提交仍更新并校验独立写时钟，
+不编码事件、不广播无用observer。空闲sim=0事件，运动actual默认每0.25s最多4Hz，phase/control/fault/首末即时；
+typed旧Provider也调用共享simulationEvent策略，不另写过滤规则，命令同步观察基线但只记录一次命令。
+输出HB/actual记账为静默，evaluate只在status/reasonKey+parameterID/limited变化时记事件，连续numeric/frames/UI数值仍更新。
+两个持续运动设备约8次/秒加未限频critical/command，1024项约容纳128秒的纯运动更新；命令风暴仍可能gap，按既定cursor恢复。
+旧Provider1.0 revision/time/trace和50Hz legacy devices SSE语义独立保留，不随shared journal降频。
+
+四个默认instanceID统一由binding constants提供：agent.mock、robot.reference、chassis.reference、output.parameters。
+客户端仍应先发现能力。旧Provider device_id不变。新整数解析使用exact helper；旧v1调用显式roundedIntValue保持其历史舍入语义。

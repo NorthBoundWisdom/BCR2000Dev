@@ -1,6 +1,7 @@
 import BCRAgentCore
 import BCRPluginRuntime
 import BCRProviderApplication
+import BCRPluginHost
 import OutputRemoteBinding
 import Foundation
 import XCTest
@@ -519,5 +520,63 @@ final class OutputControllerTests: XCTestCase {
                                           adapter: OutputFakeTransport(), automaticallyTicks: false)
         XCTAssertNotNil(controller.error)
         XCTAssertFalse(controller.settings.enabled)
+    }
+
+    func testTenThousandReadyTelemetryTicksKeepEarlyAgentAndFaultEventsWhileNumericOutputsUpdate() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let wall = OutputTestClock()
+        let owner = try BCRPluginRuntime(clock: { wall.monotonic }, epoch: "output-retention")
+        let application = ProviderApplication(configuration: .init(robot: true), runtime: owner)
+        wall.monotonic += 3; application.tick()
+        let agent = try BCRMockAgentHost(clock: { wall.monotonic }, runtime: owner)
+        _ = try owner.call(
+            "surface_agent_primary",
+            arguments: .object(["instance_id": .string(BCRMockAgentHost.instanceID), "slot": .number(1)])
+        )
+        let configuration = SurfaceConfiguration(name: "steady", parameters: [
+            .init(id: "axis", name: "Axis", minimum: 0, maximum: 10, defaultValue: 0),
+            .init(id: "enable", name: "Enable", minimum: 0, maximum: 1, kind: .toggle)
+        ])
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: configuration,
+                                     now: { wall.now }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let adapter = OutputFakeTransport()
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
+                                          adapter: adapter,
+                                          automaticallyTicks: false, now: { wall.now }, runtime: owner)
+        defer { controller.stop(); agent.stopDriving() }
+        controller.start()
+        adapter.onHeartbeat?(wall.now)
+        adapter.onSamples?([.init(id: "axis", value: 0, receivedAt: wall.now)])
+        controller.tick(); session.setParameter("enable", to: 1); controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+        func events() throws -> JSONValue { try owner.call("surface_events", arguments: .object([
+            "epoch": .string(owner.epoch), "after": .string("0"), "limit": .number(1024)
+        ])) }
+        let before = try events()
+        let wallStart = wall.now, policyStart = wall.monotonic
+        for index in 1 ... 10_000 {
+            // Date-only fixture uses exactly the facade's epoch conversion. Production
+            // receipt clocks are tested separately; independent floating clocks can drift.
+            wall.now = wallStart.addingTimeInterval(Double(index) * 0.02)
+            wall.monotonic = policyStart + wall.now.timeIntervalSince(wallStart)
+            let value = Double(index) / 1024
+            session.setParameter("axis", to: value)
+            adapter.onHeartbeat?(wall.now)
+            adapter.onSamples?([.init(id: "axis", value: value, receivedAt: wall.now)])
+            controller.tick()
+            XCTAssertEqual(controller.status, .ready)
+            XCTAssertFalse(controller.limited)
+        }
+        XCTAssertEqual(try events(), before)
+        XCTAssertEqual(controller.outputs["axis"], Double(10_000) / 1024)
+        XCTAssertEqual(controller.actual["axis"], Double(10_000) / 1024)
+        XCTAssertEqual(adapter.frames.last?.values["axis"], Double(10_000) / 1024)
+        let records = try XCTUnwrap(before.objectValue?["events"]?.arrayValue)
+        XCTAssertTrue(records
+            .contains { $0.objectValue?["event"]?.objectValue?["code"] == .string("surface_agent_primary") })
+        XCTAssertTrue(records
+            .contains { $0.objectValue?["event"]?.objectValue?["code"] == .string("host.safety.robot.fault") })
     }
 }

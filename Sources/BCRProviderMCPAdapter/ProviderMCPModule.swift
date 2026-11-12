@@ -136,8 +136,8 @@ public enum ProviderMCPModule {
             case "provider_contract": return ProviderContractSchema.document
             case "console_events":
                 return try service.session.inputEvents.read(generation: args["generation"]?.stringValue,
-                                                            after: args["after_sequence"]?.intValue ?? 0,
-                                                            limit: args["limit"]?.intValue ?? 256)
+                                                            after: args["after_sequence"]?.roundedIntValue ?? 0,
+                                                            limit: args["limit"]?.roundedIntValue ?? 256)
             case "console_mock_input":
                 let session = service.session
                 try ProviderValidation.require(
@@ -161,11 +161,11 @@ public enum ProviderMCPModule {
                 switch try text(args, "operation") {
                 case "turn":
                     try ProviderValidation.require(
-                        control.isContinuous && args["delta"]?.intValue != nil,
+                        control.isContinuous && args["delta"]?.roundedIntValue != nil,
                         "invalid_argument",
                         "Turning requires a continuous control and integer delta"
                     )
-                    session.withWriteOrigin(.agent) { session.turn(control, by: args["delta"]!.intValue!) }
+                    session.withWriteOrigin(.agent) { session.turn(control, by: args["delta"]!.roundedIntValue!) }
                 case "press", "release":
                     try ProviderValidation.require(
                         !control.isContinuous,
@@ -327,7 +327,7 @@ public enum ProviderMCPModule {
     }
 
     private static func proof(_ args: [String: JSONValue]) throws -> DeviceCommandProof {
-        guard let sequence = args["command_sequence"]?.intValue else { throw ProviderDomainError(
+        guard let sequence = args["command_sequence"]?.roundedIntValue else { throw ProviderDomainError(
             "invalid_argument",
             "An integer command sequence is required"
         ) }

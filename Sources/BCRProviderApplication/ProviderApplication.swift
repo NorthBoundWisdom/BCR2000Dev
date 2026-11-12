@@ -7,6 +7,7 @@ import BCRPluginRuntime
 import RobotRemoteBinding
 import ChassisRemoteBinding
 import RemoteToolContracts
+import struct SurfacePluginContracts.PluginEvent
 
 public enum ProviderClock: String, Codable, Sendable { case realtime, manual }
 public struct ProviderConfiguration: Codable, Sendable {
@@ -62,8 +63,8 @@ public final class ProviderApplication {
     public let configuration: ProviderConfiguration
     public let events = ProviderEventJournal(source: .simulation)
     public let runtime: BCRPluginRuntime
-    public static let robotInstanceID = "robot.reference"
-    public static let chassisInstanceID = "chassis.reference"
+    public static let robotInstanceID = RobotRemoteBinding.defaultInstanceID
+    public static let chassisInstanceID = ChassisRemoteBinding.defaultInstanceID
     private var robot: RobotSimulator? { configuration.robot ? runtime.optionalBinding(
         Self.robotInstanceID,
         as: RobotRemoteBinding.self
@@ -199,22 +200,32 @@ public final class ProviderApplication {
 
     private func storeRobot(_ value: RobotSimulator, operation: String, safety: Bool = false) throws {
         var binding = try runtime.binding(Self.robotInstanceID, as: RobotRemoteBinding.self)
-        binding.plugin = value.plugin
+        var plugin = value.plugin
+        let observation = try plugin.simulationEvent(at: safety ? runtime.safetyTimestamp : runtime.now)
+        binding.plugin = plugin
         if safety {
             try runtime.replaceForSafety(binding, event: .init(code: "host.safety.robot." + operation,
                                                                fields: ["clock": .string(operation == "fault" ?
                                                                        clockDiagnostic : "authorityRevoked")]))
-        } else { try runtime.replace(binding, event: .init(code: "host.robot." + operation)) }
+        } else {
+            let event: PluginEvent? = operation == "advance" ? observation : .init(code: "host.robot." + operation)
+            try runtime.replace(binding, event: event)
+        }
     }
 
     private func storeChassis(_ value: ChassisSimulator, operation: String, safety: Bool = false) throws {
         var binding = try runtime.binding(Self.chassisInstanceID, as: ChassisRemoteBinding.self)
-        binding.plugin = value.plugin
+        var plugin = value.plugin
+        let observation = try plugin.simulationEvent(at: safety ? runtime.safetyTimestamp : runtime.now)
+        binding.plugin = plugin
         if safety {
             try runtime.replaceForSafety(binding, event: .init(code: "host.safety.chassis." + operation,
                                                                fields: ["clock": .string(operation == "fault" ?
                                                                        clockDiagnostic : "authorityRevoked")]))
-        } else { try runtime.replace(binding, event: .init(code: "host.chassis." + operation)) }
+        } else {
+            let event: PluginEvent? = operation == "advance" ? observation : .init(code: "host.chassis." + operation)
+            try runtime.replace(binding, event: event)
+        }
     }
 
     public func robotState() throws -> RobotSnapshot {

@@ -46,6 +46,7 @@ ALLOWED = {
         "RobotRemoteBinding",
         "ChassisRemoteBinding",
         "RemoteToolContracts",
+        "SurfacePluginContracts",
     },
     "BCRExamples": {"BCRFoundation", "BCRSurfaceDomain", "ExampleParameterSets"},
     "BCRConfigurationAdapter": {
