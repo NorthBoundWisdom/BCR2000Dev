@@ -35,8 +35,11 @@ operation is implemented by the provider.
 Input, display feedback and reset each require their separate process permission, all OFF by
 default. Parameter writes must be allowed; input also requires device control and reset requires
 simulation control. Input retains `agentWritable` and `externallyProtected` checks. No option
-permits simulation input or display writes to a hardware source. Existing GUI Mock input is
-observed through the same session; its new remote simulation mutations remain disabled.
+permits simulation input or display writes to a hardware source. The optional contract itself is
+installed only with an explicit simulation profile, surface instance ID or surface permission flag.
+Ordinary GUI/Provider startup does not validate legacy configurations against its stricter IDs or
+install the new tools. When explicitly installed, the adapter observes Mock input through the same
+SurfaceSession; a GUI does not implicitly enable the optional contract.
 
 ## Input, feedback and recovery
 

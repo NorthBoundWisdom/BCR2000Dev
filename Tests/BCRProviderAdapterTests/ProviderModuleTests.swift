@@ -9,6 +9,22 @@ import XCTest
 
 @MainActor
 final class ProviderModuleTests: XCTestCase {
+    func testLegacyUnicodeParameterDoesNotImplicitlyEnableSurfaceContract() throws {
+        let configuration = SurfaceConfiguration(name: "Legacy", parameters: [
+            .init(id: "joint/轴", name: "Joint", minimum: 0, maximum: 127)
+        ], assignments: [.init(control: .pushEncoder(group: 1, 1), target: .parameter("joint/轴"))])
+        try configuration.validate()
+        let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(), configuration: configuration,
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let gateway = MCPApplicationGateway(session: session, includeAgent: false)
+        let application = ProviderApplication(configuration: .init())
+        XCTAssertNoThrow(try ProviderMCPModule.install(on: gateway, application: application))
+        XCTAssertFalse(gateway.toolDefinitions
+            .contains { $0.objectValue?["name"] == .string("surface_control_discover") })
+        let parameters = try call(gateway, "list_parameters").arrayValue ?? []
+        XCTAssertTrue(parameters.contains { $0.objectValue?["id"] == .string("joint/轴") })
+    }
+
     func context(
         console: Bool = true,
         configuration: ProviderConfiguration = .init(robot: true, chassis: true, clock: .manual),

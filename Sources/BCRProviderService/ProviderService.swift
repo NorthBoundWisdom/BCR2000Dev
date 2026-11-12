@@ -269,6 +269,10 @@ private struct BCRProviderService {
             gateway.onRestrictConfigurationWrite = {}
             let application = ProviderApplication(configuration: configuration)
             try ProviderMCPModule.install(on: gateway, application: application,
+                                          enableSurfaceControl: options.simulationProfile || options
+                                              .surfaceInstanceID != nil ||
+                                              options.surfacePermissions.input || options.surfacePermissions
+                                              .feedback || options.surfacePermissions.reset,
                                           surfaceInstanceID: options.surfaceInstanceID,
                                           surfacePermissions: options.surfacePermissions)
             try ProviderMCPModule.installShared(on: gateway, application: application)
