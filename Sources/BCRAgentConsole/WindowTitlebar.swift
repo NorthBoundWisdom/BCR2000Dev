@@ -23,7 +23,9 @@ final class WindowTitlebarView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         detach()
-        guard window != nil else { return }
+        guard let window else { return }
+        // Earliest hook before the window is first shown, so an offscreen test run never flashes.
+        OffscreenPresentation.conceal(window)
         // AppKit local event monitors execute on the application's main thread.
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             let handled = MainActor.assumeIsolated {

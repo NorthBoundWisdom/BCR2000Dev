@@ -26,6 +26,10 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_pre
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_review_fixes_ui.py
 ```
 
+加 `--offscreen` 可让隔离实例离屏运行（后台附属进程，窗口透明且在屏幕之外，离屏时“在访达中显示”只给提示、
+不打开访达）。2026-11-13 实测 `verify_connection_ui.py` 离屏通过，期间前台应用未变、无可见窗口。
+其余脚本未做离屏验证：使用区域截图（`screencapture -R`）或系统打开/保存面板的脚本需要前台窗口，仍按默认前台运行。
+
 `mcp_integration.py` 为每次运行复制一个有唯一进程身份的 App，使用临时配置、内存凭据与
 Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体 MIDI。
 每次先在运行中的 App 上执行现代 / 兼容协议的 `mcp_smoke.py`，再执行指定脚本，结束后退出该实例。

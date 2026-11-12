@@ -18,14 +18,15 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
+        NSApp.setActivationPolicy(OffscreenPresentation.isEnabled ? .accessory : .regular)
+        OffscreenPresentation.install()
         if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: url)
         {
             NSApp.applicationIconImage = icon
         }
         guard CommandLine.arguments.contains("--startup-smoke") else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        if !OffscreenPresentation.isEnabled { NSApp.activate(ignoringOtherApps: true) }
         Task { @MainActor in
             let deadline = Date().addingTimeInterval(25)
             var requestedWindow = false
@@ -41,7 +42,13 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                    let view = window.contentView
                 {
                     window.setContentSize(NSSize(width: 1_200, height: 760))
-                    window.makeKeyAndOrderFront(nil)
+                    if OffscreenPresentation.isEnabled {
+                        // Ordered in for layout and rendering, but never key, frontmost or on a screen.
+                        OffscreenPresentation.conceal(window)
+                        window.orderBack(nil)
+                    } else {
+                        window.makeKeyAndOrderFront(nil)
+                    }
                     guard window.isVisible, view.bounds.width > 0, view.bounds.height > 0 else {
                         try? await Task.sleep(for: .milliseconds(100))
                         continue

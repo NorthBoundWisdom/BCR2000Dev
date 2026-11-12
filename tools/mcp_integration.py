@@ -24,6 +24,17 @@ def main():
     parser.add_argument("--script", type=Path, help="optional acceptance script after standard MCP probes")
     parser.add_argument("--configuration-write", action="store_true")
     parser.add_argument("--connection-fixture", action="store_true", help="Use the Debug-only in-memory MIDI fixture")
+    presentation = parser.add_mutually_exclusive_group()
+    presentation.add_argument(
+        "--offscreen",
+        action="store_true",
+        help="no Dock icon, no activation, window parked outside every screen (default without --script)",
+    )
+    presentation.add_argument(
+        "--foreground",
+        action="store_true",
+        help="ordinary visible window (default with --script: those send keystrokes or take screenshots)",
+    )
     parser.add_argument(
         "--language",
         choices=("en", "zh-Hans"),
@@ -33,6 +44,8 @@ def main():
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("--port must be 1024–65535")
+    # Protocol-only probes never need the desktop. Scripted acceptance drives the front window.
+    offscreen = args.offscreen or (not args.foreground and args.script is None)
     root = Path("build/mcp-integration").resolve()
     root.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="case-", dir=root))
@@ -87,6 +100,7 @@ def main():
                 str(executable),
                 "--integration-test",
                 *(["--connection-fixture"] if args.connection_fixture else []),
+                *(["--offscreen"] if offscreen else []),
                 "-AppleLanguages",
                 f"({args.language})",
             ],

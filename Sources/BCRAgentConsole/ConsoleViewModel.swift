@@ -1063,16 +1063,25 @@ final class ConsoleViewModel: ObservableObject {
                 notice = ConsoleNotice(level: .warning, text: L10n.text("备份文件已不存在。"))
                 return
             }
+            guard !skipsFinderWhenOffscreen() else { return }
             NSWorkspace.shared.activateFileViewerSelecting([file])
         } else {
             guard canRevealPresetBackups else {
                 notice = ConsoleNotice(level: .info, text: L10n.text("尚无预设备份。"))
                 return
             }
+            guard !skipsFinderWhenOffscreen() else { return }
             if !NSWorkspace.shared.open(presetBackupDirectory) {
                 notice = ConsoleNotice(level: .error, text: L10n.text("无法打开备份文件夹。"))
             }
         }
+    }
+
+    /// Offscreen test runs must not open Finder windows on the user's desktop; say so instead.
+    private func skipsFinderWhenOffscreen() -> Bool {
+        guard OffscreenPresentation.isEnabled else { return false }
+        notice = ConsoleNotice(level: .info, text: L10n.text("离屏测试模式不打开访达。"))
+        return true
     }
 
     private func saveBackup(_ dump: Data) throws -> URL {

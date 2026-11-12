@@ -83,6 +83,11 @@ python3 configs/macos_workflow.py build
 python3 configs/macos_workflow.py smoke
 ```
 
+本机的 `smoke` 默认离屏：App 以后台附属进程启动（无 Dock 图标、不激活），窗口透明并停在所有屏幕之外，
+不遮挡也不抢占其他应用的焦点；布局、渲染与启动标记照常验证。需要看到窗口时加 `--foreground` 或设
+`BCR_FOREGROUND_TESTS=1`；CI（`CI` 环境变量）始终按原方式前台启动。`tools/mcp_integration.py` 不带 `--script`
+时同样默认离屏，带脚本时默认前台，可用 `--offscreen` / `--foreground` 显式选择。
+
 并在 1200 × 760（最小窗口）下实际打开应用检查布局，Mock 模式下走一遍改动涉及的交互。
 检查未执行或失败时，不得写成“已验证”；在提交正文中如实说明。
 

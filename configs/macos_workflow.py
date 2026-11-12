@@ -491,13 +491,21 @@ def verify_bundle(bundle: Path) -> dict:
     return info
 
 
-def smoke(bundle: Path) -> None:
+def smoke_runs_in_foreground() -> bool:
+    """Hosted CI keeps the launch it has always used; local runs stay off the desktop by default."""
+    return bool(os.environ.get("CI")) or os.environ.get("BCR_FOREGROUND_TESTS") == "1"
+
+
+def smoke(bundle: Path, foreground: bool | None = None) -> None:
     info = verify_bundle(bundle)
     bundle = bundle.resolve()
+    foreground = smoke_runs_in_foreground() if foreground is None else foreground
     for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置")):
         with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
             # Launch Services supplies normal GUI activation on hosted macOS runners.
             # -n isolates each language probe; -W waits for its startup check to exit.
+            # Offscreen (the local default): -g keeps the app in the background and --offscreen makes it
+            # an accessory app whose window is transparent and parked outside every screen.
             # Argument-domain language overrides never modify user preferences.
             stdout = Path(temporary) / "stdout.log"
             stderr = Path(temporary) / "stderr.log"
@@ -506,6 +514,7 @@ def smoke(bundle: Path) -> None:
                     "open",
                     "-n",
                     "-W",
+                    *([] if foreground else ["-g"]),
                     "--stdout",
                     str(stdout),
                     "--stderr",
@@ -513,6 +522,7 @@ def smoke(bundle: Path) -> None:
                     str(bundle),
                     "--args",
                     "--startup-smoke",
+                    *([] if foreground else ["--offscreen"]),
                     "-AppleLanguages",
                     f"({language})",
                 ],
@@ -533,7 +543,8 @@ def smoke(bundle: Path) -> None:
             raise RuntimeError("Native client version does not match the packaged app metadata.")
         if marker.get("language") != language or marker.get("settings") != settings_title:
             raise RuntimeError(f"Bundled {language} localization did not resolve correctly: {marker}")
-    print("Verified English and Chinese native startup at 1200 × 760 with bundled icon and translations.")
+    mode = "foreground" if foreground else "offscreen"
+    print(f"Verified English and Chinese native startup at 1200 × 760 ({mode}) with bundled icon and translations.")
 
 
 def _zip(bundle: Path, destination: Path, companion: Path | None = None) -> None:
@@ -804,6 +815,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--notary-profile", help="notarytool Keychain profile; otherwise BCR_NOTARY_KEYCHAIN_PROFILE.")
     parser.add_argument("--format", choices=("zip", "dmg", "both"), default="both")
     parser.add_argument("--bundle", type=Path, default=APP_BUNDLE, help="Bundle for the smoke action.")
+    parser.add_argument(
+        "--foreground",
+        action="store_true",
+        help="smoke: show and activate the window (default locally is offscreen; CI is always foreground).",
+    )
     parser.add_argument("--archive", type=Path, help="ZIP/DMG for check-package (with .build.json sidecar).")
     parser.add_argument("--driverkit-host", type=Path, help="Approved Developer ID compatibility companion to include.")
     args = parser.parse_args(argv)
@@ -828,7 +844,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.driverkit_host,
             )
         elif args.action == "smoke":
-            smoke(args.bundle)
+            smoke(args.bundle, True if args.foreground else None)
         elif args.action == "check-package":
             if args.archive is None:
                 parser.error("check-package requires --archive")
