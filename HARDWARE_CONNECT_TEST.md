@@ -3,7 +3,8 @@
 对应提交 `162f552`（feat(startup): confirm sync direction before writing to a connected BCR2000）。
 连接/对齐中英文原生假设备验收已通过，入口见 [UI 验收](docs/UI_ACCEPTANCE.md)。
 A–E、G 的完整设备验证仍待完成；F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
-设备当前在 ethanmacair，系统可枚举 USB/MIDI，但 OUT 包长仍为 4、只读身份查询无回复，驱动未安装。
+2026-11-13 设备已接回本机；Port 1 身份、108 条 CC 快照及 554 帧临时预设只读回读通过，尚未完成以下现场步骤。
+此前 ethanmacair 的系统可枚举 USB/MIDI、OUT 包长仍为 4、身份无回复和驱动未安装属于该机历史状态。
 签署阻塞、已采集的证据与下一步见 [PLAN C1](PLAN.md#c1-ethanmacair-的-usb-修复驱动需要用户在该机桌面)。
 结果记入 [实机记录](docs/HARDWARE_VALIDATION.md) 后删除本文件。
 
