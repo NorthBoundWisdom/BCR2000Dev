@@ -926,3 +926,5 @@
 "此操作只移除当前恢复记录，不写设备或映射，预设备份仍保留。较旧恢复层仍需通过设备内容校验。" = "This removes only the current restore record. The device, hardware map and preset backups are kept. Older levels still require device content verification.";
 
 "替换前的映射备份：{0}" = "The previous hardware map is backed up at: {0}";
+
+"等待设备完成上一轮预设发送，请暂勿操作设备…" = "Waiting for the previous preset stream to finish. Please leave the device untouched…";

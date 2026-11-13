@@ -1,3 +1,4 @@
+import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
 @testable import BCRAgentCore
@@ -9,14 +10,50 @@ private final class StartupMIDI: MIDIService {
     var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     var supportsSnapshotReadback = true
+    var supportsPresets = false
+    var supportsStartupConfiguration: Bool { supportsPresets }
+    var suspendsNextDump = false
+    var dumpInFlight = false
+    var dumpContinuation: CheckedContinuation<Data, any Error>?
+    var snapshotReads = 0
+    var startupWrites = 0
+
+    func readPresetNames() async throws -> BCRPresetNames {
+        .init(temporary: "Drain", memory: (1 ... 32).map { $0 == 8 ? "Drain" : "P\($0)" })
+    }
+
+    func readCurrentPreset() async throws -> Data {
+        if suspendsNextDump {
+            suspendsNextDump = false; dumpInFlight = true
+            return try await withCheckedThrowingContinuation { dumpContinuation = $0 }
+        }
+        return BCLFixtures.dump(["$rev R1", "$preset", ".name 'Drain'", ".lock on", "$end"])
+    }
+
+    func finishCancelledDump() {
+        dumpInFlight = false
+        dumpContinuation?.resume(throwing: CancellationError()); dumpContinuation = nil
+    }
+
+    func configureStartup(_ program: MIDIStartupProgram) async throws {
+        guard !dumpInFlight else { throw MIDIStartupError.noReply }
+        startupWrites += 1
+    }
+
     var snapshot: [MIDIVoiceMessage] = []
     var sent: [MIDIVoiceMessage] = []
     var failure = false
     var delay = Duration.zero
     func start() throws { onConnection?(connection) }
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
+    func send(_ message: MIDIVoiceMessage) throws {
+        guard !dumpInFlight else { throw MIDIStartupError.noReply }
+        sent.append(message)
+    }
+
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
+        guard !dumpInFlight else { throw HardwareSnapshotError.invalid }
+        snapshotReads += 1
         try await Task.sleep(for: delay)
         if failure { throw HardwareSnapshotError.invalid }
         return snapshot
@@ -88,8 +125,56 @@ final class HardwareStartupTests: XCTestCase {
         let prompt = try await waitForPrompt(model)
         XCTAssertTrue(device.sent.isEmpty)
         model.connectHardware(prompt.id, mode: .write)
+        try await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(model.source, .hardware)
         XCTAssertFalse(device.sent.isEmpty)
+    }
+
+    func testEveryConnectionModeWaitsForTheCancelledDisplayStream() async throws {
+        for mode in [HardwareConnectionPrompt.Mode.read, .write, .initialize] {
+            let (stores, directory) = stores()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            try stores.hardwareMap.save(.mockPreset())
+            let program = try MIDIStartupProgram(
+                preset: 8,
+                presetSettings: [".name 'Drain'", ".snapshot off", ".request off",
+                                 ".egroups 4", ".fkeys on", ".lock on"]
+            )
+            if mode == .initialize {
+                try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json"))
+                    .save(program)
+            }
+            let device = StartupMIDI()
+            device.supportsPresets = true; device.suspendsNextDump = true
+            device.snapshot = HardwareMap.mockPreset().entries.filter { $0.control.isContinuous }.map {
+                MIDI1UMPCodec.feedback(control: $0.midi, value: 0)
+            }
+            let model = ConsoleViewModel(stores: stores, midiService: device)
+            model.selectSource(.hardware)
+            for _ in 0 ..< 100 {
+                if device.dumpInFlight { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertTrue(device.dumpInFlight)
+            model.selectSource(.mock)
+            model.requestSource(.hardware)
+            let prompt = try await waitForPrompt(model)
+            let writes = device.sent.count
+            model.connectHardware(prompt.id, mode: mode)
+            try await Task.sleep(for: .milliseconds(30))
+            XCTAssertTrue(model.connectingHardware)
+            XCTAssertEqual(model.source, .mock)
+            XCTAssertEqual(device.snapshotReads, 0)
+            XCTAssertEqual(device.startupWrites, 0)
+            XCTAssertEqual(device.sent.count, writes)
+            device.finishCancelledDump()
+            for _ in 0 ..< 100 {
+                if !model.connectingHardware { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertEqual(model.source, .hardware)
+            XCTAssertNotEqual(model.notice?.level, .error)
+        }
     }
 
     func testNoticeActionAndPickerRequireConfirmationInsteadOfWriting() async throws {

@@ -92,7 +92,8 @@ public final class CoreMIDIService: MIDIService {
     private var dumpTask: Task<Void, Never>?
     static let presetDumpRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x40, 0x7F, 0xF7]
     private var namesID: UUID?
-    private var names: [Int: String] = [:]
+    private var namesStream = PresetNamesStream()
+    private var namesActivity: Double = 0
     private var namesContinuation: CheckedContinuation<BCRPresetNames, any Error>?
     private var namesTask: Task<Void, Never>?
     /// Ordinary input is dropped only while a write or value snapshot needs the route to itself.
@@ -241,7 +242,9 @@ public final class CoreMIDIService: MIDIService {
                 return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<
                     BCRPresetNames, any Error
                 >) in
-                    self.namesID = id; self.names = [:]; self.namesContinuation = continuation
+                    self.namesID = id; self.namesStream = PresetNamesStream(); self.namesContinuation = continuation
+                    self.namesActivity = ProcessInfo.processInfo.systemUptime
+                    let started = self.namesActivity
                     do {
                         try transport.sendBytes([0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x42, 0x7F, 0xF7],
                                                 expectedGeneration: generation)
@@ -249,12 +252,26 @@ public final class CoreMIDIService: MIDIService {
                                                 expectedGeneration: generation)
                     } catch { self.finishNames(id, result: .failure(error)); return }
                     self.namesTask = Task { @MainActor [weak self] in
-                        do { try await Task.sleep(for: .seconds(3)) } catch { return }
-                        self?.finishNames(id, result: .failure(MIDIStartupError.noReply))
+                        while true {
+                            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                            guard let self, self.namesID == id else { return }
+                            let now = ProcessInfo.processInfo.systemUptime
+                            if now - self.namesActivity > 3 {
+                                self.finishNames(
+                                    id,
+                                    result: .failure(self.namesStream.failure ?? MIDIStartupError.noReply)
+                                )
+                                return
+                            }
+                            if now - started > 3 { self.namesStream.fail(MIDIStartupError.noReply) }
+                        }
                     }
                 }
             } onCancel: {
-                Task { @MainActor [weak self] in self?.finishNames(id, result: .failure(CancellationError())) }
+                Task { @MainActor [weak self] in
+                    guard let self, self.namesID == id else { return }
+                    self.namesStream.fail(CancellationError())
+                }
             }
         }
     }
@@ -262,7 +279,7 @@ public final class CoreMIDIService: MIDIService {
     private func finishNames(_ id: UUID, result: Result<BCRPresetNames, any Error>) {
         guard namesID == id else { return }
         let continuation = namesContinuation
-        namesID = nil; namesContinuation = nil; names = [:]
+        namesID = nil; namesContinuation = nil; namesStream = PresetNamesStream()
         namesTask?.cancel(); namesTask = nil
         continuation?.resume(with: result)
     }
@@ -376,11 +393,11 @@ public final class CoreMIDIService: MIDIService {
             if let id = namesID, frame.count == 34, frame.prefix(4) == [0xF0, 0, 0x20, 0x32],
                frame[5] == 0x15, frame[6] == 0x21, frame[7] == 0, frame[8] < 32 || frame[8] == 0x7F
             {
-                names[Int(frame[8])] = String(decoding: frame[9 ..< 33], as: UTF8.self)
-                if let temporary = names[0x7F], (0 ... 31).allSatisfy({ names[$0] != nil }) {
-                    finishNames(id, result: .success(BCRPresetNames(
-                        temporary: temporary, memory: (0 ... 31).map { names[$0]! }
-                    )))
+                namesActivity = ProcessInfo.processInfo.systemUptime
+                if let result = namesStream.receive(index: Int(frame[8]),
+                                                    name: String(decoding: frame[9 ..< 33], as: UTF8.self))
+                {
+                    finishNames(id, result: result)
                 }
                 continue
             }

@@ -404,8 +404,21 @@ final class LockedPresetDisplayTests: XCTestCase {
         try await readLockedPreset(model)
         let saved = try JSONFileStore<BCRDisplayProfile>(fileURL: directory.appending(path: "display-profile.json"))
             .load()
-        XCTAssertEqual(saved?.resolvedPreset, 1)
+        XCTAssertNil(saved?.resolvedPreset)
         XCTAssertEqual(device.writes, 0)
+    }
+
+    func testCorruptProfileIsRebuiltFromFreshDumpWhenNamesFail() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = JSONFileStore<BCRDisplayProfile>(fileURL: directory.appending(path: "display-profile.json"))
+        try Data("broken json".utf8).write(to: store.fileURL)
+        device.nameReadFails = true
+        try await readLockedPreset(model)
+        let repaired = try XCTUnwrap(store.load())
+        XCTAssertEqual(repaired.name, "Redrum")
+        XCTAssertEqual(repaired.locked, true)
+        XCTAssertNil(repaired.resolvedPreset)
     }
 
     func testLearningInterruptsDisplayReadWithoutAWarning() async throws {
@@ -548,5 +561,54 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertEqual(model.source, .hardware)
         XCTAssertNil(model.startupConfiguredPreset)
         XCTAssertEqual(model.displayText, "----")
+    }
+
+    func testExplicitLockedRecallUsesFreshWorkingCopyWithoutReadingSameNamedSlots() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
+                                                                         ".egroups 4", ".fkeys on", ".lock on"])
+        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
+        try stores.hardwareMap.save(map)
+        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Old'", ".egroups 4", ".lock on", "$end"])
+        let device = DisplayDevice(temporary: data,
+                                   names: .init(
+                                       temporary: "Old",
+                                       memory: ["Old"] + (2 ... 7).map { "P\($0)" } + ["Old"]
+                                   ))
+        device.memoryReadFails = true
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        for _ in 0 ..< 80 {
+            if let prompt = model
+                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertEqual(model.startupConfiguredPreset, 8)
+        XCTAssertEqual(model.displayText, "P- 8")
+        XCTAssertTrue(device.memoryReads.isEmpty)
+    }
+}
+
+final class PresetNumberEvidenceTests: XCTestCase {
+    func testNumberProofBindsRouteCandidatesDefinitionsAndLockState() throws {
+        let route = MIDIConnectionSnapshot(connectedSource: "BCR", connectedDestination: "BCR")
+        let names = BCRPresetNames(temporary: "Shared", memory: ["Shared", "Other", "Shared"])
+        let lines = ["$rev R1", "$preset", ".name 'Shared'", ".lock on", "$encoder 1", ".default 4", "$end"]
+        let dump = BCLFixtures.dump(lines)
+        let evidence = try XCTUnwrap(PresetNumberEvidence(number: 1, dump: dump, names: names, route: route))
+        XCTAssertTrue(evidence.locked)
+        XCTAssertTrue(try evidence.matches(dump, names: names, on: route))
+        XCTAssertFalse(evidence.matches(names, on: MIDIConnectionSnapshot()))
+        XCTAssertFalse(evidence.matches(.init(temporary: "Shared", memory: ["Shared", "Shared"]), on: route))
+        XCTAssertFalse(try evidence.matches(BCLFixtures.dump(lines.map { $0 == ".lock on" ? ".lock off" : $0 }),
+                                            names: names, on: route))
+        XCTAssertTrue(try evidence.matches(BCLFixtures.dump(lines.map { $0 == ".default 4" ? ".default 90" : $0 }),
+                                           names: names, on: route))
     }
 }

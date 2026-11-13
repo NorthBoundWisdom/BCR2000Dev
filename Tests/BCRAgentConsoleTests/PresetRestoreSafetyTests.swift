@@ -19,6 +19,8 @@ private final class RestoreSafetyDevice: MIDIService {
     var onNames: (() -> Void)?
     var afterFrame: ((Int) -> Void)?
     var nameReads = 0
+    var memory: [Int: Data] = [:]
+    var memoryReads = 0
     init(_ preset: Data) { self.preset = preset }
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
@@ -26,7 +28,9 @@ private final class RestoreSafetyDevice: MIDIService {
     func readPresetNames() async throws -> BCRPresetNames {
         nameReads += 1
         onNames?()
-        return .init(temporary: try BCRDisplayProfile.read(fromPresetDump: preset).name ?? "", memory: [])
+        let name = try BCRDisplayProfile.read(fromPresetDump: preset).name ?? ""
+        let names = memory.isEmpty ? [] : (1 ... 32).map { memory[$0] == nil ? "P\($0)" : name }
+        return .init(temporary: name, memory: names)
     }
 
     func readCurrentPreset() async throws -> Data {
@@ -36,6 +40,12 @@ private final class RestoreSafetyDevice: MIDIService {
             return BCLFixtures.dump(lines)
         }
         return preset
+    }
+
+    func readMemoryPreset(_ number: Int) async throws -> Data {
+        memoryReads += 1
+        guard let dump = memory[number] else { throw MIDIStartupError.noReply }
+        return dump
     }
 
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
@@ -270,7 +280,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertTrue(try BCRPresetAlignment.readbackMatches(device.preset, expected: confirmed))
     }
 
-    func testEveryAcknowledgementIsDurableBeforeTheNextFrame() async throws {
+    func testFirstAcknowledgementIsDurableWithoutRewritingEveryLine() async throws {
         let (model, device, _, root) = try await context(aligned: false)
         defer { try? FileManager.default.removeItem(at: root) }
         model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
@@ -278,10 +288,57 @@ final class PresetRestoreSafetyTests: XCTestCase {
         device.afterFrame = { done in
             do {
                 let saved = try store.load()
-                XCTAssertEqual(saved?.acknowledgedLines, done)
+                XCTAssertEqual(saved?.acknowledgedLines, 1)
             } catch { XCTFail("Progress was not persisted: \(error)") }
         }
         model.applyPresetAlignment(); try await settle(model) { $0 == .finished }
+        XCTAssertEqual(try store.load()?.acknowledgedLines, device.batches.last?.count)
+    }
+
+    func testLockedAlignmentCarriesContentProvenNumberAndRestoreResolvesOriginal() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.memory = [1: device.preset, 8: BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safety'", "$end"])]
+        try await align(model)
+        XCTAssertEqual(model.deviceKeysLocked, true)
+        XCTAssertEqual(model.displayText, "P- 1")
+        let reads = device.memoryReads
+        model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.memoryReads, reads)
+        model.dismissPresetAlignment()
+        model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
+        XCTAssertEqual(model.displayText, "P- 1")
+        // Reconnecting must not treat the aligned same-named working copy as slot 1.
+        try await align(model)
+        model.selectSource(.mock); model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.displayText, "----")
+    }
+
+    func testFailedWriteCannotKeepThePreviousLockProof() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.memory = [1: device.preset, 8: BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safety'", "$end"])]
+        try await align(model)
+        XCTAssertEqual(model.displayText, "P- 1")
+        model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
+        var options = BCRPresetAlignment.Options(); options.enableButtonFunctions = true
+        model.setAlignmentOptions(options)
+        device.failAtFrame = 5
+        model.applyPresetAlignment(); try await settle(model, failed)
+        XCTAssertEqual(model.displayText, "----")
+    }
+
+    func testUnlockedAlignmentCannotCarryAnAmbiguousNumber() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.memory = [1: device.preset, 8: BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safety'", "$end"])]
+        model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
+        var options = BCRPresetAlignment.Options(); options.lockPreset = false
+        model.setAlignmentOptions(options)
+        model.applyPresetAlignment(); try await settle(model) { $0 == .finished }
+        XCTAssertEqual(model.displayText, "----")
     }
 
     func testDiscardUnusableTopLevelRevealsOlderLevelWithoutWriting() async throws {

@@ -50,3 +50,29 @@ final class PresetDumpStreamTests: XCTestCase {
         XCTAssertThrowsError(try XCTUnwrap(stream.receive(frame(11, "$end"))).get())
     }
 }
+
+final class PresetNamesStreamTests: XCTestCase {
+    func testCancelledNameReadDrainsAllOldIndexesBeforeItCanFinish() throws {
+        var stream = PresetNamesStream()
+        XCTAssertNil(stream.receive(index: 0x7F, name: "Old working copy"))
+        XCTAssertNil(stream.receive(index: 0, name: "Old 1"))
+        stream.fail(CancellationError())
+        for index in 1 ..< 31 { XCTAssertNil(stream.receive(index: index, name: "Old \(index + 1)")) }
+        XCTAssertThrowsError(try XCTUnwrap(stream.receive(index: 31, name: "Old 32")).get()) {
+            XCTAssertTrue($0 is CancellationError)
+        }
+        stream = PresetNamesStream()
+        for index in 0 ..< 32 { XCTAssertNil(stream.receive(index: index, name: "New \(index + 1)")) }
+        let names = try XCTUnwrap(stream.receive(index: 0x7F, name: "New 8")).get()
+        XCTAssertEqual(names.temporaryName, "New 8")
+        XCTAssertEqual(names.presetNumber, 8)
+    }
+
+    func testNamesMayArriveInAnyOrderAndDuplicatesCannotFinishAPartialStream() throws {
+        var stream = PresetNamesStream()
+        for _ in 0 ..< 33 { XCTAssertNil(stream.receive(index: 0x7F, name: "Current")) }
+        for index in (1 ..< 32).reversed() { XCTAssertNil(stream.receive(index: index, name: "P\(index + 1)")) }
+        let result = try XCTUnwrap(stream.receive(index: 0, name: "Current")).get()
+        XCTAssertEqual(result.presetNumber, 1)
+    }
+}
