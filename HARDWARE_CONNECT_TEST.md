@@ -2,18 +2,26 @@
 
 对应提交 `162f552`（feat(startup): confirm sync direction before writing to a connected BCR2000）。
 连接/对齐中英文原生假设备验收已通过，入口见 [UI 验收](docs/UI_ACCEPTANCE.md)。
-A–E、G 的完整设备验证仍待完成；F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
+A–E 本轮现场路径已通过（E 仅本次按键样本）；C3 上轮视觉未通过，17→127 大幅重测及恢复后用户明确确认通过。G 未完成。
+F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
 2026-11-13 设备已接回本机；Port 1 身份、108 条 CC 快照及 554 帧临时预设只读回读通过，尚未完成以下现场步骤。
 此前 ethanmacair 的系统可枚举 USB/MIDI、OUT 包长仍为 4、身份无回复和驱动未安装属于该机历史状态。
 签署阻塞、已采集的证据与下一步见 [PLAN C1](PLAN.md#c1-ethanmacair-的-usb-修复驱动需要用户在该机桌面)。
 结果记入 [实机记录](docs/HARDWARE_VALIDATION.md) 后删除本文件。
+
+## 2026-11-13 现场进展
+
+- 当前软硬件一致：用户确认并提供当前组截图，MCP 实体模式/Port 1 正常、外部输出关闭。
+- C 的步骤 1/2 一次拔插通过：断线回 Mock、重插后重新确认，确认前灯环未被软件改动；不包含 C3 写入。
+- B 读硬件与暂不连接通过：用户转动后读入新值，App/设备快照核对 56/56 一致；顶部 PUSH/B1 按压各一个样本通过；A 未连接时启动、D 设备已连接时启动及 E 按住拔线样本通过；C3 大幅重测的回读和目视均通过，F/G 其余项目仍待实测。
+  以下原验收步骤全部保留，具体证据与限制见实机记录。
 
 ## 前提
 
 - 本机配置在 `~/Library/Application Support/BCRAgentConsole/`。新版首次保存会把 `hardware-map.json`
   从 v6 升到 v7，旧版 app 将无法读取；v6 备份在 `Backups/hardware-map.v6.before-162f552.json`。
 - 本机没有 `hardware-startup.json`，确认窗只有“写入并连接”“按硬件现状连接”“暂不连接”，不会出现“初始化并连接”。
-- 现有映射没有 `pressMode`，按键只会短暂闪一下，不测按住效果。
+- 当前本机映射为 v7，52 项含 `pressMode`；52 个按键仍为仅显示。本轮按实际映射核对按下/松开及拔线释放。
 - 构建：`python3 configs/macos_workflow.py build`；先退出旧版 app，并拔掉 BCR2000。
 
 ## 步骤与预期
