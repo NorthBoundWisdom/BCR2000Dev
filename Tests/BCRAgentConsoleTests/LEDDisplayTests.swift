@@ -46,7 +46,41 @@ final class BCRDisplayModelTests: XCTestCase {
         display.endTransfer()
         // The value that was showing is not resurrected; the preset number returns.
         XCTAssertEqual(display.content(at: 0.1), .preset(1))
-        XCTAssertEqual(Set((0 ..< 24).map { BCRDisplayModel.busyFrame(at: Double($0) / 12) }), Set(0 ..< 12))
+        XCTAssertEqual(Set((0 ..< 24).map {
+            BCRDisplayModel.busyFrame(at: Double($0) / BCRDisplayModel.Calibration.busyFramesPerSecond)
+        }), Set(0 ..< 12))
+    }
+
+    func testBusyAnimationIsClockwiseAndRepeatsFourTimesPerSecond() {
+        XCTAssertEqual(BCRDisplayModel.Calibration.busyFrameSequence, Array(0 ..< 12))
+        XCTAssertEqual(BCRDisplayModel.Calibration.busyRotationsPerSecond, 4)
+        for segment in 0 ..< 12 {
+            let time = (Double(segment) + 0.25) / 48
+            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time), segment)
+            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time + 0.25), segment)
+        }
+    }
+
+    func testWriteAnimationIsCounterclockwiseAtOneTurnPerSecond() {
+        for segment in 0 ..< 12 {
+            let time = (Double(segment) + 0.25) / 12
+            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time, operation: .write), 11 - segment)
+            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time + 1, operation: .write), 11 - segment)
+        }
+        XCTAssertEqual(BCRDisplayModel.Calibration.framesPerSecond(for: .write), 12)
+        XCTAssertEqual(BCRDisplayModel.Calibration.framesPerSecond(for: .read), 48)
+    }
+
+    func testOverlappingTransfersKeepTheirDirectionWhenCompletedOutOfOrder() {
+        var model = BCRDisplayModel(preset: 1)
+        let read = model.beginTransfer(.read), write = model.beginTransfer(.write)
+        XCTAssertEqual(model.transferOperation, .write)
+        model.endTransfer(read)
+        XCTAssertEqual(model.transferOperation, .write)
+        XCTAssertEqual(model.transfers, 1)
+        model.endTransfer(write)
+        XCTAssertEqual(model.transfers, 0)
+        XCTAssertEqual(model.content(at: 0), .preset(1))
     }
 
     func testShowValueOffLeavesTheDisplayUnchanged() {
@@ -148,15 +182,28 @@ private final class DisplayDevice: MIDIService {
     var dumps = 0
     init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
     var dumpDelay = Duration.zero
+    var nameReadFails = false
+    var memoryReadFails = false
+    var memoryReads: [Int] = []
+    var nameResponses: [BCRPresetNames] = []
+    func configureStartup(_ program: MIDIStartupProgram) async throws {}
     func readMemoryPreset(_ number: Int) async throws -> Data {
-        dumps += 1; try await Task.sleep(for: dumpDelay); return memory[number] ?? temporary
+        dumps += 1; memoryReads.append(number)
+        try await Task.sleep(for: dumpDelay)
+        if memoryReadFails { throw CocoaError(.fileReadUnknown) }
+        return memory[number] ?? temporary
     }
 
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {}
     func readCurrentPreset() async throws -> Data { dumps += 1; try await Task.sleep(for: dumpDelay); return temporary }
-    func readPresetNames() async throws -> BCRPresetNames { names }
+    func readPresetNames() async throws -> BCRPresetNames {
+        if nameReadFails { throw CocoaError(.fileReadUnknown) }
+        if !nameResponses.isEmpty { return nameResponses.removeFirst() }
+        return names
+    }
+
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws { writes += 1
     }
 }
@@ -251,5 +298,204 @@ final class DeviceDisplayTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(200))
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.dumps, 3)
+    }
+}
+
+@MainActor
+final class LockedPresetDisplayTests: XCTestCase {
+    private func model(cachedName: String, locked: Bool = true, cachedPreset: Int? = 1) throws
+        -> (ConsoleViewModel, DisplayDevice, URL)
+    {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
+        try stores.hardwareMap.save(map)
+        var profile = BCRDisplayProfile(name: cachedName)
+        profile.resolvedPreset = cachedPreset
+        profile.resolvedCandidates = [1, 8]
+        try JSONFileStore<BCRDisplayProfile>(fileURL: directory.appending(path: "display-profile.json")).save(profile)
+        let preset = BCLFixtures.dump([
+            "$rev R1",
+            "$preset",
+            ".name 'Redrum'",
+            ".egroups 4",
+            locked ? ".lock on" : ".lock off",
+            "$encoder 1",
+            ".easypar CC 1 8 0 127 absolute",
+            ".showvalue on",
+            "$end"
+        ])
+        let device = DisplayDevice(temporary: preset, names: .init(temporary: "Redrum",
+                                                                   memory: ["Redrum"] + (2 ... 7)
+                                                                       .map { "P\($0)" } + ["Redrum"]))
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        return (model, device, directory)
+    }
+
+    private func readLockedPreset(_ model: ConsoleViewModel) async throws {
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(50))
+        model.beginPresetAlignment()
+        for _ in 0 ..< 100 {
+            if model.presetAlignment?.phase == .preview { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Read-only preset preview did not settle")
+    }
+
+    func testFreshLockedReadUsesOnlyValidatedCandidateCache() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.deviceKeysLocked, true)
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.writes, 0)
+        let dumps = device.dumps
+        device.onConnection?(device.connection)
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.dumps, dumps)
+        model.dismissPresetAlignment()
+        device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
+        XCTAssertEqual(model.displayText, " 100")
+        try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds + 0.1))
+        XCTAssertEqual(model.displayText, "P- 1")
+    }
+
+    func testLockedReadCannotReuseNumberFromADifferentPresetName() async throws {
+        let (model, device, directory) = try model(cachedName: "Other")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.deviceKeysLocked, true)
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testUnlockedReadAlsoUsesValidatedCandidateCache() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", locked: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.deviceKeysLocked, false)
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testLockingCannotInventAnUnknownPresetNumber() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.deviceKeysLocked, true)
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testNameReadFailureCannotRestoreACachedNumber() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.nameReadFails = true
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testChangedCandidateSetAboveLimitClearsOldNumber() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.names = .init(temporary: "Redrum", memory: Array(repeating: "Redrum", count: 5))
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertTrue(device.memoryReads.isEmpty)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testChangedCandidateSetAndFailedResolutionCannotLeaveOldNumber() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.names = .init(temporary: "Redrum", memory: ["Redrum", "Redrum", "Redrum"])
+        device.memoryReadFails = true
+        try await readLockedPreset(model)
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testCandidateChangeDuringMemoryResolutionCannotPublishOldResult() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let oldNames = device.names
+        device.nameResponses = [oldNames]
+        device.names = .init(temporary: "Redrum", memory: ["Redrum", "Redrum", "Redrum"])
+        device.memory[1] = device.temporary
+        device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.displayText, "----")
+        XCTAssertNil(model.displayProfile?.resolvedPreset)
+        XCTAssertEqual(device.memoryReads, [1, 8])
+    }
+
+    func testConfiguredNumberCannotOverrideAFreshDifferentPresetName() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
+                                                                         ".egroups 4", ".fkeys on", ".lock off"])
+        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
+        try stores.hardwareMap.save(map)
+        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".egroups 4", ".lock on", "$end"])
+        let device = DisplayDevice(temporary: data,
+                                   names: .init(
+                                       temporary: "New",
+                                       memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["Old"]
+                                   ))
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        for _ in 0 ..< 80 {
+            if let prompt = model
+                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertNil(model.startupConfiguredPreset)
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(model.displayPresetName, "New")
+    }
+
+    func testConfiguredNumberCannotFollowARenamedMemorySlot() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
+                                                                         ".egroups 4", ".fkeys on", ".lock off"])
+        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
+        try stores.hardwareMap.save(map)
+        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".egroups 4", ".lock on", "$end"])
+        let device = DisplayDevice(temporary: data,
+                                   names: .init(
+                                       temporary: "New",
+                                       memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["New"]
+                                   ))
+        device.memoryReadFails = true
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        for _ in 0 ..< 80 {
+            if let prompt = model
+                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertNil(model.startupConfiguredPreset)
+        XCTAssertEqual(model.displayText, "----")
     }
 }

@@ -122,9 +122,27 @@ public enum BCRPresetAlignment {
             encoderIDs[number] = id; used.insert(id)
         }
         let encoderIdentities = Set(encoderIDs.values)
+        // Locked programming/PRESET keys may already own addresses even though they are not
+        // part of the host's 108-control map. Never allocate one of those addresses to a new key.
+        let reserved = Set(document.buttons.filter { (53 ... 64).contains($0.key) }
+            .values.compactMap(\.easyparIdentity))
+        used.formUnion(reserved)
+        let controlsByNumber = Dictionary(uniqueKeysWithValues: BCRLayout.allControls.compactMap { control in
+            buttonNumber(for: control).map { ($0, control) }
+        })
+        // Prefer an already learned owner of a duplicate address, then use numeric device order.
+        let orderedButtons = document.buttons.keys.filter { (1 ... 52).contains($0) }.sorted { left, right in
+            let learnedLeft = controlsByNumber[left].flatMap { map.midi(for: $0) }
+            let learnedRight = controlsByNumber[right].flatMap { map.midi(for: $0) }
+            let ownsLeft = learnedLeft != nil && learnedLeft == document.buttons[left]?.easyparIdentity
+            let ownsRight = learnedRight != nil && learnedRight == document.buttons[right]?.easyparIdentity
+            return ownsLeft == ownsRight ? left < right : ownsLeft
+        }
         var buttonIDs: [Int: MIDIControlID] = [:]
-        for (number, block) in document.buttons where (1 ... 52).contains(number) {
+        for number in orderedButtons {
+            guard let block = document.buttons[number] else { continue }
             guard let id = block.easyparIdentity, !encoderIdentities.contains(id) else { continue }
+            guard !reserved.contains(id) else { continue }
             if buttonIDs.values.contains(id) { continue }
             buttonIDs[number] = id; used.insert(id)
         }
@@ -224,6 +242,41 @@ public enum BCRPresetAlignment {
         try map.validate()
         return Plan(lines: lines, changes: changes, hardwareMap: map)
     }
+
+    /// Compare the entire document, not whether re-applying selected edits would be a no-op.
+    /// Firmware may reorder numbered sections; statement order and every value remain significant.
+    public static func canonicalLines(_ lines: [String]) throws -> [String] {
+        guard lines.first == "$rev R1", lines.last == "$end", lines.filter({ $0 == "$preset" }).count == 1 else {
+            throw Failure.invalid(L10n.text("需要完整的单个当前预设"))
+        }
+        let document = try Document(lines: lines)
+        let blocks = document.blocks.sorted {
+            let left = $0.header.split(separator: " "), right = $1.header.split(separator: " ")
+            if left[0] != right[0] { return left[0] == "$encoder" }
+            return Int(left[1])! < Int(right[1])!
+        }
+        return ["$rev R1", "$preset"] + document.settings
+            + blocks.flatMap { [$0.header] + $0.statements } + ["$end"]
+    }
+
+    public static func canonicalLines(of dump: Data) throws -> [String] {
+        try canonicalLines(BCRPresetEncoderLearning.decodeLines(dump))
+    }
+
+    public static func readbackMatches(_ dump: Data, expected: [String]) throws -> Bool {
+        try canonicalLines(of: dump) == canonicalLines(expected)
+    }
+
+    /// Runtime knob/button values can change after alignment; they do not identify a preset.
+    /// Full readback verification above deliberately still includes these values.
+    public static func identityLines(of dump: Data) throws -> [String] {
+        try canonicalLines(of: dump).filter { !$0.hasPrefix(".default ") }
+    }
+
+    public static func deviceIdentifier(of dump: Data) throws -> UInt8 {
+        _ = try BCRPresetEncoderLearning.decodeLines(dump)
+        return dump[dump.startIndex + 4]
+    }
 }
 
 /// Minimal structured BCL preset: header settings, then encoder/button sections in order.
@@ -264,6 +317,9 @@ private struct Document {
                 let parts = line.split(separator: " ")
                 guard parts.count == 2, let number = Int(parts[1]),
                       (1 ... 64).contains(number) else { throw BCRPresetAlignment.Failure.invalid(line) }
+                guard !blocks.contains(where: { $0.header == line }) else {
+                    throw BCRPresetAlignment.Failure.invalid(L10n.text("预设区块重复"))
+                }
                 blocks.append(Block(header: line, statements: []))
                 continue
             }

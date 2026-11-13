@@ -19,6 +19,12 @@ struct PresetAlignmentSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             content
+            if model.presetRestorePoint != nil, !state.phase.isBusy, state.phase != .restoreConfirmation,
+               let reason = model.restoreUnavailableReason
+            {
+                Text(reason).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Divider()
             HStack {
                 if let backup = state.backup {
@@ -35,9 +41,10 @@ struct PresetAlignmentSheet: View {
                     .help(backup.path)
                 }
                 Spacer()
-                if state.canRestore || (model.presetRestorePoint != nil && state.phase != .preview) {
+                if model.presetRestorePoint != nil && state.phase != .preview && state.phase != .restoreConfirmation {
                     Button(L10n.text("恢复写入前的预设")) { model.restorePresetBeforeAlignment() }
-                        .disabled(state.phase.isBusy)
+                        .disabled(!model.canRestorePreset)
+                        .help(model.restoreUnavailableReason ?? L10n.text("回读校验后恢复上一层预设和映射"))
                         .accessibilityIdentifier("preset.restore")
                 }
                 Button(state.phase == .finished ? L10n.text("完成") : L10n.text("关闭")) { model.dismissPresetAlignment() }
@@ -80,8 +87,29 @@ struct PresetAlignmentSheet: View {
             ProgressView(L10n.text("正在回读核对…"))
                 .accessibilityIdentifier("preset.verifying")
         case .restoring:
-            ProgressView(L10n.text("正在恢复写入前的预设…"))
+            if let progress = state.restoreProgress {
+                ProgressView(value: Double(progress.done), total: Double(max(1, progress.total))) {
+                    Text(L10n.text("正在恢复预设：\(progress.done)/\(progress.total)，完成后回读核对。"))
+                }
                 .accessibilityIdentifier("preset.restoring")
+            }
+        case .restoreConfirmation:
+            VStack(alignment: .leading, spacing: 12) {
+                Label(L10n.text("对齐后硬件映射已有修改；恢复会替换后续学习结果。当前映射将另行备份，是否继续？"),
+                      systemImage: "exclamationmark.triangle.fill")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("preset.restore.learningWarning")
+                HStack {
+                    Button(L10n.text("取消恢复")) { model.cancelPresetRestore() }
+                        .accessibilityIdentifier("preset.restore.cancel")
+                    Spacer()
+                    Button(L10n.text("确认替换后续学习并恢复"), role: .destructive) {
+                        model.confirmPresetRestoreReplacingLearning()
+                    }
+                    .accessibilityIdentifier("preset.restore.confirm")
+                }
+            }
         case .finished:
             Label(L10n.text("设备与软件已对齐。"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)

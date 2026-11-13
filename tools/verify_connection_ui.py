@@ -162,9 +162,27 @@ def run():
     assert state()["presetWrites"] == 1 and not state()["matchesOriginal"]
     ui.press("preset.close")
     verify_button_function_confirmation()
+    # Leave a later host-map edit, then verify restore cannot silently discard it.
+    ui.press("hardware.buttonFunctions.change")
+    ui.wait(lambda: ui.enabled("hardware.buttonFunctions.confirm"), "Later mapping edit confirmation missing")
+    ui.press("hardware.buttonFunctions.confirm")
+    path = directory / "hardware-map.json"
+    edited_map = json.loads(path.read_text())
     ui.press("surface.devicePresetMenu")
     ui.wait(lambda: ui.exists("preset.menu.restore"), "Restore menu item missing")
     ui.press("preset.menu.restore")
+    ui.wait(lambda: ui.exists("preset.restore.learningWarning"), "Later learning replacement warning missing")
+    assert state()["presetWrites"] == 1 and json.loads(path.read_text()) == edited_map
+    if capture_directory:
+        ui.capture(images / "restore-learning-warning.png", width=width)
+    ui.press("preset.restore.cancel")
+    ui.wait(lambda: not ui.exists("preset.restore.confirm"), "Cancel did not dismiss restore confirmation")
+    assert state()["presetWrites"] == 1 and json.loads(path.read_text()) == edited_map
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.restore"), "Restore did not become available after cancel")
+    ui.press("preset.menu.restore")
+    ui.wait(lambda: ui.exists("preset.restore.confirm"), "Restore replacement confirmation missing")
+    ui.press("preset.restore.confirm")
     ui.wait(lambda: ui.exists("preset.restoring") or ui.exists("preset.finished"), "Restore did not start or finish")
     ui.wait(lambda: ui.exists("preset.finished"), "Restore did not finish")
     assert state()["presetWrites"] == 2 and state()["matchesOriginal"]

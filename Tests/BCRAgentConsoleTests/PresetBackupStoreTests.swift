@@ -68,4 +68,23 @@ final class PresetBackupStoreTests: XCTestCase {
         XCTAssertThrowsError(try store.save(Data("original".utf8), protecting: nil))
         XCTAssertEqual(try Data(contentsOf: url), damaged)
     }
+
+    func testRetentionProtectsEveryRestoreLevelBeyondFiveRecentBackups() throws {
+        let directory = try temporary()
+        let store = PresetBackupStore(directory: directory)
+        let first = try store.save(Data([0]), protecting: nil, now: Date(timeIntervalSince1970: 0))
+        let second = try store.save(Data([1]), protecting: nil, now: Date(timeIntervalSince1970: 1))
+        let pinned: Set<String> = [first.lastPathComponent, second.lastPathComponent]
+        for value in 2 ... 12 {
+            _ = try store.save(
+                Data([UInt8(value)]),
+                protecting: pinned,
+                now: Date(timeIntervalSince1970: Double(value))
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: first), Data([0]))
+        XCTAssertEqual(try Data(contentsOf: second), Data([1]))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count,
+                       PresetBackupStore.recentCount + pinned.count)
+    }
 }

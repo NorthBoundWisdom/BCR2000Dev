@@ -190,7 +190,7 @@ struct SurfacePanelView: View {
                     }
                     .disabled(!model.canRestorePreset)
                     .accessibilityIdentifier("preset.menu.restore")
-                    .help(L10n.text("把最近一次对齐前备份的临时预设写回设备，并恢复当时的本机映射。"))
+                    .help(model.restoreUnavailableReason ?? L10n.text("回读校验后恢复上一层预设和映射"))
                     Divider()
                     Button(L10n.text("在访达中显示备份…")) {
                         OffscreenInteractionPanel.dismiss(id: "devicePresetMenu")
@@ -249,8 +249,9 @@ struct SurfacePanelView: View {
     /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
         VStack(spacing: m(7)) {
-            LEDDisplay(text: model.displayText, busy: model.displayBusy)
-                .help(L10n.text("按设备规则重现：操作开启“显示数值”的控件时短暂显示其数值或 on/oFF，其余时间显示预设号；设备不报告预设号，仅在本软件载入预设后显示。"))
+            LEDDisplay(text: model.displayText, busy: model.displayBusy,
+                       operation: model.displayTransferOperation)
+                .help(L10n.text("按设备规则重现：操作时短暂显示数值或 on/oFF，空闲时显示已确认的预设号；未知时显示 ----。锁定后沿用已确认编号，不猜测预设。"))
             if let name = model.displayPresetName {
                 Text(name)
                     .font(m.font(7.5, weight: .medium, design: .monospaced))
@@ -383,6 +384,7 @@ struct SurfacePanelView: View {
 private struct LEDDisplay: View {
     let text: String
     var busy = false
+    var operation: BCRDisplayModel.TransferOperation = .read
     @Environment(\.panelMetrics) private var m
 
     var body: some View {
@@ -390,10 +392,10 @@ private struct LEDDisplay: View {
             if busy {
                 TimelineView(.periodic(
                     from: .now,
-                    by: 1 / BCRDisplayModel.Calibration.busyFramesPerSecond
+                    by: 1 / BCRDisplayModel.Calibration.framesPerSecond(for: operation)
                 )) { context in
                     BusySegments(frame: BCRDisplayModel.busyFrame(
-                        at: context.date.timeIntervalSinceReferenceDate
+                        at: context.date.timeIntervalSinceReferenceDate, operation: operation
                     ))
                 }
             } else {
@@ -407,7 +409,8 @@ private struct LEDDisplay: View {
         .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
         .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
         .accessibilityLabel(L10n.text("LED 显示"))
-        .accessibilityValue(busy ? L10n.text("设备正在传输预设") : text)
+        .accessibilityValue(busy
+            ? (operation == .write ? L10n.text("设备正在写入预设") : L10n.text("设备正在读取预设")) : text)
     }
 }
 
@@ -418,23 +421,37 @@ private struct BusySegments: View {
     @Environment(\.panelMetrics) private var m
 
     var body: some View {
-        HStack(spacing: m(4)) {
-            ForEach(0 ..< 4, id: \.self) { digit in
-                VStack(spacing: m(12)) {
+        VStack(spacing: m(2)) {
+            HStack(spacing: m(4)) {
+                ForEach(0 ..< 4, id: \.self) { digit in
                     bar(lit: frame == digit, vertical: false)
+                }
+            }
+            HStack {
+                VStack(spacing: m(1.5)) {
+                    bar(lit: frame == 11, vertical: true)
+                    bar(lit: frame == 10, vertical: true)
+                }
+                Spacer(minLength: 0)
+                VStack(spacing: m(1.5)) {
+                    bar(lit: frame == 4, vertical: true)
+                    bar(lit: frame == 5, vertical: true)
+                }
+            }
+            HStack(spacing: m(4)) {
+                ForEach(0 ..< 4, id: \.self) { digit in
                     bar(lit: frame == 9 - digit, vertical: false)
                 }
-                .overlay(alignment: .leading) { if digit == 0 { bar(lit: frame >= 10, vertical: true) } }
-                .overlay(alignment: .trailing) { if digit == 3 { bar(lit: frame == 4 || frame == 5, vertical: true) } }
             }
         }
+        .frame(width: m(60))
     }
 
     private func bar(lit: Bool, vertical: Bool) -> some View {
         Capsule()
             .fill(lit ? Theme.led : Theme.led.opacity(0.12))
             .shadow(color: lit ? Theme.led.opacity(0.7) : .clear, radius: 3)
-            .frame(width: m(vertical ? 2.5 : 12), height: m(vertical ? 12 : 2.5))
+            .frame(width: m(vertical ? 2.5 : 12), height: m(vertical ? 5.5 : 2.5))
     }
 }
 

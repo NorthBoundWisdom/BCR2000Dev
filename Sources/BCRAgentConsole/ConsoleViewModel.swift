@@ -39,11 +39,12 @@ struct ConsoleNotice: Equatable {
 /// Read → preview → confirm → write → verify of the device's temporary preset.
 struct PresetAlignmentState {
     enum Phase: Equatable {
-        case reading, preview, writing(done: Int, total: Int), verifying, finished, restoring, failed(String)
+        case reading, preview, writing(done: Int, total: Int), verifying, finished, restoring, restoreConfirmation,
+             failed(String)
         var isBusy: Bool {
             switch self {
             case .reading, .writing, .verifying, .restoring: true
-            case .preview, .finished, .failed: false
+            case .preview, .finished, .restoreConfirmation, .failed: false
             }
         }
     }
@@ -54,14 +55,7 @@ struct PresetAlignmentState {
     var planError: String?
     var backup: URL?
     var canRestore = false
-}
-
-/// Survives closing the alignment window and restarting the app: what to write back and which
-/// map belonged to it. The preset backup itself stays in `Backups/`.
-struct PresetRestorePoint: Codable, Equatable {
-    var backupFile: String
-    var hardwareMap: HardwareMap
-    var createdAt: Date
+    var restoreProgress: (done: Int, total: Int)?
 }
 
 struct HardwareConnectionPrompt: Identifiable {
@@ -117,7 +111,11 @@ final class ConsoleViewModel: ObservableObject {
     private var declinedHardwareConnectionRoute: MIDIConnectionSnapshot?
     private(set) var startupConfiguredGroup: Int?
     /// Only known after this app loaded the preset itself; the device never reports its preset number.
-    private(set) var startupConfiguredPreset: Int?
+    private(set) var startupConfiguredPreset: Int? {
+        didSet { if startupConfiguredPreset == nil { configuredDisplayContext = nil } }
+    }
+
+    private var configuredDisplayContext: (name: String, route: PresetRestoreRoute)?
     /// The control whose value the panel's LED display shows, as the device does while a control moves.
     /// Not `@Published`: input bursts publish through the session's coalesced frame refresh.
     private(set) var display = BCRDisplayModel()
@@ -140,7 +138,12 @@ final class ConsoleViewModel: ObservableObject {
     private var blinkLevels: [AgentSlotID: UInt8] = [:]
     private let blinkPreference: JSONFileStore<Bool>
     private var presetDump: Data?
-    private var mapBeforeAlignment: HardwareMap?
+    private var presetPreviewRoute: MIDIConnectionSnapshot?
+    private var presetPreviewMap: HardwareMap?
+    private var presetPreviewConfiguration: SurfaceConfiguration?
+    private var presetOperationRoute: MIDIConnectionSnapshot?
+    private var presetOperationID: UUID?
+    private var pendingPresetRestore: PendingPresetRestore?
     /// The last written alignment that can still be undone, independent of the window.
     @Published private(set) var presetRestorePoint: PresetRestorePoint?
     private let restorePointStore: JSONFileStore<PresetRestorePoint>
@@ -428,7 +431,7 @@ final class ConsoleViewModel: ObservableObject {
         connectionOfferTask?.cancel(); connectionOfferTask = nil
         pendingHardwareConnection = nil; declinedHardwareConnectionRoute = nil
         startupConfiguredGroup = nil; startupConfiguredPreset = nil
-        setDisplayPreset(nil)
+        invalidateDisplayNumber()
         clearDisplayedValue()
         clearHardwarePresses()
         hardwareConnectionTask?.cancel()
@@ -446,11 +449,14 @@ final class ConsoleViewModel: ObservableObject {
 
     /// True while a BCL dump or write runs; the device's display animates meanwhile.
     var displayBusy: Bool { display.transfers > 0 }
+    var displayTransferOperation: BCRDisplayModel.TransferOperation { display.transferOperation }
 
     /// Runs one BCL transfer with the panel display animating like the device's.
-    private func withDisplayTransfer<T>(_ body: @MainActor () async throws -> T) async rethrows -> T {
-        display.beginTransfer(); objectWillChange.send()
-        defer { display.endTransfer(); objectWillChange.send() }
+    private func withDisplayTransfer<T>(_ operation: BCRDisplayModel.TransferOperation = .read,
+                                        _ body: @MainActor () async throws -> T) async rethrows -> T
+    {
+        let transfer = display.beginTransfer(operation); objectWillChange.send()
+        defer { display.endTransfer(transfer); objectWillChange.send() }
         return try await body()
     }
 
@@ -506,64 +512,118 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private var displayReadTask: Task<Void, Never>?
+    private var displayReadID: UUID?
+    private var verifiedDisplayNames: (route: MIDIConnectionSnapshot, names: BCRPresetNames)?
 
     /// Read-only, on entering hardware mode. The 33 preset names take under a second and usually
     /// give the number. Full dumps take 12–15 s each on firmware 1.10 (the device display animates
     /// meanwhile), so they run only when nothing is cached for this preset name: once for the
     /// per-control ShowValue settings, and for same-named candidates to resolve the number.
+    /// Cached numbers are trusted only after a fresh name/candidate-list check on this route.
+    private func verifiedConfiguredNumber(_ names: BCRPresetNames, route: MIDIConnectionSnapshot) -> Int? {
+        guard let number = startupConfiguredPreset, let context = configuredDisplayContext,
+              context.route.matches(route), names.temporaryName == context.name,
+              names.memory.indices.contains(number - 1),
+              names.memory[number - 1].trimmingCharacters(in: .whitespaces) == context.name else { return nil }
+        return number
+    }
+
+    private func acceptDisplayNames(_ names: BCRPresetNames, route: MIDIConnectionSnapshot) {
+        verifiedDisplayNames = (route, names)
+        let candidates = names.candidates
+        let cached = displayProfile.flatMap { profile -> Int? in
+            guard profile.name == names.temporaryName, profile.resolvedCandidates == candidates,
+                  let number = profile.resolvedPreset, candidates.contains(number) else { return nil }
+            return number
+        }
+        let configured = verifiedConfiguredNumber(names, route: route)
+        if configured == nil { startupConfiguredPreset = nil }
+        let number = configured ?? names.presetNumber ?? cached
+        setDisplayPreset(number)
+        if displayProfile?.name == names.temporaryName {
+            displayProfile?.resolvedPreset = number
+            displayProfile?.resolvedCandidates = candidates
+            if let profile = displayProfile {
+                do { try displayProfileStore.save(profile) } catch { report(error) }
+            }
+        } else {
+            displayProfile?.resolvedPreset = nil
+            displayProfile?.resolvedCandidates = nil
+        }
+    }
+
+    private func invalidateDisplayNumber() {
+        verifiedDisplayNames = nil
+        setDisplayPreset(nil)
+    }
+
     private func refreshDisplayFromDevice() {
         guard canConfigureMIDI, midi.supportsStartupConfiguration, source == .hardware, connection.isConnected,
-              displayReadTask == nil, presetAlignment?.phase.isBusy != true else { return }
-        let route = connection
+              presetAlignment?.phase.isBusy != true, pendingPresetRestore == nil else { return }
+        let previous = displayReadTask
+        previous?.cancel()
+        let route = connection, id = UUID()
+        displayReadID = id
         displayReadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.displayReadTask = nil }
-            @MainActor func current() -> Bool { self.source == .hardware && self.connection.hasSameRoute(as: route) }
+            defer { if self.displayReadID == id { self.displayReadTask = nil; self.displayReadID = nil } }
+            await previous?.value
             do {
-                let names = try await self.withDisplayTransfer { try await self.midi.readPresetNames() }
-                guard current() else { return }
+                let names = try await self.presetNames(on: route)
                 let candidates = names.candidates
                 let cached = self.displayProfile.flatMap { $0.name == names.temporaryName ? $0 : nil }
-                if self.startupConfiguredPreset == nil {
-                    if candidates.count == 1 {
-                        self.setDisplayPreset(candidates[0])
-                    } else if let cached, cached.resolvedCandidates == candidates {
-                        self.setDisplayPreset(cached.resolvedPreset)
-                    }
-                }
-                let needsNumber = self.startupConfiguredPreset == nil && candidates.count > 1
-                    && cached?.resolvedCandidates != candidates
+                let needsNumber = self.display.preset == nil && candidates.count > 1
                 guard cached == nil || needsNumber else { return }
                 let temporary = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
-                guard current() else { return }
+                try self.requirePresetRoute(route)
                 self.updateDisplayProfile(from: temporary)
                 guard needsNumber, candidates.count <= 4 else { return }
                 var dumps: [Int: Data] = [:]
                 for number in candidates {
-                    guard current(), self.presetAlignment?.phase.isBusy != true else { return }
+                    try self.requirePresetRoute(route)
                     dumps[number] = try await self.withDisplayTransfer { try await self.midi.readMemoryPreset(number) }
                 }
-                guard current() else { return }
+                try self.requirePresetRoute(route)
+                // The candidate set can change during the slow memory dumps. Never publish the
+                // old result after such a change (or leave it visible when a subsequent read fails).
+                let latest = try await self.presetNames(on: route)
+                guard latest.temporaryName == names.temporaryName, latest.candidates == candidates else { return }
                 let number = try BCRPresetNames.resolve(temporary: temporary, candidates: dumps)
                 self.setDisplayPreset(number)
                 self.displayProfile?.resolvedPreset = number
                 self.displayProfile?.resolvedCandidates = candidates
-                if let profile = self.displayProfile { try? self.displayProfileStore.save(profile) }
+                if let profile = self.displayProfile { try self.displayProfileStore.save(profile) }
             } catch {
-                return
+                guard self.displayReadID == id else { return }
+                self.invalidateDisplayNumber()
+                if !(error is CancellationError) {
+                    self.notice = ConsoleNotice(level: .warning,
+                                                text: L10n.text("未能核对预设编号，显示未知：\(error.localizedDescription)"))
+                }
             }
         }
     }
 
     private func updateDisplayProfile(from dump: Data) {
-        guard var profile = try? BCRDisplayProfile.read(fromPresetDump: dump) else { return }
-        // Temporary edits (alignment) keep the name and the preset it was recalled from.
-        if displayProfile?.name == profile.name {
-            profile.resolvedPreset = displayProfile?.resolvedPreset
-            profile.resolvedCandidates = displayProfile?.resolvedCandidates
-        }
-        displayProfile = profile
-        do { try displayProfileStore.save(profile) } catch { report(error) }
+        do {
+            var profile = try BCRDisplayProfile.read(fromPresetDump: dump)
+            if let context = verifiedDisplayNames, connection.hasSameRoute(as: context.route),
+               context.names.temporaryName == profile.name
+            {
+                let candidates = context.names.candidates
+                let cached = displayProfile.flatMap { old -> Int? in
+                    guard old.name == profile.name, old.resolvedCandidates == candidates,
+                          let number = old.resolvedPreset, candidates.contains(number) else { return nil }
+                    return number
+                }
+                let configured = verifiedConfiguredNumber(context.names, route: context.route)
+                profile.resolvedPreset = configured ?? context.names.presetNumber ?? cached
+                profile.resolvedCandidates = candidates
+            }
+            displayProfile = profile
+            setDisplayPreset(profile.resolvedPreset)
+            try displayProfileStore.save(profile)
+        } catch { report(error) }
     }
 
     private func clearHardwarePresses() {
@@ -890,31 +950,70 @@ final class ConsoleViewModel: ObservableObject {
     var canAlignPreset: Bool {
         canConfigureMIDI && midi.supportsStartupConfiguration && source == .hardware && connection.isConnected
             && !isLearning && !connectingHardware && presetAlignment?.phase.isBusy != true
+            && pendingPresetRestore == nil
     }
 
-    /// Reads the current temporary preset (read-only) and prepares a preview. Nothing is written.
+    private func beginPresetWork(route: MIDIConnectionSnapshot) -> UUID {
+        alignmentTask?.cancel()
+        let id = UUID()
+        presetOperationID = id
+        presetOperationRoute = route
+        return id
+    }
+
+    private func finishPresetWork(_ id: UUID) {
+        if presetOperationID == id { presetOperationRoute = nil; presetOperationID = nil }
+    }
+
+    private func requirePresetRoute(_ route: MIDIConnectionSnapshot) throws {
+        try Task.checkCancellation()
+        guard canConfigureMIDI, midi.supportsStartupConfiguration, source == .hardware,
+              connection.isConnected, connection.hasSameRoute(as: route), !isLearning
+        else {
+            throw PresetOperationError(L10n.text("设备连接或操作状态已改变，已停止预设操作。"))
+        }
+    }
+
+    private func presetNames(on route: MIDIConnectionSnapshot) async throws -> BCRPresetNames {
+        try requirePresetRoute(route)
+        invalidateDisplayNumber()
+        let names = try await withDisplayTransfer { try await self.midi.readPresetNames() }
+        try requirePresetRoute(route)
+        acceptDisplayNames(names, route: route)
+        return names
+    }
+
+    /// Reads the current temporary preset and prepares a preview. No device writes.
     func beginPresetAlignment() {
         guard canAlignPreset else {
             notice = ConsoleNotice(level: .warning, text: L10n.text("请先在实体模式下连接 BCR2000，并停止学习。"))
             return
         }
+        let previousDisplayTask = displayReadTask
+        previousDisplayTask?.cancel()
         presetAlignment = PresetAlignmentState(phase: .reading)
-        presetDump = nil; mapBeforeAlignment = nil
-        let route = connection
+        presetDump = nil; presetPreviewRoute = nil
+        let route = connection, id = beginPresetWork(route: connection)
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.finishPresetWork(id) }
+            await previousDisplayTask?.value
             do {
+                do { _ = try await self.presetNames(on: route) }
+                catch {
+                    try self.requirePresetRoute(route)
+                    self.notice = ConsoleNotice(level: .warning,
+                                                text: L10n.text("未能核对预设编号，显示未知：\(error.localizedDescription)"))
+                }
                 let dump = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
-                try Task.checkCancellation()
-                guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
-                self.presetDump = dump
+                try self.requirePresetRoute(route)
+                self.presetDump = dump; self.presetPreviewRoute = route
                 self.updateDisplayProfile(from: dump)
                 self.presetAlignment?.backup = try self.saveBackup(dump)
                 self.presetAlignment?.phase = .preview
                 self.recomputeAlignment()
-            } catch is CancellationError {
-                self.presetAlignment = nil
             } catch {
+                guard self.presetOperationID == id else { return }
                 self.presetAlignment?.phase = .failed(L10n.text("读取设备预设失败：\(error.localizedDescription)"))
             }
         }
@@ -931,6 +1030,8 @@ final class ConsoleViewModel: ObservableObject {
         do {
             state.plan = try BCRPresetAlignment.prepare(dump: dump, hardwareMap: session.learnedHardwareMap,
                                                         configuration: configuration, options: state.options)
+            presetPreviewMap = session.learnedHardwareMap
+            presetPreviewConfiguration = configuration
             state.planError = nil
         } catch {
             state.plan = nil
@@ -939,110 +1040,312 @@ final class ConsoleViewModel: ObservableObject {
         presetAlignment = state
     }
 
-    /// Writes the previewed temporary preset, reads it back and installs the matching map.
+    private func installVerifiedMap(_ map: HardwareMap) throws {
+        try session.installHardwareMap(map)
+        guard try hardwareFile.store.load() == map else {
+            throw PresetOperationError(L10n.text("硬件映射未能保存，恢复点已保留。"))
+        }
+    }
+
+    /// The immutable confirmed document is the readback contract; live configuration edits
+    /// cannot change what was sent or make a correct device response falsely fail verification.
     func applyPresetAlignment() {
         guard var state = presetAlignment, state.phase == .preview, let plan = state.plan, !plan.isEmpty,
-              canConfigureMIDI, source == .hardware, connection.isConnected else { return }
-        // Address the device that produced the dump (its ID is byte 4 of every BCL frame).
-        let device = presetDump.flatMap { $0.count > 4 && $0[4] < 16 ? $0[4] : nil } ?? 0x7F
-        let frames = plan.frames(device: device), options = state.options, route = connection
-        state.phase = .writing(done: 0, total: frames.count)
-        presetAlignment = state
-        let previousMap = session.learnedHardwareMap
-        // The first acknowledged line may already change the device, so the restore point comes first.
-        if let backup = state.backup {
-            saveRestorePoint(PresetRestorePoint(backupFile: backup.lastPathComponent,
-                                                hardwareMap: previousMap, createdAt: .now))
+              canAlignPreset, let route = presetPreviewRoute, let before = presetDump, let backup = state.backup,
+              presetPreviewMap == session.learnedHardwareMap, presetPreviewConfiguration == configuration
+        else {
+            notice = ConsoleNotice(level: .warning, text: L10n.text("请重新读取并确认设备预设预览。"))
+            return
         }
+        do { try requirePresetRoute(route) } catch { report(error); return }
+        let device = before[before.startIndex + 4]
+        let frames = plan.frames(device: device)
+        let previousMap = session.learnedHardwareMap, previousPoint = presetRestorePoint
+        var point = PresetRestorePoint(backupFile: backup.lastPathComponent, hardwareMap: previousMap,
+                                       createdAt: .now, route: PresetRestoreRoute(route),
+                                       expectedPreset: Data(frames.joined()),
+                                       expectedHardwareMap: previousMap, acknowledgedLines: 0,
+                                       history: PresetRestorePoint.history(retaining: previousPoint),
+                                       backupDigest: PresetBackupStore.digest(before))
+        do { try saveRestorePoint(point) } catch { report(error); return }
+        state.phase = .reading
+        presetAlignment = state
+        let previousDisplayTask = displayReadTask
+        previousDisplayTask?.cancel()
+        let id = beginPresetWork(route: route)
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.finishPresetWork(id) }
+            await previousDisplayTask?.value
+            var acknowledged = 0
             do {
-                try await self.withDisplayTransfer {
+                try self.requirePresetRoute(route)
+                let names = try await self.presetNames(on: route)
+                guard names.temporaryName == (try BCRDisplayProfile.read(fromPresetDump: before).name) else {
+                    throw PresetOperationError(L10n.text("预览后设备预设已改变，请重新读取。"))
+                }
+                let current = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
+                try self.requirePresetRoute(route)
+                guard try BCRPresetAlignment.deviceIdentifier(of: current) == device,
+                      try BCRPresetAlignment.identityLines(of: current) == BCRPresetAlignment.identityLines(of: before)
+                else {
+                    throw PresetOperationError(L10n.text("预览后设备预设已改变，请重新读取。"))
+                }
+                guard self.session.learnedHardwareMap == previousMap else {
+                    throw PresetOperationError(L10n.text("写入期间硬件映射已改变，未覆盖后续学习结果。"))
+                }
+                self.presetAlignment?.phase = .writing(done: 0, total: frames.count)
+                try await self.withDisplayTransfer(.write) {
                     try await self.midi.sendPresetFrames(frames) { [weak self] done in
-                        self?.presetAlignment?.phase = .writing(done: done, total: frames.count)
+                        acknowledged = done
+                        guard let self else { return }
+                        self.presetAlignment?.phase = .writing(done: done, total: frames.count)
+                        if self.source != .hardware || !self.connection.hasSameRoute(as: route) || self.isLearning {
+                            self.alignmentTask?.cancel()
+                        }
                     }
                 }
-                self.mapBeforeAlignment = previousMap
-                self.presetAlignment?.canRestore = true
+                try self.requirePresetRoute(route)
                 self.presetAlignment?.phase = .verifying
                 let readback = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
-                guard self.connection.hasSameRoute(as: route) else { throw HardwareSnapshotError.invalid }
-                let check = try BCRPresetAlignment.prepare(dump: readback, hardwareMap: plan.hardwareMap,
-                                                           configuration: self.configuration, options: options)
-                guard check.isEmpty else { throw BCRPresetAlignment.Failure.invalid(L10n.text("回读与写入内容不一致")) }
+                try self.requirePresetRoute(route)
+                guard try BCRPresetAlignment.readbackMatches(readback, expected: plan.lines) else {
+                    throw PresetOperationError(L10n.text("回读与写入内容不一致"))
+                }
+                guard self.session.learnedHardwareMap == previousMap else {
+                    throw PresetOperationError(L10n.text("写入期间硬件映射已改变，未覆盖后续学习结果。"))
+                }
+                let finalNames = try await self.presetNames(on: route)
+                guard finalNames.temporaryName == (try BCRDisplayProfile.read(fromPresetDump: readback).name),
+                      self.session.learnedHardwareMap == previousMap
+                else {
+                    throw PresetOperationError(L10n.text("写入期间预设或映射已改变，未覆盖当前映射。"))
+                }
                 self.updateDisplayProfile(from: readback)
-                try self.session.installHardwareMap(plan.hardwareMap)
-                // Rewritten encoder sections reset to their defaults; the software values are authoritative.
+                try self.installVerifiedMap(plan.hardwareMap)
+                point.expectedPreset = readback; point.expectedHardwareMap = plan.hardwareMap
+                point.acknowledgedLines = acknowledged
+                try self.saveRestorePoint(point)
                 self.session.synchronize()
-                self.presetAlignment?.phase = .finished
-                self.notice = ConsoleNotice(
-                    level: .info,
-                    text: L10n.text("设备临时预设已对齐（\(plan.changes.count) 项）；未写入永久存储。")
-                )
-            } catch is CancellationError {
-                self.presetAlignment?.phase = .failed(L10n.text("写入已取消；设备可能停在部分修改的临时预设，可恢复写入前的预设。"))
-            } catch {
-                self.presetAlignment?.phase = .failed(
-                    L10n.text("写入设备预设失败：\(error.localizedDescription)")
-                        + L10n.text(" 永久存储未改动，可恢复写入前的预设或重新载入设备预设。")
-                )
                 self.presetAlignment?.canRestore = true
+                self.presetAlignment?.phase = .finished
+                self.notice = ConsoleNotice(level: .info,
+                                            text: L10n.text("设备临时预设已对齐（\(plan.changes.count) 项）；未写入永久存储。"))
+            } catch {
+                guard self.presetOperationID == id else { return }
+                // With no acknowledgement there is no confirmed edit to undo. Keep the old level.
+                if acknowledged == 0 {
+                    do { try self.saveRestorePoint(previousPoint) } catch { self.report(error) }
+                } else {
+                    point.acknowledgedLines = acknowledged
+                    // Never adopt an arbitrary unexpected readback as a trusted recovery context.
+                    // Only the original or complete confirmed target document is trusted.
+                    if self.source == .hardware, self.connection.hasSameRoute(as: route), !self.isLearning,
+                       !Task.isCancelled,
+                       let partial = try? await self.withDisplayTransfer(
+                           .read,
+                           { try await self.midi.readCurrentPreset() }
+                       ),
+                       (try? BCRPresetAlignment.deviceIdentifier(of: partial)) == device,
+                       (try? BCRPresetAlignment.identityLines(of: partial)) ==
+                       (try? BCRPresetAlignment.identityLines(of: before))
+                    {
+                        point.expectedPreset = before
+                    }
+                    do { try self.saveRestorePoint(point) } catch { self.report(error) }
+                }
+                self.presetAlignment?.phase = .failed(L10n.text("写入设备预设失败：\(error.localizedDescription)")
+                    + L10n.text(" 永久存储未改动，已保留可用的恢复资料。"))
+                self.presetAlignment?.canRestore = self.canRestorePreset
             }
         }
     }
 
-    var canRestorePreset: Bool {
-        presetRestorePoint != nil && canConfigureMIDI && connection.isConnected && !isLearning
-            && !connectingHardware && presetAlignment?.phase.isBusy != true
+    var restoreUnavailableReason: String? {
+        guard let point = presetRestorePoint else { return L10n.text("没有可用的恢复点。") }
+        guard canConfigureMIDI, midi.supportsStartupConfiguration else { return L10n.text("当前设备不支持预设读写。") }
+        guard source == .hardware, connection.isConnected else { return L10n.text("请先在实体模式下连接原设备。") }
+        guard !isLearning, !connectingHardware else { return L10n.text("请先结束学习或连接操作。") }
+        guard presetAlignment?.phase.isBusy != true,
+              pendingPresetRestore == nil else { return L10n.text("请先结束当前预设操作。") }
+        guard let savedRoute = point.route, point.expectedPreset != nil, point.expectedHardwareMap != nil,
+              point.backupDigest != nil,
+              (point.acknowledgedLines ?? 0) > 0
+        else {
+            return L10n.text("恢复点缺少已验证的设备上下文；备份保留，但不能自动写入。")
+        }
+        guard savedRoute.matches(connection) else { return L10n.text("当前设备路由与恢复点不同，禁止恢复。") }
+        return nil
     }
 
-    /// Writes back the preset read before the last alignment and reinstalls the map from then.
-    /// Works from the window or later from the panel, including after an app restart.
+    var canRestorePreset: Bool { restoreUnavailableReason == nil }
+
+    /// Preflight is read-only: match persistent endpoints, names, and the entire known current
+    /// document before any write. A different same-named preset is rejected by its content.
     func restorePresetBeforeAlignment() {
-        guard canRestorePreset, let point = presetRestorePoint else { return }
-        let url = supportDirectory.appending(path: "Backups").appending(path: point.backupFile)
-        let dump: Data
-        do {
-            dump = try Data(contentsOf: url)
-            // Only a complete, well-formed preset dump (no store/recall) is written back.
-            _ = try BCRPresetAlignment.prepare(dump: dump, hardwareMap: HardwareMap(), configuration: .neutral(),
-                                               options: .init(completeButtons: false, ringModes: false,
-                                                              buttonBehavior: false, lockPreset: false))
-        } catch {
-            notice = ConsoleNotice(level: .error, text: L10n.text("恢复失败：\(error.localizedDescription)"))
+        guard canRestorePreset, let point = presetRestorePoint else {
+            notice = ConsoleNotice(level: .warning, text: restoreUnavailableReason ?? L10n.text("没有可用的恢复点。"))
             return
         }
-        let frames = Array(dump).split(separator: 0xF7, omittingEmptySubsequences: true).map { Array($0) + [0xF7] }
-        if presetAlignment == nil { presetAlignment = PresetAlignmentState(phase: .restoring, backup: url) }
-        presetAlignment?.phase = .restoring
+        let previousDisplayTask = displayReadTask
+        previousDisplayTask?.cancel()
+        let route = connection, id = beginPresetWork(route: connection)
+        presetAlignment = PresetAlignmentState(phase: .reading)
         alignmentTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.finishPresetWork(id) }
+            await previousDisplayTask?.value
             do {
-                try await self.withDisplayTransfer { try await self.midi.sendPresetFrames(frames) { _ in } }
-                self.updateDisplayProfile(from: dump)
-                try self.session.installHardwareMap(point.hardwareMap)
-                self.session.synchronize()
-                self.saveRestorePoint(nil)
-                self.presetAlignment?.canRestore = false
-                self.presetAlignment?.phase = .finished
-                self.notice = ConsoleNotice(level: .info, text: L10n.text("已恢复写入前的设备临时预设和本机映射。"))
+                let dump = try self.restoreDump(point)
+                let names = try await self.presetNames(on: route)
+                let backupName = try BCRDisplayProfile.read(fromPresetDump: dump).name
+                guard names.temporaryName == backupName else {
+                    throw PresetOperationError(L10n.text("当前预设名称与恢复备份不同，禁止恢复。"))
+                }
+                let current = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
+                try self.requirePresetRoute(route)
+                guard try self.matchesRestoreContext(current, point: point, backup: dump) else {
+                    throw PresetOperationError(L10n.text("当前预设已改变，不能自动恢复旧备份。"))
+                }
+                let context = PendingPresetRestore(point: point, dump: dump, route: route,
+                                                   currentMap: self.session.learnedHardwareMap)
+                if context.currentMap != point.expectedHardwareMap {
+                    self.pendingPresetRestore = context
+                    self.presetAlignment?.phase = .restoreConfirmation
+                    return
+                }
+                try await self.performPresetRestore(context)
             } catch {
+                guard self.presetOperationID == id else { return }
                 self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)"))
             }
         }
     }
 
-    private func saveRestorePoint(_ point: PresetRestorePoint?) {
+    func confirmPresetRestoreReplacingLearning() {
+        guard let context = pendingPresetRestore else { return }
+        pendingPresetRestore = nil
+        let id = beginPresetWork(route: context.route)
+        presetAlignment?.phase = .reading
+        alignmentTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.finishPresetWork(id) }
+            do {
+                try self.requirePresetRoute(context.route)
+                guard self.session.learnedHardwareMap == context.currentMap else {
+                    throw PresetOperationError(L10n.text("确认期间映射再次改变，请重新检查恢复操作。"))
+                }
+                let names = try await self.presetNames(on: context.route)
+                guard names.temporaryName == (try BCRDisplayProfile.read(fromPresetDump: context.dump).name) else {
+                    throw PresetOperationError(L10n.text("当前预设名称与恢复备份不同，禁止恢复。"))
+                }
+                let current = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
+                try self.requirePresetRoute(context.route)
+                guard try self.matchesRestoreContext(current, point: context.point, backup: context.dump) else {
+                    throw PresetOperationError(L10n.text("当前预设已改变，不能自动恢复旧备份。"))
+                }
+                let archive = self.presetBackupDirectory
+                    .appending(path: "hardware-map-before-restore-\(UUID().uuidString).json")
+                try JSONFileStore<HardwareMap>(fileURL: archive).save(context.currentMap)
+                try await self.performPresetRestore(context)
+            } catch { self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)")) }
+        }
+    }
+
+    func cancelPresetRestore() {
+        guard pendingPresetRestore != nil else { return }
+        pendingPresetRestore = nil
+        presetAlignment = nil
+        notice = ConsoleNotice(level: .info, text: L10n.text("已取消恢复，设备与映射未改动。"))
+    }
+
+    private func restoreDump(_ point: PresetRestorePoint) throws -> Data {
+        guard point.backupFile == URL(fileURLWithPath: point.backupFile).lastPathComponent else {
+            throw PresetOperationError(L10n.text("恢复备份路径无效。"))
+        }
+        let dump = try Data(contentsOf: presetBackupDirectory.appending(path: point.backupFile))
+        guard point.backupDigest == PresetBackupStore.digest(dump) else {
+            throw PresetOperationError(L10n.text("恢复备份内容已改变，禁止写入。"))
+        }
+        _ = try BCRPresetAlignment.prepare(dump: dump, hardwareMap: HardwareMap(), configuration: .neutral(),
+                                           options: .init(completeButtons: false, ringModes: false,
+                                                          buttonBehavior: false, lockPreset: false))
+        _ = try BCRPresetAlignment.canonicalLines(of: dump)
+        return dump
+    }
+
+    private func matchesRestoreContext(_ current: Data, point: PresetRestorePoint, backup: Data) throws -> Bool {
+        guard let expected = point.expectedPreset,
+              try BCRPresetAlignment.deviceIdentifier(of: current) == BCRPresetAlignment.deviceIdentifier(of: backup)
+        else { return false }
+        let actual = try BCRPresetAlignment.identityLines(of: current)
+        if actual == (try BCRPresetAlignment.identityLines(of: expected)) { return true }
+        // A failed verification can leave the exact approved backup already on the device.
+        // Retrying that known target is safe; arbitrary partial documents are never adopted.
+        guard point.restoreAttempted == true else { return false }
+        return actual == (try BCRPresetAlignment.identityLines(of: backup))
+    }
+
+    private func performPresetRestore(_ context: PendingPresetRestore) async throws {
+        try requirePresetRoute(context.route)
+        guard session.learnedHardwareMap == context.currentMap, presetRestorePoint == context.point else {
+            throw PresetOperationError(L10n.text("恢复上下文已改变，请重新确认。"))
+        }
+        var writingPoint = context.point
+        writingPoint.restoreAttempted = true
+        try saveRestorePoint(writingPoint)
+        let frames = Array(context.dump).split(separator: 0xF7, omittingEmptySubsequences: true)
+            .map { Array($0) + [0xF7] }
+        presetAlignment?.phase = .restoring
+        presetAlignment?.restoreProgress = (0, frames.count)
+        try await withDisplayTransfer(.write) {
+            try await self.midi.sendPresetFrames(frames) { [weak self] done in
+                guard let self else { return }
+                self.presetAlignment?.restoreProgress = (done, frames.count)
+                if self.source != .hardware || !self.connection.hasSameRoute(as: context.route) || self.isLearning {
+                    self.alignmentTask?.cancel()
+                }
+            }
+        }
+        try requirePresetRoute(context.route)
+        presetAlignment?.phase = .verifying
+        let readback = try await withDisplayTransfer { try await self.midi.readCurrentPreset() }
+        try requirePresetRoute(context.route)
+        guard try BCRPresetAlignment.canonicalLines(of: readback) == BCRPresetAlignment
+            .canonicalLines(of: context.dump)
+        else {
+            throw PresetOperationError(L10n.text("恢复回读与备份内容不一致；恢复点已保留。"))
+        }
+        guard session.learnedHardwareMap == context.currentMap else {
+            throw PresetOperationError(L10n.text("写入期间硬件映射已改变，未覆盖后续学习结果。"))
+        }
+        let finalNames = try await presetNames(on: context.route)
+        guard finalNames.temporaryName == (try BCRDisplayProfile.read(fromPresetDump: readback).name),
+              session.learnedHardwareMap == context.currentMap
+        else {
+            throw PresetOperationError(L10n.text("写入期间预设或映射已改变，未覆盖当前映射。"))
+        }
+        updateDisplayProfile(from: readback)
+        try installVerifiedMap(context.point.hardwareMap)
+        try saveRestorePoint(context.point.previous)
+        session.synchronize()
+        presetAlignment?.canRestore = canRestorePreset
+        presetAlignment?.phase = .finished
+        notice = ConsoleNotice(level: .info, text: L10n.text("已回读确认并恢复设备临时预设和本机映射。"))
+    }
+
+    private func saveRestorePoint(_ point: PresetRestorePoint?) throws {
+        if let point { try restorePointStore.save(point) }
+        else if FileManager.default.fileExists(atPath: restorePointStore.fileURL.path) {
+            try FileManager.default.removeItem(at: restorePointStore.fileURL)
+        }
         presetRestorePoint = point
-        do {
-            if let point { try restorePointStore.save(point) }
-            else { try? FileManager.default.removeItem(at: restorePointStore.fileURL) }
-        } catch { report(error) }
     }
 
     func dismissPresetAlignment() {
         guard presetAlignment?.phase.isBusy != true else { return }
         alignmentTask?.cancel(); alignmentTask = nil
+        presetOperationRoute = nil; presetOperationID = nil; pendingPresetRestore = nil
         presetAlignment = nil
     }
 
@@ -1086,7 +1389,7 @@ final class ConsoleViewModel: ObservableObject {
 
     private func saveBackup(_ dump: Data) throws -> URL {
         try PresetBackupStore(directory: presetBackupDirectory)
-            .save(dump, protecting: presetRestorePoint?.backupFile)
+            .save(dump, protecting: presetRestorePoint?.protectedFiles ?? [])
     }
 
     // MARK: Session presentation
@@ -1099,6 +1402,11 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func validateConnectionWork() {
+        if let route = presetOperationRoute,
+           source != .hardware || !connection.hasSameRoute(as: route) || isLearning
+        {
+            alignmentTask?.cancel()
+        }
         if let route = declinedHardwareConnectionRoute,
            !connection.isConnected || !connection.hasSameRoute(as: route)
         {
@@ -1201,13 +1509,17 @@ final class ConsoleViewModel: ObservableObject {
             }
             do {
                 if usingSoftware, let program = prompt.program {
-                    try await self.withDisplayTransfer { try await self.midi.configureStartup(program) }
+                    try await self.withDisplayTransfer(.write) { try await self.midi.configureStartup(program) }
                     try Task.checkCancellation()
                     guard self.source == .mock, self.connection.isConnected,
                           self.connection.hasSameRoute(as: route) else { throw MIDIStartupError.noReply }
                     self.visibleGroup = 1; self.session.selectGroup(1)
                     self.session.selectSource(.hardware)
                     self.observedHardwareGroup = nil; self.startupConfiguredGroup = 1
+                    if let line = program.presetSettings.first(where: { $0.hasPrefix(".name '") }) {
+                        self.configuredDisplayContext = (String(line.dropFirst(7).dropLast())
+                            .trimmingCharacters(in: .whitespaces), PresetRestoreRoute(route))
+                    }
                     self.startupConfiguredPreset = program.preset
                     self.setDisplayPreset(program.preset)
                     self.notice = ConsoleNotice(
@@ -1261,7 +1573,7 @@ final class ConsoleViewModel: ObservableObject {
         case let .connected(snapshot):
             observedHardwareGroup = nil
             startupConfiguredGroup = nil; startupConfiguredPreset = nil
-            setDisplayPreset(nil)
+            invalidateDisplayNumber()
             clearDisplayedValue()
             clearHardwarePresses()
             offerHardwareConnection()

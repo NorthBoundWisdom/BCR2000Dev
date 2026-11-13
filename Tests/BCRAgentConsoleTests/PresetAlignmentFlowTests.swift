@@ -18,8 +18,13 @@ private final class PresetDevice: MIDIService {
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {}
     func readCurrentPreset() async throws -> Data { preset }
+    func readPresetNames() async throws -> BCRPresetNames {
+        .init(temporary: try BCRDisplayProfile.read(fromPresetDump: preset).name ?? "", memory: [])
+    }
+
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         for (index, frame) in frames.enumerated() {
+            try Task.checkCancellation()
             if let failAfter, index >= failAfter { throw MIDIStartupError.noReply }
             written.append(frame); progress(index + 1)
         }

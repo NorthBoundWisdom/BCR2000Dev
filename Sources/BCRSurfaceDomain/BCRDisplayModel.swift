@@ -12,6 +12,7 @@ import Foundation
 ///   (increment) shows the new value.
 /// - Values written *to* the device are not shown; only local manipulation is.
 public struct BCRDisplayModel: Equatable, Sendable {
+    public enum TransferOperation: Equatable, Sendable { case read, write }
     public enum Content: Equatable, Sendable {
         /// The device animates its display while it sends or receives a BCL preset dump.
         case busy
@@ -27,12 +28,20 @@ public struct BCRDisplayModel: Equatable, Sendable {
     public enum Calibration {
         /// 2026-11-12 user report: the device returns faster than 1.5 s. 0.8 s is still an estimate.
         public static let valueHoldSeconds: Double = 0.8
-        /// Existing animation speed; not timed against hardware.
-        public static let busyFramesPerSecond: Double = 12
+        /// 2026-11-13: clockwise; after previewing 2 rotations/s the user requested twice the speed.
+        /// The resulting 4 rotations/s is a visual tuning choice, not a measured firmware rate.
+        public static let busyRotationsPerSecond: Double = 4
         /// Outline indices are clockwise from the top left (see BusySegments in the host).
-        /// Reverse traversal follows the user's counterclockwise "|____|, closing across the top"
-        /// description; individual frames have not been compared with the device.
-        public static let busyFrameSequence = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+        public static let busyFrameSequence = Array(0 ..< 12)
+        public static let busyFramesPerSecond = Double(busyFrameSequence.count) * busyRotationsPerSecond
+        /// Explicit write observation, 2026-11-13: counterclockwise, approximately one turn/s.
+        public static let writeBusyRotationsPerSecond: Double = 1
+        public static let writeBusyFrameSequence = Array((0 ..< 12).reversed())
+
+        public static func framesPerSecond(for operation: TransferOperation) -> Double {
+            operation == .write
+                ? Double(writeBusyFrameSequence.count) * writeBusyRotationsPerSecond : busyFramesPerSecond
+        }
     }
 
     /// Compatibility spelling for the shared presentation calibration.
@@ -41,6 +50,11 @@ public struct BCRDisplayModel: Equatable, Sendable {
     public private(set) var preset: Int?
     /// Number of BCL transfers in flight (observed: the device animates for their whole duration).
     public private(set) var transfers = 0
+    private var transferOperations: [(id: UUID, operation: TransferOperation)] = []
+    public var transferOperation: TransferOperation {
+        transferOperations.contains { $0.operation == .write } ? .write : .read
+    }
+
     public private(set) var transient: (content: Content, until: Double)?
 
     public init(preset: Int? = nil) { self.preset = preset }
@@ -48,6 +62,7 @@ public struct BCRDisplayModel: Equatable, Sendable {
     public static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.preset == rhs.preset && lhs.transfers == rhs.transfers && lhs.transient?.content == rhs.transient?.content
             && lhs.transient?.until == rhs.transient?.until
+            && lhs.transferOperations.map(\.operation) == rhs.transferOperations.map(\.operation)
     }
 
     public mutating func setPreset(_ preset: Int?) {
@@ -74,8 +89,19 @@ public struct BCRDisplayModel: Equatable, Sendable {
 
     public mutating func clearTransient() { transient = nil }
 
-    public mutating func beginTransfer() { transfers += 1; transient = nil }
-    public mutating func endTransfer() { transfers = max(0, transfers - 1) }
+    @discardableResult
+    public mutating func beginTransfer(_ operation: TransferOperation = .read) -> UUID {
+        let id = UUID()
+        transferOperations.append((id, operation))
+        transfers = transferOperations.count; transient = nil
+        return id
+    }
+
+    public mutating func endTransfer(_ id: UUID? = nil) {
+        if let id { transferOperations.removeAll { $0.id == id } }
+        else if !transferOperations.isEmpty { transferOperations.removeLast() }
+        transfers = transferOperations.count
+    }
 
     public func content(at time: Double) -> Content {
         if transfers > 0 { return .busy }
@@ -97,8 +123,12 @@ public struct BCRDisplayModel: Equatable, Sendable {
 
     /// Animation frame while busy, using the estimated timing and user-described order above.
     public static func busyFrame(at time: Double) -> Int {
-        let sequence = Calibration.busyFrameSequence
-        let phase = Int((time * Calibration.busyFramesPerSecond).rounded(.down)) % sequence.count
+        busyFrame(at: time, operation: .read)
+    }
+
+    public static func busyFrame(at time: Double, operation: TransferOperation) -> Int {
+        let sequence = operation == .write ? Calibration.writeBusyFrameSequence : Calibration.busyFrameSequence
+        let phase = Int((time * Calibration.framesPerSecond(for: operation)).rounded(.down)) % sequence.count
         return sequence[(phase + sequence.count) % sequence.count]
     }
 

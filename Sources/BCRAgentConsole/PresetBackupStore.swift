@@ -8,6 +8,10 @@ struct PresetBackupStore {
     let directory: URL
 
     func save(_ dump: Data, protecting restoreFile: String?, now: Date = .now) throws -> URL {
+        try save(dump, protecting: Set(restoreFile.map { [$0] } ?? []), now: now)
+    }
+
+    func save(_ dump: Data, protecting restoreFiles: Set<String>, now: Date = .now) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let candidates = try managedBackups()
         let existing = try candidates.first { try Data(contentsOf: $0) == dump }
@@ -29,14 +33,14 @@ struct PresetBackupStore {
         }
         let kept = Set(recent.prefix(Self.recentCount).map(\.lastPathComponent))
         for candidate in recent where !kept.contains(candidate.lastPathComponent)
-            && candidate.lastPathComponent != restoreFile
+            && !restoreFiles.contains(candidate.lastPathComponent)
         {
             try FileManager.default.removeItem(at: candidate)
         }
         return url
     }
 
-    private static func digest(_ data: Data) -> String {
+    static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 

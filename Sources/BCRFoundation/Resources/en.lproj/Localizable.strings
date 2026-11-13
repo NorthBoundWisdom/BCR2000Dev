@@ -844,3 +844,69 @@
 "无法打开备份文件夹。" = "Could not open the backups folder.";
 "硬件 → 软件（不改动设备）" = "Hardware → Software (no device changes)";
 "离屏测试模式不打开访达。" = "Offscreen test mode does not open Finder.";
+
+"按设备规则重现：操作时短暂显示数值或 on/oFF，空闲时显示已确认的预设号；未知时显示 ----。锁定后沿用已确认编号，不猜测预设。" = "Reconstructs the device display: briefly shows values or on/oFF during input, then the verified preset number when idle. Unknown numbers show ----. Locking retains a verified number; it does not guess one.";
+
+"设备连接或操作状态已改变，已停止预设操作。" = "The device connection or operation state changed. Preset processing stopped.";
+
+"硬件映射未能保存，恢复点已保留。" = "The hardware map could not be saved. The restore point was kept.";
+
+"请重新读取并确认设备预设预览。" = "Read the device preset again and confirm the preview.";
+
+"预览后设备预设已改变，请重新读取。" = "The device preset changed after the preview. Read it again.";
+
+"写入期间硬件映射已改变，未覆盖后续学习结果。" = "The hardware map changed during the write. Later learning was not overwritten.";
+
+"写入期间预设或映射已改变，未覆盖当前映射。" = "The preset or map changed during the write. The current map was not overwritten.";
+
+" 永久存储未改动，已保留可用的恢复资料。" = " Permanent storage was not changed. Available recovery data was kept.";
+
+"没有可用的恢复点。" = "No restore point is available.";
+
+"当前设备不支持预设读写。" = "This device does not support preset reads and writes.";
+
+"请先在实体模式下连接原设备。" = "Connect the original device in Hardware mode first.";
+
+"请先结束学习或连接操作。" = "Finish learning or the connection operation first.";
+
+"请先结束当前预设操作。" = "Finish the current preset operation first.";
+
+"恢复点缺少已验证的设备上下文；备份保留，但不能自动写入。" = "This restore point lacks verified device context. Its backup is kept, but automatic writing is disabled.";
+
+"当前设备路由与恢复点不同，禁止恢复。" = "The current device route differs from the restore point. Restore is blocked.";
+
+"当前预设名称与恢复备份不同，禁止恢复。" = "The current preset name differs from the backup. Restore is blocked.";
+
+"当前预设已改变，不能自动恢复旧备份。" = "The current preset changed. The old backup cannot be restored automatically.";
+
+"确认期间映射再次改变，请重新检查恢复操作。" = "The map changed again during confirmation. Review the restore operation again.";
+
+"已取消恢复，设备与映射未改动。" = "Restore canceled. The device and map were not changed.";
+
+"恢复备份路径无效。" = "The restore backup path is invalid.";
+
+"恢复备份内容已改变，禁止写入。" = "The restore backup contents changed. Writing is blocked.";
+
+"恢复上下文已改变，请重新确认。" = "The restore context changed. Confirm it again.";
+
+"恢复回读与备份内容不一致；恢复点已保留。" = "Restore readback does not match the backup. The restore point was kept.";
+
+"已回读确认并恢复设备临时预设和本机映射。" = "Readback verified. The temporary device preset and local hardware map were restored.";
+
+"回读校验后恢复上一层预设和映射" = "Verify by readback and restore the previous preset and map level";
+
+"取消恢复" = "Cancel restore";
+
+"确认替换后续学习并恢复" = "Replace later learning and restore";
+
+"正在恢复预设：{0}/{1}，完成后回读核对。" = "Restoring preset: {0}/{1}. Readback verification follows.";
+
+"对齐后硬件映射已有修改；恢复会替换后续学习结果。当前映射将另行备份，是否继续？" = "The hardware map changed after alignment. Restore will replace later learning. The current map will be archived first. Continue?";
+
+"未能核对预设编号，显示未知：{0}" = "Could not verify the preset number; showing unknown: {0}";
+
+"预设区块重复" = "Duplicate preset section";
+
+"设备正在写入预设" = "Writing the device preset";
+
+"设备正在读取预设" = "Reading the device preset";
