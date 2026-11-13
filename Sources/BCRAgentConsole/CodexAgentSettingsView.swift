@@ -59,8 +59,7 @@ struct CodexAgentSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 680, height: 660)
-        .preferredColorScheme(.dark)
+        .settingsPage()
     }
 
     private func chooseExecutable() {

@@ -47,7 +47,6 @@ struct ConfigurationLibraryView: View {
             }
         }
         .padding(20)
-        .frame(width: 560, height: 360)
-        .preferredColorScheme(.dark)
+        .settingsPage()
     }
 }

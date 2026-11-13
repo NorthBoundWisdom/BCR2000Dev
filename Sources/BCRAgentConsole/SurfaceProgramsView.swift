@@ -94,7 +94,7 @@ struct SurfaceProgramsView: View {
             }
             if let error { Text(error).foregroundStyle(.red) }
         }
-        .formStyle(.grouped).padding(12).frame(width: 700, height: 580)
+        .formStyle(.grouped).padding(12).settingsPage()
         .confirmationDialog(L10n.text("删除页面及其切换绑定？"), isPresented: Binding(
             get: { deletingPage != nil }, set: { if !$0 { deletingPage = nil } }
         )) {

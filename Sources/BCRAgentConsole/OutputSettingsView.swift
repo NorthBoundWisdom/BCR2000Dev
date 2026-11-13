@@ -3,9 +3,8 @@ import SwiftUI
 
 struct OutputStatusButton: View {
     @ObservedObject var controller: OutputController
-    @State private var showsSettings = false
     var body: some View {
-        Button { showsSettings = true } label: {
+        SettingsChipButton(tab: .output) {
             StatusChip(
                 title: controller.settings.enabled ? L10n
                     .text("输出 · \(controller.status == .ready ? L10n.text("运行") : L10n.text("受限"))") : L10n
@@ -14,9 +13,7 @@ struct OutputStatusButton: View {
                 tint: !controller.settings.enabled ? .secondary : (controller.status == .ready ? .green : .orange)
             )
         }
-        .buttonStyle(.plain)
         .help(L10n.text("设置 OSC 输出、软限位、速度和 LED 来源"))
-        .sheet(isPresented: $showsSettings) { OutputSettingsView(controller: controller) }
     }
 }
 
@@ -62,7 +59,6 @@ struct OutputSettingsView: View {
     @ObservedObject var controller: OutputController
     @State private var draft: OutputSettings
     @State private var confirmsLimits = false
-    @Environment(\.dismiss) private var dismiss
 
     init(controller: OutputController) {
         self.controller = controller
@@ -71,11 +67,7 @@ struct OutputSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                SectionTitle(L10n.text("外部输出"), icon: "arrow.up.forward.circle")
-                Spacer()
-                Button(L10n.text("完成")) { dismiss() }
-            }
+            SectionTitle(L10n.text("外部输出"), icon: "arrow.up.forward.circle")
             Text(controller.reason).foregroundStyle(controller.status == .ready ? .green : .orange)
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             Picker(L10n.text("输出协议"), selection: $draft.transport) {
@@ -143,9 +135,9 @@ struct OutputSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
-        .frame(width: 880, height: 720)
-        .background(Theme.background)
-        .preferredColorScheme(.dark)
+        .settingsPage()
+        // Unsaved edits are dropped whenever the page is shown again, as the former sheet did.
+        .onAppear { draft = controller.settings }
     }
 
     private func numberField(_ value: Binding<Double>, label: String) -> some View {

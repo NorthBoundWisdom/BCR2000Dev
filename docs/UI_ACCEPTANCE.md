@@ -27,6 +27,14 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_pre
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_review_fixes_ui.py
 ```
 
+## 设置窗口合并（2026-11-13）
+
+输出、MCP 与实体 MIDI 端口不再是主窗口 sheet，而是统一设置窗口（固定 880 × 720）的“设备 / 输出 / MCP”页；
+顶栏三个状态胶囊只跳转到对应页。`verify_endpoint_ui.py`、`verify_output_ui.py`、`verify_builtin_names_ui.py`
+的选择器已改为按设置窗口标题定位页面。改后离屏实跑通过：端点（中文）、内置名称（英文）、语言切换（中文）；
+离屏截图接口可保存设置页。`verify_output_ui.py` 必须前台，**改后尚未运行**，其选择器与已通过的端点脚本同构但不能据此记为通过。
+各设置页的中文原生渲染快照已按 880 × 720 检查。
+
 ## 离屏能力（2026-11-13）
 
 本机有人使用桌面时，所有可离屏场景必须显式加 `--offscreen`。不发送系统键盘事件，不激活 App，不打开访达。

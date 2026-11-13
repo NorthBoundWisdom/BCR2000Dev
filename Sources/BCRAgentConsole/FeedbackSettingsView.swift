@@ -79,7 +79,7 @@ struct FeedbackSettingsView: View {
             if let error = controller.error { Text(error).foregroundStyle(.red) }
             Button(L10n.text("应用设置")) { controller.apply(draft) }
         }
-        .formStyle(.grouped).padding(12).frame(width: 560, height: 350)
+        .formStyle(.grouped).padding(12).settingsPage()
         .preferredColorScheme(.dark)
     }
 }

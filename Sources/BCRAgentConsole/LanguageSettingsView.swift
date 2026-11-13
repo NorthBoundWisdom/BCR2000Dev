@@ -28,8 +28,6 @@ struct LanguageSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 480, height: 260)
-        .background(Theme.background)
-        .preferredColorScheme(.dark)
+        .settingsPage()
     }
 }

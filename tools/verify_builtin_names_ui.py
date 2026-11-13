@@ -59,9 +59,9 @@ configuration = directory / "surface-configuration.json"
 before = configuration.read_bytes()
 ui.wait(lambda: translated("mainWindow"), "Workspace did not display builtin names in English")
 press_help("Configure OSC output, soft limits, speed, and LED source", "group 1 of mainWindow")
-ui.wait(lambda: ui.run("return count of sheets of mainWindow") == "1", "Output sheet missing")
-translated("sheet 1 of mainWindow")
-ui.run('perform action "AXPress" of button 1 of group 1 of sheet 1 of mainWindow')
+# The output page lives in the one Settings window, titled after the selected page.
+ui.wait(lambda: ui.run('return count of (windows whose name is "Output")') == "1", "Output settings page missing")
+translated('(first window whose name is "Output")')
 ui.run("set value of scroll bar 1 of scroll area 2 of group 1 of mainWindow to 1.0")
 # The protected enable parameter retains its original group. Pick the Chinese stored group (first in parameter order),
 # whose translated label intentionally matches the original English group; tags remain distinct.

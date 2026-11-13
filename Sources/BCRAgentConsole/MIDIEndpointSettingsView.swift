@@ -4,7 +4,6 @@ import SwiftUI
 struct MIDIEndpointSettingsView: View {
     @ObservedObject var model: ConsoleViewModel
     @State private var draft: MIDIEndpointSelection
-    @Environment(\.dismiss) private var dismiss
 
     init(model: ConsoleViewModel) {
         self.model = model
@@ -13,11 +12,7 @@ struct MIDIEndpointSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                SectionTitle(L10n.text("实体 MIDI 端口"), icon: "cable.connector")
-                Spacer()
-                Button(L10n.text("完成")) { dismiss() }
-            }
+            SectionTitle(L10n.text("实体 MIDI 端口"), icon: "cable.connector")
             Text(L10n.text("自动模式使用 BCR2000 Port 1。手动可选 USB-MIDI 或其他接口；所选端口缺失时不改用其他端口。"))
                 .font(.caption).foregroundStyle(.secondary)
             Form {
@@ -69,8 +64,9 @@ struct MIDIEndpointSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
-        .frame(width: 540, height: 440)
-        .background(Theme.background)
-        .preferredColorScheme(.dark)
+        .settingsPage()
+        .onAppear { draft = model.endpointSelection }
+        // The selection can also change through the MCP endpoint tool while this page is open.
+        .onChange(of: model.endpointSelection) { _, selection in draft = selection }
     }
 }

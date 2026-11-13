@@ -218,17 +218,14 @@ private struct HeaderBar: View {
 
 private struct DeviceStatus: View {
     @ObservedObject var model: ConsoleViewModel
-    @State private var showsPorts = false
 
     var body: some View {
         let (title, detail, color, icon) = status
-        Button { showsPorts = true } label: {
+        SettingsChipButton(tab: .device) {
             StatusChip(title: title, icon: icon, tint: color, detail: detail)
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(L10n.text("MIDI 端口设置：\(title)"))
         .help(L10n.text("选择实体 MIDI 输入与输出端口") + "\n" + detail)
-        .sheet(isPresented: $showsPorts) { MIDIEndpointSettingsView(model: model) }
     }
 
     private var status: (String, String, Color, String) {

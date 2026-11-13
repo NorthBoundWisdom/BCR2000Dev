@@ -62,19 +62,21 @@ return "opened"
 end if
 end repeat
 error "MIDI endpoint button missing"''')
-wait_for(lambda: gui("return count of sheets of window 1") != "0", "MIDI settings sheet missing")
-text = gui("return value of every static text of group 1 of sheet 1 of window 1")
+# Settings pages live in the one Settings window, titled after the selected page.
+PAGE = 'group 1 of group 1 of (first window whose name is "设备")'
+wait_for(lambda: gui('return count of (windows whose name is "设备")') != "0", "MIDI settings page missing")
+text = gui(f"return value of every static text of {PAGE}")
 if "隔离测试未启用实体 MIDI" not in text:
     raise RuntimeError("isolated MIDI state is not visible")
-gui('''repeat with i from 1 to count of buttons of group 1 of sheet 1 of window 1
-if help of button i of group 1 of sheet 1 of window 1 is "保存并重新连接所选 MIDI 输入与输出端口" then
-if enabled of button i of group 1 of sheet 1 of window 1 then error "isolated test enabled physical MIDI"
+gui(f'''repeat with i from 1 to count of buttons of {PAGE}
+if help of button i of {PAGE} is "保存并重新连接所选 MIDI 输入与输出端口" then
+if enabled of button i of {PAGE} then error "isolated test enabled physical MIDI"
 return "disabled"
 end if
 end repeat
 error "Apply endpoint button missing"''')
 for label in ["输入端口", "输出端口"]:
-    if gui(f'return value of pop up button "{label}" of group 1 of sheet 1 of window 1') != "自动 · Port 1":
+    if gui(f'return value of pop up button "{label}" of {PAGE}') != "自动 · Port 1":
         raise RuntimeError("unexpected default endpoint selection")
 if ui.offscreen and os.environ.get("BCR_WINDOWSERVER_PROBE") == "1":
     try:
@@ -82,5 +84,4 @@ if ui.offscreen and os.environ.get("BCR_WINDOWSERVER_PROBE") == "1":
     except (RuntimeError, subprocess.CalledProcessError) as error:
         print("WindowServer probe unavailable for transparent window:", error)
 ui.capture(directory / "endpoint-settings.png", width=1200)
-gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
-print("Native endpoint sheet, default input/output and isolated physical-MIDI lock passed.")
+print("Native endpoint settings page, default input/output and isolated physical-MIDI lock passed.")

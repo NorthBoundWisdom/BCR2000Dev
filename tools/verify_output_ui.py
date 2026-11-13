@@ -37,11 +37,13 @@ def wait_for(check, description, timeout=5):
     raise RuntimeError(description)
 
 
+# Settings pages live in the one Settings window, titled after the selected page.
+PAGE = 'group 1 of group 1 of (first window whose name is "输出")'
+
+
 def press_help(text, area=None, sheet=False):
     container = (
-        "group 1 of sheet 1 of window 1"
-        if sheet
-        else ("group 1 of window 1" if area is None else f"scroll area {area} of group 1 of window 1")
+        PAGE if sheet else ("group 1 of window 1" if area is None else f"scroll area {area} of group 1 of window 1")
     )
     return gui(f'''repeat with i from 1 to count of buttons of {container}
 if help of button i of {container} is "{text}" then
@@ -75,13 +77,12 @@ try:
     port = int(match.group(1))
     gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
     press_help("设置 OSC 输出、软限位、速度和 LED 来源")
-    wait_for(lambda: gui("return count of sheets of window 1") != "0", "output settings did not appear")
-    gui(f'''set focused of text field "端口" of group 1 of sheet 1 of window 1 to true
-set value of text field "端口" of group 1 of sheet 1 of window 1 to "{port}"
+    wait_for(lambda: gui('return count of (windows whose name is "输出")') != "0", "output settings did not appear")
+    gui(f'''set focused of text field "端口" of {PAGE} to true
+set value of text field "端口" of {PAGE} to "{port}"
 key code 48''')
     press_help("启动或停止经过安全门的 OSC 输出", sheet=True)
     wait_for(lambda: safety()["status"] == "disabled", "output did not connect and remain disabled")
-    gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
     client.call("set_parameter", {"id": "arm.j1", "value": 90})
     time.sleep(0.15)
     if abs(client.call("get_parameter", {"id": "arm.j1"})["actualValue"]) > 1e-5:
@@ -104,7 +105,7 @@ key code 48''')
     if abs(safety()["actual"]["arm.j1"] - held) > 1e-4:
         raise RuntimeError("simulator kept moving after disable")
     press_help("设置 OSC 输出、软限位、速度和 LED 来源")
-    gui("click radio button 2 of radio group 1 of group 1 of sheet 1 of window 1")
+    gui(f"click radio button 2 of radio group 1 of {PAGE}")
     wait_for(lambda: client.call("get_status")["ledSource"] == "actual", "actual LED source did not activate")
     if client.call("get_parameter", {"id": "arm.j1"})["value"] != 90:
         raise RuntimeError("actual feedback overwrote target")
@@ -112,7 +113,6 @@ key code 48''')
     ring = next(item for item in controls if item["label"] == "P1-1")["value"]
     if ring == 95:
         raise RuntimeError("actual LED projection still displayed the target")
-    gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
     print("Native disable stopped simulated movement; actual LED projection preserved the software target.")
     time.sleep(0.3)
     press_help("操作 B2-1", area=1)
@@ -142,7 +142,6 @@ key code 48''')
     press_help("设置 OSC 输出、软限位、速度和 LED 来源")
     if safety()["status"] == "disconnected":
         press_help("启动或停止经过安全门的 OSC 输出", sheet=True)
-    gui('perform action "AXPress" of button 1 of group 1 of sheet 1 of window 1')
     wait_for(lambda: safety()["status"] == "waitingRearm", "fresh receiver did not require an operator rearm")
     time.sleep(0.15)
     if abs(safety()["actual"]["arm.j1"]) > 1e-4:

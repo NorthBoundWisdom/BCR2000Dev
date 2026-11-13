@@ -3,27 +3,23 @@ import SwiftUI
 
 struct MCPStatusButton: View {
     @ObservedObject var controller: MCPController
-    @State private var showsSettings = false
 
     var body: some View {
-        Button { showsSettings = true } label: {
+        SettingsChipButton(tab: .mcp) {
             StatusChip(
                 title: controller.integrationTest ? L10n.text("测试 · \(controller.status)") : controller.status,
                 icon: "network",
                 tint: controller.error != nil ? .red : (controller.isListening ? Theme.parameter : .secondary)
             )
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(L10n.text("MCP 设置：\(controller.status)"))
         .help(L10n.text("通用 MCP 接口设置"))
-        .sheet(isPresented: $showsSettings) { MCPSettingsView(controller: controller) }
     }
 }
 
 struct MCPSettingsView: View {
     @ObservedObject var controller: MCPController
     @State private var draft: MCPSettings
-    @Environment(\.dismiss) private var dismiss
 
     init(controller: MCPController) {
         self.controller = controller
@@ -32,11 +28,7 @@ struct MCPSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                SectionTitle(L10n.text("MCP 控制接口"), icon: "network")
-                Spacer()
-                Button(L10n.text("完成")) { dismiss() }
-            }
+            SectionTitle(L10n.text("MCP 控制接口"), icon: "network")
             Toggle(L10n.text("启用本机 MCP 服务"), isOn: Binding(
                 get: { controller.settings.enabled },
                 set: { enabled in Task { await controller.setEnabled(enabled) } }
@@ -60,7 +52,7 @@ struct MCPSettingsView: View {
                 Toggle(L10n.text("参数写入（关闭时只读）"), isOn: $draft.permissions.parameterWrite)
                 Toggle(L10n.text("配置写入（修改分配和定义）"), isOn: $draft.permissions.configurationWrite)
                 Toggle(L10n.text("允许 Agent 启动和中断任务"), isOn: $draft.permissions.agentControl)
-                Toggle(L10n.text("允许控制台设备切换、诊断和 Mock 输入"), isOn: $draft.permissions.deviceControl)
+                Toggle(L10n.text("允许设备源切换、MIDI 端口设置、诊断和 Mock 输入"), isOn: $draft.permissions.deviceControl)
                 Toggle(L10n.text("允许机器人模拟控制"), isOn: $draft.permissions.robotControl)
                 Toggle(L10n.text("允许底盘模拟控制"), isOn: $draft.permissions.chassisControl)
                 Toggle(L10n.text("允许仿真重置、故障和时钟推进"), isOn: $draft.permissions.simulationControl)
@@ -92,8 +84,7 @@ struct MCPSettingsView: View {
             .frame(minHeight: 80)
         }
         .padding(24)
-        .frame(width: 700, height: 720)
-        .background(Theme.background)
-        .preferredColorScheme(.dark)
+        .settingsPage()
+        .onAppear { draft = controller.settings }
     }
 }

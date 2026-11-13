@@ -706,7 +706,7 @@
 "MCP 管道凭据无效" = "Invalid piped MCP credential";
 "MCP 凭据必须从专用管道传入" = "The MCP credential must arrive through a dedicated pipe";
 "切换设备源，需要设备切换权限且外部输出已停止。" = "Change device source; requires device-control permission and stopped external output.";
-"允许控制台设备切换、诊断和 Mock 输入" = "Allow console source changes, diagnostics and Mock input";
+"允许设备源切换、MIDI 端口设置、诊断和 Mock 输入" = "Allow source changes, MIDI port settings, diagnostics and Mock input";
 "允许机器人模拟控制" = "Allow simulated robot control";
 "允许底盘模拟控制" = "Allow simulated chassis control";
 "允许仿真重置、故障和时钟推进" = "Allow simulation reset, faults and clock advancement";
