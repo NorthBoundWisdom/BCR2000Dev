@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import XCTest
 @testable import BCRAgentCore
 @testable import BCRMCPAdapter
@@ -36,6 +37,20 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(L10n.text("参数“\(userName)”已更新。", language: .english), "Parameter “\(userName)” updated.")
         XCTAssertEqual(L10n.text("参数“\(userName)”已更新。", language: .chinese), "参数“\(userName)”已更新。")
         XCTAssertEqual(L10n.render("{1} then {0}", arguments: ["{1}", "second"]), "second then {1}")
+    }
+
+    @MainActor
+    func testRuntimeLanguageInvalidatesTrackedTextWithoutRecreatingTheReader() {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        L10n.setLanguage(.chinese)
+        let changed = XCTestExpectation(description: "localized text observes language")
+        let text = withObservationTracking { L10n.text("参数") } onChange: { changed.fulfill() }
+        XCTAssertEqual(text, "参数")
+        L10n.setLanguage(.english)
+        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 1), .completed)
+        XCTAssertEqual(L10n.text("参数"), "Parameters")
+        XCTAssertEqual(L10n.text("参数", language: .chinese), "参数")
     }
 
     func testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders() throws {

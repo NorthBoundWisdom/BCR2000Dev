@@ -116,10 +116,12 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
 struct BCRAgentConsoleApp: App {
     @NSApplicationDelegateAdaptor(ConsoleAppDelegate.self) private var appDelegate
     @StateObject private var model: ConsoleViewModel
+    @StateObject private var language = LanguageSettings.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        _ = LanguageSettings.shared
         let smoke = CommandLine.arguments.contains("--startup-smoke")
         let connectionFixture = CommandLine.arguments.contains("--connection-fixture")
         guard !connectionFixture || CommandLine.arguments.contains("--integration-test") else {
@@ -183,11 +185,17 @@ struct BCRAgentConsoleApp: App {
         WindowGroup(id: "console") {
             ContentView(model: model)
                 .onAppear {
+                    language.refreshSystemLanguage()
                     #if DEBUG
                         appDelegate.snapshotModel = model
                     #endif
                 }
-                .environment(\.locale, Locale(identifier: L10n.language.rawValue))
+                .environment(\.locale, Locale(identifier: language.language.rawValue))
+                .onReceive(NotificationCenter.default
+                    .publisher(for: NSLocale.currentLocaleDidChangeNotification))
+                { _ in
+                    language.refreshSystemLanguage()
+                }
                 .frame(minWidth: 1_200, minHeight: 760)
                 .background(WindowTitlebar().frame(width: 0, height: 0))
         }
@@ -196,6 +204,13 @@ struct BCRAgentConsoleApp: App {
         .onChange(of: scenePhase, initial: true) { _, phase in
             if phase == .active, CommandLine.arguments.contains("--startup-smoke"), NSApp.windows.isEmpty {
                 openWindow(id: "console")
+            }
+        }
+
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                SettingsLink { Text(L10n.text("设置") + "…") }
+                    .keyboardShortcut(",", modifiers: .command)
             }
         }
 
@@ -210,11 +225,15 @@ struct BCRAgentConsoleApp: App {
                     "Agent",
                     systemImage: "cpu"
                 ) }
-                LanguageSettingsView().tabItem { Label(L10n.text("语言"), systemImage: "globe") }
+                LanguageSettingsView(settings: language).tabItem { Label(L10n.text("语言"), systemImage: "globe") }
                 ConfigurationLibraryView(model: model, library: model.library)
                     .tabItem { Label(L10n.text("配置库"), systemImage: "folder") }
             }
-            .environment(\.locale, Locale(identifier: L10n.language.rawValue))
+            .environment(\.locale, Locale(identifier: language.language.rawValue))
+            .onAppear { language.refreshSystemLanguage() }
+            .onReceive(NotificationCenter.default.publisher(for: NSLocale.currentLocaleDidChangeNotification)) { _ in
+                language.refreshSystemLanguage()
+            }
         }
     }
 }

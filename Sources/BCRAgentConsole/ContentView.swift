@@ -204,6 +204,7 @@ private struct HeaderBar: View {
                 .buttonStyle(.plain)
                 .help(L10n.text("设置"))
                 .accessibilityLabel(L10n.text("设置"))
+                .accessibilityIdentifier("app.settings")
             }
         }
         .padding(.horizontal, ConsoleLayout.padding)

@@ -31,9 +31,28 @@ struct ConsoleNotice: Equatable {
         case saveMigration
     }
 
+    private enum Content: Equatable {
+        case verbatim(String)
+        case localized(LocalizedMessage)
+    }
+
     let level: Level
-    let text: String
+    private let content: Content
     var action: Action?
+    var text: String {
+        switch content {
+        case let .verbatim(text): text
+        case let .localized(message): L10n.text(message)
+        }
+    }
+
+    init(level: Level, text: String, action: Action? = nil) {
+        self.level = level; content = .verbatim(text); self.action = action
+    }
+
+    init(level: Level, message: LocalizedMessage, action: Action? = nil) {
+        self.level = level; content = .localized(message); self.action = action
+    }
 }
 
 /// Read → preview → confirm → write → verify of the device's temporary preset.
@@ -324,7 +343,7 @@ final class ConsoleViewModel: ObservableObject {
             catch { self.report(error) }
         }
         if integrationTest {
-            notice = ConsoleNotice(level: .info, text: L10n.text("隔离集成测试：使用独立配置与内存凭据，不连接实体设备。"))
+            notice = ConsoleNotice(level: .info, message: "隔离集成测试：使用独立配置与内存凭据，不连接实体设备。")
         }
         do {
             let host = try BCRMockAgentHost(
@@ -364,7 +383,7 @@ final class ConsoleViewModel: ObservableObject {
         do {
             try midi.start()
             if connection.isConnected { offerHardwareConnection() }
-        } catch { notice = ConsoleNotice(level: .error, text: L10n.text("CoreMIDI 启动失败：\(error.localizedDescription)"))
+        } catch { notice = ConsoleNotice(level: .error, message: "CoreMIDI 启动失败：\(error.localizedDescription)")
         }
     }
 
@@ -406,7 +425,7 @@ final class ConsoleViewModel: ObservableObject {
             workspacePanels = updated
             return true
         } catch {
-            notice = ConsoleNotice(level: .error, text: L10n.text("面板设置保存失败：\(error.localizedDescription)"))
+            notice = ConsoleNotice(level: .error, message: "面板设置保存失败：\(error.localizedDescription)")
             return false
         }
     }
@@ -415,7 +434,7 @@ final class ConsoleViewModel: ObservableObject {
 
     func applyEndpointSelection(_ selection: MIDIEndpointSelection) {
         guard canConfigureMIDI else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("隔离测试未启用实体 MIDI"))
+            notice = ConsoleNotice(level: .warning, message: "隔离测试未启用实体 MIDI")
             return
         }
         do {
@@ -426,7 +445,7 @@ final class ConsoleViewModel: ObservableObject {
             if isLearning { session.stopLearning() }
             midi.selectEndpoints(selection)
             try midi.start()
-            notice = ConsoleNotice(level: .info, text: L10n.text("MIDI 端口设置已保存；端口缺失时不会自动替换手动选择"))
+            notice = ConsoleNotice(level: .info, message: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
         } catch { report(error) }
     }
 
@@ -593,7 +612,7 @@ final class ConsoleViewModel: ObservableObject {
                 self.invalidateDisplayNumber()
                 if !(error is CancellationError) {
                     self.notice = ConsoleNotice(level: .warning,
-                                                text: L10n.text("未能核对预设编号，显示未知：\(error.localizedDescription)"))
+                                                message: "未能核对预设编号，显示未知：\(error.localizedDescription)")
                 }
             }
         }
@@ -650,7 +669,7 @@ final class ConsoleViewModel: ObservableObject {
             presetNumberEvidence = nil
             invalidateDisplayNumber()
             notice = ConsoleNotice(level: .warning,
-                                   text: L10n.text("未能核对预设编号，显示未知：\(error.localizedDescription)"))
+                                   message: "未能核对预设编号，显示未知：\(error.localizedDescription)")
         }
     }
 
@@ -735,7 +754,7 @@ final class ConsoleViewModel: ObservableObject {
         do {
             notice = ConsoleNotice(
                 level: .info,
-                text: L10n.text("参数“\(BuiltInNamePresentation.displayName(definition.name))”已更新。")
+                message: "参数“\(BuiltInNamePresentation.displayName(definition.name))”已更新。"
             )
             try session.updateParameter(definition)
             return configuration.parameter(definition.id)
@@ -787,7 +806,7 @@ final class ConsoleViewModel: ObservableObject {
     @discardableResult
     func applyBulkAssignment(_ plan: BulkAssignmentPlan) -> Bool {
         do {
-            notice = ConsoleNotice(level: .info, text: L10n.text("已批量分配 \(plan.changes.count) 个控件。"))
+            notice = ConsoleNotice(level: .info, message: "已批量分配 \(plan.changes.count) 个控件。")
             try session.applyBulkAssignment(plan)
             return session.lastConfigurationPersistenceError == nil
         } catch { report(error); return false }
@@ -797,13 +816,13 @@ final class ConsoleViewModel: ObservableObject {
 
     func beginLearning(at control: BCRControlID, format: MIDILearnFormat = .voice) {
         guard session.beginLearning(at: control, format: format) else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("Mock 设备的预设已知，学习只用于实体 BCR2000。"))
+            notice = ConsoleNotice(level: .warning, message: "Mock 设备的预设已知，学习只用于实体 BCR2000。")
             return
         }
         selectedControl = control
         notice = ConsoleNotice(
             level: .info,
-            text: L10n.text("学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。")
+            message: "学习中：请操作实体 \(control.shortName)。完成后会自动跳到本区下一个未学习控件，可连续扫过整排。"
         )
     }
 
@@ -823,7 +842,7 @@ final class ConsoleViewModel: ObservableObject {
         session.stopLearning()
         notice = ConsoleNotice(
             level: .info,
-            text: L10n.text("学习已停止，已学习 \(learnedCount) / \(BCRLayout.allControls.count) 个控件。")
+            message: "学习已停止，已学习 \(learnedCount) / \(BCRLayout.allControls.count) 个控件。"
         )
     }
 
@@ -840,12 +859,12 @@ final class ConsoleViewModel: ObservableObject {
     /// Called only after the inspector confirms the captured binding. No device writes or resync.
     func setHardwareButtonFunctions(_ entry: HardwareMapEntry, enabled: Bool) {
         guard canChangeHardwareButtonFunctions, !entry.control.isContinuous else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("当前无法更改按键功能，请结束学习或设备操作后重试。"))
+            notice = ConsoleNotice(level: .warning, message: "当前无法更改按键功能，请结束学习或设备操作后重试。")
             return
         }
         var map = session.learnedHardwareMap
         guard map.entries.first(where: { $0.control == entry.control }) == entry else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("按键绑定已改变，请重新确认。"))
+            notice = ConsoleNotice(level: .warning, message: "按键绑定已改变，请重新确认。")
             return
         }
         do {
@@ -858,7 +877,7 @@ final class ConsoleViewModel: ObservableObject {
 
     func resetHardwareMap() {
         guard source == .hardware else { return }
-        notice = ConsoleNotice(level: .info, text: L10n.text("实体映射已清空，请重新学习。"))
+        notice = ConsoleNotice(level: .info, message: "实体映射已清空，请重新学习。")
         session.resetHardwareMap()
     }
 
@@ -890,10 +909,10 @@ final class ConsoleViewModel: ObservableObject {
             if migratedConfiguration { try configurationFile.save(configuration) }
             migratedHardwareMap = nil; migratedConfiguration = false
             persistenceNotice = nil
-            notice = ConsoleNotice(level: .info, text: L10n.text("已保存升级后的文件，原文件已备份在同一目录。"))
+            notice = ConsoleNotice(level: .info, message: "已保存升级后的文件，原文件已备份在同一目录。")
         } catch {
             persistenceNotice = ConsoleNotice(level: .error,
-                                              text: L10n.text("保存升级失败：\(error.localizedDescription)"),
+                                              message: "保存升级失败：\(error.localizedDescription)",
                                               action: .saveMigration)
         }
     }
@@ -911,7 +930,7 @@ final class ConsoleViewModel: ObservableObject {
         case .retryConfigurationSave:
             session.retryConfigurationPersistence()
             if session.lastConfigurationPersistenceError == nil {
-                notice = ConsoleNotice(level: .info, text: L10n.text("配置已保存。"))
+                notice = ConsoleNotice(level: .info, message: "配置已保存。")
             }
         }
     }
@@ -933,7 +952,7 @@ final class ConsoleViewModel: ObservableObject {
             try configurationFile.save(candidate)
             notice = ConsoleNotice(
                 level: .info,
-                text: L10n.text("已导入“\(BuiltInNamePresentation.displayName(candidate.name))”；实体映射保留。")
+                message: "已导入“\(BuiltInNamePresentation.displayName(candidate.name))”；实体映射保留。"
             )
             try session.replaceConfiguration(candidate, persist: false)
             return true
@@ -944,7 +963,7 @@ final class ConsoleViewModel: ObservableObject {
         guard let window = NSApp.windows.first(where: {
             $0.isVisible && $0.canBecomeMain && $0.attachedSheet == nil
         }) else {
-            notice = ConsoleNotice(level: .error, text: L10n.text("无法打开配置面板：请先关闭其他对话框。"))
+            notice = ConsoleNotice(level: .error, message: "无法打开配置面板：请先关闭其他对话框。")
             return nil
         }
         NSApp.activate()
@@ -965,7 +984,7 @@ final class ConsoleViewModel: ObservableObject {
         guard response == .OK, let url = panel.url else { return nil }
         do { return try readConfiguration(from: url) }
         catch {
-            notice = ConsoleNotice(level: .error, text: L10n.text("配置导入失败：\(error.localizedDescription)"))
+            notice = ConsoleNotice(level: .error, message: "配置导入失败：\(error.localizedDescription)")
             return nil
         }
     }
@@ -990,9 +1009,9 @@ final class ConsoleViewModel: ObservableObject {
         guard response == .OK, let url = panel.url else { return }
         do {
             try exportConfiguration(to: url)
-            notice = ConsoleNotice(level: .info, text: L10n.text("配置已导出，不含实体映射。"))
+            notice = ConsoleNotice(level: .info, message: "配置已导出，不含实体映射。")
         } catch {
-            notice = ConsoleNotice(level: .error, text: L10n.text("配置导出失败：\(error.localizedDescription)"))
+            notice = ConsoleNotice(level: .error, message: "配置导出失败：\(error.localizedDescription)")
         }
     }
 
@@ -1037,7 +1056,7 @@ final class ConsoleViewModel: ObservableObject {
     /// Reads the current temporary preset and prepares a preview. No device writes.
     func beginPresetAlignment() {
         guard canAlignPreset else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("请先在实体模式下连接 BCR2000，并停止学习。"))
+            notice = ConsoleNotice(level: .warning, message: "请先在实体模式下连接 BCR2000，并停止学习。")
             return
         }
         let previousDisplayTask = displayReadTask
@@ -1054,7 +1073,7 @@ final class ConsoleViewModel: ObservableObject {
                 catch {
                     try self.requirePresetRoute(route)
                     self.notice = ConsoleNotice(level: .warning,
-                                                text: L10n.text("未能核对预设编号，显示未知：\(error.localizedDescription)"))
+                                                message: "未能核对预设编号，显示未知：\(error.localizedDescription)")
                 }
                 let dump = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 try self.requirePresetRoute(route)
@@ -1108,7 +1127,7 @@ final class ConsoleViewModel: ObservableObject {
               canAlignPreset, let route = presetPreviewRoute, let before = presetDump, let backup = state.backup,
               presetPreviewMap == session.learnedHardwareMap, presetPreviewConfiguration == configuration
         else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("请重新读取并确认设备预设预览。"))
+            notice = ConsoleNotice(level: .warning, message: "请重新读取并确认设备预设预览。")
             return
         }
         do { try requirePresetRoute(route) } catch { report(error); return }
@@ -1209,7 +1228,7 @@ final class ConsoleViewModel: ObservableObject {
                 self.presetAlignment?.canRestore = true
                 self.presetAlignment?.phase = .finished
                 self.notice = ConsoleNotice(level: .info,
-                                            text: L10n.text("设备临时预设已对齐（\(plan.changes.count) 项）；未写入永久存储。"))
+                                            message: "设备临时预设已对齐（\(plan.changes.count) 项）；未写入永久存储。")
             } catch {
                 guard self.presetOperationID == id else { return }
                 // With no acknowledgement there is no confirmed edit to undo. Keep the old level.
@@ -1324,7 +1343,7 @@ final class ConsoleViewModel: ObservableObject {
                     throw PresetOperationError(L10n.text("当前预设已改变，不能自动恢复旧备份。"))
                 }
                 let archive = try PresetMapArchiveStore(directory: self.presetBackupDirectory).save(context.currentMap)
-                self.notice = ConsoleNotice(level: .info, text: L10n.text("替换前的映射备份：\(archive.path)"))
+                self.notice = ConsoleNotice(level: .info, message: "替换前的映射备份：\(archive.path)")
                 try await self.performPresetRestore(context, mapArchive: archive)
             } catch {
                 guard self.presetOperationID == id else { return }
@@ -1337,7 +1356,7 @@ final class ConsoleViewModel: ObservableObject {
         guard pendingPresetRestore != nil else { return }
         pendingPresetRestore = nil
         presetAlignment = nil
-        notice = ConsoleNotice(level: .info, text: L10n.text("已取消恢复，设备与映射未改动。"))
+        notice = ConsoleNotice(level: .info, message: "已取消恢复，设备与映射未改动。")
     }
 
     private func restoreDump(_ point: PresetRestorePoint) throws -> Data {
@@ -1453,7 +1472,7 @@ final class ConsoleViewModel: ObservableObject {
         do {
             try saveRestorePoint(confirmed.previous)
             presetAlignment?.canRestore = canRestorePreset
-            notice = ConsoleNotice(level: .info, text: L10n.text("已丢弃当前恢复层；设备、映射和预设备份未改动。"))
+            notice = ConsoleNotice(level: .info, message: "已丢弃当前恢复层；设备、映射和预设备份未改动。")
         } catch { report(error) }
     }
 
@@ -1478,19 +1497,19 @@ final class ConsoleViewModel: ObservableObject {
     func revealPresetBackups(file: URL? = nil) {
         if let file {
             guard FileManager.default.fileExists(atPath: file.path) else {
-                notice = ConsoleNotice(level: .warning, text: L10n.text("备份文件已不存在。"))
+                notice = ConsoleNotice(level: .warning, message: "备份文件已不存在。")
                 return
             }
             guard !skipsFinderWhenOffscreen() else { return }
             NSWorkspace.shared.activateFileViewerSelecting([file])
         } else {
             guard canRevealPresetBackups else {
-                notice = ConsoleNotice(level: .info, text: L10n.text("尚无预设备份。"))
+                notice = ConsoleNotice(level: .info, message: "尚无预设备份。")
                 return
             }
             guard !skipsFinderWhenOffscreen() else { return }
             if !NSWorkspace.shared.open(presetBackupDirectory) {
-                notice = ConsoleNotice(level: .error, text: L10n.text("无法打开备份文件夹。"))
+                notice = ConsoleNotice(level: .error, message: "无法打开备份文件夹。")
             }
         }
     }
@@ -1498,7 +1517,7 @@ final class ConsoleViewModel: ObservableObject {
     /// Offscreen test runs must not open Finder windows on the user's desktop; say so instead.
     private func skipsFinderWhenOffscreen() -> Bool {
         guard OffscreenPresentation.isEnabled else { return false }
-        notice = ConsoleNotice(level: .info, text: L10n.text("离屏测试模式不打开访达。"))
+        notice = ConsoleNotice(level: .info, message: "离屏测试模式不打开访达。")
         return true
     }
 
@@ -1553,7 +1572,7 @@ final class ConsoleViewModel: ObservableObject {
         connectionOfferTask?.cancel()
         declinedHardwareConnectionRoute = nil
         let route = connection
-        notice = ConsoleNotice(level: .info, text: L10n.text("检测到硬件，等待连接稳定…"))
+        notice = ConsoleNotice(level: .info, message: "检测到硬件，等待连接稳定…")
         connectionOfferTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             guard let self else { return }
@@ -1579,7 +1598,7 @@ final class ConsoleViewModel: ObservableObject {
             selectSource(.hardware); return
         }
         guard canConfigureMIDI, connection.isConnected else {
-            notice = ConsoleNotice(level: .warning, text: L10n.text("尚未找到 BCR2000 Port 1，连接后需确认同步方向。"))
+            notice = ConsoleNotice(level: .warning, message: "尚未找到 BCR2000 Port 1，连接后需确认同步方向。")
             return
         }
         offerHardwareConnection()
@@ -1589,7 +1608,7 @@ final class ConsoleViewModel: ObservableObject {
         guard let prompt = pendingHardwareConnection, prompt.id == id else { return }
         declinedHardwareConnectionRoute = prompt.route
         pendingHardwareConnection = nil
-        notice = ConsoleNotice(level: .info, text: L10n.text("保持 Mock，未进行本次硬件同步。"))
+        notice = ConsoleNotice(level: .info, message: "保持 Mock，未进行本次硬件同步。")
     }
 
     func connectHardware(_ id: UUID, mode: HardwareConnectionPrompt.Mode) {
@@ -1659,7 +1678,7 @@ final class ConsoleViewModel: ObservableObject {
                     self.setDisplayPreset(program.preset)
                     self.notice = ConsoleNotice(
                         level: .info,
-                        text: L10n.text("预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。")
+                        message: "预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。"
                     )
                 } else {
                     let expected = self.readableEncoders
@@ -1673,12 +1692,12 @@ final class ConsoleViewModel: ObservableObject {
                     try self.session.adoptHardwareSnapshot(messages)
                     self.observedHardwareGroup = nil; self.startupConfiguredGroup = nil
                     self.startupConfiguredPreset = nil
-                    self.notice = ConsoleNotice(level: .info, text: L10n.text("已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。"))
+                    self.notice = ConsoleNotice(level: .info, message: "已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。")
                 }
             } catch is CancellationError {
                 guard self.startupTaskID == operation else { return }
                 if self.connection.isConnected == false {
-                    self.notice = ConsoleNotice(level: .warning, text: L10n.text("设备已断开，硬件同步已取消；重连后请重新确认。"))
+                    self.notice = ConsoleNotice(level: .warning, message: "设备已断开，硬件同步已取消；重连后请重新确认。")
                 }
             } catch {
                 guard self.startupTaskID == operation else { return }
@@ -1702,11 +1721,11 @@ final class ConsoleViewModel: ObservableObject {
             else { displayReadTask?.cancel(); presetNumberEvidence = nil; startupConfiguredPreset = nil }
             switch source {
             case .mock:
-                notice = ConsoleNotice(level: .info, text: L10n.text("已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。"))
+                notice = ConsoleNotice(level: .info, message: "已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。")
             case .hardware:
                 notice = connection.isConnected
-                    ? ConsoleNotice(level: .info, text: L10n.text("已切换到实体 BCR2000，软件状态已整体回写。"))
-                    : ConsoleNotice(level: .warning, text: L10n.text("已切换到实体模式，但尚未找到 BCR2000 Port 1。"))
+                    ? ConsoleNotice(level: .info, message: "已切换到实体 BCR2000，软件状态已整体回写。")
+                    : ConsoleNotice(level: .warning, message: "已切换到实体模式，但尚未找到 BCR2000 Port 1。")
             }
         case let .connected(snapshot):
             observedHardwareGroup = nil
@@ -1720,12 +1739,12 @@ final class ConsoleViewModel: ObservableObject {
             if source == .hardware {
                 notice = ConsoleNotice(
                     level: .info,
-                    text: L10n.text("已连接 \(snapshot.connectedSource ?? "BCR2000")，软件状态已整体回写。")
+                    message: "已连接 \(snapshot.connectedSource ?? "BCR2000")，软件状态已整体回写。"
                 )
             } else {
                 notice = ConsoleNotice(
                     level: .info,
-                    text: L10n.text("检测到 \(snapshot.connectedSource ?? "BCR2000")。当前仍在 Mock 模式，实体输入只记录不执行。"),
+                    message: "检测到 \(snapshot.connectedSource ?? "BCR2000")。当前仍在 Mock 模式，实体输入只记录不执行。",
                     action: .switchToHardware
                 )
             }
@@ -1844,7 +1863,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func showSurfaceApprovalNotice() {
-        notice = ConsoleNotice(level: .info, text: L10n.text("请在 Agent 页查看详情后批准或拒绝"))
+        notice = ConsoleNotice(level: .info, message: "请在 Agent 页查看详情后批准或拒绝")
     }
 
     func report(_ error: Error) {

@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Persisted language choice. The raw values are stable preferences, never translated labels.
 public enum AppLanguage: String, CaseIterable, Sendable {
@@ -24,7 +25,7 @@ public enum AppLanguage: String, CaseIterable, Sendable {
 
 /// A value-type message keeps interpolation arguments out of the lookup key.
 /// Numbered placeholders allow translations to reorder values without printf type hazards.
-public struct LocalizedMessage: ExpressibleByStringLiteral, ExpressibleByStringInterpolation, Sendable {
+public struct LocalizedMessage: ExpressibleByStringLiteral, ExpressibleByStringInterpolation, Equatable, Sendable {
     public let key: String
     public let arguments: [String]
 
@@ -57,9 +58,15 @@ public struct LocalizedMessage: ExpressibleByStringLiteral, ExpressibleByStringI
 }
 
 public enum L10n {
-    /// Freeze the language for this process. Restart applies a new preference consistently to
-    /// stored notices, native menus, background errors, and SwiftUI without resetting sessions.
-    public static let language = AppLanguage.system.resolved(preferredLanguages: Locale.preferredLanguages)
+    private static let state = LocalizationLanguageState()
+
+    /// Observable reads refresh existing SwiftUI bodies; non-UI callers read under the same lock.
+    public static var language: AppLanguage { state.language }
+
+    @MainActor
+    public static func setLanguage(_ selection: AppLanguage, preferredLanguages: [String] = Locale.preferredLanguages) {
+        state.update(selection.resolved(preferredLanguages: preferredLanguages))
+    }
 
     private static let englishBundle = localizedBundle(.english)
     private static let chineseBundle = localizedBundle(.chinese)
@@ -99,5 +106,27 @@ public enum L10n {
             }
         }
         return result
+    }
+}
+
+/// Observation is independent of SwiftUI/Combine. Mutations are serialized by the host's
+/// main actor; the lock also protects reads from transport and domain callbacks.
+private final class LocalizationLanguageState: Observable, @unchecked Sendable {
+    private let registrar = ObservationRegistrar()
+    private let lock = NSLock()
+    private var value = AppLanguage.system.resolved(preferredLanguages: Locale.preferredLanguages)
+
+    var language: AppLanguage {
+        registrar.access(self, keyPath: \.language)
+        return lock.withLock { value }
+    }
+
+    @MainActor
+    func update(_ language: AppLanguage) {
+        guard lock.withLock({ value != language }) else { return }
+        // Observation callbacks may read the language, so never notify while holding the lock.
+        registrar.withMutation(of: self, keyPath: \.language) {
+            lock.withLock { value = language }
+        }
     }
 }

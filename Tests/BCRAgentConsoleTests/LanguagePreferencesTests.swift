@@ -5,6 +5,11 @@ import XCTest
 @testable import BCRCoreMIDIDriver
 @testable import BCRHTTPTransport
 
+@MainActor
+private final class SystemLanguageFixture {
+    var values = ["zh-Hans"]
+}
+
 final class LanguagePreferencesTests: XCTestCase {
     func testPreferencePersistsAndReturningToSystemRemovesOnlyAppOverride() throws {
         let suite = "BCRLocalizationTests.\(UUID().uuidString)"
@@ -22,5 +27,70 @@ final class LanguagePreferencesTests: XCTestCase {
         }
         defaults.set("unknown-future-language", forKey: AppLanguage.preferenceKey)
         XCTAssertEqual(AppLanguage.saved(in: defaults), .system)
+    }
+
+    @MainActor
+    func testRuntimeSelectionUpdatesExistingTextAndNoticesAndKeepsTheSession() throws {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        let suite = "BCRLanguageRuntime.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = LanguageSettings(defaults: defaults, preferredLanguages: { ["zh-Hans"] })
+        let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm,
+                                     automaticallyAdvancesMock: false)
+        model.setParameter("arm.j1", to: 37)
+        let configuration = model.configuration, epoch = model.provider.runtime.epoch
+        let values = model.engine.parameterValues
+        let userName = "My 参数 {0}"
+        let notice = ConsoleNotice(level: .warning, message: "参数“\(userName)”已更新。")
+        XCTAssertEqual(settings.language, .chinese)
+        XCTAssertEqual(notice.text, "参数“\(userName)”已更新。")
+        settings.selection = .english
+        XCTAssertEqual(L10n.text("设置"), "Settings")
+        XCTAssertEqual(notice.text, "Parameter “\(userName)” updated.")
+        XCTAssertEqual(AppLanguage.saved(in: defaults), .english)
+        settings.selection = .chinese
+        XCTAssertEqual(notice.text, "参数“\(userName)”已更新。")
+        XCTAssertEqual(model.configuration, configuration)
+        XCTAssertEqual(model.provider.runtime.epoch, epoch)
+        XCTAssertEqual(model.engine.parameterValues, values)
+        XCTAssertEqual(model.engine.value(of: "arm.j1"), 37)
+    }
+
+    @MainActor
+    func testSystemSelectionRefreshesAndIgnoresThePriorAppOverride() throws {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        let suite = "BCRLanguageSystem.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let languages = SystemLanguageFixture()
+        let settings = LanguageSettings(defaults: defaults, preferredLanguages: { languages.values })
+        settings.selection = .english
+        languages.values = ["zh-Hans"]
+        settings.selection = .system
+        XCTAssertEqual(settings.language, .chinese)
+        XCTAssertNil(defaults.persistentDomain(forName: suite)?["AppleLanguages"])
+        languages.values = ["en"]
+        settings.refreshSystemLanguage()
+        XCTAssertEqual(settings.language, .english)
+        settings.selection = .chinese
+        settings.refreshSystemLanguage()
+        XCTAssertEqual(settings.language, .chinese)
+    }
+
+    @MainActor
+    func testSmokeLanguageOverrideDoesNotChangeTheSavedUserSelection() throws {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        let suite = "BCRLanguageSmoke.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        AppLanguage.chinese.save(in: defaults)
+        let settings = LanguageSettings(defaults: defaults, initialSelection: .system, preferredLanguages: { ["en"] })
+        XCTAssertEqual(settings.language, .english)
+        XCTAssertEqual(AppLanguage.saved(in: defaults), .chinese)
+        XCTAssertEqual(defaults.persistentDomain(forName: suite)?["AppleLanguages"] as? [String], ["zh-Hans"])
     }
 }

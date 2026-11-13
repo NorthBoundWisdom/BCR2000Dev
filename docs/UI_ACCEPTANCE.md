@@ -18,6 +18,7 @@ python3 configs/macos_workflow.py build
 ```bash
 python3 tools/mcp_integration.py --connection-fixture --script tools/verify_connection_ui.py
 python3 tools/mcp_integration.py --language en --configuration-write --script tools/verify_builtin_names_ui.py
+python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_language_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_configuration_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_endpoint_ui.py
 python3 tools/mcp_integration.py --configuration-write --script tools/verify_functions_ui.py
@@ -35,6 +36,7 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 | 脚本 | 模式 | 语言与依据 |
 | --- | --- | --- |
 | `verify_connection_ui.py` | 可离屏 | 中英文；离屏专用非激活面板承载原有连接/对齐视图、菜单和确认动作，全部状态断言保留；系统原生菜单/确认框的呈现仍由原前台路径验证 |
+| `verify_language_ui.py` | 可离屏 | 中文启动，通过实际设置控件在同进程切换中英文；主窗口、设置、窗口标题、设置菜单、参数/名称/配置保留及桌面审计通过 |
 | `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
 | `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
 | `verify_functions_ui.py` | 可离屏 | 中文；步进/指定/循环、批量分配和保留参数值通过 |
@@ -86,6 +88,7 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 
 | 脚本 | 覆盖范围 | 最近验收 |
 | --- | --- | --- |
+| `verify_language_ui.py` | 同进程中文→English→中文即时切换；原生设置及应用设置命令更新，MCP参数值/用户命名/磁盘配置不变 | 2026-11-13 离屏通过 |
 | `verify_builtin_names_ui.py` | 中文存储的参数/分组在英文工作区、批量预览、输出设置中翻译；浏览不改 JSON/MCP 原名 | 2026-11-12 通过 |
 | `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；分类汇总/展开/收起、选项、写入进度、单键功能确认/取消/启用/禁用、回读及恢复 | 2026-11-13 中英文通过 |
 | `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 2026-11-11 通过 |
