@@ -680,7 +680,7 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
   普通产品和前台验收仍走原生控件。所有状态断言、文案、业务入口不变；不新增用户数据格式或公开合同。
   这是对测试呈现的适配，不能用它证明系统原生菜单/确认窗口本身不抢焦点；后者本轮未前台验证。
 
-### F3 续作验收（实现提交号由下一条收尾索引补齐）
+### F3 续作验收 — `17aca89`（已完成，限制见下）
 
 - 改动文件：`Sources/BCRAgentConsole/OffscreenActivationGuard.swift`、`OffscreenInteractionPanel.swift`、
   `OffscreenPresentation.swift`、`IntegrationWindowCapture.swift`、`ContentView.swift`、`ControlInspectorView.swift`、
@@ -713,3 +713,17 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
   Python SDK 6 项、失败 0。build、双语离屏 smoke、全部上述可离屏脚本、域边界、命令校验、compileall、
   全仓格式检查及暂存 diff 检查通过。双语 strings 未新增，plutil 首次沿用旧 Core 资源路径失败，
   改为实际 Foundation 资源路径后两份均 OK。格式器改动已重新暂存并复跑；没有修改任何现有测试断言。
+
+### F1–F3 最终提交索引
+
+- F1：`74b4925`，F2：`62e68d8`，F3：通知/参数部分 `397bb77`，严格连接验收续作 `17aca89`。
+  以上均已 rebase 到 origin/main 的 `d8e15a4`；历史旧号与中间失败记录保留。
+- F1–F3 按本计划范围完成；F2 的三个必须前台脚本、名称脚本的英文语义与 F3 测试专用呈现限制以能力表为准。
+  F4 未处理；没有真实设备连接或真实 MIDI/SysEx，没有 push/tag。
+- 本次索引只改 PLAN.md，补齐已存在实现提交的真实编号；不修改实现、测试、验收步骤或原始结果。
+  对应已验证实现：五模块 545 项、失败 0；BuildWorkflow 124 项、失败 0；SDK 6 项、失败 0。
+  App 场景均为上述离屏记录，没有前台验收；原生系统菜单/确认呈现与三个前台脚本仍未验证。
+
+- 索引提交前复查：五模块再次全部 PASS，545 项、失败 0，545 个独立进程、116.695 s；
+  BuildWorkflow 再次 124 项、失败 0；域边界、命令校验、全仓格式和暂存 diff 检查通过。
+  仅文档索引变动，复用 17aca89 的上述 build/离屏 App 场景证据，不新增前台运行。
