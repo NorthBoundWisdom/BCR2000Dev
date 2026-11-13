@@ -1637,6 +1637,12 @@ final class ConsoleViewModel: ObservableObject {
             try rememberPresetNumber(evidence.number, dump: readback, names: finalNames, route: context.route,
                                      originalDefinition: evidence.originalDefinition,
                                      uniquenessProven: evidence.uniquenessProven)
+        } else if let proven = try presetNumberMemory.number(for: readback, names: finalNames, route: context.route) {
+            // Evidence rebuilt after a restart lacks the original definition, but the restored document
+            // itself may have a content-uniqueness proof on this route (from the preview before the
+            // alignment). Only such proofs qualify; manual session confirmations never do.
+            try rememberPresetNumber(proven, dump: readback, names: finalNames, route: context.route,
+                                     uniquenessProven: true)
         }
         updateDisplayProfile(from: readback)
         try installVerifiedMap(context.point.hardwareMap)

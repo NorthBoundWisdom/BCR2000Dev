@@ -415,6 +415,26 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(proofStore.load()).allSatisfy { $0.uniquenessProven == true })
     }
 
+    func testRestoreAfterRestartUsesTheContentProofOfTheRestoredDefinition() async throws {
+        let (model, device, stores, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.memory = [1: device.preset, 8: BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safety'", "$end"])]
+        // The preview proves slot 1 for the original definition by comparing the same-named slots.
+        try await align(model)
+        XCTAssertEqual(model.displayText, "P- 1")
+        model.dismissPresetAlignment()
+
+        // 2026-11-14 on hardware: after an app restart the restore wrote the original back but showed ----.
+        let restarted = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        restarted.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(restarted.displayText, "P- 1")
+        let reads = device.memoryReads
+        restarted.restorePresetBeforeAlignment(); try await settle(restarted) { $0 == .finished }
+        XCTAssertEqual(restarted.displayText, "P- 1")
+        XCTAssertEqual(device.memoryReads, reads, "the recorded proof needs no further slot dumps")
+    }
+
     func testFailedWriteCannotKeepThePreviousLockProof() async throws {
         let (model, device, _, root) = try await context(aligned: false)
         defer { try? FileManager.default.removeItem(at: root) }
