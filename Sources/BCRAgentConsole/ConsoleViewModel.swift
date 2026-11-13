@@ -651,8 +651,7 @@ final class ConsoleViewModel: ObservableObject {
                 try self.requirePresetRoute(route)
                 self.updateDisplayProfile(from: temporary)
                 if needsNumber {
-                    try await self.resolveDisplayNumber(temporary: temporary, names: names, route: route,
-                                                        compareLockedMemory: true)
+                    try await self.resolveDisplayNumber(temporary: temporary, names: names, route: route)
                 }
             } catch {
                 guard self.displayReadID == id, !Task.isCancelled,
@@ -687,7 +686,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func resolveDisplayNumber(temporary: Data, names: BCRPresetNames,
-                                      route: MIDIConnectionSnapshot, compareLockedMemory: Bool = false) async throws
+                                      route: MIDIConnectionSnapshot) async throws
     {
         try requirePresetRoute(route)
         if let evidence = presetNumberEvidence, try evidence.matches(temporary, names: names, on: route) {
@@ -706,10 +705,10 @@ final class ConsoleViewModel: ObservableObject {
         }
         presetNumberEvidence = nil
         let candidates = names.candidates
-        // Previews skip extra locked-memory reads. Connection refresh can check a
-        // stored locked preset in the background without delaying the preview.
-        guard (profile.locked != true || compareLockedMemory),
-              candidates.count > 1, candidates.count <= 4 else { return }
+        // A locked copy without proof is usually an aligned (edited) copy that can never match a
+        // stored slot; two more full dumps (~24 s of device busy time) on every connection would be
+        // futile. Such copies use the recorded proof above or the explicit screen confirmation.
+        guard profile.locked != true, candidates.count > 1, candidates.count <= 4 else { return }
         var dumps: [Int: Data] = [:]
         for number in candidates {
             try requirePresetRoute(route)

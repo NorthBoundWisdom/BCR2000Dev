@@ -421,16 +421,16 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertNil(repaired.resolvedPreset)
     }
 
-    func testLockedStoredPresetGetsAContentProvenNumberInTheBackground() async throws {
+    func testLockedCopyWithoutProofSkipsTheSlowSameNamedSlotDumpsOnConnection() async throws {
         let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
         defer { try? FileManager.default.removeItem(at: directory) }
         device.memory[1] = device.temporary
         device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
         model.selectSource(.hardware)
         try await Task.sleep(for: .milliseconds(250))
-        XCTAssertEqual(model.displayContent, .preset(1))
-        XCTAssertEqual(BCRSevenSegmentDisplay.masks(for: model.displayContent), [0x73, 0x40, 0, 0x06])
-        XCTAssertEqual(device.memoryReads, [1, 8])
+        // Connecting reads only names and the working copy; no ~24 s of extra device busy time.
+        XCTAssertEqual(model.displayContent, .unknown)
+        XCTAssertEqual(device.memoryReads, [])
         XCTAssertEqual(device.writes, 0)
     }
 
@@ -474,7 +474,7 @@ final class LockedPresetDisplayTests: XCTestCase {
     }
 
     func testProvenNumberSurvivesARestartOnlyForTheIdenticalWorkingCopy() async throws {
-        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        let (model, device, directory) = try model(cachedName: "Redrum", locked: false, cachedPreset: nil)
         defer { try? FileManager.default.removeItem(at: directory) }
         device.memory[1] = device.temporary
         device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
