@@ -406,7 +406,7 @@
 "未开启参数写入权限" = "Parameter writes are not enabled";
 "未开启配置写入权限" = "Configuration writes are not enabled";
 "未找到 BCR2000 Port 1（建议 USB 模式 U-1）" = "BCR2000 Port 1 not found (USB mode U-1 recommended)";
-"未找到 BCR2000 Port 1，请连接设备或手动选择端口" = "BCR2000 Port 1 not found. Connect the device or select ports manually.";
+"未找到 BCR2000 Port 1 或唯一的 BCR2000 端口，请连接设备或手动选择端口" = "Neither BCR2000 Port 1 nor a single BCR2000 port was found. Connect the device or select ports manually.";
 "未找到可执行文件：{0}" = "Executable not found: {0}";
 "未找到待处理审批 request-id={0}" = "No pending approval for request-id={0}";
 "未收到对端心跳，已停止输出" = "No peer heartbeat received; output stopped";

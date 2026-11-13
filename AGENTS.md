@@ -17,7 +17,8 @@
 - OSC policy uses float32 with exact representable actual seeds; JSON/WebSocket/rosbridge use Double. Production OSC/WS/rosbridge stamp monotonic time at actual IO receipt and use bounded handoff; gate/cadence/RTT consume only that channel once. Date remains audit/fixture compatibility, never a production freshness clock. Invalid host clocks reject ordinary writes; only explicit safety close/fault paths use the last trusted time.
 - Views render state and emit user intent; they do not own MIDI or Mock business logic.
 - Do not guess a user's BCR2000 preset. Keep physical controls behind the persisted Quick Learn profile.
-- Port 1 is the preferred BCR2000 control-surface endpoint, with a visible disconnected/error state.
+- Port 1 is the preferred BCR2000 control-surface endpoint, with a visible disconnected/error state. Without any
+  Port 1, automatic mode accepts only a sole unnumbered `BCR2000` endpoint per direction (PLAN G3).
 
 ## Code Rules
 

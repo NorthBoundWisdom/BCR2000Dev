@@ -31,7 +31,7 @@ public enum MIDIEndpointSelectionError: Error, LocalizedError, Equatable, Sendab
         switch self {
         case .invalidSettings: L10n.text("MIDI 端口设置版本或身份无效")
         case .missingSelectedEndpoint: L10n.text("手动选择的 MIDI 端口不可用，请重新选择；未自动切换其他端口")
-        case .missingPortOne: L10n.text("未找到 BCR2000 Port 1，请连接设备或手动选择端口")
+        case .missingPortOne: L10n.text("未找到 BCR2000 Port 1 或唯一的 BCR2000 端口，请连接设备或手动选择端口")
         }
     }
 }
@@ -46,14 +46,17 @@ public enum MIDIEndpointPolicy {
             }
             return endpoint
         }
-        guard let endpoint = endpoints
-            .first(where: {
-                $0.name.localizedCaseInsensitiveContains("BCR2000") && $0.name
-                    .localizedCaseInsensitiveContains("Port 1")
-            })
-        else {
+        let devices = endpoints.filter { $0.name.localizedCaseInsensitiveContains("BCR2000") }
+        if let portOne = devices.first(where: { $0.name.localizedCaseInsensitiveContains("Port 1") }) {
+            return portOne
+        }
+        // Some Macs enumerate the BCR2000 as one unnumbered endpoint per direction (named just
+        // "BCR2000", PLAN G3). Accept it only when it is the sole BCR2000 endpoint and names no
+        // port, so a lone Port 2/3 (THRU/external MIDI) never captures automatic mode.
+        let unnumbered = devices.filter { !$0.name.localizedCaseInsensitiveContains("Port") }
+        guard devices.count == 1, let only = unnumbered.first else {
             throw MIDIEndpointSelectionError.missingPortOne
         }
-        return endpoint
+        return only
     }
 }

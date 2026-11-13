@@ -65,7 +65,7 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | begin_control_learn | control: 控件对象 | 仅实体源、健康路由、外部输出停止时等待实际输入；拒绝覆盖已有学习映射 |
 | stop_control_learn | 空对象 | 停止学习，需要配置写入 |
 | restrict_configuration_write | 空对象 | 关闭配置写入权限；GUI 持久化，独立服务按进程启动策略；不能通过 MCP 重新开启 |
-| list_midi_endpoints | 空对象 | sources/destinations（id、name、availabilityKnown）、selection（sourceID/destinationID，null 为自动 Port 1；宿主无此设置时整体为 null）、实际连接的端口 ID/名称与 error |
+| list_midi_endpoints | 空对象 | sources/destinations（id、name、availabilityKnown）、selection（sourceID/destinationID，null 为自动：优先 Port 1，没有 Port 1 时仅接受唯一且不带端口号的 BCR2000；宿主无此设置时整体为 null）、实际连接的端口 ID/名称与 error |
 | set_midi_endpoints | sourceID、destinationID: 整数或 null | 保存后的 selection。需要 parameterWrite 与 deviceControl；外部输出停止、无学习活动、无预设操作；ID 必须来自 list_midi_endpoints，所选端口缺失时不改用其他端口；独立服务未提供此设置 |
 | get_preset_alignment | 空对象 | 对齐状态：phase（none/reading/preview/writing/verifying/finished/restoring/restoreConfirmation/failed）、busy、progress（done/total 或 null）、error、planError、options、plan（changeCount、lineCount、changes[kind/control/detail]）、backupFile（仅文件名）、canPreview、hasRestorePoint、canRestore、restoreUnavailableReason |
 | preview_preset_alignment | 可选布尔：completeButtons、ringModes、buttonBehavior、lockPreset、enableButtonFunctions（缺省同对齐窗口） | 开始读取设备临时预设并生成预览（备份到本机，不写设备），立即返回状态；轮询 get_preset_alignment 直到 phase=preview |
