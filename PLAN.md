@@ -1140,3 +1140,19 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
   才接受；单独的 Port 2/3、多个同名端点仍报错。AGENTS.md、MCP 文档与错误文案同步；选择器标签“自动 · Port 1”保持不变。
 - G4 观察的“改端口后回到 mock”属既有设计：`requiresHardwareConfirmation` 下路由变化即回 Mock，需用户确认或显式
   `set_device_source hardware`；未改。
+
+### G5 — 设置窗口收尾（2026-11-14，用户让出桌面并授权执行窗口决定观感取舍）
+
+1. 前台验收：`verify_output_ui.py`、`verify_precision_ui.py`、`verify_configuration_ui.py` 通过。configuration 脚本两处过时：
+   检查器文本框的 AppleScript name 为空（标签在 description），改按 description 查找；导出键集补 v7 的 pages/macros/activePageID。
+   改版后复跑 endpoint、language（离屏）、output、builtin_names（英文）、configuration、precision 全部通过；
+   output 在同一构建首次于“使能后限速输出”等待超时，重跑通过，记为偶发，未查原因。
+2. 中英文六页均在真实设置窗口按窗口 ID 截图目视（截图在会话临时目录，未入库）。
+3. 留白（执行窗口决定）：八页合为六页——通用（语言 + 配置库）、设备（MIDI 端口 + 反馈调度）、输出、MCP、Agent、页面与宏；
+   默认打开“通用”。配置库补空状态与说明；空文本框补占位提示。输出、MCP 保持原平铺布局（控件密集，验收路径稳定）。
+4. 应用反馈：有未应用修改时提示“切换页面或关闭窗口会丢弃”，成功后短暂显示“已应用”（Agent 为“已保存”）。
+   草稿仍不跨页保留（执行窗口决定：保持原行为但明示）。
+5. 一致性：MCP 服务开关、LED 环显示标注“即时生效”；Agent 页注明“改动立即用于本次运行，保存后重启保留”；README 列出各页生效方式。
+6. README 四张主窗口截图用 `capture_readme_screenshots.py` 重拍（脚本不依赖旧 sheet），设置描述改为六页结构。
+7. `docs/UI_ACCEPTANCE.md` 端点行与各脚本最近验收日期已更新。
+- 观察未处理：打开含文本框的分组表单页时系统创建 500 × 500 不在屏幕上的空白窗口（文本框自动聚焦所致），用户不可见。

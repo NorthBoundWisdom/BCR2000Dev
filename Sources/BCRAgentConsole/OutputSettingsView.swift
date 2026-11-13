@@ -59,6 +59,7 @@ struct OutputSettingsView: View {
     @ObservedObject var controller: OutputController
     @State private var draft: OutputSettings
     @State private var confirmsLimits = false
+    @State private var applied = 0
 
     /// Starting and stopping the output is a separate action, not a pending edit.
     private var hasChanges: Bool {
@@ -99,14 +100,18 @@ struct OutputSettingsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .help(L10n.text("启动或停止经过安全门的 OSC 输出"))
-                Button(L10n.text("应用设置")) { controller.apply(draft) }
-                    .disabled(!hasChanges)
+                Button(L10n.text("应用设置")) {
+                    controller.apply(draft)
+                    if controller.error == nil { applied += 1 }
+                }
+                .disabled(!hasChanges)
                 Button(L10n.text("重新生成限位草稿…")) { confirmsLimits = true }
                     .confirmationDialog(L10n.text("按当前参数范围重建限位草稿？"), isPresented: $confirmsLimits) {
                         Button(L10n.text("重建草稿"), role: .destructive) {
                             draft.limits = OutputSettings.defaults(for: controller.session.engine.configuration).limits
                         }
                     } message: { Text(L10n.text("尚未应用的限位编辑会被替换，实际输出设置不会立即改变。")) }
+                ApplyStatusLabel(dirty: hasChanges, applied: applied)
             }
             Picker(L10n.text("LED 环显示"), selection: Binding(
                 get: { controller.settings.ledSource },
@@ -118,6 +123,7 @@ struct OutputSettingsView: View {
             .pickerStyle(.segmented)
             Text(L10n.text("实际回传只投影到连续参数灯环，不覆盖目标。使能与触发按键 LED 始终反映软件目标。"))
                 .font(.caption).foregroundStyle(.secondary)
+            ImmediateEffectNote()
             Divider()
             ScrollView {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {

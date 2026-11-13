@@ -62,8 +62,9 @@ return "opened"
 end if
 end repeat
 error "MIDI endpoint button missing"''')
-# Settings pages live in the one Settings window, titled after the selected page.
-PAGE = 'group 1 of group 1 of (first window whose name is "设备")'
+# Settings pages live in the one Settings window, titled after the selected page. The Device page is a
+# grouped form: the port section comes first, feedback scheduling second.
+PAGE = 'group 1 of scroll area 1 of group 1 of (first window whose name is "设备")'
 wait_for(lambda: gui('return count of (windows whose name is "设备")') != "0", "MIDI settings page missing")
 text = gui(f"return value of every static text of {PAGE}")
 if "隔离测试未启用实体 MIDI" not in text:

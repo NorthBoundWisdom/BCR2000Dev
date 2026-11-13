@@ -4,6 +4,7 @@ import SwiftUI
 struct CodexAgentSettingsView: View {
     @ObservedObject var controller: CodexAgentController
     @ObservedObject var model: ConsoleViewModel
+    @State private var saved = 0
     var body: some View {
         Form {
             Section(L10n.text("Agent 按键灯")) {
@@ -21,11 +22,11 @@ struct CodexAgentSettingsView: View {
                 Text("Codex").tag(AgentBackend.codex)
             }
             HStack {
-                TextField(L10n.text("可执行文件"), text: $controller.executable)
+                TextField(L10n.text("可执行文件"), text: $controller.executable, prompt: Text(L10n.text("codex 可执行文件的绝对路径")))
                 Button(L10n.text("选择文件…")) { chooseExecutable() }
             }
             .disabled(controller.phase != .stopped && controller.phase != .failed)
-            TextField(L10n.text("工作目录"), text: $controller.workspace)
+            TextField(L10n.text("工作目录"), text: $controller.workspace, prompt: Text(L10n.text("工作目录的绝对路径")))
                 .disabled(controller.phase != .stopped && controller.phase != .failed)
             HStack {
                 Button(L10n.text("连接")) { Task { await controller.connect() } }
@@ -50,8 +51,14 @@ struct CodexAgentSettingsView: View {
             Toggle(L10n.text("允许写入当前工作目录"), isOn: $controller.allowWorkspaceWrites)
             Text(L10n.text("默认只读；写入仅限所选目录。审批前请查看 Agent 页中的操作详情。"))
                 .font(.caption).foregroundStyle(.secondary)
-            TextField(L10n.text("任务内容"), text: $controller.prompt, axis: .vertical).lineLimit(3 ... 6)
-            Button(L10n.text("保存设置")) { controller.savePreferences() }
+            TextField(L10n.text("任务内容"), text: $controller.prompt, prompt: Text(L10n.text("描述要执行的任务")), axis: .vertical)
+                .lineLimit(3 ... 6)
+            HStack {
+                Button(L10n.text("保存设置")) { if controller.savePreferences() { saved += 1 } }
+                ApplyStatusLabel(dirty: false, applied: saved, confirmation: L10n.text("已保存"))
+            }
+            Text(L10n.text("改动立即用于本次运行；“保存设置”后重启仍保留。"))
+                .font(.caption).foregroundStyle(.secondary)
             Text(L10n.text("设置不保存任务内容，重新打开后不会自动连接或启动任务。"))
                 .font(.caption).foregroundStyle(.secondary)
             Text(L10n.text("连接不会启动任务；从 Agent 页或绑定按键明确启动。"))

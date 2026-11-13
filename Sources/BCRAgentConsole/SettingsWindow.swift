@@ -3,33 +3,29 @@ import SwiftUI
 
 /// Every setting lives in the one Settings window; status chips only jump to their page.
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case device, output, mcp, agent, programs, feedback, library, language
+    case general, device, output, mcp, agent, programs
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .general: L10n.text("通用")
         case .device: L10n.text("设备")
         case .output: L10n.text("输出")
         case .mcp: "MCP"
         case .agent: "Agent"
         case .programs: L10n.text("页面与宏")
-        case .feedback: L10n.text("反馈调度")
-        case .library: L10n.text("配置库")
-        case .language: L10n.text("语言")
         }
     }
 
     var icon: String {
         switch self {
+        case .general: "gearshape"
         case .device: "cable.connector"
         case .output: "arrow.up.forward.circle"
         case .mcp: "network"
         case .agent: "cpu"
         case .programs: "square.stack"
-        case .feedback: "speedometer"
-        case .library: "folder"
-        case .language: "globe"
         }
     }
 }
@@ -37,7 +33,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 @MainActor
 final class SettingsNavigation: ObservableObject {
     static let shared = SettingsNavigation()
-    @Published var tab: SettingsTab = .device
+    @Published var tab: SettingsTab = .general
 }
 
 enum SettingsLayout {
@@ -75,15 +71,49 @@ struct SettingsRootView: View {
     @ViewBuilder
     private func page(_ tab: SettingsTab) -> some View {
         switch tab {
-        case .device: MIDIEndpointSettingsView(model: model)
+        case .general: GeneralSettingsView(model: model, language: language)
+        case .device: DeviceSettingsView(model: model)
         case .output: OutputSettingsView(controller: model.output)
         case .mcp: MCPSettingsView(controller: model.mcp)
         case .agent: CodexAgentSettingsView(controller: model.codex, model: model)
         case .programs: SurfaceProgramsView(model: model)
-        case .feedback: FeedbackSettingsView(controller: model.feedbackSettings)
-        case .library: ConfigurationLibraryView(model: model, library: model.library)
-        case .language: LanguageSettingsView(settings: language)
         }
+    }
+}
+
+/// Inline state beside an Apply button. Drafts live in the page, so the dirty hint also says that
+/// leaving the page drops them; a successful apply shows a short confirmation.
+struct ApplyStatusLabel: View {
+    let dirty: Bool
+    /// Incremented by the page after each successful apply.
+    let applied: Int
+    var confirmation = L10n.text("已应用")
+    @State private var showsApplied = false
+
+    var body: some View {
+        Group {
+            if dirty {
+                Label(L10n.text("有未应用的修改；切换页面或关闭窗口会丢弃"), systemImage: "pencil.circle")
+                    .foregroundStyle(.orange)
+            } else if showsApplied {
+                Label(confirmation, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            }
+        }
+        .font(.caption)
+        .accessibilityIdentifier("settings.applyStatus")
+        .task(id: applied) {
+            guard applied > 0 else { return }
+            showsApplied = true
+            try? await Task.sleep(for: .seconds(2))
+            showsApplied = false
+        }
+    }
+}
+
+/// A caption for a control that takes effect immediately on a page that otherwise uses Apply.
+struct ImmediateEffectNote: View {
+    var body: some View {
+        Text(L10n.text("即时生效，不需要“应用”")).font(.caption).foregroundStyle(.secondary)
     }
 }
 

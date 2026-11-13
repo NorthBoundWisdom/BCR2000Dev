@@ -243,12 +243,10 @@ struct BCRAgentConsoleApp: App {
             ("mcp", AnyView(MCPSettingsView(controller: model.mcp)), SettingsLayout.size),
             ("output", AnyView(OutputSettingsView(controller: model.output)), SettingsLayout.size),
             ("console", AnyView(ContentView(model: model)), CGSize(width: 1200, height: 760)),
-            ("endpoints", AnyView(MIDIEndpointSettingsView(model: model)), SettingsLayout.size),
+            ("device", AnyView(DeviceSettingsView(model: model)), SettingsLayout.size),
             ("agents", AnyView(CodexAgentSettingsView(controller: model.codex, model: model)), SettingsLayout.size),
             ("programs", AnyView(SurfaceProgramsView(model: model)), SettingsLayout.size),
-            ("feedback", AnyView(FeedbackSettingsView(controller: model.feedbackSettings)), SettingsLayout.size),
-            ("language", AnyView(LanguageSettingsView()), SettingsLayout.size),
-            ("library", AnyView(ConfigurationLibraryView(model: model, library: model.library)), SettingsLayout.size)
+            ("general", AnyView(GeneralSettingsView(model: model)), SettingsLayout.size)
         ]
         for (name, content, size) in previews {
             let hosting = NSHostingView(rootView: content.environment(

@@ -32,7 +32,7 @@ try:
     source = client.call("get_status")["source"]
     ui.wait(lambda: "跟随触碰" in main_tree(), "Initial Chinese interface missing")
     ui.press("app.settings")
-    ui.press_description("语言")
+    ui.press_description("通用")
     ui.wait(lambda: ui.exists("app-language"), "Language settings missing")
     ui.press_description("English")
     ui.wait(lambda: "Follow Touch" in main_tree(), "Main window did not switch to English")
@@ -41,7 +41,7 @@ try:
         "Open settings did not update",
     )
     ui.wait(lambda: "Settings…" in ui.run("return entire contents of menu bar 1"), "Settings command did not update")
-    assert "Language" in ui.run("return name of every window"), "Settings window title did not update"
+    assert "General" in ui.run("return name of every window"), "Settings window title did not update"
     ui.capture(directory / "language-english.png", width=1200)
     assert client.call("get_parameter", {"id": "arm.j1"})["value"] == 37
     assert config.read_bytes() == stored
@@ -51,7 +51,7 @@ try:
         lambda: "系统对话框按钮及 macOS 系统错误描述需重启应用后切换" in all_windows(),
         "Open settings did not switch back",
     )
-    assert "语言" in ui.run("return name of every window"), "Settings window title did not switch back"
+    assert "通用" in ui.run("return name of every window"), "Settings window title did not switch back"
     ui.capture(directory / "language-chinese.png", width=1200)
     assert client.call("get_parameter", {"id": "arm.j1"})["value"] == 37
     assert client.call("get_status")["source"] == source

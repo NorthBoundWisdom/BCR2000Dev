@@ -495,7 +495,7 @@
 "缺少参数：{0}" = "Missing argument: {0}";
 "缺少必要字段：{0}" = "Missing required field: {0}";
 "自动 · Port 1" = "Automatic · Port 1";
-"自动模式使用 BCR2000 Port 1。手动可选 USB-MIDI 或其他接口；所选端口缺失时不改用其他端口。" = "Automatic mode uses BCR2000 Port 1. Select USB-MIDI or another interface manually; a missing selected port will not be replaced.";
+"自动模式优先 BCR2000 Port 1，没有 Port 1 时使用唯一的 BCR2000 端口。手动可选 USB-MIDI 或其他接口；所选端口缺失时不改用其他端口。" = "Automatic mode prefers BCR2000 Port 1 and, without it, uses the only BCR2000 port. Manually choose USB-MIDI or another interface; a missing selected port is never replaced by another one.";
 "自定义" = "Custom";
 "范围无效：最小值 {0} 必须小于最大值 {1}" = "Invalid range: minimum {0} must be less than maximum {1}";
 "行长度超限" = "Line length limit exceeded";
@@ -989,3 +989,14 @@
 "把当前预览写入设备临时预设并回读校验，不写永久存储；需要设备切换与配置写入权限。" = "Writes the current preview to the device's temporary preset and verifies it by readback, without storing it permanently. Requires device-switch and configuration-write permissions.";
 "回读核对后恢复对齐前的设备临时预设和映射；需要设备切换与配置写入权限。" = "After a readback check, restores the device's temporary preset and mapping from before the alignment. Requires device-switch and configuration-write permissions.";
 "关闭空闲的预设对齐窗口，不写设备。" = "Closes an idle preset alignment window without writing the device.";
+"有未应用的修改；切换页面或关闭窗口会丢弃" = "Unapplied changes; switching pages or closing the window discards them";
+"已应用" = "Applied";
+"即时生效，不需要“应用”" = "Takes effect immediately; no Apply needed";
+"还没有保存的配置。保存后可在这里载入或删除。" = "No saved configurations yet. Saved ones can be loaded or deleted here.";
+"保存参数、分配、页面与宏，不含硬件映射；载入前确认，会替换当前全部参数与分配。" = "Saves parameters, assignments, pages and macros, never the hardware map. Loading asks first and replaces all current parameters and assignments.";
+"已保存" = "Saved";
+"改动立即用于本次运行；“保存设置”后重启仍保留。" = "Changes apply to this run immediately; Save Settings keeps them after a restart.";
+"输入名称后保存" = "Enter a name, then save";
+"codex 可执行文件的绝对路径" = "Absolute path to the codex executable";
+"工作目录的绝对路径" = "Absolute workspace path";
+"描述要执行的任务" = "Describe the task";

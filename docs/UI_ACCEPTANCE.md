@@ -32,8 +32,16 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 输出、MCP 与实体 MIDI 端口不再是主窗口 sheet，而是统一设置窗口（固定 880 × 720）的“设备 / 输出 / MCP”页；
 顶栏三个状态胶囊只跳转到对应页。`verify_endpoint_ui.py`、`verify_output_ui.py`、`verify_builtin_names_ui.py`
 的选择器已改为按设置窗口标题定位页面。改后离屏实跑通过：端点（中文）、内置名称（英文）、语言切换（中文）；
-离屏截图接口可保存设置页。`verify_output_ui.py` 必须前台，**改后尚未运行**，其选择器与已通过的端点脚本同构但不能据此记为通过。
-各设置页的中文原生渲染快照已按 880 × 720 检查。
+离屏截图接口可保存设置页。`verify_output_ui.py` 必须前台，2026-11-14 前台通过。
+
+## 设置窗口收尾（2026-11-14）
+
+八页合并为六页：通用（语言 + 配置库）、设备（MIDI 端口 + 反馈调度）、输出、MCP、Agent、页面与宏；默认打开“通用”。
+“设备”页改为分组表单，`verify_endpoint_ui.py` 的页面路径随之改为 `group 1 of scroll area 1 of group 1`；
+`verify_language_ui.py` 经“通用”页切换语言、按窗口标题“General/通用”断言。中英文六页均在真实设置窗口按窗口 ID 截图目视检查。
+应用按钮旁显示“有未应用的修改”或短暂的“已应用/已保存”；即时生效的控件注明“即时生效”。
+观察：打开含文本框的分组表单页时，系统会创建一个 500 × 500、不在屏幕上的空白辅助窗口（文本框自动获得焦点所致，
+替换为纯文本即消失）；用户不可见，未处理。
 
 ## 离屏能力（2026-11-13）
 
@@ -47,10 +55,10 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 | `verify_startup_display_ui.py` | 可离屏 | 延迟假MIDI初始化，首帧/MCP先可用；同名锁定存储预设确认P- 1及显式实机编号确认，零设备写入 |
 | `verify_language_ui.py` | 可离屏 | 中文启动，通过实际设置控件在同进程切换中英文；主窗口、设置、窗口标题、设置菜单、参数/名称/配置保留及桌面审计通过 |
 | `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
-| `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
+| `verify_endpoint_ui.py` | 可离屏 | 中文；设置窗口“设备”页（分组表单第一段）的端点默认值/禁用状态与页面截图通过 |
 | `verify_functions_ui.py` | 可离屏 | 中文；步进/指定/循环、批量分配和保留参数值通过 |
 | `verify_review_fixes_ui.py` | 可离屏 | 中文；MCP 保护、复位跳过报告、大角度 Canvas 自身渲染通过 |
-| `verify_configuration_ui.py` | **必须前台** | 产品文件面板主动 activate/makeKeyAndOrderFront，且路径选择依赖系统键盘；本轮保留原验收步骤，未前台运行 |
+| `verify_configuration_ui.py` | **必须前台** | 产品文件面板主动 activate/makeKeyAndOrderFront，且路径选择依赖系统键盘；2026-11-14 前台通过 |
 | `verify_output_ui.py` | **必须前台** | 不聚焦时 AXSetValue + AXConfirm 未提交动态端口，原连接状态断言失败；保留原 Tab 提交和全部输出验收步骤 |
 | `verify_precision_ui.py` | **必须前台** | 不聚焦时 AXSetValue + AXConfirm 未提交 0.25 步长，原步长断言失败；保留原 Tab 提交和全部精度验收步骤 |
 
@@ -97,14 +105,14 @@ Mock 机械臂示例预置，不读取生产配置或 Keychain，不启动实体
 
 | 脚本 | 覆盖范围 | 最近验收 |
 | --- | --- | --- |
-| `verify_language_ui.py` | 同进程中文→English→中文即时切换；原生设置及应用设置命令更新，MCP参数值/用户命名/磁盘配置不变 | 2026-11-13 离屏通过 |
-| `verify_builtin_names_ui.py` | 中文存储的参数/分组在英文工作区、批量预览、输出设置中翻译；浏览不改 JSON/MCP 原名 | 2026-11-12 通过 |
+| `verify_language_ui.py` | 同进程中文→English→中文即时切换；原生设置及应用设置命令更新，MCP参数值/用户命名/磁盘配置不变 | 2026-11-14 离屏通过（经“通用”页） |
+| `verify_builtin_names_ui.py` | 中文存储的参数/分组在英文工作区、批量预览、输出设置中翻译；浏览不改 JSON/MCP 原名 | 2026-11-14 通过 |
 | `verify_connection_ui.py` | 连接确认/拒绝/读取；三次预览零写入且备份去重；分类汇总/展开/收起、选项、写入进度、单键功能确认/取消/启用/禁用、回读及恢复 | 2026-11-13 中英文通过 |
-| `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出；非法文件拒绝；替换确认及保留硬件映射 | 2026-11-11 通过 |
-| `verify_endpoint_ui.py` | MIDI 端点设置；默认自动 Port 1；隔离模式禁止应用实体端口 | 2026-11-11 通过 |
+| `verify_configuration_ui.py` | 参数草稿刷新 / 冲突解决；原生导入导出（含 v7 页面与宏字段）；非法文件拒绝；替换确认及保留硬件映射 | 2026-11-14 前台通过 |
+| `verify_endpoint_ui.py` | MIDI 端点设置；默认自动（Port 1 优先）；隔离模式禁止应用实体端口 | 2026-11-14 通过 |
 | `verify_functions_ui.py` | 步进 / 指定 / 循环按键；参数吸附；整行分配预览确认及保留运行值 | 2026-11-11 通过 |
-| `verify_output_ui.py` | 本机 OSC 仿真；使能、限速、停机；实际 LED；接收端断线 / 重启后重新使能 | 2026-11-11 通过 |
-| `verify_precision_ui.py` | 相对 1 / 2、每格步长编辑；Mock NRPN 回路与 14-bit 读数 | 2026-11-11 通过 |
+| `verify_output_ui.py` | 本机 OSC 仿真；使能、限速、停机；实际 LED；接收端断线 / 重启后重新使能 | 2026-11-14 前台通过（同一构建首次在“使能后限速输出”等待超时，重跑通过，记为偶发） |
+| `verify_precision_ui.py` | 相对 1 / 2、每格步长编辑；Mock NRPN 回路与 14-bit 读数 | 2026-11-14 前台通过 |
 | `verify_review_fixes_ui.py` | MCP 保护使能参数；复位跳过报告；启用可选机械臂预览及极大有限值渲染 | 2026-11-11 通过 |
 
 2026-11-11 OSC 验收中，接收端丢失后 309 ms 内告警；它是本机仿真结果，不代表真实机械臂的停机保证。

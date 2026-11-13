@@ -20,6 +20,7 @@ struct MCPStatusButton: View {
 struct MCPSettingsView: View {
     @ObservedObject var controller: MCPController
     @State private var draft: MCPSettings
+    @State private var applied = 0
 
     /// The service switch saves immediately and is not part of the draft.
     private var hasChanges: Bool {
@@ -40,6 +41,7 @@ struct MCPSettingsView: View {
                 get: { controller.settings.enabled },
                 set: { enabled in Task { await controller.setEnabled(enabled) } }
             ))
+            ImmediateEffectNote()
             HStack {
                 Text(controller.endpoint).font(.body.monospaced()).textSelection(.enabled)
                 Spacer()
@@ -67,13 +69,19 @@ struct MCPSettingsView: View {
             }
             .formStyle(.columns)
             HStack {
-                Button(L10n.text("应用设置")) { Task { await controller.apply(draft) } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!hasChanges)
+                Button(L10n.text("应用设置")) {
+                    Task {
+                        await controller.apply(draft)
+                        if controller.error == nil { applied += 1 }
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!hasChanges)
                 Button(L10n.text("复制 Token")) { Task { await controller.copyToken() } }
                     .disabled(!controller.settings.enabled || controller.isStarting)
                 Button(L10n.text("复制连接命令")) { Task { await controller.copyConnectionCommand() } }
                     .disabled(!controller.settings.enabled || controller.isStarting)
+                ApplyStatusLabel(dirty: hasChanges, applied: applied)
             }
             Divider()
             Text(L10n.text("最近 100 次调用")).font(.headline)

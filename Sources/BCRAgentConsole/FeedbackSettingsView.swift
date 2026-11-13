@@ -60,16 +60,18 @@ final class FeedbackSettingsController: ObservableObject {
     }
 }
 
-struct FeedbackSettingsView: View {
+/// Feedback scheduling for the physical device's MIDI output; part of the Device page.
+struct FeedbackSettingsSection: View {
     @ObservedObject var controller: FeedbackSettingsController
     @State private var draft: FeedbackPolicy
+    @State private var applied = 0
     init(controller: FeedbackSettingsController) {
         self.controller = controller
         _draft = State(initialValue: controller.policy)
     }
 
     var body: some View {
-        Form {
+        Section {
             Toggle(L10n.text("合并并限速实体反馈"), isOn: $draft.enabled)
             TextField(L10n.text("每秒消息上限"), value: $draft.messagesPerSecond, format: .number)
             TextField(L10n.text("突发消息上限"), value: $draft.burst, format: .number)
@@ -77,10 +79,16 @@ struct FeedbackSettingsView: View {
             Text(L10n.text("同一控件只发送最新值；切换端口、设备或配置时清除待发送反馈。默认关闭，真机速率需实测校准。"))
                 .font(.caption).fixedSize(horizontal: false, vertical: true)
             if let error = controller.error { Text(error).foregroundStyle(.red) }
-            Button(L10n.text("应用设置")) { controller.apply(draft) }
+            HStack {
+                Button(L10n.text("应用设置")) {
+                    controller.apply(draft)
+                    if controller.error == nil { applied += 1 }
+                }
                 .disabled(draft == controller.policy)
+                ApplyStatusLabel(dirty: draft != controller.policy, applied: applied)
+            }
+        } header: {
+            Text(L10n.text("反馈调度"))
         }
-        .formStyle(.grouped).padding(12).settingsPage()
-        .preferredColorScheme(.dark)
     }
 }
