@@ -356,6 +356,9 @@ final class ConsoleViewModel: ObservableObject {
                 .joined(separator: " "))
             return
         }
+        if let point = presetRestorePoint, point != point.bounded() {
+            do { try saveRestorePoint(point) } catch { report(error) }
+        }
         guard startsMIDI else { return }
         midi.selectEndpoints(savedSelection)
         do {
@@ -517,13 +520,13 @@ final class ConsoleViewModel: ObservableObject {
 
     /// Read-only, on entering hardware mode. The 33 preset names take under a second and usually
     /// give the number. Full dumps take 12–15 s each on firmware 1.10 (the device display animates
-    /// meanwhile), so they run only when nothing is cached for this preset name: once for the
-    /// per-control ShowValue settings, and for same-named candidates to resolve the number.
-    /// Cached numbers are trusted only after a fresh name/candidate-list check on this route.
+    /// meanwhile). ShowValue settings can be cached by name; resolving same-named candidates
+    /// requires fresh dumps on each connection.
+    /// Same-named presets always require fresh content comparison, including after reconnect.
     private func verifiedConfiguredNumber(_ names: BCRPresetNames, route: MIDIConnectionSnapshot) -> Int? {
         guard let number = startupConfiguredPreset, let context = configuredDisplayContext,
               context.route.matches(route), names.temporaryName == context.name,
-              names.memory.indices.contains(number - 1),
+              names.candidates == [number], names.memory.indices.contains(number - 1),
               names.memory[number - 1].trimmingCharacters(in: .whitespaces) == context.name else { return nil }
         return number
     }
@@ -531,14 +534,9 @@ final class ConsoleViewModel: ObservableObject {
     private func acceptDisplayNames(_ names: BCRPresetNames, route: MIDIConnectionSnapshot) {
         verifiedDisplayNames = (route, names)
         let candidates = names.candidates
-        let cached = displayProfile.flatMap { profile -> Int? in
-            guard profile.name == names.temporaryName, profile.resolvedCandidates == candidates,
-                  let number = profile.resolvedPreset, candidates.contains(number) else { return nil }
-            return number
-        }
         let configured = verifiedConfiguredNumber(names, route: route)
         if configured == nil { startupConfiguredPreset = nil }
-        let number = configured ?? names.presetNumber ?? cached
+        let number = configured ?? names.presetNumber
         setDisplayPreset(number)
         if displayProfile?.name == names.temporaryName {
             displayProfile?.resolvedPreset = number
@@ -594,7 +592,9 @@ final class ConsoleViewModel: ObservableObject {
                 self.displayProfile?.resolvedCandidates = candidates
                 if let profile = self.displayProfile { try self.displayProfileStore.save(profile) }
             } catch {
-                guard self.displayReadID == id else { return }
+                guard self.displayReadID == id, !Task.isCancelled,
+                      self.source == .hardware, self.connection.hasSameRoute(as: route), !self.isLearning
+                else { return }
                 self.invalidateDisplayNumber()
                 if !(error is CancellationError) {
                     self.notice = ConsoleNotice(level: .warning,
@@ -611,18 +611,20 @@ final class ConsoleViewModel: ObservableObject {
                context.names.temporaryName == profile.name
             {
                 let candidates = context.names.candidates
-                let cached = displayProfile.flatMap { old -> Int? in
-                    guard old.name == profile.name, old.resolvedCandidates == candidates,
-                          let number = old.resolvedPreset, candidates.contains(number) else { return nil }
-                    return number
-                }
                 let configured = verifiedConfiguredNumber(context.names, route: context.route)
-                profile.resolvedPreset = configured ?? context.names.presetNumber ?? cached
+                profile.resolvedPreset = configured ?? context.names.presetNumber
                 profile.resolvedCandidates = candidates
+            }
+            // Retain the last disk evidence on a failed names query, without displaying it
+            // as current evidence. Ambiguous cached numbers never authorize a live number.
+            var saved = profile
+            if verifiedDisplayNames == nil, let old = try displayProfileStore.load(), old.name == profile.name {
+                saved.resolvedPreset = old.resolvedPreset
+                saved.resolvedCandidates = old.resolvedCandidates
             }
             displayProfile = profile
             setDisplayPreset(profile.resolvedPreset)
-            try displayProfileStore.save(profile)
+            try displayProfileStore.save(saved)
         } catch { report(error) }
     }
 
@@ -1098,7 +1100,10 @@ final class ConsoleViewModel: ObservableObject {
                 try await self.withDisplayTransfer(.write) {
                     try await self.midi.sendPresetFrames(frames) { [weak self] done in
                         acknowledged = done
-                        guard let self else { return }
+                        guard let self, self.presetOperationID == id else { return }
+                        point.acknowledgedLines = done
+                        do { try self.saveRestorePoint(point) }
+                        catch { self.report(error); self.alignmentTask?.cancel() }
                         self.presetAlignment?.phase = .writing(done: done, total: frames.count)
                         if self.source != .hardware || !self.connection.hasSameRoute(as: route) || self.isLearning {
                             self.alignmentTask?.cancel()
@@ -1155,7 +1160,7 @@ final class ConsoleViewModel: ObservableObject {
                     do { try self.saveRestorePoint(point) } catch { self.report(error) }
                 }
                 self.presetAlignment?.phase = .failed(L10n.text("写入设备预设失败：\(error.localizedDescription)")
-                    + L10n.text(" 永久存储未改动，已保留可用的恢复资料。"))
+                    + L10n.text(" 永久存储未改动；备份已保留，部分写入可能无法自动恢复，可丢弃此恢复层。"))
                 self.presetAlignment?.canRestore = self.canRestorePreset
             }
         }
@@ -1244,11 +1249,13 @@ final class ConsoleViewModel: ObservableObject {
                 guard try self.matchesRestoreContext(current, point: context.point, backup: context.dump) else {
                     throw PresetOperationError(L10n.text("当前预设已改变，不能自动恢复旧备份。"))
                 }
-                let archive = self.presetBackupDirectory
-                    .appending(path: "hardware-map-before-restore-\(UUID().uuidString).json")
-                try JSONFileStore<HardwareMap>(fileURL: archive).save(context.currentMap)
-                try await self.performPresetRestore(context)
-            } catch { self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)")) }
+                let archive = try PresetMapArchiveStore(directory: self.presetBackupDirectory).save(context.currentMap)
+                self.notice = ConsoleNotice(level: .info, text: L10n.text("替换前的映射备份：\(archive.path)"))
+                try await self.performPresetRestore(context, mapArchive: archive)
+            } catch {
+                guard self.presetOperationID == id else { return }
+                self.presetAlignment?.phase = .failed(L10n.text("恢复失败：\(error.localizedDescription)"))
+            }
         }
     }
 
@@ -1286,7 +1293,7 @@ final class ConsoleViewModel: ObservableObject {
         return actual == (try BCRPresetAlignment.identityLines(of: backup))
     }
 
-    private func performPresetRestore(_ context: PendingPresetRestore) async throws {
+    private func performPresetRestore(_ context: PendingPresetRestore, mapArchive: URL? = nil) async throws {
         try requirePresetRoute(context.route)
         guard session.learnedHardwareMap == context.currentMap, presetRestorePoint == context.point else {
             throw PresetOperationError(L10n.text("恢复上下文已改变，请重新确认。"))
@@ -1331,15 +1338,33 @@ final class ConsoleViewModel: ObservableObject {
         session.synchronize()
         presetAlignment?.canRestore = canRestorePreset
         presetAlignment?.phase = .finished
-        notice = ConsoleNotice(level: .info, text: L10n.text("已回读确认并恢复设备临时预设和本机映射。"))
+        notice = ConsoleNotice(level: .info, text: mapArchive.map {
+            L10n.text("已恢复预设；替换前的映射备份：\($0.path)")
+        } ?? L10n.text("已回读确认并恢复设备临时预设和本机映射。"))
     }
 
-    private func saveRestorePoint(_ point: PresetRestorePoint?) throws {
+    private func saveRestorePoint(_ candidate: PresetRestorePoint?) throws {
+        let point = candidate?.bounded()
         if let point { try restorePointStore.save(point) }
         else if FileManager.default.fileExists(atPath: restorePointStore.fileURL.path) {
             try FileManager.default.removeItem(at: restorePointStore.fileURL)
         }
         presetRestorePoint = point
+    }
+
+    var canDiscardPresetRestore: Bool {
+        presetRestorePoint != nil && presetAlignment?.phase.isBusy != true && pendingPresetRestore == nil
+    }
+
+    /// The UI confirms the exact level first. Skipping never writes to the device or map;
+    /// older levels still require their own full content preflight.
+    func discardPresetRestore(_ confirmed: PresetRestorePoint) {
+        guard canDiscardPresetRestore, presetRestorePoint == confirmed else { return }
+        do {
+            try saveRestorePoint(confirmed.previous)
+            presetAlignment?.canRestore = canRestorePreset
+            notice = ConsoleNotice(level: .info, text: L10n.text("已丢弃当前恢复层；设备、映射和预设备份未改动。"))
+        } catch { report(error) }
     }
 
     func dismissPresetAlignment() {
@@ -1402,6 +1427,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func validateConnectionWork() {
+        if source != .hardware || !connection.isConnected || isLearning { displayReadTask?.cancel() }
         if let route = presetOperationRoute,
            source != .hardware || !connection.hasSameRoute(as: route) || isLearning
         {

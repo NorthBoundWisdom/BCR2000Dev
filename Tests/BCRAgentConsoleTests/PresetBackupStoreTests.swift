@@ -1,4 +1,5 @@
 import BCRTestSupport
+import BCRAgentCore
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -86,5 +87,64 @@ final class PresetBackupStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: second), Data([1]))
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path).count,
                        PresetBackupStore.recentCount + pinned.count)
+    }
+
+    func testMapArchivesArePrivateAndBoundedWithoutTouchingUnknownFiles() throws {
+        let directory = try temporary()
+        let store = PresetMapArchiveStore(directory: directory)
+        let unrelated = directory.appending(path: "my-map.json")
+        try Data("private".utf8).write(to: unrelated)
+        let corrupt = directory.appending(path: "hardware-map-before-restore-\(UUID().uuidString).json")
+        try Data("broken".utf8).write(to: corrupt)
+        let link = directory.appending(path: "hardware-map-before-restore-\(UUID().uuidString).json")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: unrelated)
+        var archives: [URL] = []
+        for index in 0 ..< 9 {
+            archives.append(try store.save(HardwareMap(), now: Date(timeIntervalSince1970: Double(index))))
+        }
+        for file in archives.prefix(4) { XCTAssertFalse(FileManager.default.fileExists(atPath: file.path)) }
+        for file in archives.suffix(5) {
+            XCTAssertEqual(
+                try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int,
+                0o600
+            )
+        }
+        XCTAssertEqual(try Data(contentsOf: unrelated), Data("private".utf8))
+        XCTAssertEqual(try Data(contentsOf: corrupt), Data("broken".utf8))
+        XCTAssertTrue(try link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true)
+    }
+
+    func testNestedRestoreHistoryIsFlattenedAndLimitedToFiveLevels() throws {
+        var point = PresetRestorePoint(backupFile: "0.syx", hardwareMap: HardwareMap(), createdAt: .now)
+        for index in 1 ... 20 {
+            point = PresetRestorePoint(backupFile: "\(index).syx", hardwareMap: HardwareMap(), createdAt: .now,
+                                       expectedPreset: Data(repeating: 0, count: 30000), history: [point])
+        }
+        point = point.bounded()
+        XCTAssertEqual(point.history?.map(\.backupFile), ["16.syx", "17.syx", "18.syx", "19.syx"])
+        XCTAssertTrue(point.history?.allSatisfy { $0.history == nil } == true)
+        XCTAssertEqual(point.protectedFiles.count, PresetRestorePoint.maximumLevels)
+        XCTAssertEqual(point.bounded(), point)
+        XCTAssertLessThan(try JSONEncoder().encode(point).count, 250000)
+    }
+
+    @MainActor
+    func testLoadingOldNestedHistoryRewritesABoundedFlatRecord() throws {
+        let directory = try temporary()
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let store = JSONFileStore<PresetRestorePoint>(fileURL: directory
+            .appending(path: "preset-alignment-restore.json"))
+        var point = PresetRestorePoint(backupFile: "0.syx", hardwareMap: HardwareMap(), createdAt: .now)
+        for index in 1 ... 8 {
+            point = PresetRestorePoint(backupFile: "\(index).syx", hardwareMap: HardwareMap(), createdAt: .now,
+                                       history: [point])
+        }
+        try store.save(point)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let saved = try XCTUnwrap(store.load())
+        XCTAssertEqual(saved, model.presetRestorePoint)
+        XCTAssertEqual(saved.history?.map(\.backupFile), ["4.syx", "5.syx", "6.syx", "7.syx"])
+        XCTAssertTrue(saved.history?.allSatisfy { $0.history == nil } == true)
     }
 }

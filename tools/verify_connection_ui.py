@@ -161,6 +161,25 @@ def run():
     ui.wait(lambda: ui.exists("preset.finished"), "Alignment write/readback did not finish")
     assert state()["presetWrites"] == 1 and not state()["matchesOriginal"]
     ui.press("preset.close")
+    # Existing recovery controls and their disabled explanation must stay hidden in preview.
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.align"), "Alignment unavailable after a completed write")
+    ui.press("preset.menu.align")
+    ui.wait(lambda: ui.exists("preset.preview"), "Second preview missing")
+    assert not ui.exists("preset.restore") and not ui.exists("preset.restore.unavailable")
+    assert not ui.exists("preset.discard")
+    ui.press("preset.close")
+    # Cancelling a discard confirmation must preserve the exact recovery record.
+    restore_path = directory / "preset-alignment-restore.json"
+    saved_point = restore_path.read_bytes()
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.discard"), "Discard action missing")
+    ui.press("preset.menu.discard")
+    ui.wait(lambda: ui.exists("preset.discard.cancel"), "Discard confirmation missing")
+    assert restore_path.read_bytes() == saved_point and state()["presetWrites"] == 1
+    ui.press("preset.discard.cancel")
+    ui.wait(lambda: not ui.exists("preset.discard.confirm"), "Discard cancellation did not close")
+    assert restore_path.read_bytes() == saved_point
     verify_button_function_confirmation()
     # Leave a later host-map edit, then verify restore cannot silently discard it.
     ui.press("hardware.buttonFunctions.change")
@@ -193,8 +212,27 @@ def run():
     ui.press("preset.menu.backups")
     ui.run("set frontmost to true")
     assert state()["presetWrites"] == 2 and state()["matchesOriginal"]
+    # Confirming discard removes only the newest recovery record, keeping preset/map bytes.
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.align"), "Alignment unavailable after restore")
+    ui.press("preset.menu.align")
+    ui.wait(lambda: ui.exists("preset.preview"), "Final preview missing")
+    ui.press("preset.write")
+    ui.wait(lambda: ui.exists("preset.finished"), "Final alignment did not finish")
+    ui.press("preset.close")
+    before_discard = state()
+    saved_map = path.read_bytes()
+    backups = {file.name: file.read_bytes() for file in (directory / "Backups").glob("*.syx")}
+    ui.press("surface.devicePresetMenu")
+    ui.wait(lambda: ui.enabled("preset.menu.discard"), "Final discard action missing")
+    ui.press("preset.menu.discard")
+    ui.wait(lambda: ui.exists("preset.discard.confirm"), "Discard confirmation action missing")
+    ui.press("preset.discard.confirm")
+    ui.wait(lambda: not restore_path.exists(), "Confirmed discard did not remove the recovery record")
+    assert path.read_bytes() == saved_map and state() == before_discard
+    assert backups == {file.name: file.read_bytes() for file in (directory / "Backups").glob("*.syx")}
     print(
-        "PASS native connection decline/read, read-only preview/deduplication, options, write/readback and restore",
+        "PASS native connection decline/read, preview, write/readback, restore and discard confirmation/cancel",
         flush=True,
     )
 

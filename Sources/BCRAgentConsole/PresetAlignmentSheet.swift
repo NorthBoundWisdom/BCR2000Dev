@@ -5,6 +5,7 @@ import SwiftUI
 struct PresetAlignmentSheet: View {
     @ObservedObject var model: ConsoleViewModel
     let state: PresetAlignmentState
+    @State private var restoreToDiscard: PresetRestorePoint?
     @State private var expandedChangeKinds: Set<String> = []
 
     private static let changeKinds: [BCRPresetAlignment.Change.Kind] = [
@@ -19,11 +20,18 @@ struct PresetAlignmentSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             content
-            if model.presetRestorePoint != nil, !state.phase.isBusy, state.phase != .restoreConfirmation,
-               let reason = model.restoreUnavailableReason
-            {
-                Text(reason).font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+            if showsRestoreControls, !state.phase.isBusy {
+                HStack {
+                    if let reason = model.restoreUnavailableReason {
+                        Text(reason).font(.caption).foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("preset.restore.unavailable")
+                    }
+                    Spacer()
+                    Button(L10n.text("丢弃此恢复层…")) { restoreToDiscard = model.presetRestorePoint }
+                        .disabled(!model.canDiscardPresetRestore)
+                        .accessibilityIdentifier("preset.discard")
+                }
             }
             Divider()
             HStack {
@@ -41,7 +49,7 @@ struct PresetAlignmentSheet: View {
                     .help(backup.path)
                 }
                 Spacer()
-                if model.presetRestorePoint != nil && state.phase != .preview && state.phase != .restoreConfirmation {
+                if showsRestoreControls {
                     Button(L10n.text("恢复写入前的预设")) { model.restorePresetBeforeAlignment() }
                         .disabled(!model.canRestorePreset)
                         .help(model.restoreUnavailableReason ?? L10n.text("回读校验后恢复上一层预设和映射"))
@@ -64,6 +72,11 @@ struct PresetAlignmentSheet: View {
         .padding(24)
         .frame(width: 560)
         .interactiveDismissDisabled(state.phase.isBusy)
+        .modifier(PresetRestoreDiscardConfirmation(model: model, point: $restoreToDiscard, id: "preset.discard.sheet"))
+    }
+
+    private var showsRestoreControls: Bool {
+        model.presetRestorePoint != nil && state.phase != .preview && state.phase != .restoreConfirmation
     }
 
     @ViewBuilder private var content: some View {
@@ -245,6 +258,31 @@ struct PresetAlignmentSheet: View {
         case .buttonBehavior: L10n.text("按键行为")
         case .lock: L10n.text("预设锁定")
         case .enabledFunction: L10n.text("启用功能")
+        }
+    }
+}
+
+/// Confirm a specific level so a late dialog cannot discard a newer operation's recovery.
+struct PresetRestoreDiscardConfirmation: ViewModifier {
+    @ObservedObject var model: ConsoleViewModel
+    @Binding var point: PresetRestorePoint?
+    let id: String
+
+    func body(content: Content) -> some View {
+        content.offscreenSafeConfirmationDialog(
+            id: id, L10n.text("丢弃当前恢复层？"), isPresented: Binding(
+                get: { point != nil }, set: { if !$0 { point = nil } }
+            ), titleVisibility: .visible, presenting: point
+        ) { confirmed in
+            Button(L10n.text("取消"), role: .cancel) { point = nil }
+                .accessibilityIdentifier("preset.discard.cancel")
+            Button(L10n.text("丢弃此恢复层"), role: .destructive) {
+                model.discardPresetRestore(confirmed)
+                point = nil
+            }
+            .accessibilityIdentifier("preset.discard.confirm")
+        } message: { _ in
+            Text(L10n.text("此操作只移除当前恢复记录，不写设备或映射，预设备份仍保留。较旧恢复层仍需通过设备内容校验。"))
         }
     }
 }

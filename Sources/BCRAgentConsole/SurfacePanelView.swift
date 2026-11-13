@@ -106,6 +106,7 @@ extension EnvironmentValues {
 
 struct SurfacePanelView: View {
     @ObservedObject var model: ConsoleViewModel
+    @State private var restoreToDiscard: PresetRestorePoint?
     @Environment(\.panelMetrics) private var m
 
     // Base widths: 18 + 28 + 6 + 8 × 74 + 7 × 6 + 16 + 80 + 18 = 800 (PanelMetrics.naturalSize).
@@ -156,6 +157,11 @@ struct SurfacePanelView: View {
         .overlay {
             RoundedRectangle(cornerRadius: m(18)).stroke(Color.white.opacity(0.12))
         }
+        .modifier(PresetRestoreDiscardConfirmation(
+            model: model,
+            point: $restoreToDiscard,
+            id: "preset.discard.surface"
+        ))
     }
 
     private var header: some View {
@@ -191,6 +197,12 @@ struct SurfacePanelView: View {
                     .disabled(!model.canRestorePreset)
                     .accessibilityIdentifier("preset.menu.restore")
                     .help(model.restoreUnavailableReason ?? L10n.text("回读校验后恢复上一层预设和映射"))
+                    Button(L10n.text("丢弃此恢复层…")) {
+                        OffscreenInteractionPanel.dismiss(id: "devicePresetMenu")
+                        restoreToDiscard = model.presetRestorePoint
+                    }
+                    .disabled(!model.canDiscardPresetRestore)
+                    .accessibilityIdentifier("preset.menu.discard")
                     Divider()
                     Button(L10n.text("在访达中显示备份…")) {
                         OffscreenInteractionPanel.dismiss(id: "devicePresetMenu")

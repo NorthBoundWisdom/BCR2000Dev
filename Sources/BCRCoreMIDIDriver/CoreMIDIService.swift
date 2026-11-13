@@ -86,7 +86,7 @@ public final class CoreMIDIService: MIDIService {
     private var sysEx = MIDISysEx7Assembler()
     private var inputGeneration: UInt = 0
     private var dumpID: UUID?
-    private var dumpFrames: [[UInt8]] = []
+    private var dumpStream = PresetDumpStream()
     private var dumpActivity: Double = 0
     private var dumpContinuation: CheckedContinuation<Data, any Error>?
     private var dumpTask: Task<Void, Never>?
@@ -277,7 +277,7 @@ public final class CoreMIDIService: MIDIService {
                     Data,
                     any Error
                 >) in
-                    self.dumpID = id; self.dumpFrames = []; self.dumpContinuation = continuation
+                    self.dumpID = id; self.dumpStream = PresetDumpStream(); self.dumpContinuation = continuation
                     self.dumpActivity = ProcessInfo.processInfo.systemUptime
                     let started = self.dumpActivity
                     do { try transport.sendBytes(request, expectedGeneration: generation) }
@@ -287,14 +287,24 @@ public final class CoreMIDIService: MIDIService {
                             do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
                             guard let self, self.dumpID == id else { return }
                             let now = ProcessInfo.processInfo.systemUptime
-                            if now - self.dumpActivity > 3 || now - started > 45 {
-                                self.finishDump(id, result: .failure(MIDIStartupError.noReply)); return
+                            if now - self.dumpActivity > 3 {
+                                self.finishDump(
+                                    id,
+                                    result: .failure(self.dumpStream.failure ?? MIDIStartupError.noReply)
+                                )
+                                return
                             }
+                            // A deadline ends collection, not the device's stream. Keep draining
+                            // until $end or idle before releasing the exclusive route.
+                            if now - started > 45 { self.dumpStream.fail(MIDIStartupError.noReply) }
                         }
                     }
                 }
             } onCancel: {
-                Task { @MainActor [weak self] in self?.finishDump(id, result: .failure(CancellationError())) }
+                Task { @MainActor [weak self] in
+                    guard let self, self.dumpID == id else { return }
+                    self.dumpStream.fail(CancellationError())
+                }
             }
         }
     }
@@ -310,7 +320,9 @@ public final class CoreMIDIService: MIDIService {
         startupID = id; sysEx = MIDISysEx7Assembler(); self.holdsInput = holdsInput
         defer { if startupID == id { startupID = nil; self.holdsInput = false; sysEx = MIDISysEx7Assembler() } }
         try Task.checkCancellation()
-        return try await body(transport, generation)
+        let result = try await body(transport, generation)
+        try Task.checkCancellation()
+        return result
     }
 
     private func acknowledged(
@@ -344,7 +356,7 @@ public final class CoreMIDIService: MIDIService {
     private func finishDump(_ id: UUID, result: Result<Data, any Error>) {
         guard dumpID == id else { return }
         let continuation = dumpContinuation
-        dumpID = nil; dumpContinuation = nil; dumpFrames = []
+        dumpID = nil; dumpContinuation = nil; dumpStream = PresetDumpStream()
         dumpTask?.cancel(); dumpTask = nil
         continuation?.resume(with: result)
     }
@@ -356,15 +368,8 @@ public final class CoreMIDIService: MIDIService {
             if let id = dumpID, frame.count >= 10, frame.prefix(4) == [0xF0, 0, 0x20, 0x32],
                frame[5] == 0x15, frame[6] == 0x20
             {
-                guard Int(frame[7]) * 128 + Int(frame[8]) == dumpFrames.count else {
-                    finishDump(id, result: .failure(HardwareSnapshotError.invalid)); continue
-                }
-                dumpFrames.append(frame)
                 dumpActivity = ProcessInfo.processInfo.systemUptime
-                let text = String(decoding: frame[9 ..< frame.count - 1], as: UTF8.self)
-                if text.trimmingCharacters(in: .whitespaces) == "$end" {
-                    finishDump(id, result: .success(Data(dumpFrames.joined())))
-                }
+                if let result = dumpStream.receive(frame) { finishDump(id, result: result) }
                 continue
             }
             // Send Preset Name: F0 00 20 32 dd 15 21 00 index name(24) F7.

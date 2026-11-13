@@ -265,7 +265,7 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayPresetName, "Edited")
     }
 
-    func testDuplicateNamesResolveOnceThenUseTheCache() async throws {
+    func testDuplicateNamesAreResolvedAgainAfterDeviceRecall() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
@@ -292,12 +292,13 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertFalse(model.displayBusy)
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.dumps, 3)
-        // Next connection: names alone, no slow dumps.
+        // A same-named recall cannot be detected from names or the old cache.
+        device.temporary = other
         model.selectSource(.mock)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(200))
-        XCTAssertEqual(model.displayText, "P- 1")
-        XCTAssertEqual(device.dumps, 3)
+        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertEqual(model.displayText, "P- 8")
+        XCTAssertEqual(device.dumps, 6)
     }
 }
 
@@ -345,22 +346,22 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTFail("Read-only preset preview did not settle")
     }
 
-    func testFreshLockedReadUsesOnlyValidatedCandidateCache() async throws {
+    func testFreshLockedReadCannotTrustAnAmbiguousCandidateCache() async throws {
         let (model, device, directory) = try model(cachedName: "Redrum")
         defer { try? FileManager.default.removeItem(at: directory) }
         try await readLockedPreset(model)
         XCTAssertEqual(model.deviceKeysLocked, true)
-        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(model.displayText, "----")
         XCTAssertEqual(device.writes, 0)
         let dumps = device.dumps
         device.onConnection?(device.connection)
-        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(model.displayText, "----")
         XCTAssertEqual(device.dumps, dumps)
         model.dismissPresetAlignment()
         device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
         XCTAssertEqual(model.displayText, " 100")
         try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds + 0.1))
-        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(model.displayText, "----")
     }
 
     func testLockedReadCannotReuseNumberFromADifferentPresetName() async throws {
@@ -373,12 +374,12 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertEqual(device.writes, 0)
     }
 
-    func testUnlockedReadAlsoUsesValidatedCandidateCache() async throws {
+    func testUnlockedReadCannotTrustAnAmbiguousCandidateCache() async throws {
         let (model, device, directory) = try model(cachedName: "Redrum", locked: false)
         defer { try? FileManager.default.removeItem(at: directory) }
         try await readLockedPreset(model)
         XCTAssertEqual(model.deviceKeysLocked, false)
-        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(model.displayText, "----")
         XCTAssertEqual(device.writes, 0)
     }
 
@@ -399,7 +400,27 @@ final class LockedPresetDisplayTests: XCTestCase {
         try await readLockedPreset(model)
         XCTAssertEqual(model.displayText, "----")
         XCTAssertNil(model.displayProfile?.resolvedPreset)
+        model.dismissPresetAlignment()
+        try await readLockedPreset(model)
+        let saved = try JSONFileStore<BCRDisplayProfile>(fileURL: directory.appending(path: "display-profile.json"))
+            .load()
+        XCTAssertEqual(saved?.resolvedPreset, 1)
         XCTAssertEqual(device.writes, 0)
+    }
+
+    func testLearningInterruptsDisplayReadWithoutAWarning() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.dumpDelay = .milliseconds(150)
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(30))
+        model.beginLearning(at: .userButton(1))
+        let notice = model.notice
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(model.notice?.text, notice?.text)
+        XCTAssertEqual(model.notice?.level, .info)
+        XCTAssertFalse(model.displayBusy)
+        model.stopLearning()
     }
 
     func testChangedCandidateSetAboveLimitClearsOldNumber() async throws {
@@ -485,6 +506,36 @@ final class LockedPresetDisplayTests: XCTestCase {
                                    names: .init(
                                        temporary: "New",
                                        memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["New"]
+                                   ))
+        device.memoryReadFails = true
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        for _ in 0 ..< 80 {
+            if let prompt = model
+                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.source, .hardware)
+        XCTAssertNil(model.startupConfiguredPreset)
+        XCTAssertEqual(model.displayText, "----")
+    }
+
+    func testConfiguredNumberCannotDistinguishSameNamedSlots() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
+                                                                         ".egroups 4", ".fkeys on", ".lock off"])
+        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
+        try stores.hardwareMap.save(map)
+        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Old'", ".egroups 4", ".lock on", "$end"])
+        let device = DisplayDevice(temporary: data,
+                                   names: .init(
+                                       temporary: "Old",
+                                       memory: ["Old"] + (2 ... 7).map { "P\($0)" } + ["Old"]
                                    ))
         device.memoryReadFails = true
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)

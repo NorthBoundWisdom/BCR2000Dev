@@ -219,6 +219,10 @@ final class PresetRestoreSafetyTests: XCTestCase {
             .filter { $0.lastPathComponent.hasPrefix("hardware-map-before-restore-") }
         XCTAssertEqual(archives.count, 1)
         XCTAssertEqual(try JSONFileStore<HardwareMap>(fileURL: XCTUnwrap(archives.first)).load(), learned)
+        let archive = try XCTUnwrap(archives.first)
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: archive.path)[.posixPermissions] as? Int, 0o600)
+        let presentedPath = root.appending(path: "Backups").appending(path: archive.lastPathComponent).path
+        XCTAssertTrue(model.notice?.text.contains(presentedPath) == true)
     }
 
     func testCancelRestoreConfirmationPreservesLaterLearning() async throws {
@@ -264,6 +268,58 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await settle(model) { $0 == .finished || self.failed($0) }
         XCTAssertEqual(model.presetAlignment?.phase, .finished)
         XCTAssertTrue(try BCRPresetAlignment.readbackMatches(device.preset, expected: confirmed))
+    }
+
+    func testEveryAcknowledgementIsDurableBeforeTheNextFrame() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
+        let store = JSONFileStore<PresetRestorePoint>(fileURL: root.appending(path: "preset-alignment-restore.json"))
+        device.afterFrame = { done in
+            do {
+                let saved = try store.load()
+                XCTAssertEqual(saved?.acknowledgedLines, done)
+            } catch { XCTFail("Progress was not persisted: \(error)") }
+        }
+        model.applyPresetAlignment(); try await settle(model) { $0 == .finished }
+    }
+
+    func testDiscardUnusableTopLevelRevealsOlderLevelWithoutWriting() async throws {
+        let (model, device, stores, root) = try await context()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let previous = try XCTUnwrap(model.presetRestorePoint)
+        let broken = PresetRestorePoint(backupFile: "legacy.syx", hardwareMap: HardwareMap(), createdAt: .now,
+                                        acknowledgedLines: 0, history: [previous])
+        let store = JSONFileStore<PresetRestorePoint>(fileURL: root.appending(path: "preset-alignment-restore.json"))
+        try store.save(broken)
+        let reopened = ConsoleViewModel(stores: stores, midiService: device)
+        reopened.selectSource(.hardware)
+        XCTAssertFalse(reopened.canRestorePreset)
+        XCTAssertTrue(reopened.canDiscardPresetRestore)
+        let map = reopened.engine.hardwareMap, count = device.batches.count
+        reopened.discardPresetRestore(broken)
+        XCTAssertEqual(reopened.presetRestorePoint, previous)
+        XCTAssertEqual(try store.load(), previous)
+        XCTAssertEqual(reopened.engine.hardwareMap, map)
+        XCTAssertEqual(device.batches.count, count)
+        // A stale confirmation cannot discard the next level.
+        reopened.discardPresetRestore(broken)
+        XCTAssertEqual(reopened.presetRestorePoint, previous)
+        reopened.restorePresetBeforeAlignment(); try await settle(reopened) { $0 == .finished }
+        XCTAssertNil(reopened.presetRestorePoint)
+    }
+
+    func testDiscardLastLegacyLevelRemovesRecordAndKeepsBackup() async throws {
+        let (model, device, _, root) = try await context()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let point = try XCTUnwrap(model.presetRestorePoint), count = device.batches.count
+        model.discardPresetRestore(point)
+        XCTAssertNil(model.presetRestorePoint)
+        XCTAssertFalse(FileManager.default
+            .fileExists(atPath: root.appending(path: "preset-alignment-restore.json").path))
+        XCTAssertTrue(FileManager.default
+            .fileExists(atPath: root.appending(path: "Backups").appending(path: point.backupFile).path))
+        XCTAssertEqual(device.batches.count, count)
     }
 
     func testZeroAcknowledgementFailureDoesNotOfferANewRestore() async throws {

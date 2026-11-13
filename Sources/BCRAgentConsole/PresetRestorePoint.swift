@@ -23,6 +23,8 @@ struct PresetRestoreRoute: Codable, Equatable {
 /// Legacy fields remain readable. Missing safety context cannot authorize a device write.
 /// History is stored as flat prior levels; all referenced preset files remain protected.
 struct PresetRestorePoint: Codable, Equatable {
+    /// Five levels including the current point; prior JSON may contain nested histories.
+    static let maximumLevels = 5
     var backupFile: String
     var hardwareMap: HardwareMap
     var createdAt: Date
@@ -49,7 +51,22 @@ struct PresetRestorePoint: Codable, Equatable {
         var levels = point.history ?? []
         point.history = nil
         levels.append(point)
-        return levels
+        return Array(levels.suffix(maximumLevels - 1))
+    }
+
+    func bounded() -> Self {
+        var levels: [Self] = []
+        func flatten(_ point: Self) {
+            for prior in point.history ?? [] { flatten(prior) }
+            var flat = point
+            flat.history = nil
+            levels.append(flat)
+            if levels.count > Self.maximumLevels { levels.removeFirst() }
+        }
+        flatten(self)
+        var current = levels.removeLast()
+        current.history = levels.isEmpty ? nil : levels
+        return current
     }
 }
 
