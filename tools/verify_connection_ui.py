@@ -121,6 +121,8 @@ def run():
     width = 1680 if readme_capture else 1200
     size = "{1680, 900}" if readme_capture else "{1200, 760}"
     images = Path(capture_directory) if capture_directory else Path(__file__).resolve().parent.parent / "docs/images"
+    # The MCP listener can start before the SwiftUI window is registered with accessibility.
+    ui.wait(lambda: ui.exists("surface.led"), "Native surface window did not become ready")
     ui.run(f"set frontmost to true\nset position of mainWindow to {{40, 40}}\nset size of mainWindow to {size}")
     ui.wait(lambda: ui.exists("connection.dialog"), "Initial connection confirmation did not appear")
     assert state()["voiceWrites"] == state()["presetWrites"] == 0
@@ -164,6 +166,10 @@ def run():
     ui.wait(lambda: ui.exists("preset.finished"), "Alignment write/readback did not finish")
     assert state()["presetWrites"] == 1 and not state()["matchesOriginal"]
     ui.press("preset.close")
+    ui.wait(lambda: not ui.exists("preset.dialog"), "Completed alignment did not close")
+    ui.wait(lambda: ui.exists("surface.led"), "Segmented LED accessibility element missing")
+    if capture_directory:
+        ui.capture(images / "seven-segment-display.png", width=width)
     # Existing recovery controls and their disabled explanation must stay hidden in preview.
     ui.press("surface.devicePresetMenu")
     ui.wait(lambda: ui.enabled("preset.menu.align"), "Alignment unavailable after a completed write")

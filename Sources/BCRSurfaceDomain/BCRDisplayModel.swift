@@ -31,7 +31,7 @@ public struct BCRDisplayModel: Equatable, Sendable {
         /// 2026-11-13: clockwise; after previewing 2 rotations/s the user requested twice the speed.
         /// The resulting 4 rotations/s is a visual tuning choice, not a measured firmware rate.
         public static let busyRotationsPerSecond: Double = 4
-        /// Outline indices are clockwise from the top left (see BusySegments in the host).
+        /// Outline indices are clockwise from the top left (see BCRSevenSegmentDisplay.busyMasks).
         public static let busyFrameSequence = Array(0 ..< 12)
         public static let busyFramesPerSecond = Double(busyFrameSequence.count) * busyRotationsPerSecond
         /// Explicit write observation, 2026-11-13: counterclockwise, approximately one turn/s.
