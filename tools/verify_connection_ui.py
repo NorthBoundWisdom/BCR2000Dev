@@ -168,6 +168,8 @@ def run():
     ui.press("preset.close")
     ui.wait(lambda: not ui.exists("preset.dialog"), "Completed alignment did not close")
     ui.wait(lambda: ui.exists("surface.led"), "Segmented LED accessibility element missing")
+    led_help = ui.help("surface.led")
+    assert "on/oFF" in led_help, "LED display-rules help is missing"
     if capture_directory:
         ui.capture(images / "seven-segment-display.png", width=width)
     # Existing recovery controls and their disabled explanation must stay hidden in preview.

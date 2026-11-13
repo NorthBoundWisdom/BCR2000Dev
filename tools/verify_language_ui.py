@@ -37,7 +37,7 @@ try:
     ui.press_description("English")
     ui.wait(lambda: "Follow Touch" in main_tree(), "Main window did not switch to English")
     ui.wait(
-        lambda: "System menus, file panels and system dialog buttons switch after restarting" in all_windows(),
+        lambda: "system dialog buttons and macOS error descriptions switch after restarting" in all_windows(),
         "Open settings did not update",
     )
     ui.wait(lambda: "Settings…" in ui.run("return entire contents of menu bar 1"), "Settings command did not update")
@@ -48,7 +48,7 @@ try:
     ui.press_description("简体中文")
     ui.wait(lambda: "跟随触碰" in main_tree(), "Main window did not switch back to Chinese")
     ui.wait(
-        lambda: "系统菜单、文件面板和系统对话框按钮需重启应用后切换" in all_windows(),
+        lambda: "系统对话框按钮及 macOS 系统错误描述需重启应用后切换" in all_windows(),
         "Open settings did not switch back",
     )
     assert "语言" in ui.run("return name of every window"), "Settings window title did not switch back"

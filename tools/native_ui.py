@@ -102,6 +102,14 @@ end tell"""
     def enabled(self, identifier):
         return self.command("enabled", identifier)
 
+    def help(self, identifier):
+        result = subprocess.run(
+            [str(native_binary()), str(self.pid), "help", identifier], capture_output=True, text=True, timeout=15
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or f"Help unavailable: {identifier}")
+        return result.stdout.strip()
+
     def press(self, identifier):
         print("AXPress", identifier, flush=True)
         if not self.command("press", identifier):

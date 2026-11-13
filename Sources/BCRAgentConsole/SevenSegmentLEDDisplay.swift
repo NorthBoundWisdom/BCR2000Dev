@@ -29,7 +29,8 @@ struct LEDDisplay: View {
         .frame(width: m(78), height: m(30))
         .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
         .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
-        .allowsHitTesting(false)
+        // Keep the whole bezel hoverable for the help attached by the surface view.
+        .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("surface.led")
         .accessibilityLabel(L10n.text("LED 显示"))
