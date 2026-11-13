@@ -1106,3 +1106,14 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
   BuildWorkflow124项、SDK6项均通过；构建/双语离屏smoke/中英文离屏连接恢复验收通过。
   新确认文字截图检查发现单行截断，已加完整换行并重新构建、跑全套和中英文AX流程；原始22条验收assert保留。
   用户要求先提交本轮，再修复新发现的9项（读取取消排流、不可用层级、同名编号与存储体积等）；这些新问题不记为本轮已解决。
+
+### G1 第 1–3 步 / G4 第 1–2 步（2026-11-14）
+
+- `377a983`：新增 MCP 工具 `get_preset_alignment`、`preview_preset_alignment`、`apply_preset_alignment`、`restore_preset`、
+  `dismiss_preset_alignment`，与对齐窗口同一流程；需要 parameterWrite、deviceControl、configurationWrite。全量 647 项、失败 0。
+- 新增 `tools/time_bcr_transfer.py`（只读请求或纯监听，只输出行数/时间）。
+- G4：真机 `list_midi_endpoints` 列出 `BCR2000` 一进一出；`set_midi_endpoints` 后 `hardwareConnection.connected=true`。
+  观察：改端口后设备源回到 mock，需再调 `set_device_source hardware`（是否应保持实体源，未定）。拒绝路径未在真机验证。
+- G1：五类只读操作与一次完整对齐写入均已记录，见 `docs/HARDWARE_VALIDATION.md`“G1 跑马灯分场景观察”。
+  “每行一步、12 步一圈”未证实也未推翻；读取中目视的短暂加速无计时对应。写入取数改用被动监听设备确认，未改 App 写入路径。
+- 未做：G1 第 4 步（慢速写入判定每行步数），需用户同意新增写设备路径。设备当前保持对齐后的临时预设，可恢复。
