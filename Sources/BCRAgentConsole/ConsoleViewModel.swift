@@ -147,6 +147,8 @@ final class ConsoleViewModel: ObservableObject {
     /// The control whose value the panel's LED display shows, as the device does while a control moves.
     /// Not `@Published`: input bursts publish through the session's coalesced frame refresh.
     private(set) var display = BCRDisplayModel()
+    /// Stepped by every transferred BCL line; observed only by the LED display.
+    let displayMarquee = DisplayMarqueeState()
     /// `.showvalue` settings and preset name of the device's current preset, when last read.
     @Published private(set) var displayProfile: BCRDisplayProfile?
     private let displayProfileStore: JSONFileStore<BCRDisplayProfile>
@@ -283,6 +285,7 @@ final class ConsoleViewModel: ObservableObject {
         do { try ProviderMCPModule.install(on: mcp.service, application: provider) }
         catch { preconditionFailure("Invalid built-in provider module registration") }
         provider.start()
+        midi.observeTransferLines { [weak self] direction in self?.displayMarquee.step(direction) }
         mcp.service.onReadAgents = { [weak self] in
             guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
             return .object(["backend": .string(self.codex.backend.rawValue), "slots": try .encoded(self.slots)])

@@ -46,29 +46,35 @@ final class BCRDisplayModelTests: XCTestCase {
         display.endTransfer()
         // The value that was showing is not resurrected; the preset number returns.
         XCTAssertEqual(display.content(at: 0.1), .preset(1))
-        XCTAssertEqual(Set((0 ..< 24).map {
-            BCRDisplayModel.busyFrame(at: Double($0) / BCRDisplayModel.Calibration.busyFramesPerSecond)
-        }), Set(0 ..< 12))
     }
 
-    func testBusyAnimationIsClockwiseAndRepeatsFourTimesPerSecond() {
-        XCTAssertEqual(BCRDisplayModel.Calibration.busyFrameSequence, Array(0 ..< 12))
-        XCTAssertEqual(BCRDisplayModel.Calibration.busyRotationsPerSecond, 4)
-        for segment in 0 ..< 12 {
-            let time = (Double(segment) + 0.25) / 48
-            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time), segment)
-            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time + 0.25), segment)
+    func testMarqueeStepsOneSegmentPerLineClockwiseForReceivedLines() {
+        var marquee = BCRDisplayMarquee()
+        XCTAssertEqual(marquee.lit, [11, 0])
+        // G1: 12 lines are one turn; each step keeps the previous segment lit (overlap by one).
+        for line in 1 ... 12 {
+            let before = marquee.head
+            marquee.step(.read)
+            XCTAssertEqual(marquee.lit, [before, (before + 1) % 12])
+            XCTAssertEqual(marquee.steps, line)
         }
+        XCTAssertEqual(marquee.lit, [11, 0])
     }
 
-    func testWriteAnimationIsCounterclockwiseAtOneTurnPerSecond() {
-        for segment in 0 ..< 12 {
-            let time = (Double(segment) + 0.25) / 12
-            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time, operation: .write), 11 - segment)
-            XCTAssertEqual(BCRDisplayModel.busyFrame(at: time + 1, operation: .write), 11 - segment)
-        }
-        XCTAssertEqual(BCRDisplayModel.Calibration.framesPerSecond(for: .write), 12)
-        XCTAssertEqual(BCRDisplayModel.Calibration.framesPerSecond(for: .read), 48)
+    func testMarqueeTurnsCounterclockwiseForWrittenLinesAndReversesInPlace() {
+        var marquee = BCRDisplayMarquee()
+        marquee.step(.write)
+        XCTAssertEqual(marquee.lit, [0, 11])
+        marquee.step(.write)
+        XCTAssertEqual(marquee.lit, [11, 10])
+        // A readback after a write turns back from where the write stopped.
+        marquee.step(.read)
+        XCTAssertEqual(marquee.lit, [10, 11])
+        // Time alone never moves it.
+        let still = marquee
+        XCTAssertEqual(marquee, still)
+        for _ in 0 ..< 554 { marquee.step(.write) }
+        XCTAssertEqual(marquee.head, ((11 - 554) % 12 + 12) % 12)
     }
 
     func testOverlappingTransfersKeepTheirDirectionWhenCompletedOutOfOrder() {
@@ -219,12 +225,27 @@ private final class DisplayDevice: MIDIService {
 
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws { writes += 1
     }
+
+    var transferLines: (@MainActor (BCRDisplayModel.TransferOperation) -> Void)?
+    func observeTransferLines(_ observer: @escaping @MainActor (BCRDisplayModel.TransferOperation) -> Void) {
+        transferLines = observer
+    }
 }
 
 @MainActor
 final class DeviceDisplayTests: XCTestCase {
     private func dump(_ lines: [String]) -> Data {
         BCLFixtures.dump(lines)
+    }
+
+    func testDeviceTransferLinesStepThePanelMarquee() throws {
+        let device = DisplayDevice(temporary: dump(["$rev R1", "$end"]), names: .init(temporary: "", memory: []))
+        let model = ConsoleViewModel(stores: .temporary(), midiService: device, initialPreset: .robotArm)
+        let observer = try XCTUnwrap(device.transferLines)
+        let start = model.displayMarquee.marquee
+        observer(.read); observer(.read); observer(.write)
+        XCTAssertEqual(model.displayMarquee.marquee.steps, start.steps + 3)
+        XCTAssertEqual(model.displayMarquee.marquee.head, (start.head + 1) % 12)
     }
 
     func testHardwareModeReadsPresetNumberAndShowValueWithoutWriting() async throws {

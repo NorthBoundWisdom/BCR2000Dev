@@ -32,6 +32,23 @@ final class SevenSegmentDisplayTests: XCTestCase {
         }
     }
 
+    func testMarqueeLightsTwoAdjacentOutlineSegments() {
+        var marquee = BCRDisplayMarquee()
+        // Start: upper-left vertical and the first top bar of digit 1 (a corner).
+        XCTAssertEqual(BCRSevenSegmentDisplay.marqueeMasks(marquee), [0x21, 0, 0, 0])
+        marquee.step(.read)
+        XCTAssertEqual(BCRSevenSegmentDisplay.marqueeMasks(marquee), [1, 1, 0, 0])
+        for _ in 0 ..< 4 { marquee.step(.read) }
+        // Right edge: b + c of the last digit form one full "|".
+        XCTAssertEqual(BCRSevenSegmentDisplay.marqueeMasks(marquee), [0, 0, 0, 0x06])
+        for _ in 0 ..< 5 { marquee.step(.read) }
+        // Lower-left corner: d + e of the first digit form the "L" the user saw.
+        XCTAssertEqual(BCRSevenSegmentDisplay.marqueeMasks(marquee), [0x18, 0, 0, 0])
+        marquee.step(.read)
+        // Left edge: e + f form the other "|".
+        XCTAssertEqual(BCRSevenSegmentDisplay.marqueeMasks(marquee), [0x30, 0, 0, 0])
+    }
+
     @MainActor
     func testVectorDisplayRendersAVisualReviewGallery() throws {
         let gallery = VStack(spacing: 8) {

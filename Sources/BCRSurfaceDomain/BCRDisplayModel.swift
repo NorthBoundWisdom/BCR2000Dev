@@ -23,25 +23,11 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case unknown
     }
 
-    /// Adjust these together after PLAN B4 hardware measurements. These are presentation estimates,
-    /// not firmware constants or measured timing guarantees.
+    /// Presentation estimates still awaiting PLAN B4 measurements. The transfer animation is not
+    /// timed: it follows `BCRDisplayMarquee`, one step per transferred line.
     public enum Calibration {
         /// 2026-11-12 user report: the device returns faster than 1.5 s. 0.8 s is still an estimate.
         public static let valueHoldSeconds: Double = 0.8
-        /// 2026-11-13: clockwise; after previewing 2 rotations/s the user requested twice the speed.
-        /// The resulting 4 rotations/s is a visual tuning choice, not a measured firmware rate.
-        public static let busyRotationsPerSecond: Double = 4
-        /// Outline indices are clockwise from the top left (see BCRSevenSegmentDisplay.busyMasks).
-        public static let busyFrameSequence = Array(0 ..< 12)
-        public static let busyFramesPerSecond = Double(busyFrameSequence.count) * busyRotationsPerSecond
-        /// Explicit write observation, 2026-11-13: counterclockwise, approximately one turn/s.
-        public static let writeBusyRotationsPerSecond: Double = 1
-        public static let writeBusyFrameSequence = Array((0 ..< 12).reversed())
-
-        public static func framesPerSecond(for operation: TransferOperation) -> Double {
-            operation == .write
-                ? Double(writeBusyFrameSequence.count) * writeBusyRotationsPerSecond : busyFramesPerSecond
-        }
     }
 
     /// Compatibility spelling for the shared presentation calibration.
@@ -121,20 +107,39 @@ public struct BCRDisplayModel: Equatable, Sendable {
         }
     }
 
-    /// Animation frame while busy, using the estimated timing and user-described order above.
-    public static func busyFrame(at time: Double) -> Int {
-        busyFrame(at: time, operation: .read)
-    }
-
-    public static func busyFrame(at time: Double, operation: TransferOperation) -> Int {
-        let sequence = operation == .write ? Calibration.writeBusyFrameSequence : Calibration.busyFrameSequence
-        let phase = Int((time * Calibration.framesPerSecond(for: operation)).rounded(.down)) % sequence.count
-        return sequence[(phase + sequence.count) % sequence.count]
-    }
-
     private static func pad(_ text: String) -> String {
         String(repeating: " ", count: max(0, 4 - text.count)) + text
     }
+}
+
+/// The device's transfer animation on the 12 outer display segments (indices clockwise from the
+/// top left, see `BCRSevenSegmentDisplay.busyMasks`). Hardware-confirmed on firmware 1.10
+/// (PLAN G1, 2026-11-14): it is driven by transferred BCL lines, not by time. Every line advances
+/// two adjacent lit segments by one segment: clockwise for a line the device sends (dump or name
+/// reply), counterclockwise for a line it receives and acknowledges. Reads at 36 lines/s therefore
+/// turn three times per second; writes acknowledged at ~17 lines/s turn about 1.4 times.
+public struct BCRDisplayMarquee: Equatable, Sendable {
+    public static let positions = 12
+    /// The segment lit by the latest line.
+    public private(set) var head: Int
+    /// The previously lit segment, so the pair overlaps by one segment between steps.
+    public private(set) var tail: Int
+    public private(set) var steps = 0
+
+    public init(head: Int = 0, tail: Int = BCRDisplayMarquee.positions - 1) {
+        self.head = Self.wrap(head); self.tail = Self.wrap(tail)
+    }
+
+    /// One transferred line: `.read` (device → host) clockwise, `.write` (host → device) counterclockwise.
+    public mutating func step(_ direction: BCRDisplayModel.TransferOperation) {
+        tail = head
+        head = Self.wrap(head + (direction == .read ? 1 : -1))
+        steps += 1
+    }
+
+    public var lit: [Int] { [tail, head] }
+
+    private static func wrap(_ index: Int) -> Int { (index % positions + positions) % positions }
 }
 
 /// Names of the temporary preset and memory presets 1…32, as the device reports them.

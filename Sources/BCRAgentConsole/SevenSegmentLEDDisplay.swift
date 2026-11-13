@@ -2,6 +2,26 @@ import BCRFoundation
 import BCRSurfaceDomain
 import SwiftUI
 
+/// Transfer marquee state, published apart from the console model: transfers step it about
+/// 36 times per second and only the LED display re-renders for it.
+@MainActor
+final class DisplayMarqueeState: ObservableObject {
+    @Published private(set) var marquee = BCRDisplayMarquee()
+
+    func step(_ direction: BCRDisplayModel.TransferOperation) { marquee.step(direction) }
+}
+
+/// The panel's LED display, following the shared marquee while a transfer runs.
+struct LiveLEDDisplay: View {
+    let content: BCRDisplayModel.Content
+    let operation: BCRDisplayModel.TransferOperation
+    @ObservedObject var marquee: DisplayMarqueeState
+
+    var body: some View {
+        LEDDisplay(content: content, operation: operation, marquee: marquee.marquee)
+    }
+}
+
 /// Code-driven four-digit display. Text is retained only as the logical/a11y value;
 /// every visible glyph and transfer frame is drawn from the same 28 segment paths.
 struct LEDDisplay: View {
@@ -9,34 +29,24 @@ struct LEDDisplay: View {
     private var text: String { BCRDisplayModel.text(for: content) }
     private var busy: Bool { content == .busy }
     var operation: BCRDisplayModel.TransferOperation = .read
+    /// Not timed: it moves only when a transferred line steps it, like the device.
+    var marquee = BCRDisplayMarquee()
     @Environment(\.panelMetrics) private var m
 
     var body: some View {
-        Group {
-            if busy {
-                TimelineView(.periodic(
-                    from: .now,
-                    by: 1 / BCRDisplayModel.Calibration.framesPerSecond(for: operation)
-                )) { context in
-                    SevenSegmentCells(masks: BCRSevenSegmentDisplay.busyMasks(frame: BCRDisplayModel.busyFrame(
-                        at: context.date.timeIntervalSinceReferenceDate, operation: operation
-                    )))
-                }
-            } else {
-                SevenSegmentCells(masks: BCRSevenSegmentDisplay.masks(for: content))
-            }
-        }
-        .frame(width: m(60), height: m(22))
-        .frame(width: m(78), height: m(30))
-        .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
-        .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
-        // Keep the whole bezel hoverable for the help attached by the surface view.
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("surface.led")
-        .accessibilityLabel(L10n.text("LED 显示"))
-        .accessibilityValue(busy
-            ? (operation == .write ? L10n.text("设备正在写入预设") : L10n.text("设备正在读取预设")) : text)
+        SevenSegmentCells(masks: busy
+            ? BCRSevenSegmentDisplay.marqueeMasks(marquee) : BCRSevenSegmentDisplay.masks(for: content))
+            .frame(width: m(60), height: m(22))
+            .frame(width: m(78), height: m(30))
+            .background(Color.black.opacity(0.75), in: RoundedRectangle(cornerRadius: m(4)))
+            .overlay { RoundedRectangle(cornerRadius: m(4)).stroke(Color.white.opacity(0.1)) }
+            // Keep the whole bezel hoverable for the help attached by the surface view.
+            .contentShape(Rectangle())
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("surface.led")
+            .accessibilityLabel(L10n.text("LED 显示"))
+            .accessibilityValue(busy
+                ? (operation == .write ? L10n.text("设备正在写入预设") : L10n.text("设备正在读取预设")) : text)
     }
 }
 

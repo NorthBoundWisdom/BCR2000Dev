@@ -267,8 +267,9 @@ struct SurfacePanelView: View {
     /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
         VStack(spacing: m(7)) {
-            LEDDisplay(content: model.displayContent,
-                       operation: model.displayTransferOperation)
+            LiveLEDDisplay(content: model.displayContent,
+                           operation: model.displayTransferOperation,
+                           marquee: model.displayMarquee)
                 .help(L10n.text("按设备规则重现：操作时短暂显示数值或 on/oFF，空闲时显示已确认的预设号；未知时显示 ----。锁定后沿用已确认编号，不猜测预设。"))
             if let name = model.displayPresetName {
                 Text(name)

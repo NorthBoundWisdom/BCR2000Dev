@@ -20,7 +20,15 @@ public enum BCRSevenSegmentDisplay {
         return Array(repeating: 0, count: 4 - cells.count) + cells.map { glyphs[$0] ?? 0x40 }
     }
 
-    /// The existing twelve-step transfer outline, encoded on these same digit cells.
+    /// The transfer marquee: both lit outline segments on the same digit cells. At the corners the
+    /// pair forms an `L`-like angle; on the left and right edges it fills a whole `|`.
+    public static func marqueeMasks(_ marquee: BCRDisplayMarquee) -> [UInt8] {
+        marquee.lit.reduce(into: [UInt8](repeating: 0, count: 4)) { result, segment in
+            for (digit, mask) in busyMasks(frame: segment).enumerated() { result[digit] |= mask }
+        }
+    }
+
+    /// One of the twelve outline segments, clockwise from the top left, on these same digit cells.
     public static func busyMasks(frame: Int) -> [UInt8] {
         var result: [UInt8] = [0, 0, 0, 0]
         switch frame {

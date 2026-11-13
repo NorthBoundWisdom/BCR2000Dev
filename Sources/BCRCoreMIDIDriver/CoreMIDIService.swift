@@ -38,6 +38,10 @@ public protocol MIDIService: SurfaceDevice {
     func readMemoryPreset(_ number: Int) async throws -> Data
     /// Sends BCL frames one at a time, each acknowledged by the device. No store unless a frame says so.
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws
+    /// Called on the main actor for every BCL line moved by the requests above: `.read` for each
+    /// dump or name reply the device sends, `.write` for each line it acknowledges. The device's
+    /// display animation advances on exactly these lines. Devices without BCL transfers ignore it.
+    func observeTransferLines(_ observer: @escaping @MainActor (BCRDisplayModel.TransferOperation) -> Void)
 }
 
 public extension MIDIService {
@@ -50,6 +54,8 @@ public extension MIDIService {
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         throw MIDIStartupError.invalidProgram
     }
+
+    func observeTransferLines(_ observer: @escaping @MainActor (BCRDisplayModel.TransferOperation) -> Void) {}
 
     var supportsSnapshotReadback: Bool { false }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
@@ -86,6 +92,7 @@ public final class CoreMIDIService: MIDIService {
     private var snapshotTask: Task<Void, Never>?
     private var startupID: UUID?
     private var ackIndex: Int?
+    private var transferLineObserver: (@MainActor (BCRDisplayModel.TransferOperation) -> Void)?
     private var ackID: UUID?
     private var ackContinuation: CheckedContinuation<Void, any Error>?
     private var ackTimeout: Task<Void, Never>?
@@ -422,6 +429,12 @@ public final class CoreMIDIService: MIDIService {
         continuation?.resume(with: result)
     }
 
+    public func observeTransferLines(
+        _ observer: @escaping @MainActor (BCRDisplayModel.TransferOperation) -> Void
+    ) {
+        transferLineObserver = observer
+    }
+
     private func receiveSysEx(_ chunks: [MIDISysEx7Chunk], generation: UInt) {
         guard generation == inputGeneration else { return }
         for chunk in chunks {
@@ -430,6 +443,7 @@ public final class CoreMIDIService: MIDIService {
                frame[5] == 0x15, frame[6] == 0x20
             {
                 dumpActivity = ProcessInfo.processInfo.systemUptime
+                transferLineObserver?(.read)
                 if let result = dumpStream.receive(frame) { finishDump(id, result: result) }
                 continue
             }
@@ -438,6 +452,7 @@ public final class CoreMIDIService: MIDIService {
                frame[5] == 0x15, frame[6] == 0x21, frame[7] == 0, frame[8] < 32 || frame[8] == 0x7F
             {
                 namesActivity = ProcessInfo.processInfo.systemUptime
+                transferLineObserver?(.read)
                 if let result = namesStream.receive(index: Int(frame[8]),
                                                     name: String(decoding: frame[9 ..< 33], as: UTF8.self))
                 {
@@ -448,6 +463,7 @@ public final class CoreMIDIService: MIDIService {
             guard frame.count == 11,
                   frame.prefix(4) == [0xF0, 0, 0x20, 0x32], frame[5] == 0x15, frame[6] == 0x21,
                   Int(frame[7]) * 128 + Int(frame[8]) == ackIndex, let id = ackID else { continue }
+            transferLineObserver?(.write)
             finishAck(id, result: frame[9] == 0 ? .success(()) : .failure(MIDIStartupError.rejected(Int(frame[9]))))
         }
     }
