@@ -61,6 +61,39 @@ extension AgentControlService {
             guard session.engine.learnTarget == nil else { throw MCPToolFailure(L10n.text("请先停止控件学习")) }
             try onSelectMIDIEndpoints(selection)
             return endpointSelectionInfo(selection)
+        case "get_preset_alignment", "dismiss_preset_alignment":
+            guard let onPresetAlignment else { throw MCPToolFailure(L10n.text("预设对齐服务不可用")) }
+            return try onPresetAlignment(name == "get_preset_alignment" ? .status : .dismiss)
+        case "preview_preset_alignment", "apply_preset_alignment", "restore_preset":
+            guard permissions.parameterWrite,
+                  permissions.deviceControl else { throw MCPToolFailure(L10n.text("未开启设备切换权限")) }
+            try requireConfigurationWrite()
+            guard let onPresetAlignment else { throw MCPToolFailure(L10n.text("预设对齐服务不可用")) }
+            let command: PresetAlignmentCommand
+            switch name {
+            case "preview_preset_alignment":
+                var options = BCRPresetAlignment.Options()
+                func flag(_ key: String, _ path: WritableKeyPath<BCRPresetAlignment.Options, Bool>) throws {
+                    guard let value = args[key] else { return }
+                    guard case let .bool(flag) = value else {
+                        throw MCPToolFailure(L10n.text("预设对齐选项必须是布尔值"))
+                    }
+                    options[keyPath: path] = flag
+                }
+                try flag("completeButtons", \.completeButtons)
+                try flag("ringModes", \.ringModes)
+                try flag("buttonBehavior", \.buttonBehavior)
+                try flag("lockPreset", \.lockPreset)
+                try flag("enableButtonFunctions", \.enableButtonFunctions)
+                command = .preview(options)
+            case "apply_preset_alignment": command = .apply
+            default: command = .restore
+            }
+            try requireHardwareConnection()
+            try consumeWrites(1)
+            try requireInactiveOutput()
+            guard session.engine.learnTarget == nil else { throw MCPToolFailure(L10n.text("请先停止控件学习")) }
+            return try onPresetAlignment(command)
         case "get_status":
             return .object([
                 "source": .string(session.source.rawValue),

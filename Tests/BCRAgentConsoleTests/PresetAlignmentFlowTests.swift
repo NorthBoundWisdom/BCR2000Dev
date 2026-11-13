@@ -121,6 +121,65 @@ final class PresetAlignmentFlowTests: XCTestCase {
             .fileExists(atPath: directory.appending(path: "preset-alignment-restore.json").path))
     }
 
+    private func mcpPhase(_ model: ConsoleViewModel) -> JSONValue? {
+        model.mcp.service.call("get_preset_alignment").value.objectValue?["phase"]
+    }
+
+    func testMCPToolsRunTheSameAlignmentAndRestoreFlowAsTheWindow() async throws {
+        let (model, device, directory) = try setUp()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let original = device.preset
+        let mapBefore = model.engine.hardwareMap
+        let service = model.mcp.service
+        service.permissions.deviceControl = true
+        service.permissions.configurationWrite = true
+        XCTAssertEqual(mcpPhase(model), .string("none"))
+        XCTAssertTrue(service.call("apply_preset_alignment").isError, "no preview yet")
+
+        let started = service.call("preview_preset_alignment", arguments: .object(["lockPreset": .bool(false)]))
+        XCTAssertFalse(started.isError, "\(started.value)")
+        XCTAssertEqual(started.value.objectValue?["busy"], .bool(true))
+        try await wait(model) { $0 == .preview }
+        XCTAssertTrue(device.written.isEmpty)
+        XCTAssertEqual(model.presetAlignment?.options.lockPreset, false)
+        let preview = try XCTUnwrap(service.call("get_preset_alignment").value.objectValue)
+        XCTAssertEqual(preview["phase"], .string("preview"))
+        let plan = try XCTUnwrap(preview["plan"]?.objectValue)
+        XCTAssertEqual(plan["changeCount"], .number(try XCTUnwrap(model.presetAlignment?.plan).changes.count))
+        XCTAssertFalse(plan["changes"]?.arrayValue?.contains {
+            $0.objectValue?["kind"] == .string("lock")
+        } ?? true)
+        XCTAssertTrue(service.call("dismiss_preset_alignment").isError == false)
+        XCTAssertNil(model.presetAlignment)
+
+        XCTAssertFalse(service.call("preview_preset_alignment").isError)
+        try await wait(model) { $0 == .preview }
+        XCTAssertFalse(service.call("apply_preset_alignment").isError)
+        XCTAssertTrue(service.call("dismiss_preset_alignment").isError, "busy flow cannot be closed")
+        try await wait(model) { $0 == .finished || { if case .failed = $0 { true } else { false } }($0) }
+        XCTAssertEqual(mcpPhase(model), .string("finished"))
+        XCTAssertNotEqual(device.preset, original)
+        XCTAssertEqual(service.call("get_preset_alignment").value.objectValue?["canRestore"], .bool(true))
+
+        XCTAssertFalse(service.call("restore_preset").isError)
+        try await wait(model) { $0 == .finished }
+        XCTAssertEqual(device.preset, original)
+        XCTAssertEqual(model.engine.hardwareMap, mapBefore)
+        let restored = try XCTUnwrap(service.call("get_preset_alignment").value.objectValue)
+        XCTAssertEqual(restored["hasRestorePoint"], .bool(false))
+        XCTAssertTrue(service.call("restore_preset").isError, "nothing left to restore")
+    }
+
+    func testMCPAlignmentToolsWriteNothingWithoutPermission() async throws {
+        let (model, device, directory) = try setUp()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        XCTAssertTrue(model.mcp.service.call("preview_preset_alignment").isError)
+        model.mcp.service.permissions.deviceControl = true
+        XCTAssertTrue(model.mcp.service.call("preview_preset_alignment").isError, "configuration write is off")
+        XCTAssertNil(model.presetAlignment)
+        XCTAssertTrue(device.written.isEmpty)
+    }
+
     func testOpeningPreviewThreeTimesCreatesOneBackupAndNeverWritesTheDevice() async throws {
         let (model, device, directory) = try setUp()
         defer { try? FileManager.default.removeItem(at: directory) }

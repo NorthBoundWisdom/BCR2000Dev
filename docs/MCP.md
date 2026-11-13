@@ -67,6 +67,15 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | restrict_configuration_write | 空对象 | 关闭配置写入权限；GUI 持久化，独立服务按进程启动策略；不能通过 MCP 重新开启 |
 | list_midi_endpoints | 空对象 | sources/destinations（id、name、availabilityKnown）、selection（sourceID/destinationID，null 为自动 Port 1；宿主无此设置时整体为 null）、实际连接的端口 ID/名称与 error |
 | set_midi_endpoints | sourceID、destinationID: 整数或 null | 保存后的 selection。需要 parameterWrite 与 deviceControl；外部输出停止、无学习活动、无预设操作；ID 必须来自 list_midi_endpoints，所选端口缺失时不改用其他端口；独立服务未提供此设置 |
+| get_preset_alignment | 空对象 | 对齐状态：phase（none/reading/preview/writing/verifying/finished/restoring/restoreConfirmation/failed）、busy、progress（done/total 或 null）、error、planError、options、plan（changeCount、lineCount、changes[kind/control/detail]）、backupFile（仅文件名）、canPreview、hasRestorePoint、canRestore、restoreUnavailableReason |
+| preview_preset_alignment | 可选布尔：completeButtons、ringModes、buttonBehavior、lockPreset、enableButtonFunctions（缺省同对齐窗口） | 开始读取设备临时预设并生成预览（备份到本机，不写设备），立即返回状态；轮询 get_preset_alignment 直到 phase=preview |
+| apply_preset_alignment | 空对象 | 把当前预览写入设备临时预设并回读校验，不写永久存储；立即返回状态，轮询至 finished 或 failed |
+| restore_preset | 空对象 | 回读核对后恢复对齐前的临时预设与映射；若对齐后映射已改，停在 restoreConfirmation，须在 App 窗口确认 |
+| dismiss_preset_alignment | 空对象 | 关闭空闲的对齐窗口；操作进行中报错 |
+
+预设对齐工具与 App 的“对齐设备预设”窗口共用同一流程和状态（窗口会同步打开），只在 GUI 宿主提供。
+preview/apply/restore 需要 parameterWrite、deviceControl 与 configurationWrite，且实体源连接健康、外部输出停止、无学习活动；
+预览后预设、映射或配置改变时 apply 报错，须重新预览。读取与写入各约 15 秒，期间设备显示跑马灯。
 
 所有 inputSchema 都是 object、additionalProperties=false，required 字段见上表。
 参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable/step；

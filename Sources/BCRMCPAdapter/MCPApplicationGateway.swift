@@ -8,6 +8,16 @@ public enum HardwareConnectionConfirmation: String, Sendable {
     case none, pending, declined
 }
 
+/// The GUI host's device preset alignment: read → preview → apply (write and verify), and restore.
+/// The host runs the same flow as its alignment window; the gateway only checks permissions.
+public enum PresetAlignmentCommand: Equatable, Sendable {
+    case status
+    case preview(BCRPresetAlignment.Options)
+    case apply
+    case restore
+    case dismiss
+}
+
 /// Client-neutral tool execution. Transport credentials never enter this service or its log.
 @MainActor
 public final class MCPApplicationGateway {
@@ -37,6 +47,9 @@ public final class MCPApplicationGateway {
     /// Hosts without a persisted endpoint choice leave these unset; the tools then report it.
     public var onReadMIDIEndpointSelection: (@MainActor () -> MIDIEndpointSelection)?
     public var onSelectMIDIEndpoints: (@MainActor (MIDIEndpointSelection) throws -> Void)?
+    /// Hosts without preset read/write (headless, isolated) leave this unset; the tools then report it.
+    /// Every command returns the host's alignment status after it started.
+    public var onPresetAlignment: (@MainActor (PresetAlignmentCommand) throws -> JSONValue)?
     public var onRestrictConfigurationWrite: (@MainActor () throws -> Void)?
     private let now: @MainActor () -> Date
     private var rateWindow: Date?

@@ -325,6 +325,11 @@ final class ConsoleViewModel: ObservableObject {
             guard !self.startingMIDI else { throw MCPToolFailure(L10n.text("MIDI 服务仍在启动，请等待设备就绪。")) }
             try self.commitEndpointSelection(selection)
         }
+        mcp.service.onPresetAlignment = { [weak self] command in
+            guard let self else { throw MCPToolFailure(L10n.text("预设对齐服务不可用")) }
+            guard self.canConfigureMIDI else { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
+            return try self.handlePresetAlignment(command)
+        }
         mcp.service.onSelectSource = { [weak self] source in
             guard let self else { throw MCPToolFailure(L10n.text("设备切换服务不可用")) }
             guard !self.presetSourceSwitchBlocked else {
@@ -1237,14 +1242,14 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     /// Reads the current temporary preset and prepares a preview. No device writes.
-    func beginPresetAlignment() {
+    func beginPresetAlignment(options: BCRPresetAlignment.Options = .init()) {
         guard canAlignPreset else {
             notice = ConsoleNotice(level: .warning, message: "请先在实体模式下连接 BCR2000，并停止学习。")
             return
         }
         let previousDisplayTask = displayReadTask
         previousDisplayTask?.cancel()
-        presetAlignment = PresetAlignmentState(phase: .reading)
+        presetAlignment = PresetAlignmentState(phase: .reading, options: options)
         presetDump = nil; presetPreviewRoute = nil
         let route = connection, id = beginPresetWork(route: connection)
         alignmentTask = Task { @MainActor [weak self] in

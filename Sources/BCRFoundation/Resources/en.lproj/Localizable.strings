@@ -979,3 +979,13 @@
 "MIDI 端口设置服务不可用" = "MIDI port settings service is unavailable";
 "所选 MIDI 端口不存在，请先用 list_midi_endpoints 读取" = "The selected MIDI port does not exist; read list_midi_endpoints first";
 "预设操作尚未结束，暂不能更改 MIDI 端口。" = "A preset operation is still running; MIDI ports cannot be changed yet.";
+"预设对齐服务不可用" = "Preset alignment service is unavailable";
+"预设对齐选项必须是布尔值" = "Preset alignment options must be booleans";
+"没有待确认的预设对齐预览，请先读取预览。" = "No preset alignment preview awaits confirmation; read a preview first.";
+"预览没有需要写入的变更。" = "The preview has no changes to write.";
+"预设操作进行中，完成后才能关闭。" = "A preset operation is running; it can be closed after it finishes.";
+"读取设备预设对齐的阶段、进度、计划变更与恢复可用性。" = "Reads the device preset alignment phase, progress, planned changes and restore availability.";
+"读取设备临时预设并生成对齐预览，不写设备；需要设备切换与配置写入权限。" = "Reads the device's temporary preset and prepares an alignment preview without writing the device. Requires device-switch and configuration-write permissions.";
+"把当前预览写入设备临时预设并回读校验，不写永久存储；需要设备切换与配置写入权限。" = "Writes the current preview to the device's temporary preset and verifies it by readback, without storing it permanently. Requires device-switch and configuration-write permissions.";
+"回读核对后恢复对齐前的设备临时预设和映射；需要设备切换与配置写入权限。" = "After a readback check, restores the device's temporary preset and mapping from before the alignment. Requires device-switch and configuration-write permissions.";
+"关闭空闲的预设对齐窗口，不写设备。" = "Closes an idle preset alignment window without writing the device.";

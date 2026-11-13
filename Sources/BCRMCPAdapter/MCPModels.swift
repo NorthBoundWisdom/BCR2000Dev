@@ -166,6 +166,10 @@ public enum MCPToolCatalog {
         .object(["type": .string("integer")]), .object(["type": .string("null")])
     ])])
 
+    public static let presetAlignmentOptionNames = [
+        "completeButtons", "ringModes", "buttonBehavior", "lockPreset", "enableButtonFunctions"
+    ]
+
     private static func schema(_ properties: [String: JSONValue], required: [String] = []) -> JSONValue {
         .object(["type": .string("object"), "properties": .object(properties),
                  "required": .array(required.map(JSONValue.string)), "additionalProperties": .bool(false)])
@@ -176,13 +180,19 @@ public enum MCPToolCatalog {
         "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter",
         "get_agents", "start_agent", "interrupt_agent", "stop_all_agents", "set_device_source",
         "begin_control_learn", "stop_control_learn", "restrict_configuration_write",
-        "list_midi_endpoints", "set_midi_endpoints"
+        "list_midi_endpoints", "set_midi_endpoints",
+        "get_preset_alignment", "preview_preset_alignment", "apply_preset_alignment", "restore_preset",
+        "dismiss_preset_alignment"
     ]
 
     public static func inputSchema(for name: String) -> JSONValue {
         switch name {
         case "get_status", "list_parameters", "list_controls", "get_agents", "stop_all_agents", "stop_control_learn",
-             "restrict_configuration_write", "list_midi_endpoints": schema([:])
+             "restrict_configuration_write", "list_midi_endpoints", "get_preset_alignment", "apply_preset_alignment",
+             "restore_preset", "dismiss_preset_alignment": schema([:])
+        case "preview_preset_alignment":
+            // Omitted options keep the alignment window's defaults.
+            schema(Dictionary(uniqueKeysWithValues: presetAlignmentOptionNames.map { ($0, boolean) }))
         case "set_midi_endpoints":
             // null selects the automatic "BCR2000 Port 1" policy for that direction.
             schema(["sourceID": endpointID, "destinationID": endpointID], required: ["sourceID", "destinationID"])
@@ -246,6 +256,11 @@ public enum MCPToolCatalog {
         "stop_control_learn": L10n.text("停止控件学习，需要配置写入权限。"),
         "restrict_configuration_write": L10n.text("关闭配置写入权限并持久化，不能通过 MCP 再次开启。"),
         "list_midi_endpoints": L10n.text("列出可用的实体 MIDI 输入/输出端口、当前选择与实际连接。"),
-        "set_midi_endpoints": L10n.text("选择实体 MIDI 输入/输出端口并保存；null 为自动 Port 1，需要设备切换权限且外部输出已停止。")
+        "set_midi_endpoints": L10n.text("选择实体 MIDI 输入/输出端口并保存；null 为自动 Port 1，需要设备切换权限且外部输出已停止。"),
+        "get_preset_alignment": L10n.text("读取设备预设对齐的阶段、进度、计划变更与恢复可用性。"),
+        "preview_preset_alignment": L10n.text("读取设备临时预设并生成对齐预览，不写设备；需要设备切换与配置写入权限。"),
+        "apply_preset_alignment": L10n.text("把当前预览写入设备临时预设并回读校验，不写永久存储；需要设备切换与配置写入权限。"),
+        "restore_preset": L10n.text("回读核对后恢复对齐前的设备临时预设和映射；需要设备切换与配置写入权限。"),
+        "dismiss_preset_alignment": L10n.text("关闭空闲的预设对齐窗口，不写设备。")
     ]
 }

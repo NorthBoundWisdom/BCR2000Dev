@@ -210,6 +210,49 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(selection, MIDIEndpointSelection())
     }
 
+    func testPresetAlignmentToolsRequireDeviceAndConfigurationPermissionAndParseOptions() async throws {
+        let device = MCPFakeDevice()
+        device.connection = MIDIConnectionSnapshot(connectedSource: "BCR2000", connectedDestination: "BCR2000")
+        let session = SurfaceSession(hardwareDevice: device, configuration: .robotArmDemo(),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        session.selectSource(.hardware)
+        let service = AgentControlService(session: session)
+        var commands: [PresetAlignmentCommand] = []
+
+        XCTAssertTrue(service.call("get_preset_alignment").isError, "no host service")
+        service.onPresetAlignment = { commands.append($0); return .object(["phase": .string("none")]) }
+        XCTAssertFalse(service.call("get_preset_alignment").isError, "status needs no write permission")
+        for tool in ["preview_preset_alignment", "apply_preset_alignment", "restore_preset"] {
+            XCTAssertTrue(service.call(tool).isError, "\(tool) without device control")
+        }
+        service.permissions.deviceControl = true
+        XCTAssertTrue(service.call("apply_preset_alignment").isError, "without configuration write")
+        service.permissions.configurationWrite = true
+        XCTAssertTrue(service.call("preview_preset_alignment", arguments: .object([
+            "lockPreset": .string("no")
+        ])).isError)
+        XCTAssertTrue(service.call("preview_preset_alignment", arguments: .object([
+            "unknown": .bool(true)
+        ])).isError)
+        XCTAssertEqual(commands, [.status])
+
+        XCTAssertFalse(service.call("preview_preset_alignment", arguments: .object([
+            "lockPreset": .bool(false), "enableButtonFunctions": .bool(true)
+        ])).isError)
+        var expected = BCRPresetAlignment.Options()
+        expected.lockPreset = false; expected.enableButtonFunctions = true
+        XCTAssertEqual(commands.last, .preview(expected))
+        XCTAssertFalse(service.call("apply_preset_alignment").isError)
+        XCTAssertFalse(service.call("restore_preset").isError)
+        XCTAssertFalse(service.call("dismiss_preset_alignment").isError)
+        XCTAssertEqual(commands.suffix(3), [.apply, .restore, .dismiss])
+
+        device.connection = MIDIConnectionSnapshot()
+        device.onConnection?(device.connection)
+        XCTAssertTrue(service.call("apply_preset_alignment").isError, "without a hardware connection")
+        XCTAssertEqual(commands.last, .dismiss)
+    }
+
     func testLearnUsesRealInputPathAndCannotOverwriteExistingBinding() async throws {
         let device = MCPFakeDevice()
         device.connection = MIDIConnectionSnapshot(connectedSource: "BCR Port 1", connectedDestination: "BCR Port 1")
