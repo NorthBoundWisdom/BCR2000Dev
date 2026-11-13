@@ -100,6 +100,8 @@ final class ConsoleViewModel: ObservableObject {
     private let endpointStore: JSONFileStore<MIDIEndpointSelection>
     let canConfigureMIDI: Bool
     @Published private(set) var endpointSelection = MIDIEndpointSelection()
+    /// Saved endpoint settings could not be read; MIDI stays stopped until a choice is applied.
+    @Published private(set) var endpointSettingsNeedRepair = false
     private let workspacePanelStore: JSONFileStore<WorkspacePanelSettings>
     /// Specialist workspace panels the user switched on; core panels are always visible.
     @Published private(set) var workspacePanels = WorkspacePanelSettings()
@@ -252,6 +254,7 @@ final class ConsoleViewModel: ObservableObject {
             if let stored = try endpointStore.load() { try stored.validate(); savedSelection = stored }
         } catch { endpointError = "MIDI 端口设置读取失败：\(error: error)" }
         endpointSelection = savedSelection
+        endpointSettingsNeedRepair = endpointError != nil
         let workspacePanelStore = JSONFileStore<WorkspacePanelSettings>(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "workspace-panels.json"))
         self.workspacePanelStore = workspacePanelStore
@@ -486,6 +489,7 @@ final class ConsoleViewModel: ObservableObject {
     private func commitEndpointSelection(_ selection: MIDIEndpointSelection) throws {
         try selection.validate()
         try endpointStore.save(selection)
+        endpointSettingsNeedRepair = false
         if output.settings.enabled { output.stop(failure: L10n.text("MIDI 端口已改变，请重新确认使能")) }
         endpointSelection = selection
         if isLearning { session.stopLearning() }

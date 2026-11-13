@@ -60,6 +60,13 @@ struct OutputSettingsView: View {
     @State private var draft: OutputSettings
     @State private var confirmsLimits = false
 
+    /// Starting and stopping the output is a separate action, not a pending edit.
+    private var hasChanges: Bool {
+        var candidate = draft
+        candidate.enabled = controller.settings.enabled
+        return candidate != controller.settings
+    }
+
     init(controller: OutputController) {
         self.controller = controller
         _draft = State(initialValue: controller.settings)
@@ -93,6 +100,7 @@ struct OutputSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .help(L10n.text("启动或停止经过安全门的 OSC 输出"))
                 Button(L10n.text("应用设置")) { controller.apply(draft) }
+                    .disabled(!hasChanges)
                 Button(L10n.text("重新生成限位草稿…")) { confirmsLimits = true }
                     .confirmationDialog(L10n.text("按当前参数范围重建限位草稿？"), isPresented: $confirmsLimits) {
                         Button(L10n.text("重建草稿"), role: .destructive) {

@@ -109,7 +109,9 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertEqual(midi.starts, 0)
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertEqual(try Data(contentsOf: url), original)
+        XCTAssertTrue(model.endpointSettingsNeedRepair, "an unchanged choice must stay applicable")
         model.applyEndpointSelection(.init())
+        XCTAssertFalse(model.endpointSettingsNeedRepair)
         for _ in 0 ..< 100 {
             if !model.startingMIDI { break }
             try await Task.sleep(for: .milliseconds(1))

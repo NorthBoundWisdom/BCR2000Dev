@@ -55,7 +55,9 @@ struct MIDIEndpointSettingsView: View {
                 Spacer()
                 Button(L10n.text("应用端口")) { model.applyEndpointSelection(draft) }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!model.canConfigureMIDI)
+                    // Re-applying the same choice is still needed to repair unreadable saved settings.
+                    .disabled(!model.canConfigureMIDI
+                        || (draft == model.endpointSelection && !model.endpointSettingsNeedRepair))
                     .help(L10n.text("保存并重新连接所选 MIDI 输入与输出端口"))
             }
             Text(L10n.text("端口选择保留当前实体映射；换设备或预设后需重新学习。"))

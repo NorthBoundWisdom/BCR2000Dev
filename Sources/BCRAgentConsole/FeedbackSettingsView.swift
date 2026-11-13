@@ -78,6 +78,7 @@ struct FeedbackSettingsView: View {
                 .font(.caption).fixedSize(horizontal: false, vertical: true)
             if let error = controller.error { Text(error).foregroundStyle(.red) }
             Button(L10n.text("应用设置")) { controller.apply(draft) }
+                .disabled(draft == controller.policy)
         }
         .formStyle(.grouped).padding(12).settingsPage()
         .preferredColorScheme(.dark)

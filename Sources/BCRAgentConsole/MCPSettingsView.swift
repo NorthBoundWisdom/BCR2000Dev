@@ -21,6 +21,13 @@ struct MCPSettingsView: View {
     @ObservedObject var controller: MCPController
     @State private var draft: MCPSettings
 
+    /// The service switch saves immediately and is not part of the draft.
+    private var hasChanges: Bool {
+        var candidate = draft
+        candidate.enabled = controller.settings.enabled
+        return candidate != controller.settings
+    }
+
     init(controller: MCPController) {
         self.controller = controller
         _draft = State(initialValue: controller.settings)
@@ -60,7 +67,9 @@ struct MCPSettingsView: View {
             }
             .formStyle(.columns)
             HStack {
-                Button(L10n.text("应用设置")) { Task { await controller.apply(draft) } }.buttonStyle(.borderedProminent)
+                Button(L10n.text("应用设置")) { Task { await controller.apply(draft) } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!hasChanges)
                 Button(L10n.text("复制 Token")) { Task { await controller.copyToken() } }
                     .disabled(!controller.settings.enabled || controller.isStarting)
                 Button(L10n.text("复制连接命令")) { Task { await controller.copyConnectionCommand() } }
