@@ -34,6 +34,9 @@ public final class MCPApplicationGateway {
     /// Headless hosts leave this unset and report `none`.
     public var onReadHardwareConnectionConfirmation: (@MainActor () -> HardwareConnectionConfirmation)?
     public var onSelectSource: (@MainActor (DeviceSource) throws -> Void)?
+    /// Hosts without a persisted endpoint choice leave these unset; the tools then report it.
+    public var onReadMIDIEndpointSelection: (@MainActor () -> MIDIEndpointSelection)?
+    public var onSelectMIDIEndpoints: (@MainActor (MIDIEndpointSelection) throws -> Void)?
     public var onRestrictConfigurationWrite: (@MainActor () throws -> Void)?
     private let now: @MainActor () -> Date
     private var rateWindow: Date?

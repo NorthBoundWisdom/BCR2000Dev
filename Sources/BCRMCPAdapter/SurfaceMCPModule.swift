@@ -22,6 +22,45 @@ extension AgentControlService {
             if source == .hardware { try requireHardwareConnection() }
             try onSelectSource(source)
             return .object(["source": .string(session.source.rawValue)])
+        case "list_midi_endpoints":
+            let connection = session.connection
+            func list(_ endpoints: [MIDIEndpointDescriptor]) -> JSONValue {
+                .array(endpoints.map { .object([
+                    "id": .number(Int($0.id)), "name": .string($0.name),
+                    "availabilityKnown": .bool($0.availabilityKnown)
+                ]) })
+            }
+            return .object([
+                "sources": list(connection.sourceEndpoints),
+                "destinations": list(connection.destinationEndpoints),
+                "selection": onReadMIDIEndpointSelection.map { endpointSelectionInfo($0()) } ?? .null,
+                "connectedSourceID": connection.connectedSourceID.map { .number(Int($0)) } ?? .null,
+                "connectedDestinationID": connection.connectedDestinationID.map { .number(Int($0)) } ?? .null,
+                "connectedSource": connection.connectedSource.map(JSONValue.string) ?? .null,
+                "connectedDestination": connection.connectedDestination.map(JSONValue.string) ?? .null,
+                "error": connection.lastError.map(JSONValue.string) ?? .null
+            ])
+        case "set_midi_endpoints":
+            guard permissions.parameterWrite,
+                  permissions.deviceControl else { throw MCPToolFailure(L10n.text("未开启设备切换权限")) }
+            guard let onSelectMIDIEndpoints else { throw MCPToolFailure(L10n.text("MIDI 端口设置服务不可用")) }
+            func endpoint(_ key: String, in available: [MIDIEndpointDescriptor]) throws -> Int32? {
+                guard let value = args[key], value != .null else { return nil }
+                guard let id = value.exactIntValue.flatMap(Int32.init(exactly:)),
+                      available.contains(where: { $0.id == id })
+                else { throw MCPToolFailure(L10n.text("所选 MIDI 端口不存在，请先用 list_midi_endpoints 读取")) }
+                return id
+            }
+            let selection = MIDIEndpointSelection(
+                sourceID: try endpoint("sourceID", in: session.connection.sourceEndpoints),
+                destinationID: try endpoint("destinationID", in: session.connection.destinationEndpoints)
+            )
+            try selection.validate()
+            try consumeWrites(1)
+            try requireInactiveOutput()
+            guard session.engine.learnTarget == nil else { throw MCPToolFailure(L10n.text("请先停止控件学习")) }
+            try onSelectMIDIEndpoints(selection)
+            return endpointSelectionInfo(selection)
         case "get_status":
             return .object([
                 "source": .string(session.source.rawValue),
@@ -227,6 +266,11 @@ extension AgentControlService {
     func requireConfigurationWrite() throws {
         guard permissions.parameterWrite,
               permissions.configurationWrite else { throw MCPToolFailure(L10n.text("未开启配置写入权限")) }
+    }
+
+    func endpointSelectionInfo(_ selection: MIDIEndpointSelection) -> JSONValue {
+        .object(["sourceID": selection.sourceID.map { .number(Int($0)) } ?? .null,
+                 "destinationID": selection.destinationID.map { .number(Int($0)) } ?? .null])
     }
 
     func requireInactiveOutput() throws {

@@ -974,3 +974,8 @@
 "已确认预设编号 {0}；已有内容唯一性证明，定义一致时可跨连接恢复，不写入设备。" = "Preset number {0} confirmed. Existing content-uniqueness proof permits restoring it across connections for the same definition. Nothing was written to the device.";
 
 "未能读取设备显示设置或同步灯环：{0}" = "Could not read device display settings or synchronize LED rings: {0}";
+"列出可用的实体 MIDI 输入/输出端口、当前选择与实际连接。" = "Lists available physical MIDI input/output ports, the current selection and the actual connection.";
+"选择实体 MIDI 输入/输出端口并保存；null 为自动 Port 1，需要设备切换权限且外部输出已停止。" = "Selects and saves the physical MIDI input/output ports; null means automatic Port 1. Requires device-switch permission and stopped external output.";
+"MIDI 端口设置服务不可用" = "MIDI port settings service is unavailable";
+"所选 MIDI 端口不存在，请先用 list_midi_endpoints 读取" = "The selected MIDI port does not exist; read list_midi_endpoints first";
+"预设操作尚未结束，暂不能更改 MIDI 端口。" = "A preset operation is still running; MIDI ports cannot be changed yet.";

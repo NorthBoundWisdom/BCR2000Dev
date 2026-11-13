@@ -162,6 +162,10 @@ public enum MCPToolCatalog {
         "encoderStep": .object(["type": .string("number"), "exclusiveMinimum": .number(0)])
     ], required: ["control", "target", "buttonBehavior", "inverted"])
 
+    private static let endpointID: JSONValue = .object(["oneOf": .array([
+        .object(["type": .string("integer")]), .object(["type": .string("null")])
+    ])])
+
     private static func schema(_ properties: [String: JSONValue], required: [String] = []) -> JSONValue {
         .object(["type": .string("object"), "properties": .object(properties),
                  "required": .array(required.map(JSONValue.string)), "additionalProperties": .bool(false)])
@@ -171,13 +175,17 @@ public enum MCPToolCatalog {
         "get_status", "list_parameters", "get_parameter", "set_parameter", "set_parameters",
         "nudge_parameter", "reset_group", "list_controls", "assign_control", "create_parameter", "update_parameter",
         "get_agents", "start_agent", "interrupt_agent", "stop_all_agents", "set_device_source",
-        "begin_control_learn", "stop_control_learn", "restrict_configuration_write"
+        "begin_control_learn", "stop_control_learn", "restrict_configuration_write",
+        "list_midi_endpoints", "set_midi_endpoints"
     ]
 
     public static func inputSchema(for name: String) -> JSONValue {
         switch name {
         case "get_status", "list_parameters", "list_controls", "get_agents", "stop_all_agents", "stop_control_learn",
-             "restrict_configuration_write": schema([:])
+             "restrict_configuration_write", "list_midi_endpoints": schema([:])
+        case "set_midi_endpoints":
+            // null selects the automatic "BCR2000 Port 1" policy for that direction.
+            schema(["sourceID": endpointID, "destinationID": endpointID], required: ["sourceID", "destinationID"])
         case "start_agent", "interrupt_agent": schema(
                 ["slot": .object(["type": .string("integer"), "minimum": .number(1), "maximum": .number(8)])],
                 required: ["slot"]
@@ -236,6 +244,8 @@ public enum MCPToolCatalog {
         "set_device_source": L10n.text("切换设备源，需要设备切换权限且外部输出已停止。"),
         "begin_control_learn": L10n.text("等待实体输入学习未绑定控件，不覆盖已有映射。"),
         "stop_control_learn": L10n.text("停止控件学习，需要配置写入权限。"),
-        "restrict_configuration_write": L10n.text("关闭配置写入权限并持久化，不能通过 MCP 再次开启。")
+        "restrict_configuration_write": L10n.text("关闭配置写入权限并持久化，不能通过 MCP 再次开启。"),
+        "list_midi_endpoints": L10n.text("列出可用的实体 MIDI 输入/输出端口、当前选择与实际连接。"),
+        "set_midi_endpoints": L10n.text("选择实体 MIDI 输入/输出端口并保存；null 为自动 Port 1，需要设备切换权限且外部输出已停止。")
     ]
 }

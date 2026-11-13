@@ -159,6 +159,57 @@ final class MCPTests: XCTestCase {
         XCTAssertTrue(service.call("set_device_source", arguments: .object(["source": .string("unknown")])).isError)
     }
 
+    func testMIDIEndpointToolsListAndSelectOnlyKnownPortsWithDevicePermission() async throws {
+        let device = MCPFakeDevice()
+        let session = SurfaceSession(hardwareDevice: device, configuration: .robotArmDemo(),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let service = AgentControlService(session: session)
+        var connection = MIDIConnectionSnapshot()
+        connection.sourceEndpoints = [.init(id: 11, name: "BCR2000")]
+        connection.destinationEndpoints = [.init(id: -22, name: "BCR2000", availabilityKnown: false)]
+        device.connection = connection
+        device.onConnection?(connection)
+        var selection = MIDIEndpointSelection()
+        let choice: JSONValue = .object(["sourceID": .number(11), "destinationID": .number(-22)])
+
+        // Reading needs no write permission; a host without the setting reports a null selection.
+        var listed = try XCTUnwrap(service.call("list_midi_endpoints").value.objectValue)
+        XCTAssertEqual(listed["selection"], .null)
+        XCTAssertEqual(listed["sources"], .array([.object([
+            "id": .number(11), "name": .string("BCR2000"), "availabilityKnown": .bool(true)
+        ])]))
+        XCTAssertEqual(listed["destinations"]?.arrayValue?.first?.objectValue?["availabilityKnown"], .bool(false))
+
+        service.permissions.deviceControl = true
+        XCTAssertTrue(service.call("set_midi_endpoints", arguments: choice).isError, "no host service")
+        service.onReadMIDIEndpointSelection = { selection }
+        service.onSelectMIDIEndpoints = { selection = $0 }
+        service.permissions.deviceControl = false
+        XCTAssertTrue(service.call("set_midi_endpoints", arguments: choice).isError)
+        service.permissions.deviceControl = true
+        for invalid: [String: JSONValue] in [
+            ["sourceID": .number(11)],
+            ["sourceID": .number(99), "destinationID": .number(-22)],
+            ["sourceID": .number(11), "destinationID": .number(0)],
+            ["sourceID": .double(11.5), "destinationID": .null],
+            ["sourceID": .string("BCR2000"), "destinationID": .null]
+        ] {
+            XCTAssertTrue(service.call("set_midi_endpoints", arguments: .object(invalid)).isError)
+        }
+        XCTAssertEqual(selection, MIDIEndpointSelection())
+
+        let result = service.call("set_midi_endpoints", arguments: choice)
+        XCTAssertFalse(result.isError)
+        XCTAssertEqual(result.value, .object(["sourceID": .number(11), "destinationID": .number(-22)]))
+        XCTAssertEqual(selection, MIDIEndpointSelection(sourceID: 11, destinationID: -22))
+        listed = try XCTUnwrap(service.call("list_midi_endpoints").value.objectValue)
+        XCTAssertEqual(listed["selection"], result.value)
+
+        let automatic: JSONValue = .object(["sourceID": .null, "destinationID": .null])
+        XCTAssertFalse(service.call("set_midi_endpoints", arguments: automatic).isError)
+        XCTAssertEqual(selection, MIDIEndpointSelection())
+    }
+
     func testLearnUsesRealInputPathAndCannotOverwriteExistingBinding() async throws {
         let device = MCPFakeDevice()
         device.connection = MIDIConnectionSnapshot(connectedSource: "BCR Port 1", connectedDestination: "BCR Port 1")

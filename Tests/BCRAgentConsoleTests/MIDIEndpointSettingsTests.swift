@@ -60,6 +60,43 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertEqual(saved, choice)
     }
 
+    func testMCPEndpointToolPersistsTheSameChoiceAsTheSettingsSheet() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let midi = EndpointFakeMIDI()
+        midi.connection.sourceEndpoints = [.init(id: 7, name: "BCR2000")]
+        midi.connection.destinationEndpoints = [.init(id: 9, name: "BCR2000")]
+        let model = ConsoleViewModel(stores: stores(directory), midiService: midi)
+        for _ in 0 ..< 200 {
+            if !model.startingMIDI, model.connection.sourceEndpoints.count == 1 { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        model.mcp.service.permissions.deviceControl = true
+        let result = model.mcp.service.call("set_midi_endpoints", arguments: .object([
+            "sourceID": .number(7), "destinationID": .number(9)
+        ]))
+        XCTAssertFalse(result.isError, "\(result.value)")
+        let choice = MIDIEndpointSelection(sourceID: 7, destinationID: 9)
+        XCTAssertEqual(model.endpointSelection, choice)
+        XCTAssertEqual(midi.choices.last, choice)
+        XCTAssertEqual(try JSONFileStore<MIDIEndpointSelection>(
+            fileURL: directory.appending(path: "midi-endpoints.json")
+        ).load(), choice)
+        XCTAssertEqual(model.mcp.service.call("list_midi_endpoints").value.objectValue?["selection"], result.value)
+    }
+
+    func testIsolatedModeRejectsTheMCPEndpointTool() async {
+        let midi = EndpointFakeMIDI()
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, midiService: midi)
+        model.mcp.service.permissions.deviceControl = true
+        XCTAssertTrue(model.mcp.service.call("set_midi_endpoints", arguments: .object([
+            "sourceID": .null, "destinationID": .null
+        ])).isError)
+        XCTAssertTrue(midi.choices.isEmpty)
+    }
+
     func testCorruptSettingsPreventStartUntilExplicitlyRepaired() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

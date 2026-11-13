@@ -312,6 +312,16 @@ final class ConsoleViewModel: ObservableObject {
         mcp.service.onReadHardwareConnectionConfirmation = { [weak self] in
             self?.hardwareConnectionConfirmation ?? .none
         }
+        mcp.service.onReadMIDIEndpointSelection = { [weak self] in self?.endpointSelection ?? .init() }
+        mcp.service.onSelectMIDIEndpoints = { [weak self] selection in
+            guard let self else { throw MCPToolFailure(L10n.text("MIDI 端口设置服务不可用")) }
+            guard self.canConfigureMIDI else { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
+            guard !self.presetSourceSwitchBlocked else {
+                throw MCPToolFailure(L10n.text("预设操作尚未结束，暂不能更改 MIDI 端口。"))
+            }
+            guard !self.startingMIDI else { throw MCPToolFailure(L10n.text("MIDI 服务仍在启动，请等待设备就绪。")) }
+            try self.commitEndpointSelection(selection)
+        }
         mcp.service.onSelectSource = { [weak self] source in
             guard let self else { throw MCPToolFailure(L10n.text("设备切换服务不可用")) }
             guard !self.presetSourceSwitchBlocked else {
@@ -469,16 +479,19 @@ final class ConsoleViewModel: ObservableObject {
             notice = ConsoleNotice(level: .warning, message: "隔离测试未启用实体 MIDI")
             return
         }
-        do {
-            try selection.validate()
-            try endpointStore.save(selection)
-            if output.settings.enabled { output.stop(failure: L10n.text("MIDI 端口已改变，请重新确认使能")) }
-            endpointSelection = selection
-            if isLearning { session.stopLearning() }
-            midi.selectEndpoints(selection)
-            startMIDIWithoutBlockingWindow()
-            notice = ConsoleNotice(level: .info, message: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
-        } catch { report(error) }
+        do { try commitEndpointSelection(selection) } catch { report(error) }
+    }
+
+    /// Shared by the settings sheet and the MCP tool; failures stay with the caller.
+    private func commitEndpointSelection(_ selection: MIDIEndpointSelection) throws {
+        try selection.validate()
+        try endpointStore.save(selection)
+        if output.settings.enabled { output.stop(failure: L10n.text("MIDI 端口已改变，请重新确认使能")) }
+        endpointSelection = selection
+        if isLearning { session.stopLearning() }
+        midi.selectEndpoints(selection)
+        startMIDIWithoutBlockingWindow()
+        notice = ConsoleNotice(level: .info, message: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
     }
 
     private var presetSourceSwitchBlocked: Bool {

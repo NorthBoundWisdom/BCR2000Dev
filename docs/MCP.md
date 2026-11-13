@@ -65,6 +65,8 @@ tools/list 返回权威 JSON Schema（inputSchema、outputSchema 与只读提示
 | begin_control_learn | control: 控件对象 | 仅实体源、健康路由、外部输出停止时等待实际输入；拒绝覆盖已有学习映射 |
 | stop_control_learn | 空对象 | 停止学习，需要配置写入 |
 | restrict_configuration_write | 空对象 | 关闭配置写入权限；GUI 持久化，独立服务按进程启动策略；不能通过 MCP 重新开启 |
+| list_midi_endpoints | 空对象 | sources/destinations（id、name、availabilityKnown）、selection（sourceID/destinationID，null 为自动 Port 1；宿主无此设置时整体为 null）、实际连接的端口 ID/名称与 error |
+| set_midi_endpoints | sourceID、destinationID: 整数或 null | 保存后的 selection。需要 parameterWrite 与 deviceControl；外部输出停止、无学习活动、无预设操作；ID 必须来自 list_midi_endpoints，所选端口缺失时不改用其他端口；独立服务未提供此设置 |
 
 所有 inputSchema 都是 object、additionalProperties=false，required 字段见上表。
 参数定义包含 id/name/group/unit/minimum/maximum/defaultValue/kind/agentWritable/step；
