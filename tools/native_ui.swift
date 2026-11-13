@@ -10,7 +10,7 @@ func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
 
 let arguments = CommandLine.arguments
 if arguments.count != 4 || Int32(arguments[1]) == nil || Int32(arguments[1])! <= 0 {
-    FileHandle.standardError.write(Data("Usage: native_ui <pid> <exists|enabled|help|press> <identifier>\n".utf8))
+    FileHandle.standardError.write(Data("Usage: native_ui <pid> <exists|enabled|help|value|press> <identifier>\n".utf8))
     exit(2)
 }
 
@@ -37,7 +37,7 @@ while let element = pending.popLast(), visited < 10000 {
     let matches: Bool
     if arguments[2] == "press-help" {
         matches = (attribute(element, kAXHelpAttribute) as? String)?.hasPrefix(arguments[3]) == true
-    } else if arguments[2] == "press-description" {
+    } else if arguments[2] == "press-description" || arguments[2] == "enabled-description" {
         matches = (attribute(element, kAXDescriptionAttribute) as? String)?.hasPrefix(arguments[3]) == true
     } else {
         matches = attribute(element, kAXIdentifierAttribute) as? String == arguments[3]
@@ -45,13 +45,25 @@ while let element = pending.popLast(), visited < 10000 {
     if matches {
         switch arguments[2] {
         case "exists": print("found"); exit(0)
+        case "value":
+            guard let value = attribute(element, kAXValueAttribute) as? String
+                ?? attribute(element, kAXValueDescriptionAttribute) as? String
+            else {
+                let role = attribute(element, kAXRoleAttribute) as? String ?? "unknown"
+                let description = attribute(element, kAXDescriptionAttribute) as? String ?? ""
+                FileHandle.standardError
+                    .write(Data("String value missing for \(arguments[3]); role=\(role); description=\(description)\n"
+                            .utf8))
+                exit(4)
+            }
+            print(value); exit(0)
         case "help":
             guard let help = attribute(element, kAXHelpAttribute) as? String else {
                 FileHandle.standardError.write(Data("Help attribute missing for \(arguments[3])\n".utf8))
                 exit(4)
             }
             print(help); exit(0)
-        case "enabled":
+        case "enabled", "enabled-description":
             if attribute(element, kAXEnabledAttribute) as? Bool == false { exit(3) }
             print("enabled"); exit(0)
         case "press", "press-help", "press-description":

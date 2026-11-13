@@ -936,3 +936,35 @@
 "应用界面立即切换并自动保存；系统菜单、文件面板、系统对话框按钮及 macOS 系统错误描述需重启应用后切换。" = "The app interface updates immediately and the choice is saved. System menus, file panels, system dialog buttons and macOS error descriptions switch after restarting the app.";
 
 "{0}：{1}" = "{0}: {1}";
+
+"正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。" = "Starting the MIDI service. You can continue using the interface while the device becomes ready.";
+
+"MIDI 正在启动" = "MIDI Starting";
+
+"界面可继续使用，请等待设备就绪。" = "You can continue using the interface while the device becomes ready.";
+
+"当前名称没有对应的存储预设，无法确认编号。" = "The current name has no matching stored preset, so its number cannot be confirmed.";
+
+"已按实机屏幕确认预设编号 {0}；仅用于本次连接，不写入设备。" = "Preset number {0} confirmed from the device screen for this connection only. Nothing was written to the device.";
+
+"核对实机预设编号" = "Check Device Preset Number";
+
+"核对实机预设编号…" = "Check Device Preset Number…";
+
+"设备不直接报告当前编号。请查看实机屏幕并选择一致的编号；仅确认本次连接的显示，不写入设备。" = "The device does not report its current number directly. Check its screen and select the matching number. This confirms the display for this connection only and writes nothing to the device.";
+
+"实机屏幕编号" = "Number on Device Screen";
+
+"请选择实机显示的编号" = "Select the number shown on the device";
+
+"确认与实机一致" = "Confirm Screen Match";
+
+"假设备启动参数无效" = "Invalid isolated device startup options";
+
+"MIDI 服务仍在启动，请等待设备就绪。" = "The MIDI service is still starting. Please wait for the device to become ready.";
+
+"已选中" = "Selected";
+
+"未选中" = "Not Selected";
+
+"编号证据与当前预设不一致，请重新核对。" = "The preset number evidence does not match the current preset. Please check again.";

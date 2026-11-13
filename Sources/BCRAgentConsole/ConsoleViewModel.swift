@@ -148,6 +148,8 @@ final class ConsoleViewModel: ObservableObject {
     /// `.showvalue` settings and preset name of the device's current preset, when last read.
     @Published private(set) var displayProfile: BCRDisplayProfile?
     private let displayProfileStore: JSONFileStore<BCRDisplayProfile>
+    /// Proven numbers bound to exact working-copy definitions; survives restarts.
+    private let presetNumberMemory: PresetNumberMemory
     private var displayRevertTask: Task<Void, Never>?
     private var startupProgram: MIDIStartupProgram?
     private var startupProgramError: (any Error)?
@@ -179,6 +181,8 @@ final class ConsoleViewModel: ObservableObject {
     private var pressTasks: [BCRControlID: Task<Void, Never>] = [:]
     private var pressStarted: [BCRControlID: Double] = [:]
     private var hardwareConnectionTask: Task<Void, Never>?
+    private var midiInitializationTask: Task<Void, Never>?
+    @Published private(set) var startingMIDI = false
     @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
     /// Select whichever control was last touched on the device.
     @Published var followsTouch = true
@@ -206,6 +210,9 @@ final class ConsoleViewModel: ObservableObject {
         supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
         displayProfileStore = JSONFileStore(fileURL: supportDirectory.appending(path: "display-profile.json"))
         displayProfile = try? displayProfileStore.load()
+        presetNumberMemory = PresetNumberMemory(
+            store: JSONFileStore(fileURL: supportDirectory.appending(path: "preset-number-evidence.json"))
+        )
         restorePointStore = JSONFileStore(fileURL: supportDirectory.appending(path: "preset-alignment-restore.json"))
         presetRestorePoint = try? restorePointStore.load()
         blinkPreference = JSONFileStore(fileURL: supportDirectory.appending(path: "agent-led-blink.json"))
@@ -310,6 +317,9 @@ final class ConsoleViewModel: ObservableObject {
             guard !self.presetSourceSwitchBlocked else {
                 throw MCPToolFailure(L10n.text("预设操作尚未结束，暂不能切换设备来源。"))
             }
+            if source == .hardware, self.startingMIDI {
+                throw MCPToolFailure(L10n.text("MIDI 服务仍在启动，请等待设备就绪。"))
+            }
             if source == .hardware, !self.canConfigureMIDI { throw MCPToolFailure(L10n.text("隔离测试未启用实体 MIDI")) }
             guard source == .hardware, self.source == .mock, self.hardwareSwitchWrites else {
                 self.selectSource(source); return
@@ -390,10 +400,22 @@ final class ConsoleViewModel: ObservableObject {
         }
         guard startsMIDI else { return }
         midi.selectEndpoints(savedSelection)
-        do {
-            try midi.start()
-            if connection.isConnected { offerHardwareConnection() }
-        } catch { notice = ConsoleNotice(level: .error, message: "CoreMIDI 启动失败：\(error: error)")
+        startMIDIWithoutBlockingWindow()
+    }
+
+    private func startMIDIWithoutBlockingWindow() {
+        guard midiInitializationTask == nil else { return }
+        startingMIDI = true
+        let progress = ConsoleNotice(level: .info, message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。")
+        if notice == nil { notice = progress }
+        midiInitializationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.startingMIDI = false; self.midiInitializationTask = nil }
+            do {
+                try await self.midi.startWhenReady()
+                if self.notice == progress { self.notice = nil }
+                if self.connection.isConnected { self.offerHardwareConnection() }
+            } catch { self.notice = ConsoleNotice(level: .error, message: "CoreMIDI 启动失败：\(error: error)") }
         }
     }
 
@@ -454,7 +476,7 @@ final class ConsoleViewModel: ObservableObject {
             endpointSelection = selection
             if isLearning { session.stopLearning() }
             midi.selectEndpoints(selection)
-            try midi.start()
+            startMIDIWithoutBlockingWindow()
             notice = ConsoleNotice(level: .info, message: "MIDI 端口设置已保存；端口缺失时不会自动替换手动选择")
         } catch { report(error) }
     }
@@ -472,6 +494,7 @@ final class ConsoleViewModel: ObservableObject {
         pendingHardwareConnection = nil; declinedHardwareConnectionRoute = nil
         startupConfiguredGroup = nil; startupConfiguredPreset = nil
         presetNumberEvidence = nil
+        latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
         invalidateDisplayNumber()
         clearDisplayedValue()
         clearHardwarePresses()
@@ -484,9 +507,11 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     /// Text of the 4-digit LED display, as the device would show it right now.
-    var displayText: String {
-        BCRDisplayModel.text(for: display.content(at: ProcessInfo.processInfo.systemUptime))
+    var displayContent: BCRDisplayModel.Content {
+        display.content(at: ProcessInfo.processInfo.systemUptime)
     }
+
+    var displayText: String { BCRDisplayModel.text(for: displayContent) }
 
     /// True while a BCL dump or write runs; the device's display animates meanwhile.
     var displayBusy: Bool { display.transfers > 0 }
@@ -555,6 +580,9 @@ final class ConsoleViewModel: ObservableObject {
     private var displayReadTask: Task<Void, Never>?
     private var displayReadID: UUID?
     private var presetNumberEvidence: PresetNumberEvidence?
+    private var latestDisplayDump: (route: PresetRestoreRoute, dump: Data)?
+    @Published private(set) var pendingPresetNumberConfirmation: PresetNumberConfirmation?
+    @Published private(set) var selectedPresetNumber: Int?
     private var verifiedDisplayNames: (route: MIDIConnectionSnapshot, names: BCRPresetNames)?
 
     /// Read-only, on entering hardware mode. The 33 preset names take under a second and usually
@@ -622,7 +650,10 @@ final class ConsoleViewModel: ObservableObject {
                 let temporary = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 try self.requirePresetRoute(route)
                 self.updateDisplayProfile(from: temporary)
-                if needsNumber { try await self.resolveDisplayNumber(temporary: temporary, names: names, route: route) }
+                if needsNumber {
+                    try await self.resolveDisplayNumber(temporary: temporary, names: names, route: route,
+                                                        compareLockedMemory: true)
+                }
             } catch {
                 guard self.displayReadID == id, !Task.isCancelled,
                       self.source == .hardware, self.connection.hasSameRoute(as: route), !self.isLearning
@@ -639,8 +670,16 @@ final class ConsoleViewModel: ObservableObject {
     private func rememberPresetNumber(_ number: Int?, dump: Data, names: BCRPresetNames,
                                       route: MIDIConnectionSnapshot, originalDefinition: [String]? = nil) throws
     {
-        presetNumberEvidence = try PresetNumberEvidence(number: number, dump: dump, names: names, route: route,
-                                                        originalDefinition: originalDefinition)
+        let evidence = try PresetNumberEvidence(number: number, dump: dump, names: names, route: route,
+                                                originalDefinition: originalDefinition)
+        guard number == nil || evidence != nil else {
+            throw PresetOperationError("编号证据与当前预设不一致，请重新核对。")
+        }
+        presetNumberEvidence = evidence
+        // Persist the proof for this exact definition so a restart does not fall back to ----.
+        if let evidence {
+            do { try presetNumberMemory.remember(evidence) } catch { report(error) }
+        }
         setDisplayPreset(number)
         displayProfile?.resolvedPreset = number
         displayProfile?.resolvedCandidates = names.candidates
@@ -648,7 +687,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     private func resolveDisplayNumber(temporary: Data, names: BCRPresetNames,
-                                      route: MIDIConnectionSnapshot) async throws
+                                      route: MIDIConnectionSnapshot, compareLockedMemory: Bool = false) async throws
     {
         try requirePresetRoute(route)
         if let evidence = presetNumberEvidence, try evidence.matches(temporary, names: names, on: route) {
@@ -657,17 +696,20 @@ final class ConsoleViewModel: ObservableObject {
             return
         }
         let profile = try BCRDisplayProfile.read(fromPresetDump: temporary)
+        // A number proven earlier (also before a restart) for exactly this definition on this route.
+        let remembered = try presetNumberMemory.number(for: temporary, names: names, route: route)
         if let number = verifiedConfiguredNumber(names, route: route, locked: profile.locked == true)
-            ?? names.presetNumber
+            ?? names.presetNumber ?? remembered
         {
             try rememberPresetNumber(number, dump: temporary, names: names, route: route)
             return
         }
         presetNumberEvidence = nil
         let candidates = names.candidates
-        // A locked, edited working copy cannot identify its stored origin without
-        // process-local proof. Do not hold up previews with two slow, futile dumps.
-        guard profile.locked != true, candidates.count > 1, candidates.count <= 4 else { return }
+        // Previews skip extra locked-memory reads. Connection refresh can check a
+        // stored locked preset in the background without delaying the preview.
+        guard (profile.locked != true || compareLockedMemory),
+              candidates.count > 1, candidates.count <= 4 else { return }
         var dumps: [Int: Data] = [:]
         for number in candidates {
             try requirePresetRoute(route)
@@ -696,6 +738,7 @@ final class ConsoleViewModel: ObservableObject {
     private func updateDisplayProfile(from dump: Data) {
         do {
             var profile = try BCRDisplayProfile.read(fromPresetDump: dump)
+            latestDisplayDump = (PresetRestoreRoute(connection), dump)
             if let context = verifiedDisplayNames, connection.hasSameRoute(as: context.route),
                context.names.temporaryName == profile.name
             {
@@ -715,6 +758,67 @@ final class ConsoleViewModel: ObservableObject {
             try displayProfileStore.save(profile)
         } catch { report(error) }
     }
+
+    var canCheckDisplayPresetNumber: Bool {
+        canConfigureMIDI && midi.supportsStartupConfiguration && source == .hardware && connection.isConnected
+            && !presetSourceSwitchBlocked && !isLearning && !startingMIDI
+    }
+
+    /// Read-only, on explicit user intent. A changed temporary preset may have no stored
+    /// content match, so the operator can confirm the number actually visible on the device.
+    func requestPresetNumberConfirmation() {
+        guard canCheckDisplayPresetNumber else { return }
+        pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
+        let previous = displayReadTask
+        previous?.cancel()
+        let route = connection, id = UUID()
+        displayReadID = id
+        displayReadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { if self.displayReadID == id { self.displayReadID = nil; self.displayReadTask = nil } }
+            await previous?.value
+            do {
+                let names = try await self.presetNames(on: route)
+                let dump: Data
+                if let recent = self.latestDisplayDump, recent.route.matches(route),
+                   self.displayProfile?.locked == true,
+                   (try BCRDisplayProfile.read(fromPresetDump: recent.dump).name) == names.temporaryName
+                {
+                    dump = recent.dump
+                } else { dump = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() } }
+                try self.requirePresetRoute(route)
+                self.updateDisplayProfile(from: dump)
+                guard !names.candidates.isEmpty else {
+                    throw PresetOperationError("当前名称没有对应的存储预设，无法确认编号。")
+                }
+                self.pendingPresetNumberConfirmation = PresetNumberConfirmation(route: PresetRestoreRoute(route),
+                                                                                dump: dump, names: names)
+            } catch {
+                guard self.displayReadID == id, !Task.isCancelled else { return }
+                self.report(error)
+            }
+        }
+    }
+
+    func selectDisplayPresetNumber(_ id: UUID, number: Int) {
+        guard let context = pendingPresetNumberConfirmation, context.id == id,
+              context.route.matches(connection), context.names.candidates.contains(number) else { return }
+        selectedPresetNumber = number
+    }
+
+    func confirmDisplayPresetNumber(_ id: UUID, number: Int) {
+        guard let context = pendingPresetNumberConfirmation, context.id == id,
+              canCheckDisplayPresetNumber, context.route.matches(connection), context.names.candidates.contains(number),
+              latestDisplayDump?.dump == context.dump,
+              verifiedDisplayNames?.names == context.names else { return }
+        do {
+            try rememberPresetNumber(number, dump: context.dump, names: context.names, route: connection)
+            pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
+            notice = ConsoleNotice(level: .info, message: "已按实机屏幕确认预设编号 \(number)；仅用于本次连接，不写入设备。")
+        } catch { report(error) }
+    }
+
+    func cancelPresetNumberConfirmation() { pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil }
 
     private func clearHardwarePresses() {
         for task in pressTasks.values { task.cancel() }
@@ -915,6 +1019,8 @@ final class ConsoleViewModel: ObservableObject {
     private func scheduleNoticeDismissal() {
         noticeDismissTask?.cancel(); noticeDismissTask = nil
         guard let current = notice, current.level == .info, current.action == nil else { return }
+        if startingMIDI, current == ConsoleNotice(level: .info,
+                                                  message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。") { return }
         noticeDismissTask = Task { @MainActor [weak self] in
             do { try await Task.sleep(for: .seconds(Self.infoNoticeSeconds)) } catch { return }
             guard let self, self.notice == current else { return }
@@ -1619,6 +1725,10 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     func requestSource(_ newSource: DeviceSource) {
+        if newSource == .hardware, startingMIDI {
+            notice = ConsoleNotice(level: .info, message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。")
+            return
+        }
         guard !presetSourceSwitchBlocked else {
             notice = ConsoleNotice(level: .warning, message: "预设操作尚未结束，暂不能切换设备来源。")
             return
@@ -1751,7 +1861,10 @@ final class ConsoleViewModel: ObservableObject {
             // The session may leave hardware on its own (e.g. route loss); no held press survives that.
             clearHardwarePresses()
             if source == .hardware { refreshDisplayFromDevice() }
-            else { displayReadTask?.cancel(); presetNumberEvidence = nil; startupConfiguredPreset = nil }
+            else {
+                displayReadTask?.cancel(); presetNumberEvidence = nil; startupConfiguredPreset = nil
+                latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
+            }
             switch source {
             case .mock:
                 notice = ConsoleNotice(level: .info, message: "已切换到 Mock 设备：在虚拟面板上拖动旋钮、按下按键即模拟实体操作。")
@@ -1764,6 +1877,7 @@ final class ConsoleViewModel: ObservableObject {
             observedHardwareGroup = nil
             startupConfiguredGroup = nil; startupConfiguredPreset = nil
             presetNumberEvidence = nil
+            latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
             invalidateDisplayNumber()
             clearDisplayedValue()
             clearHardwarePresses()

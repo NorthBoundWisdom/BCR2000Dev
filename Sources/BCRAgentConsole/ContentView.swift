@@ -41,6 +41,10 @@ struct ContentView: View {
         ) {
             if let state = model.presetAlignment { PresetAlignmentSheet(model: model, state: state) }
         }
+        .offscreenSafeSheet(id: "presetNumber", item: Binding(
+            get: { model.pendingPresetNumberConfirmation },
+            set: { if $0 == nil { model.cancelPresetNumberConfirmation() } }
+        )) { context in PresetNumberConfirmationSheet(model: model, context: context) }
         .offscreenSafeSheet(
             id: "hardwareConnection",
             item: Binding(get: { model.pendingHardwareConnection }, set: { value in
@@ -228,6 +232,9 @@ private struct DeviceStatus: View {
     }
 
     private var status: (String, String, Color, String) {
+        if model.startingMIDI {
+            return (L10n.text("MIDI 正在启动"), L10n.text("界面可继续使用，请等待设备就绪。"), .cyan, "hourglass")
+        }
         let hardware = model.connection.isConnected
             ? "\(model.connection.connectedSource ?? "—") → \(model.connection.connectedDestination ?? "—")"
             : (model.connection.lastError ?? L10n.text("未找到 BCR2000 Port 1（建议 USB 模式 U-1）"))

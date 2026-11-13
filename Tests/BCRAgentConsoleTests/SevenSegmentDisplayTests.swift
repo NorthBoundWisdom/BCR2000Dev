@@ -35,8 +35,11 @@ final class SevenSegmentDisplayTests: XCTestCase {
     @MainActor
     func testVectorDisplayRendersAVisualReviewGallery() throws {
         let gallery = VStack(spacing: 8) {
-            ForEach(["P- 1", "P-32", "8888", "  on", " oFF", "----"], id: \.self) { code in
-                LEDDisplay(text: code)
+            ForEach(
+                Array([BCRDisplayModel.Content.preset(1), .preset(32), .value(8888), .on, .off, .unknown].enumerated()),
+                id: \.offset
+            ) { _, content in
+                LEDDisplay(content: content)
             }
         }
         .padding(12)

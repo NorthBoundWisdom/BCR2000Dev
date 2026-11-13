@@ -23,6 +23,8 @@ enum CoreMIDIServiceError: Error, LocalizedError {
 @MainActor
 public protocol MIDIService: SurfaceDevice {
     func start() throws
+    /// GUI readiness path: slow system initialization must not hold the main actor.
+    func startWhenReady() async throws
     func selectEndpoints(_ selection: MIDIEndpointSelection)
     var supportsSnapshotReadback: Bool { get }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
@@ -39,6 +41,7 @@ public protocol MIDIService: SurfaceDevice {
 }
 
 public extension MIDIService {
+    func startWhenReady() async throws { try start() }
     var supportsStartupConfiguration: Bool { false }
     func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
@@ -71,6 +74,9 @@ public final class CoreMIDIService: MIDIService {
     public var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     public var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     private var transport: CoreMIDITransport?
+    private var transportReady = false
+    private var initializationTask: Task<Void, any Error>?
+    private var pendingConnection: (MIDIConnectionSnapshot, UInt)?
     private var selection: MIDIEndpointSelection
     private var snapshotID: UUID?
     private var snapshotContinuation: CheckedContinuation<[MIDIVoiceMessage], any Error>?
@@ -106,9 +112,8 @@ public final class CoreMIDIService: MIDIService {
         transport?.selectEndpoints(selection)
     }
 
-    public func start() throws {
-        guard transport == nil else { return }
-        let transport = CoreMIDITransport(
+    private func makeTransport() -> CoreMIDITransport {
+        CoreMIDITransport(
             selection: selection,
             onMessages: { [weak self] messages, generation in
                 Task { @MainActor [weak self] in self?.receive(messages, generation: generation) }
@@ -118,39 +123,78 @@ public final class CoreMIDIService: MIDIService {
             },
             onConnection: { [weak self] snapshot, generation in
                 Task { @MainActor [weak self] in
-                    if self?.inputGeneration != generation, let ack = self?.ackID {
-                        self?.finishAck(ack, result: .failure(CoreMIDIServiceError.outputUnavailable))
-                    }
-                    if self?.inputGeneration != generation, let request = self?.namesID {
-                        self?.finishNames(request, result: .failure(CoreMIDIServiceError.outputUnavailable))
-                    }
-                    if self?.inputGeneration != generation, let dump = self?.dumpID {
-                        self?.finishDump(dump, result: .failure(CoreMIDIServiceError.outputUnavailable))
-                    }
-                    if self?.inputGeneration != generation, let id = self?.snapshotID { self?.finishSnapshot(
-                        id,
-                        result: .failure(HardwareSnapshotError.invalid)
-                    ) }
-                    self?.inputGeneration = generation
-                    self?.sysEx = MIDISysEx7Assembler()
-                    self?.connection = snapshot
-                    self?.onConnection?(snapshot)
+                    guard let self else { return }
+                    if !self.transportReady { self.pendingConnection = (snapshot, generation); return }
+                    self.acceptConnection(snapshot, generation: generation)
                 }
             }
         )
-        do {
-            try transport.start()
-            self.transport = transport
-        } catch {
+    }
+
+    private func acceptConnection(_ snapshot: MIDIConnectionSnapshot, generation: UInt) {
+        if self.inputGeneration != generation, let ack = self.ackID {
+            self.finishAck(ack, result: .failure(CoreMIDIServiceError.outputUnavailable))
+        }
+        if self.inputGeneration != generation, let request = self.namesID {
+            self.finishNames(request, result: .failure(CoreMIDIServiceError.outputUnavailable))
+        }
+        if self.inputGeneration != generation, let dump = self.dumpID {
+            self.finishDump(dump, result: .failure(CoreMIDIServiceError.outputUnavailable))
+        }
+        if self.inputGeneration != generation, let id = self.snapshotID { self.finishSnapshot(
+            id,
+            result: .failure(HardwareSnapshotError.invalid)
+        ) }
+        self.inputGeneration = generation
+        self.sysEx = MIDISysEx7Assembler()
+        self.connection = snapshot
+        self.onConnection?(snapshot)
+    }
+
+    private func markTransportReady() {
+        transportReady = true
+        if let (snapshot, generation) = pendingConnection {
+            pendingConnection = nil
+            acceptConnection(snapshot, generation: generation)
+        }
+    }
+
+    public func start() throws {
+        if transportReady { return }
+        guard initializationTask == nil else { throw CoreMIDIServiceError.outputUnavailable }
+        let transport = makeTransport()
+        self.transport = transport
+        do { try transport.start(); markTransportReady() }
+        catch {
+            self.transport = nil; pendingConnection = nil
             connection.lastError = error.localizedDescription
             onConnection?(connection)
             throw error
         }
     }
 
+    public func startWhenReady() async throws {
+        if transportReady { return }
+        if let task = initializationTask { try await task.value; return }
+        let transport = makeTransport()
+        self.transport = transport
+        let task = Task { @MainActor in
+            do { try await transport.startAsynchronously(); self.markTransportReady() }
+            catch {
+                self.transport = nil; self.pendingConnection = nil
+                self.connection.lastError = error.localizedDescription
+                self.onConnection?(self.connection)
+                throw error
+            }
+        }
+        initializationTask = task
+        defer { initializationTask = nil }
+        try await task.value
+    }
+
     public func send(_ message: MIDIVoiceMessage) throws {
         try message.validate()
-        guard let transport else { throw CoreMIDIServiceError.outputUnavailable }
+        guard transportReady, let transport else { throw CoreMIDIServiceError.outputUnavailable }
         try transport.send(message, expectedGeneration: inputGeneration)
     }
 
@@ -428,6 +472,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
     private let connectionHandler: ConnectionHandler
     private let sysExHandler: SysExHandler
     private let managementQueue = DispatchQueue(label: "dev.bcragentconsole.coremidi")
+    private let managementQueueKey = DispatchSpecificKey<UInt8>()
 
     private var client: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
@@ -448,6 +493,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
         messageHandler = onMessages
         sysExHandler = onSysEx
         connectionHandler = onConnection
+        managementQueue.setSpecific(key: managementQueueKey, value: 1)
     }
 
     deinit {
@@ -455,100 +501,111 @@ private final class CoreMIDITransport: @unchecked Sendable {
     }
 
     public func start() throws {
-        try managementQueue.sync {
-            guard !isStarted else {
+        try managementQueue.sync { try startOnQueue() }
+    }
+
+    func startAsynchronously() async throws {
+        try await CoreMIDIStartup.run(on: managementQueue) { [self] in try startOnQueue() }
+    }
+
+    private func startOnQueue() throws {
+        guard !isStarted else {
+            return
+        }
+
+        var newClient: MIDIClientRef = 0
+        let clientStatus = MIDIClientCreateWithBlock(
+            "BCR Agent Console" as CFString,
+            &newClient
+        ) { [weak self] notification in
+            guard notification.pointee.messageID == .msgSetupChanged else {
                 return
             }
-
-            var newClient: MIDIClientRef = 0
-            let clientStatus = MIDIClientCreateWithBlock(
-                "BCR Agent Console" as CFString,
-                &newClient
-            ) { [weak self] notification in
-                guard notification.pointee.messageID == .msgSetupChanged else {
-                    return
-                }
-                self?.managementQueue.async { [weak self] in
-                    self?.reconnect()
-                }
+            self?.managementQueue.async { [weak self] in
+                self?.reconnect()
             }
-            try Self.check(clientStatus, operation: L10n.text("创建 MIDI Client"))
-            client = newClient
-
-            var newInputPort: MIDIPortRef = 0
-            let inputStatus = MIDIInputPortCreateWithProtocol(
-                client,
-                "BCR Agent Console Input" as CFString,
-                ._1_0,
-                &newInputPort
-            ) { [weak self] eventList, context in
-                guard let self else {
-                    return
-                }
-                let (messages, chunks) = Self.decode(eventList)
-                let generation = context.map { UInt(bitPattern: $0) } ?? 0
-                if !messages.isEmpty {
-                    self.messageHandler(messages, generation)
-                }
-                if !chunks.isEmpty { self.sysExHandler(chunks, generation) }
-            }
-            do {
-                try Self.check(inputStatus, operation: L10n.text("创建 MIDI Input Port"))
-            } catch {
-                MIDIClientDispose(client)
-                client = 0
-                throw error
-            }
-            inputPort = newInputPort
-
-            var newOutputPort: MIDIPortRef = 0
-            let outputStatus = MIDIOutputPortCreate(
-                client,
-                "BCR Agent Console Output" as CFString,
-                &newOutputPort
-            )
-            do {
-                try Self.check(outputStatus, operation: L10n.text("创建 MIDI Output Port"))
-            } catch {
-                MIDIPortDispose(inputPort)
-                MIDIClientDispose(client)
-                inputPort = 0
-                client = 0
-                throw error
-            }
-            outputPort = newOutputPort
-            isStarted = true
-            reconnect()
         }
+        try Self.check(clientStatus, operation: L10n.text("创建 MIDI Client"))
+        client = newClient
+
+        var newInputPort: MIDIPortRef = 0
+        let inputStatus = MIDIInputPortCreateWithProtocol(
+            client,
+            "BCR Agent Console Input" as CFString,
+            ._1_0,
+            &newInputPort
+        ) { [weak self] eventList, context in
+            guard let self else {
+                return
+            }
+            let (messages, chunks) = Self.decode(eventList)
+            let generation = context.map { UInt(bitPattern: $0) } ?? 0
+            if !messages.isEmpty {
+                self.messageHandler(messages, generation)
+            }
+            if !chunks.isEmpty { self.sysExHandler(chunks, generation) }
+        }
+        do {
+            try Self.check(inputStatus, operation: L10n.text("创建 MIDI Input Port"))
+        } catch {
+            MIDIClientDispose(client)
+            client = 0
+            throw error
+        }
+        inputPort = newInputPort
+
+        var newOutputPort: MIDIPortRef = 0
+        let outputStatus = MIDIOutputPortCreate(
+            client,
+            "BCR Agent Console Output" as CFString,
+            &newOutputPort
+        )
+        do {
+            try Self.check(outputStatus, operation: L10n.text("创建 MIDI Output Port"))
+        } catch {
+            MIDIPortDispose(inputPort)
+            MIDIClientDispose(client)
+            inputPort = 0
+            client = 0
+            throw error
+        }
+        outputPort = newOutputPort
+        isStarted = true
+        reconnect()
     }
 
     func stop() {
-        managementQueue.sync {
-            guard isStarted else {
-                return
-            }
+        // The last async startup/callback reference may be released on this queue.
+        // Never synchronously dispatch back onto the queue from its own deinitializer.
+        if DispatchQueue.getSpecific(key: managementQueueKey) != nil { stopOnQueue() }
+        else { managementQueue.sync { stopOnQueue() } }
+    }
 
-            for source in connectedSources {
-                MIDIPortDisconnectSource(inputPort, source)
-            }
-            connectedSources.removeAll()
-            destination = 0
-
-            if inputPort != 0 {
-                MIDIPortDispose(inputPort)
-            }
-            if outputPort != 0 {
-                MIDIPortDispose(outputPort)
-            }
-            if client != 0 {
-                MIDIClientDispose(client)
-            }
-
-            inputPort = 0
-            outputPort = 0
-            client = 0
-            isStarted = false
+    private func stopOnQueue() {
+        guard isStarted else {
+            return
         }
+
+        for source in connectedSources {
+            MIDIPortDisconnectSource(inputPort, source)
+        }
+        connectedSources.removeAll()
+        destination = 0
+
+        if inputPort != 0 {
+            MIDIPortDispose(inputPort)
+        }
+        if outputPort != 0 {
+            MIDIPortDispose(outputPort)
+        }
+        if client != 0 {
+            MIDIClientDispose(client)
+        }
+
+        inputPort = 0
+        outputPort = 0
+        client = 0
+        isStarted = false
     }
 
     public func send(_ message: MIDIVoiceMessage, expectedGeneration: UInt) throws {

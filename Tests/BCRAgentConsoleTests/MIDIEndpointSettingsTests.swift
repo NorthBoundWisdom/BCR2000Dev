@@ -73,6 +73,10 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertEqual(try Data(contentsOf: url), original)
         model.applyEndpointSelection(.init())
+        for _ in 0 ..< 100 {
+            if !model.startingMIDI { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
         XCTAssertEqual(midi.starts, 1)
     }
 

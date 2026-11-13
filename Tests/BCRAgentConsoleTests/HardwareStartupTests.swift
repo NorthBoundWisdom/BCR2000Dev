@@ -74,7 +74,7 @@ final class HardwareStartupTests: XCTestCase {
             if let prompt = model.pendingHardwareConnection { return prompt }
             try await Task.sleep(for: .milliseconds(25))
         }
-        throw XCTSkip("connection prompt did not appear")
+        throw ConfigurationFileError(reason: "connection prompt did not appear")
     }
 
     private func confirmRead(_ model: ConsoleViewModel, settle: Bool = true) async throws {
@@ -101,6 +101,10 @@ final class HardwareStartupTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let device = StartupMIDI()
         let model = ConsoleViewModel(stores: stores, midiService: device)
+        for _ in 0 ..< 100 {
+            if !model.startingMIDI { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
         model.requestSource(.hardware)
         model.beginLearning(at: .pushEncoder(group: 1, 1))
         device.onMessages?([.controlChange(channel: 0, number: 20, value: 5)])

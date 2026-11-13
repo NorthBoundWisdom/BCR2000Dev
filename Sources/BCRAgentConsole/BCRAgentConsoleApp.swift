@@ -151,7 +151,10 @@ struct BCRAgentConsoleApp: App {
                 do {
                     guard !smoke else { throw MCPHTTPParseError(reason: L10n.text("集成测试与 startup-smoke 不能同时启用")) }
                     let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
-                    let fixture = connectionFixture ? try IntegrationMIDIFixture(directory: context.directory) : nil
+                    let fixture = connectionFixture ? try IntegrationMIDIFixture(
+                        directory: context.directory,
+                        environment: ProcessInfo.processInfo.environment
+                    ) : nil
                     if let fixture, try context.stores.hardwareMap.load() == nil {
                         try context.stores.hardwareMap.save(fixture.hardwareMap)
                     }

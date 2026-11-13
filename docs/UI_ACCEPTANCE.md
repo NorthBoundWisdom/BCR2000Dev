@@ -36,6 +36,7 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 | 脚本 | 模式 | 语言与依据 |
 | --- | --- | --- |
 | `verify_connection_ui.py` | 可离屏 | 中英文；离屏专用非激活面板承载原有连接/对齐视图、菜单和确认动作，全部状态断言保留；系统原生菜单/确认框的呈现仍由原前台路径验证 |
+| `verify_startup_display_ui.py` | 可离屏 | 延迟假MIDI初始化，首帧/MCP先可用；同名锁定存储预设确认P- 1及显式实机编号确认，零设备写入 |
 | `verify_language_ui.py` | 可离屏 | 中文启动，通过实际设置控件在同进程切换中英文；主窗口、设置、窗口标题、设置菜单、参数/名称/配置保留及桌面审计通过 |
 | `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
 | `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
@@ -129,3 +130,12 @@ nonactivatingPanel。连接和对齐仍使用原产品视图；菜单和确认�
 另外只在该进程的 NSApplication 具体类上拦截两个公开 activate 请求，防止视图桥接显式激活。
 普通产品启动与前台验收继续使用原生 Menu/sheet/confirmationDialog，不改变存储格式、Provider 合同或业务动作。
 离屏验收覆盖真实视图与动作，不验证系统原生菜单/确认窗口的呈现机制；这部分仍需原前台路径验收，本轮没有前台运行。
+
+启动/编号场景（仅显式隔离假设备）：
+
+```bash
+BCR_FIXTURE_STARTUP_DELAY_MS=10000 BCR_FIXTURE_PRESET_NUMBER=1 BCR_FIXTURE_DUPLICATE_NAMES=1 \
+python3 tools/mcp_integration.py --offscreen --port 18819 --connection-fixture --script tools/verify_startup_display_ui.py
+```
+
+该场景不初始化真实CoreMIDI，不重启当前用户实例；通过原生LED可访问性值校验结构化状态最终为P- 1。

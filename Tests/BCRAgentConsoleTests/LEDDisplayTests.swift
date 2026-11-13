@@ -421,6 +421,120 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertNil(repaired.resolvedPreset)
     }
 
+    func testLockedStoredPresetGetsAContentProvenNumberInTheBackground() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.memory[1] = device.temporary
+        device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(model.displayContent, .preset(1))
+        XCTAssertEqual(BCRSevenSegmentDisplay.masks(for: model.displayContent), [0x73, 0x40, 0, 0x06])
+        XCTAssertEqual(device.memoryReads, [1, 8])
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testEditedLockedPresetCanUseAnExplicitScreenConfirmationForThisConnection() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // Both memory replies differ from the approved working copy: automatic resolution stays unknown.
+        device.memory[1] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
+        device.memory[8] = device.memory[1]
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.displayContent, .unknown)
+        model.requestPresetNumberConfirmation()
+        for _ in 0 ..< 100 {
+            if model.pendingPresetNumberConfirmation != nil { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
+        model.confirmDisplayPresetNumber(context.id, number: 2)
+        XCTAssertEqual(model.displayContent, .unknown)
+        XCTAssertNil(model.selectedPresetNumber)
+        model.selectDisplayPresetNumber(context.id, number: 1)
+        model.selectGroup(2)
+        XCTAssertEqual(model.selectedPresetNumber, 1)
+        model.confirmDisplayPresetNumber(context.id, number: 1)
+        XCTAssertEqual(model.displayContent, .preset(1))
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.writes, 0)
+        model.selectSource(.mock)
+        // A stale confirmation context cannot be reused after the session changed.
+        model.confirmDisplayPresetNumber(context.id, number: 1)
+        XCTAssertEqual(model.displayContent, .unknown)
+        // The fresh working copy is byte-identical on the same route: the confirmed number returns
+        // from its definition-bound record, without reading the same-named memory slots again.
+        let memoryReads = device.memoryReads
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.displayContent, .preset(1))
+        XCTAssertEqual(device.memoryReads, memoryReads)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testProvenNumberSurvivesARestartOnlyForTheIdenticalWorkingCopy() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.memory[1] = device.temporary
+        device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(model.displayContent, .preset(1))
+
+        // Same device, same directory, new process: identical copy -> number without memory dumps.
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let sameCopy = DisplayDevice(temporary: device.temporary, names: device.names)
+        let restarted = ConsoleViewModel(stores: stores, midiService: sameCopy, initialPreset: .robotArm)
+        restarted.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(restarted.displayContent, .preset(1))
+        XCTAssertEqual(sameCopy.memoryReads, [])
+
+        // A different definition under the same name is never given the recorded number.
+        let edited = BCLFixtures.dump([
+            "$rev R1", "$preset", ".name 'Redrum'", ".egroups 4", ".lock on",
+            "$encoder 1", ".easypar CC 1 9 0 127 absolute", ".showvalue on", "$end"
+        ])
+        let otherCopy = DisplayDevice(temporary: edited, names: device.names)
+        let other = ConsoleViewModel(stores: stores, midiService: otherCopy, initialPreset: .robotArm)
+        other.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(other.displayContent, .unknown)
+        XCTAssertEqual(otherCopy.writes, 0)
+    }
+
+    func testCorruptNumberRecordsNeverProduceANumber() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data("broken json".utf8).write(to: directory.appending(path: "preset-number-evidence.json"))
+        device.memory[1] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
+        device.memory[8] = device.memory[1]
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.displayContent, .unknown)
+    }
+
+    func testScreenConfirmationRefreshesADumpWhenItsNameNoLongerMatches() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(100))
+        device.names = .init(temporary: "New", memory: ["New"])
+        device.temporary = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".lock on", "$end"])
+        model.requestPresetNumberConfirmation()
+        for _ in 0 ..< 100 {
+            if model.pendingPresetNumberConfirmation != nil { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
+        XCTAssertEqual(try BCRDisplayProfile.read(fromPresetDump: context.dump).name, "New")
+        model.confirmDisplayPresetNumber(context.id, number: 1)
+        XCTAssertEqual(model.displayPresetName, "New")
+        XCTAssertEqual(model.displayContent, .preset(1))
+    }
+
     func testLearningInterruptsDisplayReadWithoutAWarning() async throws {
         let (model, device, directory) = try model(cachedName: "Redrum")
         defer { try? FileManager.default.removeItem(at: directory) }

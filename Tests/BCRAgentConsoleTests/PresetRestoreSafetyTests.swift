@@ -393,11 +393,15 @@ final class PresetRestoreSafetyTests: XCTestCase {
         model.dismissPresetAlignment()
         model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
         XCTAssertEqual(model.displayText, "P- 1")
-        // Reconnecting must not treat the aligned same-named working copy as slot 1.
+        // Reconnecting reads the working copy again; the identical aligned definition was proven
+        // as slot 1 on this route, so its definition-bound record restores the number without
+        // re-reading the same-named slots (which could never match an edited copy).
         try await align(model)
+        let readsBeforeReconnect = device.memoryReads
         model.selectSource(.mock); model.selectSource(.hardware)
         try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(model.displayText, "----")
+        XCTAssertEqual(model.displayText, "P- 1")
+        XCTAssertEqual(device.memoryReads, readsBeforeReconnect)
     }
 
     func testFailedWriteCannotKeepThePreviousLockProof() async throws {

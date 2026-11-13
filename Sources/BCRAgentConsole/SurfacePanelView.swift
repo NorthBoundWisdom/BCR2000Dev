@@ -188,6 +188,12 @@ struct SurfacePanelView: View {
                     .disabled(!model.canAlignPreset)
                     .accessibilityIdentifier("preset.menu.align")
                     .help(L10n.text("读取设备当前临时预设，预览按软件配置所需的修改；确认后才写入，不写永久存储。"))
+                    Button(L10n.text("核对实机预设编号…")) {
+                        OffscreenInteractionPanel.dismiss(id: "devicePresetMenu")
+                        model.requestPresetNumberConfirmation()
+                    }
+                    .disabled(!model.canCheckDisplayPresetNumber)
+                    .accessibilityIdentifier("preset.menu.number")
                     Button {
                         OffscreenInteractionPanel.dismiss(id: "devicePresetMenu")
                         model.restorePresetBeforeAlignment()
@@ -261,7 +267,7 @@ struct SurfacePanelView: View {
     /// disabled: the BCR2000 neither reports them over MIDI nor accepts them from the computer.
     private var sideColumn: some View {
         VStack(spacing: m(7)) {
-            LEDDisplay(text: model.displayText, busy: model.displayBusy,
+            LEDDisplay(content: model.displayContent,
                        operation: model.displayTransferOperation)
                 .help(L10n.text("按设备规则重现：操作时短暂显示数值或 on/oFF，空闲时显示已确认的预设号；未知时显示 ----。锁定后沿用已确认编号，不猜测预设。"))
             if let name = model.displayPresetName {

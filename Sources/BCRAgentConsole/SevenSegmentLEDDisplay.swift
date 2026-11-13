@@ -5,8 +5,9 @@ import SwiftUI
 /// Code-driven four-digit display. Text is retained only as the logical/a11y value;
 /// every visible glyph and transfer frame is drawn from the same 28 segment paths.
 struct LEDDisplay: View {
-    let text: String
-    var busy = false
+    let content: BCRDisplayModel.Content
+    private var text: String { BCRDisplayModel.text(for: content) }
+    private var busy: Bool { content == .busy }
     var operation: BCRDisplayModel.TransferOperation = .read
     @Environment(\.panelMetrics) private var m
 
@@ -22,7 +23,7 @@ struct LEDDisplay: View {
                     )))
                 }
             } else {
-                SevenSegmentCells(masks: BCRSevenSegmentDisplay.masks(for: text))
+                SevenSegmentCells(masks: BCRSevenSegmentDisplay.masks(for: content))
             }
         }
         .frame(width: m(60), height: m(22))

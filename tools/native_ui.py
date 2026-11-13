@@ -110,6 +110,14 @@ end tell"""
             raise RuntimeError(result.stderr.strip() or f"Help unavailable: {identifier}")
         return result.stdout.strip()
 
+    def value(self, identifier):
+        result = subprocess.run(
+            [str(native_binary()), str(self.pid), "value", identifier], capture_output=True, text=True, timeout=15
+        )
+        if result.returncode:
+            raise RuntimeError(result.stderr.strip() or f"Value unavailable: {identifier}")
+        return result.stdout.strip()
+
     def press(self, identifier):
         print("AXPress", identifier, flush=True)
         if not self.command("press", identifier):

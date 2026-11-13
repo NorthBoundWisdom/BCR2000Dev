@@ -6,6 +6,22 @@
 
     @MainActor
     final class IntegrationMIDIFixtureTests: XCTestCase {
+        func testLockedSameNamedFixtureHasOneVerifiedMemoryMatch() async throws {
+            let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let fixture = try IntegrationMIDIFixture(directory: directory, environment: [
+                "BCR_FIXTURE_PRESET_NUMBER": "1", "BCR_FIXTURE_DUPLICATE_NAMES": "1"
+            ])
+            XCTAssertFalse(fixture.connection.isConnected)
+            try await fixture.startWhenReady()
+            let names = try await fixture.readPresetNames()
+            XCTAssertEqual(names.candidates, [1, 8])
+            let temporary = try await fixture.readCurrentPreset()
+            XCTAssertEqual(try BCRDisplayProfile.read(fromPresetDump: temporary).locked, true)
+            let one = try await fixture.readMemoryPreset(1), eight = try await fixture.readMemoryPreset(8)
+            XCTAssertEqual(try BCRPresetNames.resolve(temporary: temporary, candidates: [1: one, 8: eight]), 1)
+        }
+
         func testReadOnlySetupAndExplicitPresetWriteStayInsideTheIsolatedFixture() async throws {
             let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }

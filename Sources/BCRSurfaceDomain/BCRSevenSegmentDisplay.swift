@@ -9,6 +9,10 @@ public enum BCRSevenSegmentDisplay {
         "P": 0x73, "-": 0x40, " ": 0, "o": 0x5C, "n": 0x54, "F": 0x71
     ]
 
+    public static func masks(for content: BCRDisplayModel.Content) -> [UInt8] {
+        masks(for: BCRDisplayModel.text(for: content))
+    }
+
     /// Right-align the logical display value. Unsupported cells show the same dash
     /// as an unknown preset, rather than substituting a typographic character.
     public static func masks(for text: String) -> [UInt8] {
