@@ -114,6 +114,8 @@ def select_path(path, confirm):
     gui(f"click button {quote(confirm)} of splitter group 1 of sheet 1 of window 1")
 
 
+# The inspector's TextFields expose their label as the accessibility description; on the current
+# macOS their AppleScript name is empty, so look them up by description rather than by name.
 gui("set frontmost to true\nset position of window 1 to {80, 80}\nset size of window 1 to {1200, 760}")
 binding_before = [entry["binding"] for entry in client.call("list_controls")]
 original = client.call("get_parameter", {"id": "arm.j1"})
@@ -121,12 +123,15 @@ definition = client.parameter_definition("arm.j1")
 definition["name"] = "External J1"
 client.call("update_parameter", {"definition": definition})
 wait_for(
-    lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "External J1",
+    lambda: (
+        gui('return value of (first text field of scroll area 2 of group 1 of window 1 whose description is "名称")')
+        == "External J1"
+    ),
     "pristine parameter draft did not refresh",
 )
 gui("""set frontmost to true
-set focused of text field "名称" of scroll area 2 of group 1 of window 1 to true
-set value of text field "名称" of scroll area 2 of group 1 of window 1 to "LocalDraft"
+set focused of (first text field of scroll area 2 of group 1 of window 1 whose description is "名称") to true
+set value of (first text field of scroll area 2 of group 1 of window 1 whose description is "名称") to "LocalDraft"
 key code 48""")
 time.sleep(0.1)
 definition["name"] = "Concurrent J1"
@@ -137,7 +142,10 @@ wait_for(
 )
 click_identifier("parameter.adoptExternal")
 wait_for(
-    lambda: gui('return value of text field "名称" of scroll area 2 of group 1 of window 1') == "Concurrent J1",
+    lambda: (
+        gui('return value of (first text field of scroll area 2 of group 1 of window 1 whose description is "名称")')
+        == "Concurrent J1"
+    ),
     "external conflict resolution failed",
 )
 print("Native parameter draft refresh/conflict/resolution passed.")
@@ -150,7 +158,12 @@ click button "导出" of splitter group 1 of sheet 1 of window 1""")
 exported = directory / "exported-config.json"
 wait_for(lambda: exported.exists(), "export file not created")
 raw = json.loads(exported.read_text())
-if set(raw) != {"version", "name", "parameters", "assignments"}:
+# SurfaceConfiguration v7 also carries pages, macros and the active page; never a map or credentials.
+if (
+    not {"version", "name", "parameters", "assignments"}
+    <= set(raw)
+    <= {"version", "name", "parameters", "assignments", "pages", "macros", "activePageID"}
+):
     raise RuntimeError("export contains data outside SurfaceConfiguration")
 print("Native NSSavePanel export passed; no hardware map or credentials.")
 
