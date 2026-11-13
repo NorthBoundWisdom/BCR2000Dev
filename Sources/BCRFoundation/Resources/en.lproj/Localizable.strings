@@ -930,3 +930,9 @@
 "等待设备完成上一轮预设发送，请暂勿操作设备…" = "Waiting for the previous preset stream to finish. Please leave the device untouched…";
 
 "语言更改立即生效，并自动保存。" = "Language changes apply immediately and are saved automatically.";
+
+"预设操作尚未结束，暂不能切换设备来源。" = "A preset operation is still in progress. Device source switching is temporarily unavailable.";
+
+"应用界面立即切换并自动保存；系统菜单、文件面板和系统对话框按钮需重启应用后切换。" = "The app interface updates immediately and the choice is saved. System menus, file panels and system dialog buttons switch after restarting the app.";
+
+"{0}：{1}" = "{0}: {1}";

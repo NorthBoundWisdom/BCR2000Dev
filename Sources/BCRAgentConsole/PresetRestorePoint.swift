@@ -1,4 +1,5 @@
 import BCRSurfaceDomain
+import BCRFoundation
 import Foundation
 
 /// Persistent endpoint identity without retaining CoreMIDI endpoint lifetimes or inventories.
@@ -77,7 +78,7 @@ struct PendingPresetRestore {
     let currentMap: HardwareMap
 }
 
-struct PresetOperationError: LocalizedError {
-    let errorDescription: String?
-    init(_ message: String) { errorDescription = message }
+struct PresetOperationError: LocalizedMessageError {
+    let localizedMessage: LocalizedMessage
+    init(_ message: LocalizedMessage) { localizedMessage = message }
 }

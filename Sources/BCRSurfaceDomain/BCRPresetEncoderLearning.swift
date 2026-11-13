@@ -9,11 +9,15 @@ public enum BCRPresetEncoderLearning {
         public let configuration: SurfaceConfiguration
     }
 
-    public enum Failure: Error, LocalizedError {
+    public enum Failure: LocalizedMessageError {
+        /// Compatibility payload for caller-supplied diagnostics; kept verbatim.
         case invalid(String)
-        public var errorDescription: String? {
-            if case let .invalid(reason) = self { return L10n.text("旋钮批量学习失败：\(reason)") }
-            return nil
+        case invalidMessage(LocalizedMessage)
+        public var localizedMessage: LocalizedMessage {
+            switch self {
+            case let .invalid(reason): "旋钮批量学习失败：\(reason)"
+            case let .invalidMessage(reason): "旋钮批量学习失败：\(reason)"
+            }
         }
     }
 
@@ -27,7 +31,7 @@ public enum BCRPresetEncoderLearning {
         guard lines.first == "$rev R1", lines.last == "$end",
               lines.filter({ $0 == "$preset" }).count == 1,
               lines.filter({ $0.hasPrefix(".egroups ") }) == [".egroups 4"]
-        else { throw Failure.invalid(L10n.text("需要完整的单个当前预设")) }
+        else { throw Failure.invalidMessage("需要完整的单个当前预设") }
         var identities: [Int: MIDIControlID] = [:]
         var ringModes: [Int: LEDRingMode] = [:]
         var encoder: Int?
@@ -35,17 +39,17 @@ public enum BCRPresetEncoderLearning {
         var inPreset = false
         for line in lines.dropFirst().dropLast() {
             let words = line.split(separator: " ").map(String.init)
-            guard let statement = words.first else { throw Failure.invalid(L10n.text("空语句")) }
+            guard let statement = words.first else { throw Failure.invalidMessage("空语句") }
             if statement == "$preset" { inPreset = true; encoder = nil; continue }
             if statement == "$encoder" {
                 guard inPreset, words.count == 2, let number = Int(words[1]), (1 ... 56).contains(number),
                       seenEncoders.insert(number).inserted
-                else { throw Failure.invalid(L10n.text("编码器编号无效或重复")) }
+                else { throw Failure.invalidMessage("编码器编号无效或重复") }
                 encoder = number
                 continue
             }
             if statement == "$button" { encoder = nil; continue }
-            guard !statement.hasPrefix("$") else { throw Failure.invalid(L10n.text("不支持的预设区块")) }
+            guard !statement.hasPrefix("$") else { throw Failure.invalidMessage("不支持的预设区块") }
             guard let encoder else { continue }
             switch statement {
             case ".easypar":
@@ -53,28 +57,28 @@ public enum BCRPresetEncoderLearning {
                       let channel = UInt8(words[2]), (1 ... 16).contains(channel),
                       let number = UInt8(words[3]), number < 128,
                       words[4...] == ["0", "127", "absolute"]
-                else { throw Failure.invalid(L10n.text("只支持 0…127 的普通绝对 CC 旋钮")) }
+                else { throw Failure.invalidMessage("只支持 0…127 的普通绝对 CC 旋钮") }
                 identities[encoder] = MIDIControlID(kind: .controlChange, channel: channel - 1, number: number)
             case ".showvalue":
                 guard words.count == 2, ["on", "off"].contains(words[1]) else {
-                    throw Failure.invalid(L10n.text("无效的显示设置"))
+                    throw Failure.invalidMessage("无效的显示设置")
                 }
             case ".mode":
                 guard words.count == 2,
                       let mode = LEDRingMode(rawValue: words[1]), ringModes[encoder] == nil
-                else { throw Failure.invalid(L10n.text("未知灯环模式")) }
+                else { throw Failure.invalidMessage("未知灯环模式") }
                 ringModes[encoder] = mode
             case ".resolution":
                 guard words.count == 5, words.dropFirst().allSatisfy({ UInt16($0).map { $0 > 0 } ?? false })
-                else { throw Failure.invalid(L10n.text("无效的旋钮分辨率")) }
+                else { throw Failure.invalidMessage("无效的旋钮分辨率") }
             case ".default":
                 guard words.count == 2, let value = UInt8(words[1]), value < 128 else {
-                    throw Failure.invalid(L10n.text("无效的默认值"))
+                    throw Failure.invalidMessage("无效的默认值")
                 }
-            default: throw Failure.invalid(L10n.text("不支持的编码器语句 \(statement)"))
+            default: throw Failure.invalidMessage("不支持的编码器语句 \(statement)")
             }
         }
-        guard identities.count == 56 else { throw Failure.invalid(L10n.text("预设未提供全部 56 个旋钮定义")) }
+        guard identities.count == 56 else { throw Failure.invalidMessage("预设未提供全部 56 个旋钮定义") }
         var map = try existingMap.migrated()
         var result = configuration
         for number in 1 ... 56 {
@@ -82,16 +86,16 @@ public enum BCRPresetEncoderLearning {
                 ? .pushEncoder(group: (number - 1) / 8 + 1, (number - 1) % 8 + 1)
                 : .encoder(row: (number - 33) / 8 + 1, (number - 33) % 8 + 1)
             guard let midi = identities[number], let value = snapshot[midi], value < 128 else {
-                throw Failure.invalid(L10n.text("\(control.shortName) 缺少当前设备快照"))
+                throw Failure.invalidMessage("\(control.shortName) 缺少当前设备快照")
             }
             if let previous = map.midi(for: control), previous != midi {
-                throw Failure.invalid(L10n.text("\(control.shortName) 与已有学习身份不同，保留原映射"))
+                throw Failure.invalidMessage("\(control.shortName) 与已有学习身份不同，保留原映射")
             }
-            guard let ringMode = ringModes[number] else { throw Failure.invalid(L10n.text("未知灯环模式")) }
+            guard let ringMode = ringModes[number] else { throw Failure.invalidMessage("未知灯环模式") }
             try map.bind(control, to: midi, ringMode: ringMode)
             if let assignment = result.assignment(for: control) {
                 guard assignment.encoderMode == .absolute else {
-                    throw Failure.invalid(L10n.text("\(control.shortName) 的已有功能不是绝对模式"))
+                    throw Failure.invalidMessage("\(control.shortName) 的已有功能不是绝对模式")
                 }
                 continue
             }
@@ -107,14 +111,14 @@ public enum BCRPresetEncoderLearning {
     }
 
     static func decodeLines(_ data: Data) throws -> [String] {
-        guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { throw Failure.invalid(L10n.text("预设大小无效")) }
+        guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { throw Failure.invalidMessage("预设大小无效") }
         let bytes = Array(data)
         var offset = 0
         var lines: [String] = []
         var device: UInt8?
         while offset < bytes.count {
             guard let end = bytes[offset...].firstIndex(of: 0xF7), end - offset >= 10 else {
-                throw Failure.invalid(L10n.text("SysEx 帧不完整"))
+                throw Failure.invalidMessage("SysEx 帧不完整")
             }
             let frame = Array(bytes[offset ... end])
             guard frame[0 ... 3] == [0xF0, 0, 0x20, 0x32], frame[4] < 16,
@@ -124,7 +128,7 @@ public enum BCRPresetEncoderLearning {
                   device == nil || device == frame[4],
                   frame[9 ..< frame.count - 1].allSatisfy({ (32 ... 126).contains($0) }),
                   let text = String(bytes: frame[9 ..< frame.count - 1], encoding: .ascii)
-            else { throw Failure.invalid(L10n.text("设备、行序号或 BCL 帧无效")) }
+            else { throw Failure.invalidMessage("设备、行序号或 BCL 帧无效") }
             device = frame[4]
             lines.append(text.trimmingCharacters(in: .whitespaces))
             offset = end + 1

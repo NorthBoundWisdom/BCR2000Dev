@@ -90,3 +90,31 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(restored.controls(targeting: .resetGroup("原分组")), [.button(row: 2, 8)])
     }
 }
+
+extension LocalizationTests {
+    func testNestedMessagesLocalizeWithoutTranslatingVerbatimArguments() {
+        let custom = "用户 {0} custom"
+        let inner: LocalizedMessage = "参数“\(custom)”已更新。"
+        let outer: LocalizedMessage = "\(inner)"
+        XCTAssertEqual(L10n.text(outer, language: .english), "Parameter “\(custom)” updated.")
+        XCTAssertEqual(L10n.text(outer, language: .chinese), "参数“\(custom)”已更新。")
+    }
+}
+
+extension LocalizationTests {
+    @MainActor
+    func testRetainedPresetParserCauseKeepsItsMessageKey() throws {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        L10n.setLanguage(.chinese)
+        var retained: LocalizedMessage?
+        do { _ = try BCRPresetAlignment.canonicalLines(of: Data([0])) }
+        catch { retained = "读取设备预设失败：\(error: error)" }
+        let message = try XCTUnwrap(retained)
+        XCTAssertTrue(L10n.text(message).contains("SysEx 帧不完整"))
+        L10n.setLanguage(.english)
+        let translated = L10n.text(message)
+        XCTAssertTrue(translated.contains("Incomplete SysEx"), translated)
+        XCTAssertFalse(translated.contains("SysEx 帧不完整"))
+    }
+}

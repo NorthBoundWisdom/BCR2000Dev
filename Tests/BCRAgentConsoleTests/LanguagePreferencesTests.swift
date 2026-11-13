@@ -94,3 +94,25 @@ final class LanguagePreferencesTests: XCTestCase {
         XCTAssertEqual(defaults.persistentDomain(forName: suite)?["AppleLanguages"] as? [String], ["zh-Hans"])
     }
 }
+
+extension LanguagePreferencesTests {
+    @MainActor
+    func testRetainedPresetFailureAndNestedErrorDetailsFollowLanguage() {
+        let original = L10n.language
+        defer { L10n.setLanguage(original) }
+        L10n.setLanguage(.chinese)
+        let cause = PresetOperationError("硬件映射未能保存，恢复点已保留。")
+        let failure = PresetAlignmentState.Phase.failed("恢复失败：\(error: cause)")
+        let notice = ConsoleNotice(level: .warning, message: "未能核对预设编号，显示未知：\(error: MIDIStartupError.noReply)")
+        guard case let .failed(message) = failure else { return XCTFail("Missing retained failure") }
+        XCTAssertTrue(L10n.text(message).contains("硬件映射未能保存"))
+        L10n.setLanguage(.english)
+        XCTAssertTrue(L10n.text(message).contains("hardware map"))
+        XCTAssertFalse(L10n.text(message).contains("硬件映射"))
+        XCTAssertTrue(notice.text.contains("startup"))
+        XCTAssertFalse(notice.text.contains("未确认"))
+        L10n.setLanguage(.chinese)
+        XCTAssertTrue(L10n.text(message).contains("硬件映射未能保存"))
+        XCTAssertTrue(notice.text.contains("未确认"))
+    }
+}

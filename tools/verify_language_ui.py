@@ -36,7 +36,10 @@ try:
     ui.wait(lambda: ui.exists("app-language"), "Language settings missing")
     ui.press_description("English")
     ui.wait(lambda: "Follow Touch" in main_tree(), "Main window did not switch to English")
-    ui.wait(lambda: "Language changes apply immediately" in all_windows(), "Open settings did not update")
+    ui.wait(
+        lambda: "System menus, file panels and system dialog buttons switch after restarting" in all_windows(),
+        "Open settings did not update",
+    )
     ui.wait(lambda: "Settings…" in ui.run("return entire contents of menu bar 1"), "Settings command did not update")
     assert "Language" in ui.run("return name of every window"), "Settings window title did not update"
     ui.capture(directory / "language-english.png", width=1200)
@@ -44,7 +47,10 @@ try:
     assert config.read_bytes() == stored
     ui.press_description("简体中文")
     ui.wait(lambda: "跟随触碰" in main_tree(), "Main window did not switch back to Chinese")
-    ui.wait(lambda: "语言更改立即生效" in all_windows(), "Open settings did not switch back")
+    ui.wait(
+        lambda: "系统菜单、文件面板和系统对话框按钮需重启应用后切换" in all_windows(),
+        "Open settings did not switch back",
+    )
     assert "语言" in ui.run("return name of every window"), "Settings window title did not switch back"
     ui.capture(directory / "language-chinese.png", width=1200)
     assert client.call("get_parameter", {"id": "arm.j1"})["value"] == 37

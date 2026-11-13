@@ -19,7 +19,7 @@ struct LanguageSettingsView: View {
                 .accessibilityIdentifier("app-language")
                 Text(L10n.text("当前语言：\(L10n.language == .chinese ? "简体中文" : "English")"))
                     .foregroundStyle(.secondary)
-                Text(L10n.text("语言更改立即生效，并自动保存。"))
+                Text(L10n.text("应用界面立即切换并自动保存；系统菜单、文件面板和系统对话框按钮需重启应用后切换。"))
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             } header: {
@@ -28,7 +28,7 @@ struct LanguageSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(12)
-        .frame(width: 480, height: 240)
+        .frame(width: 480, height: 260)
         .background(Theme.background)
         .preferredColorScheme(.dark)
     }

@@ -459,7 +459,7 @@ final class LockedPresetDisplayTests: XCTestCase {
     }
 
     func testCandidateChangeDuringMemoryResolutionCannotPublishOldResult() async throws {
-        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        let (model, device, directory) = try model(cachedName: "Redrum", locked: false, cachedPreset: nil)
         defer { try? FileManager.default.removeItem(at: directory) }
         let oldNames = device.names
         device.nameResponses = [oldNames]

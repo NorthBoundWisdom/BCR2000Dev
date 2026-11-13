@@ -157,6 +157,9 @@ def run():
     assert len(list((directory / "Backups").glob("*.syx"))) == 1
     open_preview()
     ui.press("preset.write")
+    # Probe immediately after intent dispatch: AX traversal can outlast the entire fixture write.
+    client.call("set_device_source", {"source": "mock"}, expect_error=True)
+    assert status()["source"] == "hardware"
     ui.wait(lambda: ui.exists("preset.writing") or ui.exists("preset.finished"), "Write did not start or finish")
     ui.wait(lambda: ui.exists("preset.finished"), "Alignment write/readback did not finish")
     assert state()["presetWrites"] == 1 and not state()["matchesOriginal"]
@@ -191,6 +194,8 @@ def run():
     ui.wait(lambda: ui.exists("preset.menu.restore"), "Restore menu item missing")
     ui.press("preset.menu.restore")
     ui.wait(lambda: ui.exists("preset.restore.learningWarning"), "Later learning replacement warning missing")
+    client.call("set_device_source", {"source": "mock"}, expect_error=True)
+    assert status()["source"] == "hardware"
     assert state()["presetWrites"] == 1 and json.loads(path.read_text()) == edited_map
     if capture_directory:
         ui.capture(images / "restore-learning-warning.png", width=width)
@@ -202,6 +207,8 @@ def run():
     ui.press("preset.menu.restore")
     ui.wait(lambda: ui.exists("preset.restore.confirm"), "Restore replacement confirmation missing")
     ui.press("preset.restore.confirm")
+    client.call("set_device_source", {"source": "mock"}, expect_error=True)
+    assert status()["source"] == "hardware"
     ui.wait(lambda: ui.exists("preset.restoring") or ui.exists("preset.finished"), "Restore did not start or finish")
     ui.wait(lambda: ui.exists("preset.finished"), "Restore did not finish")
     assert state()["presetWrites"] == 2 and state()["matchesOriginal"]

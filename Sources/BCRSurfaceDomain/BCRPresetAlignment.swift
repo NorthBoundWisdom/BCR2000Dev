@@ -62,11 +62,15 @@ public enum BCRPresetAlignment {
         }
     }
 
-    public enum Failure: Error, LocalizedError, Equatable {
+    public enum Failure: LocalizedMessageError, Equatable {
+        /// Compatibility payload for caller-supplied diagnostics; kept verbatim.
         case invalid(String)
-        public var errorDescription: String? {
-            if case let .invalid(reason) = self { return L10n.text("预设对齐失败：\(reason)") }
-            return nil
+        case invalidMessage(LocalizedMessage)
+        public var localizedMessage: LocalizedMessage {
+            switch self {
+            case let .invalid(reason): "预设对齐失败：\(reason)"
+            case let .invalidMessage(reason): "预设对齐失败：\(reason)"
+            }
         }
     }
 
@@ -106,10 +110,10 @@ public enum BCRPresetAlignment {
         guard source.first == "$rev R1", source.last == "$end",
               source.filter({ $0 == "$preset" }).count == 1,
               !source.contains(where: { $0.hasPrefix("$store") || $0.hasPrefix("$recall") || $0.hasPrefix("$global") })
-        else { throw Failure.invalid(L10n.text("需要完整的单个当前预设")) }
+        else { throw Failure.invalidMessage("需要完整的单个当前预设") }
         var document = try Document(lines: source)
         guard document.setting(".egroups") == "4" else {
-            throw Failure.invalid(L10n.text("只支持 4 个编码器组的预设"))
+            throw Failure.invalidMessage("只支持 4 个编码器组的预设")
         }
         var map = try hardwareMap.migrated()
         var changes: [Change] = []
@@ -150,7 +154,7 @@ public enum BCRPresetAlignment {
         // Every encoder the software knows must still be exactly what the device sends.
         for entry in map.entries where entry.control.isContinuous {
             guard let number = encoderNumber(for: entry.control), encoderIDs[number] == entry.midi else {
-                throw Failure.invalid(L10n.text("\(entry.control.shortName) 与设备预设不一致，请先重新学习"))
+                throw Failure.invalidMessage("\(entry.control.shortName) 与设备预设不一致，请先重新学习")
             }
         }
 
@@ -162,15 +166,15 @@ public enum BCRPresetAlignment {
                 guard let number = buttonNumber(for: control) else { continue }
                 if let id = buttonIDs[number] {
                     if let learned = map.midi(for: control), learned != id {
-                        throw Failure.invalid(L10n.text("\(control.shortName) 与设备预设不一致，请先重新学习"))
+                        throw Failure.invalidMessage("\(control.shortName) 与设备预设不一致，请先重新学习")
                     }
                     continue
                 }
                 if let learned = map.midi(for: control), !map.isVisualizationOnly(control) {
                     // A functional binding the device doesn't send: report rather than silently change it.
-                    throw Failure.invalid(L10n.text("\(control.shortName) 的已学习身份 \(learned) 不在设备预设中"))
+                    throw Failure.invalidMessage("\(control.shortName) 的已学习身份 \(learned) 不在设备预设中")
                 }
-                guard let id = free.next() else { throw Failure.invalid(L10n.text("没有可用的 MIDI 地址")) }
+                guard let id = free.next() else { throw Failure.invalidMessage("没有可用的 MIDI 地址") }
                 let wasDefined = document.buttons[number]?.easyparIdentity != nil
                 document.setButton(number, easypar: ".easypar CC 16 \(id.number) 127 0 toggleoff")
                 buttonIDs[number] = id; used.insert(id)
@@ -237,7 +241,7 @@ public enum BCRPresetAlignment {
 
         let lines = document.render()
         guard lines.allSatisfy({ $0.utf8.count <= 120 && $0.utf8.allSatisfy { (32 ... 126).contains($0) } }) else {
-            throw Failure.invalid(L10n.text("生成的 BCL 行无效"))
+            throw Failure.invalidMessage("生成的 BCL 行无效")
         }
         try map.validate()
         return Plan(lines: lines, changes: changes, hardwareMap: map)
@@ -247,7 +251,7 @@ public enum BCRPresetAlignment {
     /// Firmware may reorder numbered sections; statement order and every value remain significant.
     public static func canonicalLines(_ lines: [String]) throws -> [String] {
         guard lines.first == "$rev R1", lines.last == "$end", lines.filter({ $0 == "$preset" }).count == 1 else {
-            throw Failure.invalid(L10n.text("需要完整的单个当前预设"))
+            throw Failure.invalidMessage("需要完整的单个当前预设")
         }
         let document = try Document(lines: lines)
         let blocks = document.blocks.sorted {
@@ -318,16 +322,16 @@ private struct Document {
                 guard parts.count == 2, let number = Int(parts[1]),
                       (1 ... 64).contains(number) else { throw BCRPresetAlignment.Failure.invalid(line) }
                 guard !blocks.contains(where: { $0.header == line }) else {
-                    throw BCRPresetAlignment.Failure.invalid(L10n.text("预设区块重复"))
+                    throw BCRPresetAlignment.Failure.invalidMessage("预设区块重复")
                 }
                 blocks.append(Block(header: line, statements: []))
                 continue
             }
             guard !line.hasPrefix("$") else {
-                throw BCRPresetAlignment.Failure.invalid(L10n.text("不支持的预设区块"))
+                throw BCRPresetAlignment.Failure.invalidMessage("不支持的预设区块")
             }
             if blocks.isEmpty {
-                guard inPreset else { throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设")) }
+                guard inPreset else { throw BCRPresetAlignment.Failure.invalidMessage("需要完整的单个当前预设") }
                 settings.append(line)
             } else {
                 blocks[blocks.count - 1].statements.append(line)

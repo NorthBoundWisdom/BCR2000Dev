@@ -21,6 +21,8 @@ private final class RestoreSafetyDevice: MIDIService {
     var nameReads = 0
     var memory: [Int: Data] = [:]
     var memoryReads = 0
+    var suspendsNextDump = false
+    var suspendedDump: CheckedContinuation<Data, any Error>?
     init(_ preset: Data) { self.preset = preset }
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
@@ -34,6 +36,10 @@ private final class RestoreSafetyDevice: MIDIService {
     }
 
     func readCurrentPreset() async throws -> Data {
+        if suspendsNextDump {
+            suspendsNextDump = false
+            return try await withCheckedThrowingContinuation { suspendedDump = $0 }
+        }
         if corruptReadAfterBatch == batches.count {
             var lines = try BCRPresetAlignment.canonicalLines(of: preset)
             lines.insert(".request on", at: 2)
@@ -103,6 +109,84 @@ final class PresetRestoreSafetyTests: XCTestCase {
         model.applyPresetAlignment()
         try await settle(model) { $0 == .finished || self.failed($0) }
         XCTAssertEqual(model.presetAlignment?.phase, .finished)
+    }
+
+    func testSourceSwitchRequestsCannotInterruptAlignmentOrRestore() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var attempts = 0
+        device.afterFrame = { done in
+            guard done == 1 else { return }
+            attempts += 1
+            do {
+                try model.mcp.service
+                    .onSelectSource?(.mock); XCTFail("MCP must reject a source switch during transfer")
+            } catch {}
+            model.selectSource(.mock)
+            XCTAssertEqual(model.source, .hardware)
+        }
+        try await align(model)
+        model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertNil(model.presetRestorePoint)
+    }
+
+    func testPendingRestoreConfirmationRejectsSourceSwitch() async throws {
+        let (model, _, _, root) = try await context()
+        defer { try? FileManager.default.removeItem(at: root) }
+        model.unbind(.userButton(1))
+        model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .restoreConfirmation }
+        XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.mock))
+        model.selectSource(.mock)
+        XCTAssertEqual(model.source, .hardware)
+        model.cancelPresetRestore()
+        model.selectSource(.mock)
+        XCTAssertEqual(model.source, .mock)
+    }
+
+    func testReconnectCannotRaceAnAlignmentReadThatIsStillDraining() async throws {
+        let (model, device, _, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.suspendsNextDump = true
+        model.beginPresetAlignment()
+        for _ in 0 ..< 100 {
+            if device.suspendedDump != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(device.suspendedDump)
+        let route = device.connection
+        device.connection = .init(); device.onConnection?(device.connection)
+        device.connection = route; device.onConnection?(route)
+        XCTAssertEqual(model.source, .mock)
+        XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.hardware))
+        model.requestSource(.hardware)
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertEqual(model.source, .mock)
+        XCTAssertNil(model.pendingHardwareConnection)
+        device.suspendedDump?.resume(throwing: CancellationError()); device.suspendedDump = nil
+        try await settle(model, failed)
+        model.dismissPresetAlignment()
+        model.requestSource(.hardware)
+        for _ in 0 ..< 100 {
+            if model.pendingHardwareConnection != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(model.pendingHardwareConnection)
+        XCTAssertTrue(device.batches.isEmpty)
+    }
+
+    func testLockedUnknownPresetPreviewDoesNotDumpSameNamedMemorySlots() async throws {
+        let (model, device, _, root) = try await context()
+        defer { try? FileManager.default.removeItem(at: root) }
+        device.memory = [1: try BCLFixtures.encoderPreset(name: "Safety").dump,
+                         8: BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safety'", "$end"])]
+        // Drop all process-local number evidence, as after a reconnect with an edited working copy.
+        model.selectSource(.mock); model.selectSource(.hardware)
+        model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
+        XCTAssertEqual(model.deviceKeysLocked, true)
+        XCTAssertEqual(device.memoryReads, 0)
+        XCTAssertEqual(model.displayText, "----")
     }
 
     func testRestoreRejectsMockUnsupportedDisconnectedAndChangedRouteWithoutWriting() async throws {

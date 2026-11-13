@@ -133,7 +133,8 @@ MCP 控制接口（ROADMAP R8）完成后，每轮验收还要在运行中的 Ap
 - README 截图用 `tools/capture_readme_screenshots.py` 从隔离 Mock 实例重新生成，不手工截取桌面。
 - 界面支持简体中文与 English，默认跟随系统。新增界面/提示/错误文字通过 `L10n.text` 和
   `Sources/BCRAgentCore/Resources/{en,zh-Hans}.lproj/Localizable.strings` 提供成对翻译；
-  插值占位符两种语言必须一致，用户输入的名称不翻译。语言设置即时生效，不重建控制台或设备/Agent 会话；保留用户命名和配置原值。控件简称沿用 `P组-序号`、`B行-序号`、`E行-序号`、`U序号`。
+  插值占位符两种语言必须一致，用户输入的名称不翻译。语言设置对应用界面和自有消息即时生效，不重建控制台或设备/Agent 会话；保留用户命名和配置原值。
+  macOS 系统菜单、文件面板和系统按钮在下次启动时切换，设置页必须明确说明。控件简称沿用 `P组-序号`、`B行-序号`、`E行-序号`、`U序号`。
 - 交互控件提供无障碍标签；可调节控件支持 `accessibilityAdjustableAction`。
 - 破坏性操作（清空映射、删除参数、替换配置）必须二次确认。
 

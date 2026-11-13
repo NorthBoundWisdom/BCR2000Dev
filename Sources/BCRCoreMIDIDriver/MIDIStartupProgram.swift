@@ -1,13 +1,13 @@
 import BCRFoundation
 import Foundation
 
-public enum MIDIStartupError: Error, LocalizedError {
+public enum MIDIStartupError: LocalizedMessageError {
     case invalidProgram, noReply, rejected(Int)
-    public var errorDescription: String? {
+    public var localizedMessage: LocalizedMessage {
         switch self {
-        case .invalidProgram: L10n.text("硬件启动配置无效")
-        case .noReply: L10n.text("硬件未确认启动设置")
-        case let .rejected(code): L10n.text("硬件拒绝启动设置：\(code)")
+        case .invalidProgram: "硬件启动配置无效"
+        case .noReply: "硬件未确认启动设置"
+        case let .rejected(code): "硬件拒绝启动设置：\(code)"
         }
     }
 }

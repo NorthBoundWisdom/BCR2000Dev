@@ -27,34 +27,90 @@ public enum AppLanguage: String, CaseIterable, Sendable {
 /// Numbered placeholders allow translations to reorder values without printf type hazards.
 public struct LocalizedMessage: ExpressibleByStringLiteral, ExpressibleByStringInterpolation, Equatable, Sendable {
     public let key: String
-    public let arguments: [String]
+    private let values: [Argument]
+    public var arguments: [String] { renderedArguments(language: L10n.language) }
+
+    fileprivate enum Argument: Equatable, Sendable {
+        case verbatim(String)
+        case message(LocalizedMessage)
+        case error(ErrorArgument)
+    }
+
+    fileprivate struct ErrorArgument: Equatable, Sendable {
+        let value: any Error
+        let id = UUID()
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+    }
+
+    fileprivate func renderedArguments(language: AppLanguage) -> [String] {
+        values.map {
+            switch $0 {
+            case let .verbatim(value): value
+            case let .message(message): L10n.text(message, language: language)
+            case let .error(error): error.value.localizedDescription
+            }
+        }
+    }
+
+    /// A dynamic message containing opaque/user text, without treating that text as a key.
+    public static func verbatim(_ value: String) -> Self {
+        var interpolation = StringInterpolation(literalCapacity: 0, interpolationCount: 1)
+        interpolation.appendInterpolation(value)
+        return Self(stringInterpolation: interpolation)
+    }
 
     public init(stringLiteral value: String) {
         key = value
-        arguments = []
+        values = []
     }
 
     public init(stringInterpolation: StringInterpolation) {
         key = stringInterpolation.key
-        arguments = stringInterpolation.arguments
+        values = stringInterpolation.values
     }
 
     public struct StringInterpolation: StringInterpolationProtocol, Sendable {
         var key = ""
-        var arguments: [String] = []
+        fileprivate var values: [Argument] = []
 
         public init(literalCapacity: Int, interpolationCount: Int) {
             key.reserveCapacity(literalCapacity)
-            arguments.reserveCapacity(interpolationCount)
+            values.reserveCapacity(interpolationCount)
         }
 
         public mutating func appendLiteral(_ literal: String) { key += literal }
 
+        /// Nested messages keep their keys; ordinary user strings remain verbatim.
+        public mutating func appendInterpolation(_ message: LocalizedMessage) {
+            key += "{\(values.count)}"
+            values.append(.message(message))
+        }
+
+        public mutating func appendInterpolation(error: any Error) {
+            key += "{\(values.count)}"
+            if let localized = error as? any LocalizedMessageError {
+                values.append(.message(localized.localizedMessage))
+            } else {
+                // Retain the error, not its current description. Computed LocalizedError
+                // descriptions can then follow the active language too.
+                values.append(.error(ErrorArgument(value: error)))
+            }
+        }
+
         public mutating func appendInterpolation(_ value: some Any) {
-            key += "{\(arguments.count)}"
-            arguments.append(String(describing: value))
+            key += "{\(values.count)}"
+            values.append(.verbatim(String(describing: value)))
         }
     }
+}
+
+/// App-owned failures retain message keys, including nested causes, until presentation.
+public protocol LocalizedMessageError: LocalizedError {
+    var localizedMessage: LocalizedMessage { get }
+}
+
+public extension LocalizedMessageError {
+    var errorDescription: String? { L10n.text(localizedMessage) }
 }
 
 public enum L10n {
@@ -86,7 +142,7 @@ public enum L10n {
         let resolved = language.resolved(preferredLanguages: Locale.preferredLanguages)
         let bundle = resolved == .chinese ? chineseBundle : englishBundle
         let template = bundle.localizedString(forKey: message.key, value: message.key, table: "Localizable")
-        return render(template, arguments: message.arguments)
+        return render(template, arguments: message.renderedArguments(language: resolved))
     }
 
     /// Substitute only tokens in the template, never tokens contained in user-supplied arguments.

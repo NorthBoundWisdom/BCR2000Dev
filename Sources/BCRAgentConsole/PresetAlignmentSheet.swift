@@ -128,7 +128,7 @@ struct PresetAlignmentSheet: View {
                 .foregroundStyle(.green)
                 .accessibilityIdentifier("preset.finished")
         case let .failed(message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
+            Label(L10n.text(message), systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
                 .accessibilityIdentifier("preset.failed")
                 .fixedSize(horizontal: false, vertical: true)
@@ -170,7 +170,7 @@ struct PresetAlignmentSheet: View {
 
     @ViewBuilder private var changes: some View {
         if let error = state.planError {
-            Label(error, systemImage: "xmark.octagon.fill")
+            Label(L10n.text(error), systemImage: "xmark.octagon.fill")
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
         } else if let plan = state.plan {

@@ -24,9 +24,9 @@ public enum MIDIObservationDirection: String, Equatable, Sendable {
     case output
 }
 
-public enum HardwareSnapshotError: Error, LocalizedError {
+public enum HardwareSnapshotError: LocalizedMessageError {
     case invalid
-    public var errorDescription: String? { L10n.text("硬件快照无效、不完整或不支持当前映射") }
+    public var localizedMessage: LocalizedMessage { "硬件快照无效、不完整或不支持当前映射" }
 }
 
 public enum SurfaceEffect: Equatable, Sendable {

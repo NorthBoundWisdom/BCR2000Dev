@@ -175,7 +175,7 @@ public struct BCRPresetNames: Equatable, Sendable {
     static func signature(of dump: Data) throws -> [String] {
         let lines = try BCRPresetEncoderLearning.decodeLines(dump)
         guard lines.first == "$rev R1", lines.last == "$end" else {
-            throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设"))
+            throw BCRPresetAlignment.Failure.invalidMessage("需要完整的单个当前预设")
         }
         return lines.filter { !$0.hasPrefix(".default ") && !$0.hasPrefix("$store ") && !$0.hasPrefix("$recall ") }
     }
@@ -212,7 +212,7 @@ public struct BCRDisplayProfile: Codable, Equatable, Sendable {
     public static func read(fromPresetDump dump: Data) throws -> BCRDisplayProfile {
         let lines = try BCRPresetEncoderLearning.decodeLines(dump)
         guard lines.first == "$rev R1", lines.last == "$end" else {
-            throw BCRPresetAlignment.Failure.invalid(L10n.text("需要完整的单个当前预设"))
+            throw BCRPresetAlignment.Failure.invalidMessage("需要完整的单个当前预设")
         }
         var profile = BCRDisplayProfile()
         var control: BCRControlID?
