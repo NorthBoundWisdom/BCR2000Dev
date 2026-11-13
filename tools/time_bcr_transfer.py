@@ -3,6 +3,11 @@
 
 Sends only request SysEx (identity, snapshot, preset names, preset dump), or
 nothing at all in listen mode, and prints frame counts and timing. Reply contents are never printed or saved.
+
+slow-lock is the one write: it requires --confirm-write and sends only the fixed, idempotent
+`$rev R1` / `$preset` / `.lock on` x N / `$end` at a slow pace, one acknowledged line at a time,
+so an observer can count marquee steps per written line. Run it only when the temporary preset
+already has `.lock on`; it never stores or recalls a preset.
 """
 
 import argparse
@@ -14,7 +19,7 @@ from bcr_protocol import identity_info
 from macos_bcr_roundtrip import MacBCR
 from midi_feedback_probe import resolve
 
-OPERATIONS = ("identity", "snapshot", "names", "temp", "stored", "listen")
+OPERATIONS = ("identity", "snapshot", "names", "temp", "stored", "listen", "slow-lock")
 
 
 def request(operation, device, preset):
@@ -94,9 +99,41 @@ def listen(args):
         backend.close()
 
 
+def slow_lock(backend, device, args):
+    lines = ["$rev R1", "$preset"] + [".lock on"] * args.lines + ["$end"]
+    stamps = []
+    for index, line in enumerate(lines):
+        backend.collect(0.01)
+        start = len(backend.frames.frames)
+        frame = bytes([0xF0, 0, 0x20, 0x32, device, 0x15, 0x20, index >> 7, index & 0x7F]) + line.encode() + b"\xf7"
+        sent = time.monotonic()
+        backend._send_bytes(frame)
+        while True:
+            backend.collect(0.005)
+            acks = [
+                f for f in backend.frames.frames[start:] if len(f) == 11 and f[6] == 0x21 and f[7] * 128 + f[8] == index
+            ]
+            if acks:
+                if acks[0][9] != 0:
+                    raise RuntimeError(f"Line {index} rejected with error {acks[0][9]}")
+                break
+            if time.monotonic() - sent > 2:
+                raise RuntimeError(f"No acknowledgement for line {index}")
+        stamps.append(round(time.monotonic() - sent, 3))
+        print(f"line {index + 1}/{len(lines)} acknowledged", file=sys.stderr, flush=True)
+        if index + 1 < len(lines):
+            time.sleep(args.interval)
+    print(
+        json.dumps({"operation": "slow-lock", "lines": len(lines), "intervalS": args.interval, "ackS": stamps}),
+        flush=True,
+    )
+
+
 def run(args):
     if args.operation == "listen":
         return listen(args)
+    if args.operation == "slow-lock" and not args.confirm_write:
+        raise ValueError("slow-lock writes the device; pass --confirm-write")
     backend = MacBCR()
     try:
         source = resolve(backend.ports(True), args.input, "input")
@@ -111,6 +148,8 @@ def run(args):
             print(f"{remaining}…", file=sys.stderr, flush=True)
             time.sleep(1)
         backend.collect(0.1)
+        if args.operation == "slow-lock":
+            return slow_lock(backend, device, args)
         start = len(backend.frames.frames)
         stamps = []
         sent = time.monotonic()
@@ -158,10 +197,15 @@ def main():
     parser.add_argument("--output", type=int)
     parser.add_argument("--countdown", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=45)
+    parser.add_argument("--lines", type=int, default=20, help="slow-lock: number of .lock on lines (1-60)")
+    parser.add_argument("--interval", type=float, default=2, help="slow-lock: seconds between lines (0.5-5)")
+    parser.add_argument("--confirm-write", action="store_true", help="required for slow-lock")
     parser.add_argument("--quiet", type=float, default=1.5, help="stop after this many silent seconds")
     args = parser.parse_args()
     if sys.platform != "darwin":
         parser.error("Native macOS probe required")
+    if not 1 <= args.lines <= 60 or not 0.5 <= args.interval <= 5:
+        parser.error("Invalid slow-lock lines or interval")
     if not 0 <= args.preset <= 31 or not 0 <= args.countdown <= 10:
         parser.error("Invalid preset or countdown")
     run(args)
