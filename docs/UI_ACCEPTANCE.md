@@ -12,7 +12,7 @@ python3 configs/macos_workflow.py build
 ```
 
 在已登录且解锁的 macOS 图形会话中，逐个运行下面的命令。启动命令的终端 / Agent 宿主需要
-“系统设置 → 隐私与安全性 → 辅助功能”权限；截图还需要屏幕录制权限。
+“系统设置 → 隐私与安全性 → 辅助功能”权限；前台按窗口截图还需要屏幕录制权限，离屏自身渲染不读取桌面像素。
 不并行运行，以免共享 MCP 端口或键盘焦点相互干扰。
 
 ```bash
@@ -34,7 +34,7 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 
 | 脚本 | 模式 | 语言与依据 |
 | --- | --- | --- |
-| `verify_connection_ui.py` | **严格离屏未通过，需前台** | F3 采样在原生功能确认框路径捕获激活；禁止激活策略又使确认框不可访问。保留真实流程和全部断言，离屏提前拒绝，待用户决定测试呈现方案 |
+| `verify_connection_ui.py` | 可离屏 | 中英文；离屏专用非激活面板承载原有连接/对齐视图、菜单和确认动作，全部状态断言保留；系统原生菜单/确认框的呈现仍由原前台路径验证 |
 | `verify_builtin_names_ui.py` | 可离屏 | **英文专用**，保留原英文断言；中文实例不适用该既有验收语义 |
 | `verify_endpoint_ui.py` | 可离屏 | 中文；端点默认值/禁用状态与自身 sheet 渲染通过 |
 | `verify_functions_ui.py` | 可离屏 | 中文；步进/指定/循环、批量分配和保留参数值通过 |
@@ -46,18 +46,19 @@ python3 tools/mcp_integration.py --configuration-write --script tools/verify_rev
 示例（逐个运行，不并行）：
 
 ```bash
+python3 tools/mcp_integration.py --offscreen --connection-fixture --script tools/verify_connection_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_endpoint_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_functions_ui.py
 python3 tools/mcp_integration.py --offscreen --configuration-write --script tools/verify_review_fixes_ui.py
 python3 tools/mcp_integration.py --offscreen --language en --configuration-write --script tools/verify_builtin_names_ui.py
 ```
 
-每次离屏运行在启动前开始有限采样，关闭后保存 `desktop-audit.json`：仅记录前台 PID 和本测试进程的窗口元数据，
+每次离屏运行在启动前开始有限采样，关闭后保存 `desktop-audit.json`：仅记录前台/辅助功能焦点 PID 和本测试进程的窗口元数据，
 不读取其他应用像素。若目标进程抢焦点或出现与真实屏幕相交的非透明窗口，采样器立即结束该测试实例并使验收失败。
 `foregroundStable` 如为 false，须结合 PID 判断是否用户自行切换；不能声称该次前台应用全程未变。
 
 透明窗口的 WindowServer 筛选未能取得可截取的主窗口号，已实际验证端点场景；离屏截图使用 Debug 隔离 App 自身
-`cacheDisplay`，保存当前主视图或当前 sheet，不包含其他窗口、桌面像素或窗口边框。接口只在显式隔离 Debug 进程注册，
+`cacheDisplay`，保存当前主视图、当前 sheet 或离屏交互面板，不包含其他窗口、桌面像素或窗口边框。接口只在显式隔离 Debug 进程注册，
 不新增产品 UI 或 Provider 工具。前台截图也改为限定本进程窗口号，不再按屏幕区域截取。
 
 `mcp_integration.py` 为每次运行复制一个有唯一进程身份的 App，使用临时配置、内存凭据与
@@ -111,13 +112,17 @@ FeedbackSchedulerTests、JSONParameterLinkTests、WebSocketParameterAdapterTests
 不可见性由窗口透明和鼠标穿透提供，App 使用 accessory 策略并避免主动激活。屏幕外坐标是首次隐藏时的尽力放置，
 SwiftUI 后续可能将 frame 约束回屏幕范围，因此不能只用坐标判断不可见。
 维护使用 AppKit 的应用更新、窗口更新/移动/尺寸/屏幕及 sheet 通知。通知处理不持续追逐已透明窗口的坐标，
-避免形成同步 frame 约束循环。完整连接确认场景的激活问题在通知维护和原轮询方案中均出现，不能靠轮询保证不激活，现已提前拒绝该路径。
-针对允许的 smoke 与四个脚本使用通知维护，不再运行测试 App 内 50 ms 常驻轮询。
-桌面审计器的 50 ms 采样只在一次验收期间运行，另用于观测与及时终止不合格测试进程。
+避免形成同步 frame 约束循环。不再运行测试 App 内 50 ms 常驻轮询。
+桌面审计器的 50 ms 采样只在一次验收期间运行，用于观测与及时终止不合格测试进程。
 
-### F3 尚未满足的验收
+### 菜单与连接流程的离屏呈现
 
-历史连接脚本曾记录离屏通过，但新的生命周期采样实际捕获了原生确认框路径激活，不能据旧记录保证不抢焦点。
-原有 50 ms 维护与通知-only 都出现此问题；禁止激活的实验可渲染 smoke，但确认框未进入 AX 树。
-本轮未改变产品确认框或放宽任何状态断言；严格离屏下已提前拒绝完整连接场景，避免再次影响桌面。
-因此 F3 的“现有离屏连接验收仍通过”**未完成**，须先决定是否允许测试专用的非激活确认呈现，或将该场景正式保留前台。
+原生菜单可能取得辅助功能焦点而不改变 NSWorkspace 的前台 PID；只看前台 PID 不够。
+审计现同时检查系统级 AXFocusedApplication，目标获得焦点立即失败；完全没有有效焦点读数也拒绝通过。
+短暂读取失败会记录在 focusReadFailures 中，有限采样不能保证观测到两次采样之间的所有瞬间。
+
+仅在显式测试模式的 --offscreen 进程，连接/对齐 sheet、设备预设/专业面板/批量参数组菜单与按键功能确认共用不能成为 key/main 的
+nonactivatingPanel。连接和对齐仍使用原产品视图；菜单和确认复用原动作、文案、禁用条件与标识，所有原验收断言保留。
+另外只在该进程的 NSApplication 具体类上拦截两个公开 activate 请求，防止视图桥接显式激活。
+普通产品启动与前台验收继续使用原生 Menu/sheet/confirmationDialog，不改变存储格式、Provider 合同或业务动作。
+离屏验收覆盖真实视图与动作，不验证系统原生菜单/确认窗口的呈现机制；这部分仍需原前台路径验收，本轮没有前台运行。

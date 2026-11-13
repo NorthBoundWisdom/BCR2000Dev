@@ -179,7 +179,7 @@ E1–E5、E7 已完成并通过 review。本轮接着做遗留和离屏相关的
   必须前台的脚本行为不变。`tools/mcp_integration.py` 带 `--script` 时的默认值不要改成离屏，除非全部脚本都可离屏。
 - 不做：不为离屏去改产品界面的行为；不删除任何现有验收断言。
 
-### F3（部分完成，连接严格离屏阻塞） 离屏模式的收尾（小）
+### F3（已完成，测试专用呈现限制见执行记录） 离屏模式的收尾（小）
 
 - 依据（均在 `Sources/BCRAgentConsole/OffscreenPresentation.swift` 与 2026-11-13 的实测）：
   - 离屏状态靠 50 ms 轮询加四个通知维持，轮询在测试进程整个生命周期里空转；
@@ -666,3 +666,50 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
   名称脚本固有英文断言保留，英文离屏通过，未伪称中文通过；所有必须前台的原流程本轮未跑。
 - 最终基线 06952e0，依赖 c6b3083de6e96a8315aee58c7bf18d97003aa21a；全部实现本地提交，未 push/tag。
   未处理范围外桥接任务；未连接真实设备。所有项目提交后工作区干净，收尾记录不改变实现。
+
+### F3 继续执行（2026-11-13）
+
+- 用户要求继续完成全部；保留不打扰桌面、不改产品确认行为/断言的约束。
+- 尝试仅在复制的离屏 Debug 集成包指定专用 NSApplication，拦截其显式激活请求；不替换原生确认框或业务动作。
+  普通产品包 PrincipalClass 和前台验收保持原样；宿主类型不符时立即拒绝启动。继续严格审计，失败不放行。
+
+- 继续排查：Info.plist 的 PrincipalClass 未替换 SwiftUI 的宿主类型，已删除该实验。仅拦截实际应用类两个公开激活方法后，
+  中文连接流程曾通过，但补充 AXFocusedApplication 采样后捕获原生菜单取得焦点，立即终止目标；此失败不计通过。
+  初版误用系统级 AXFocusedUIElement，查 SDK 后改为系统级 AXFocusedApplication，读取失败数保留在报告中。
+- 最小测试呈现选择：只在离屏测试中用不可成为 key/main 的 nonactivatingPanel 承载原连接/对齐视图及原菜单/确认动作；
+  普通产品和前台验收仍走原生控件。所有状态断言、文案、业务入口不变；不新增用户数据格式或公开合同。
+  这是对测试呈现的适配，不能用它证明系统原生菜单/确认窗口本身不抢焦点；后者本轮未前台验证。
+
+### F3 续作验收（实现提交号由下一条收尾索引补齐）
+
+- 改动文件：`Sources/BCRAgentConsole/OffscreenActivationGuard.swift`、`OffscreenInteractionPanel.swift`、
+  `OffscreenPresentation.swift`、`IntegrationWindowCapture.swift`、`ContentView.swift`、`ControlInspectorView.swift`、
+  `SurfacePanelView.swift`、`WorkspaceTabsView.swift`、`BulkAssignmentView.swift`；
+  `Tests/BCRAgentConsoleTests/OffscreenActivationGuardTests.swift`、`OffscreenInteractionPanelTests.swift`；
+  `Tests/BuildWorkflowTests/test_native_offscreen_safety.py`；`tools/desktop_audit.swift`、`native_ui.py`、
+  `verify_connection_ui.py`、`verify_builtin_names_ui.py`、`verify_review_fixes_ui.py`；`docs/UI_ACCEPTANCE.md`、本计划与 TODO/ROADMAP。
+- 新增 4 项 Swift 测试（两个公开激活入口的局部隔离、非法类拒绝、面板不成为 key/main、普通启动不创建面板），
+  新增 2 项 Python 测试（前台 PID 未变但焦点转移仍拒绝、无有效焦点观测拒绝）。原有测试断言未改；三个调整脚本的原 assert AST 对比一致。
+- 更严格采样还捕获专业面板菜单、批量参数组菜单取得焦点；立即结束隔离测试实例，失败未计通过。
+  只在离屏分支复用非激活菜单载体，仍执行原来的面板启用和参数组选择；前台脚本步骤完整保留。
+- 最终离屏运行：中文连接 case-z5dvmm1b（234 样本）、英文连接 case-5nebgu31（233）、
+  endpoint 中文 case-65y7ocn0（52）、functions 中文 case-3mylgw9a（73）、
+  review_fixes 中文 case-zg8ylycc（61）、builtin_names 英文 case-y77wb9ur（93）；
+  双语 smoke 为 build/offscreen-audits/smoke-f3-final-ib6budr9（29 样本）。每次均 foregroundStable=true、
+  targetWasFront=false、focusedTargetSamples=0、visibleSamples=0；每份报告有 1 次焦点读取失败，其他读数均为原前台应用。
+  有限 50 ms 采样不是连续时刻的保证；报告完整保留失败数，不把无法读取当作已确认无焦点。
+- 自身渲染的连接/对齐 PNG 已查看；初版透明背景不便审查，离屏面板补了深色背景和 darkAqua 外观后重新构建、采集、通过完整连接。
+  图片在忽略目录 build/ui-validation/f3-final，不读取其他窗口像素、不替换 README 图片。
+- 所有真实 App 启动均离屏，没有有意前台运行，也没有系统键盘事件、访达、设置或其他应用窗口。
+  排查中捕获的意外焦点已由采样器立即结束目标并如实记录。所有设备行为仅在隔离内存替身中进行，没有真实 MIDI/SysEx。
+- 未验证/限制：configuration、output、precision 仍必须前台，本轮不运行，原因与原流程见能力表；
+  builtin_names 固有英文断言没有改成中文。系统原生菜单/确认呈现和 Return/Escape 快捷键仍由原前台路径覆盖，离屏仅验证同一视图/动作及状态。
+- 与 PLAN 的偏离：为满足严格不抢焦点，增加仅测试启用的非激活呈现适配；普通产品 UI、数据格式、公开合同不改。
+  未改模拟侧禁改文件与冲突热点。fetch 后 rebase 到 d8e15a4，依赖锁未变，无需 update；保留远端新鲜 XCTest worker 汇总实现。
+  当前旧任务提交号为 F1 74b4925、F2 62e68d8、F3 首次交付 397bb77；历史旧号保留作追溯。
+
+- 最终检查：Swift 五模块全部 PASS，545 项、失败 0（PluginHost 11、AgentCore 271、AgentConsole 170、
+  ProviderDomain 26、ProviderAdapter 67；545 个独立 XCTest 进程，120.668 s）。BuildWorkflow 124 项、失败 0；
+  Python SDK 6 项、失败 0。build、双语离屏 smoke、全部上述可离屏脚本、域边界、命令校验、compileall、
+  全仓格式检查及暂存 diff 检查通过。双语 strings 未新增，plutil 首次沿用旧 Core 资源路径失败，
+  改为实际 Foundation 资源路径后两份均 OK。格式器改动已重新暂存并复跑；没有修改任何现有测试断言。

@@ -39,18 +39,20 @@ struct WorkspaceTabsView: View {
     }
 
     private func panelMenu(outputActive: Bool) -> some View {
-        Menu {
+        OffscreenSafeMenu(id: "workspacePanels") {
             Section(L10n.text("专业面板")) {
                 ForEach(WorkspaceTab.optional) { panel in
                     Toggle(isOn: Binding(
                         get: { model.workspacePanels.isEnabled(panel) },
                         set: { isOn in
+                            OffscreenInteractionPanel.dismiss(id: "workspacePanels")
                             if model.setWorkspacePanel(panel, enabled: isOn), isOn { selection = panel }
                         }
                     )) {
                         Label(panel.title, systemImage: panel.systemImage)
                         if let summary = panel.optionalSummary { Text(summary) }
                     }
+                    .accessibilityIdentifier("workspace.panel.\(panel.rawValue)")
                 }
             }
             if outputActive, !model.workspacePanels.isEnabled(.output) {

@@ -1,9 +1,10 @@
+import json
 import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tools import native_ui
 
@@ -64,6 +65,34 @@ class NativeOffscreenSafetyTests(unittest.TestCase):
                 ui.capture(root / "result.png")
             command.assert_not_called()
             self.assertEqual((root / "result.png").read_bytes(), b"own App view")
+
+    def test_audit_rejects_keyboard_focus_even_when_frontmost_pid_is_unchanged(self):
+        self.assert_audit_rejected(focused_pids=[123], focused_target_samples=1)
+
+    def test_audit_rejects_missing_focus_observations(self):
+        self.assert_audit_rejected(focused_pids=[], focused_target_samples=0)
+
+    def assert_audit_rejected(self, *, focused_pids, focused_target_samples):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "desktop-audit.json").write_text(
+                json.dumps(
+                    dict(
+                        samples=10,
+                        targetPIDs=[123],
+                        targetWasFront=False,
+                        visibleSamples=0,
+                        focusedPIDs=focused_pids,
+                        focusedTargetSamples=focused_target_samples,
+                    )
+                )
+            )
+            audit = native_ui.DesktopAudit.__new__(native_ui.DesktopAudit)
+            audit.directory = root
+            audit.process = Mock(returncode=0)
+            audit.process.communicate.return_value = ("", "")
+            with self.assertRaisesRegex(RuntimeError, "Offscreen desktop audit failed"):
+                audit.finish()
 
 
 if __name__ == "__main__":

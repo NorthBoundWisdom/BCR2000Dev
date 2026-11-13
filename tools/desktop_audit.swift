@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Foundation
 
 // Finite, read-only sampling for an explicitly scoped acceptance run. Never activates an app.
@@ -31,6 +32,10 @@ var targets = Set<pid_t>()
 var samples = 0
 var maxWindows = 0
 var visibleSamples = 0
+let systemAccessibility = AXUIElementCreateSystemWide()
+var focusedPIDs = Set<pid_t>()
+var focusedTargetSamples = 0
+var focusReadFailures = 0
 var targetWasFront = false
 var frontEvents: [[String: Any]] = []
 var lastFront = initial
@@ -69,6 +74,21 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
         targetWasFront = true
         if stopped.insert(front).inserted { kill(front, SIGKILL) }
     }
+    var focused: CFTypeRef?
+    if AXUIElementCopyAttributeValue(systemAccessibility, kAXFocusedApplicationAttribute as CFString, &focused) ==
+        .success,
+       let focused, CFGetTypeID(focused) == AXUIElementGetTypeID()
+    {
+        let element = focused as! AXUIElement
+        var pid: pid_t = 0
+        if AXUIElementGetPid(element, &pid) == .success {
+            focusedPIDs.insert(pid)
+            if targets.contains(pid) {
+                focusedTargetSamples += 1
+                if stopped.insert(pid).inserted { kill(pid, SIGKILL) }
+            }
+        } else { focusReadFailures += 1 }
+    } else { focusReadFailures += 1 }
     let windows = (CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []).filter {
         targets.contains(($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value ?? -1)
     }
@@ -100,6 +120,8 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
 }
 
 let data = try JSONSerialization.data(withJSONObject: [
+    "focusedPIDs": focusedPIDs.sorted(), "focusedTargetSamples": focusedTargetSamples,
+    "focusReadFailures": focusReadFailures,
     "samples": samples, "frontmostPIDs": fronts.sorted(), "foregroundStable": fronts.count == 1,
     "targetPIDs": targets.sorted(), "targetWasFront": targetWasFront, "frontEvents": frontEvents,
     "maxOwnedWindows": maxWindows,

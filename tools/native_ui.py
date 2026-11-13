@@ -48,7 +48,14 @@ class DesktopAudit:
         if self.process.returncode:
             raise RuntimeError("Desktop sampler failed: " + errors)
         result = json.loads((self.directory / "desktop-audit.json").read_text())
-        if result["samples"] == 0 or not result["targetPIDs"] or result["targetWasFront"] or result["visibleSamples"]:
+        if (
+            result["samples"] == 0
+            or not result["targetPIDs"]
+            or result["targetWasFront"]
+            or result["visibleSamples"]
+            or not result["focusedPIDs"]
+            or result["focusedTargetSamples"]
+        ):
             raise RuntimeError("Offscreen desktop audit failed: " + json.dumps(result))
         print("Offscreen desktop audit:", json.dumps(result), flush=True)
 

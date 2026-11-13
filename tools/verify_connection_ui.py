@@ -13,10 +13,6 @@ if os.environ.get("BCR_CONNECTION_FIXTURE") != "1":
     raise RuntimeError("This script requires the explicit isolated connection fixture; never run against hardware")
 
 ui = NativeUI(os.environ["BCR_INTEGRATION_APP_PID"])
-if ui.offscreen:
-    raise RuntimeError(
-        "Full connection acceptance requires foreground: native confirmation can activate the App; strict offscreen audit rejected it"
-    )
 directory = Path(os.environ["BCR_INTEGRATION_DIRECTORY"])
 client = Client(os.environ["BCR_MCP_URL"], os.environ["BCR_MCP_TOKEN"])
 

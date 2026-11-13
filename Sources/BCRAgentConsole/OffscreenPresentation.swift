@@ -22,6 +22,12 @@ enum OffscreenPresentation {
     /// AppKit notifications cover newly created windows/sheets and later presentation changes.
     static func install() {
         guard isEnabled, observers.isEmpty else { return }
+        guard let applicationClass = object_getClass(NSApp),
+              OffscreenActivationGuard.install(on: applicationClass)
+        else {
+            FileHandle.standardError.write(Data("Could not isolate offscreen activation requests.\n".utf8))
+            exit(2)
+        }
         observers = observeWindows(center: .default) { NSApp.windows }
     }
 

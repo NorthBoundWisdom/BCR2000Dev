@@ -65,8 +65,13 @@ ui.run('perform action "AXPress" of button 1 of group 1 of sheet 1 of mainWindow
 ui.run("set value of scroll bar 1 of scroll area 2 of group 1 of mainWindow to 1.0")
 # The protected enable parameter retains its original group. Pick the Chinese stored group (first in parameter order),
 # whose translated label intentionally matches the original English group; tags remain distinct.
-ui.run("click pop up button 6 of scroll area 2 of group 1 of mainWindow")
-ui.run("click first menu item of menu 1 of pop up button 6 of scroll area 2 of group 1 of mainWindow")
+if ui.offscreen:
+    ui.press("bulk.group")
+    ui.wait(lambda: ui.exists("bulk.group.option.0"), "Parameter group options missing")
+    ui.press("bulk.group.option.0")
+else:
+    ui.run("click pop up button 6 of scroll area 2 of group 1 of mainWindow")
+    ui.run("click first menu item of menu 1 of pop up button 6 of scroll area 2 of group 1 of mainWindow")
 press_help("Preview sequential row assignments, then confirm to apply", "scroll area 2 of group 1 of mainWindow")
 ui.wait(lambda: ui.run("return count of sheets of mainWindow") == "1", "Bulk preview missing")
 translated("sheet 1 of mainWindow")

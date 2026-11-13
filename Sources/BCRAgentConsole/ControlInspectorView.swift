@@ -139,18 +139,19 @@ struct ControlInspectorView: View {
             }
         }
         .panelStyle()
-        .confirmationDialog(
-            pendingButtonFunctionChange?.visualizationOnly == true
-                ? L10n.text("启用此按键的功能？") : L10n.text("改回仅显示按压？"),
-            isPresented: Binding(
-                get: { pendingButtonFunctionChange != nil },
-                set: { if !$0 { pendingButtonFunctionChange = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: pendingButtonFunctionChange
-        ) { entry in
+        .offscreenSafeConfirmationDialog(id: "buttonFunctions",
+                                         pendingButtonFunctionChange?.visualizationOnly == true
+                                             ? L10n.text("启用此按键的功能？") : L10n.text("改回仅显示按压？"),
+                                         isPresented: Binding(
+                                             get: { pendingButtonFunctionChange != nil },
+                                             set: { if !$0 { pendingButtonFunctionChange = nil } }
+                                         ),
+                                         titleVisibility: .visible,
+                                         presenting: pendingButtonFunctionChange)
+        { entry in
             Button(entry.visualizationOnly == true ? L10n.text("启用此按键的功能") : L10n.text("改回仅显示按压")) {
                 model.setHardwareButtonFunctions(entry, enabled: entry.visualizationOnly == true)
+                if OffscreenPresentation.isEnabled { pendingButtonFunctionChange = nil }
             }
             .accessibilityIdentifier("hardware.buttonFunctions.confirm")
             Button(L10n.text("取消"), role: .cancel) { pendingButtonFunctionChange = nil }

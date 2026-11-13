@@ -18,7 +18,8 @@
                         do {
                             guard let window = NSApp.windows
                                 .first(where: { $0.canBecomeMain && $0.title.hasPrefix("BCRTest-") }),
-                                let view = (window.attachedSheet ?? window).contentView
+                                let view = (OffscreenInteractionPanel.window ?? window.attachedSheet ?? window)
+                                    .contentView
                             else { throw CocoaError(.fileReadNoSuchFile) }
                             view.layoutSubtreeIfNeeded()
                             guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {

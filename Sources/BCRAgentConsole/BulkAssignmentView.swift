@@ -22,9 +22,24 @@ struct BulkAssignmentSection: View {
                 }
             }
             FieldRow(L10n.text("参数组")) {
-                Picker(L10n.text("参数组"), selection: $group) {
-                    ForEach(model.configuration.parameterGroups, id: \.self) {
-                        Text($0.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName($0)).tag($0)
+                if OffscreenPresentation.isEnabled {
+                    OffscreenSafeMenu(id: "bulkGroup") {
+                        ForEach(Array(model.configuration.parameterGroups.enumerated()), id: \.offset) { index, value in
+                            Button(value.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName(value)) {
+                                group = value
+                                OffscreenInteractionPanel.dismiss(id: "bulkGroup")
+                            }
+                            .accessibilityIdentifier("bulk.group.option.\(index)")
+                        }
+                    } label: {
+                        Text(group.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName(group))
+                    }
+                    .accessibilityIdentifier("bulk.group")
+                } else {
+                    Picker(L10n.text("参数组"), selection: $group) {
+                        ForEach(model.configuration.parameterGroups, id: \.self) {
+                            Text($0.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName($0)).tag($0)
+                        }
                     }
                 }
             }
