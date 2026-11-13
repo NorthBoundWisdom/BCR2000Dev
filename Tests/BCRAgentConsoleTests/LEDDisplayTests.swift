@@ -179,11 +179,14 @@ private final class DisplayDevice: MIDIService {
     var names: BCRPresetNames
     var memory: [Int: Data] = [:]
     var writes = 0
+    var voiceWrites = 0
+    var supportsSnapshotReadback = false
     var dumps = 0
     init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
     var dumpDelay = Duration.zero
     var nameReadFails = false
     var memoryReadFails = false
+    var currentReadFails = false
     var memoryReads: [Int] = []
     var nameResponses: [BCRPresetNames] = []
     func configureStartup(_ program: MIDIStartupProgram) async throws {}
@@ -196,8 +199,18 @@ private final class DisplayDevice: MIDIService {
 
     func start() throws {}
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
-    func send(_ message: MIDIVoiceMessage) throws {}
-    func readCurrentPreset() async throws -> Data { dumps += 1; try await Task.sleep(for: dumpDelay); return temporary }
+    func send(_ message: MIDIVoiceMessage) throws { voiceWrites += 1 }
+    func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
+        expected.map { MIDI1UMPCodec.feedback(control: $0, value: 64) }
+    }
+
+    func readCurrentPreset() async throws -> Data {
+        dumps += 1
+        try await Task.sleep(for: dumpDelay)
+        if currentReadFails { throw HardwareSnapshotError.invalid }
+        return temporary
+    }
+
     func readPresetNames() async throws -> BCRPresetNames {
         if nameReadFails { throw CocoaError(.fileReadUnknown) }
         if !nameResponses.isEmpty { return nameResponses.removeFirst() }
@@ -463,12 +476,12 @@ final class LockedPresetDisplayTests: XCTestCase {
         // A stale confirmation context cannot be reused after the session changed.
         model.confirmDisplayPresetNumber(context.id, number: 1)
         XCTAssertEqual(model.displayContent, .unknown)
-        // The fresh working copy is byte-identical on the same route: the confirmed number returns
-        // from its definition-bound record, without reading the same-named memory slots again.
+        // Matching the definition does not establish a slot: a manual-only record
+        // cannot restore the number on a new connection.
         let memoryReads = device.memoryReads
         model.selectSource(.hardware)
         try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(model.displayContent, .preset(1))
+        XCTAssertEqual(model.displayContent, .unknown)
         XCTAssertEqual(device.memoryReads, memoryReads)
         XCTAssertEqual(device.writes, 0)
     }
@@ -503,6 +516,156 @@ final class LockedPresetDisplayTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertEqual(other.displayContent, .unknown)
         XCTAssertEqual(otherCopy.writes, 0)
+    }
+
+    func testConnectionDrawsRingsWithTheModesOfTheDevicesCurrentWorkingCopy() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // The stored map still says pan (from an alignment); the device reverted to 1dot.
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8), ringMode: .pan)
+        try stores.hardwareMap.save(map)
+        device.temporary = BCLFixtures.dump([
+            "$rev R1", "$preset", ".name 'Redrum'", ".egroups 4", ".lock off",
+            "$encoder 1", ".easypar CC 1 8 0 127 absolute", ".showvalue on", ".mode 1dot", "$end"
+        ])
+        let reverted = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        _ = model
+        // Mock mode draws the mock map; the persisted hardware map is what hardware mode uses.
+        XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
+        reverted.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertEqual(reverted.engine.hardwareMap.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
+        XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testAmbiguousManualNumberCannotReturnAfterRestartOnAnotherDefaultValue() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let definition = try BCRPresetAlignment.canonicalLines(of: device.temporary).dropLast()
+        let one = BCLFixtures.dump(Array(definition) + [".default 11", "$end"])
+        let eight = BCLFixtures.dump(Array(definition) + [".default 92", "$end"])
+        XCTAssertEqual(try BCRPresetAlignment.identityLines(of: one), try BCRPresetAlignment.identityLines(of: eight))
+        device.temporary = one; device.memory = [1: one, 8: eight]
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        model.requestPresetNumberConfirmation()
+        for _ in 0 ..< 100 {
+            if model.pendingPresetNumberConfirmation != nil { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
+        model.confirmDisplayPresetNumber(context.id, number: 1)
+        XCTAssertEqual(model.displayContent, .preset(1))
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        let recalledEight = DisplayDevice(temporary: eight, names: device.names)
+        recalledEight.memory = device.memory
+        let restarted = ConsoleViewModel(stores: stores, midiService: recalledEight, initialPreset: .robotArm)
+        restarted.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(restarted.displayContent, .unknown)
+        XCTAssertEqual(restarted.displayText, "----")
+        XCTAssertEqual(recalledEight.writes, 0)
+    }
+
+    func testLegacyNumberRecordWithoutUniquenessIsNotRestored() async throws {
+        let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let record = PresetNumberRecord(
+            route: PresetRestoreRoute(device.connection),
+            name: "Redrum",
+            candidates: [1, 8],
+            definitionDigest: try PresetNumberMemory.digest(of: device.temporary),
+            number: 1,
+            recordedAt: .now
+        )
+        try JSONFileStore<[PresetNumberRecord]>(fileURL: directory.appending(path: "preset-number-evidence.json"))
+            .save([record])
+        model.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.displayContent, .unknown)
+        XCTAssertNotEqual(model.notice?.level, .error)
+    }
+
+    private func uniqueRingReadbackContext(cachedName: String = "Ring") throws
+        -> (ConsoleViewModel, DisplayDevice, ConsoleStores, URL)
+    {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
+                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
+        var map = HardwareMap()
+        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8), ringMode: .pan)
+        try stores.hardwareMap.save(map)
+        try JSONFileStore<BCRDisplayProfile>(fileURL: directory.appending(path: "display-profile.json"))
+            .save(BCRDisplayProfile(name: cachedName))
+        let dump = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Ring'", ".egroups 4", ".lock off",
+                                     "$encoder 1", ".easypar CC 1 8 0 127 absolute", ".mode 1dot", "$end"])
+        let device = DisplayDevice(temporary: dump, names: .init(temporary: "Ring", memory: ["Ring"]))
+        device.supportsSnapshotReadback = true
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        return (model, device, stores, directory)
+    }
+
+    private func connectForReadback(_ model: ConsoleViewModel) async throws {
+        for _ in 0 ..< 200 {
+            if let prompt = model.pendingHardwareConnection {
+                model.connectHardware(prompt.id, mode: .read)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTFail("Read-only connection prompt missing")
+    }
+
+    func testUniqueCachedNameStillReadsWorkingCopyAndPersistsActualRingMode() async throws {
+        let (model, device, stores, directory) = try uniqueRingReadbackContext()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.dumpDelay = .milliseconds(100)
+        try await connectForReadback(model)
+        for _ in 0 ..< 100 {
+            if device.dumps > 0 { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        XCTAssertEqual(device.dumps, 1)
+        XCTAssertEqual(model.display.preset, 1, "Names establish the number before the working-copy read finishes")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(model.engine.hardwareMap.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
+        XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
+        XCTAssertEqual(device.voiceWrites, 0)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testUniqueNameNumberRemainsKnownWhenOnlyWorkingCopyReadFails() async throws {
+        let (model, device, stores, directory) = try uniqueRingReadbackContext()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        device.currentReadFails = true
+        try await connectForReadback(model)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(device.dumps, 1)
+        XCTAssertEqual(model.displayContent, .preset(1))
+        XCTAssertEqual(model.notice?.level, .warning)
+        XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
+        XCTAssertEqual(device.voiceWrites, 0)
+        XCTAssertEqual(device.writes, 0)
+    }
+
+    func testUnwritableRingMapDoesNotReplacePersistenceFailureWithSuccess() async throws {
+        let (model, device, stores, directory) = try uniqueRingReadbackContext(cachedName: "Old Cache")
+        defer {
+            try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: stores.hardwareMap.fileURL.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: stores.hardwareMap.fileURL.path)
+        try await connectForReadback(model)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.notice?.level, .error)
+        XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
+        XCTAssertEqual(device.voiceWrites, 0)
+        XCTAssertEqual(device.writes, 0)
     }
 
     func testCorruptNumberRecordsNeverProduceANumber() async throws {

@@ -277,6 +277,30 @@ public enum BCRPresetAlignment {
         try canonicalLines(of: dump).filter { !$0.hasPrefix(".default ") }
     }
 
+    /// Takes each learned encoder's LED ring mode from a fresh read of the device's working copy.
+    /// The working copy can change without the host (power cycle or preset recall reverts an
+    /// alignment), so the map's ring modes may describe a copy that is no longer loaded. Only the
+    /// ring mode changes, and only where the device reports the exact learned MIDI identity and an
+    /// explicit, known `.mode`; identities, buttons and anything ambiguous stay untouched.
+    public static func syncingRingModes(_ map: HardwareMap, with dump: Data) throws
+        -> (map: HardwareMap, changed: [BCRControlID])
+    {
+        let document = try Document(lines: canonicalLines(of: dump))
+        let encoders = document.encoders
+        var result = map
+        var changed: [BCRControlID] = []
+        for entry in map.entries where entry.control.isContinuous {
+            guard let number = encoderNumber(for: entry.control), let block = encoders[number],
+                  block.easyparIdentity == entry.midi,
+                  let raw = block.value(of: ".mode"), let mode = LEDRingMode(rawValue: raw),
+                  mode != entry.ringMode
+            else { continue }
+            try result.bind(entry.control, to: entry.midi, ringMode: mode)
+            changed.append(entry.control)
+        }
+        return (result, changed)
+    }
+
     public static func deviceIdentifier(of dump: Data) throws -> UInt8 {
         _ = try BCRPresetEncoderLearning.decodeLines(dump)
         return dump[dump.startIndex + 4]

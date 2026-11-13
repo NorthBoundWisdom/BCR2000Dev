@@ -12,9 +12,12 @@ struct PresetNumberEvidence {
     let definition: [String]
     let locked: Bool
     let originalDefinition: [String]
+    /// Only a unique match across every same-named stored candidate can establish this.
+    /// Manual screen confirmation and explicit recall alone do not prove uniqueness.
+    let uniquenessProven: Bool
 
     init?(number: Int?, dump: Data, names: BCRPresetNames, route: MIDIConnectionSnapshot,
-          originalDefinition: [String]? = nil) throws
+          originalDefinition: [String]? = nil, uniquenessProven: Bool = false) throws
     {
         let profile = try BCRDisplayProfile.read(fromPresetDump: dump)
         guard let number, let name = names.temporaryName,
@@ -27,6 +30,7 @@ struct PresetNumberEvidence {
         definition = try BCRPresetAlignment.identityLines(of: dump)
         locked = profile.locked == true
         self.originalDefinition = originalDefinition ?? definition
+        self.uniquenessProven = uniquenessProven
     }
 
     func matches(_ names: BCRPresetNames, on route: MIDIConnectionSnapshot) -> Bool {

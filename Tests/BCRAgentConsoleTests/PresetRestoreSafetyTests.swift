@@ -386,11 +386,21 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await align(model)
         XCTAssertEqual(model.deviceKeysLocked, true)
         XCTAssertEqual(model.displayText, "P- 1")
+        let proofStore = JSONFileStore<[PresetNumberRecord]>(fileURL: root
+            .appending(path: "preset-number-evidence.json"))
+        XCTAssertTrue(try XCTUnwrap(proofStore.load()).allSatisfy { $0.uniquenessProven == true })
         let reads = device.memoryReads
         model.beginPresetAlignment(); try await settle(model) { $0 == .preview }
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.memoryReads, reads)
         model.dismissPresetAlignment()
+        model.requestPresetNumberConfirmation()
+        for _ in 0 ..< 100 {
+            if model.pendingPresetNumberConfirmation != nil { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let confirmation = try XCTUnwrap(model.pendingPresetNumberConfirmation)
+        model.confirmDisplayPresetNumber(confirmation.id, number: 1)
         model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
         XCTAssertEqual(model.displayText, "P- 1")
         // Reconnecting reads the working copy again; the identical aligned definition was proven
@@ -402,6 +412,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(150))
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.memoryReads, readsBeforeReconnect)
+        XCTAssertTrue(try XCTUnwrap(proofStore.load()).allSatisfy { $0.uniquenessProven == true })
     }
 
     func testFailedWriteCannotKeepThePreviousLockProof() async throws {
@@ -416,6 +427,34 @@ final class PresetRestoreSafetyTests: XCTestCase {
         device.failAtFrame = 5
         model.applyPresetAlignment(); try await settle(model, failed)
         XCTAssertEqual(model.displayText, "----")
+    }
+
+    func testManualOnlyProofDoesNotBecomeUniqueThroughAlignmentOrRestore() async throws {
+        let (model, device, stores, root) = try await context(aligned: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = device.preset
+        device.memory = [1: original, 8: original]
+        try await Task.sleep(for: .milliseconds(100))
+        model.requestPresetNumberConfirmation()
+        for _ in 0 ..< 100 {
+            if model.pendingPresetNumberConfirmation != nil { break }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        let confirmation = try XCTUnwrap(model.pendingPresetNumberConfirmation)
+        model.confirmDisplayPresetNumber(confirmation.id, number: 1)
+        try await align(model)
+        let restartedDevice = RestoreSafetyDevice(device.preset)
+        restartedDevice.memory = device.memory
+        let restarted = ConsoleViewModel(stores: stores, midiService: restartedDevice)
+        restarted.selectSource(.hardware)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(restarted.displayContent, .unknown)
+        model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
+        let records = try JSONFileStore<[PresetNumberRecord]>(fileURL: root
+            .appending(path: "preset-number-evidence.json"))
+            .load()
+        XCTAssertTrue(records?.allSatisfy { $0.uniquenessProven == false } == true)
+        XCTAssertEqual(model.displayContent, .preset(1), "Manual proof still works within its uninterrupted session")
     }
 
     func testUnlockedAlignmentCannotCarryAnAmbiguousNumber() async throws {

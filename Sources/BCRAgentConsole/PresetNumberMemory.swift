@@ -3,10 +3,9 @@ import BCRSurfaceDomain
 import CryptoKit
 import Foundation
 
-/// A preset number proven on a route (full content comparison, a verified locked edit, or the
-/// operator's explicit confirmation), keyed by the exact working-copy definition it was proven
-/// for. It never authorizes a number from a name alone: after a restart the working copy must be
-/// read again and match the recorded definition digest, route, name and candidate list exactly.
+/// Definition-bound records include session-only confirmations, but only a content-unique
+/// proof (or an approved edit carrying that proof) can restore a number across connections.
+/// Every restore also re-reads and matches the route, name, candidates and working definition.
 struct PresetNumberRecord: Codable, Equatable, Sendable {
     var route: PresetRestoreRoute
     var name: String
@@ -14,6 +13,8 @@ struct PresetNumberRecord: Codable, Equatable, Sendable {
     var definitionDigest: String
     var number: Int
     var recordedAt: Date
+    /// Missing on legacy records: they remain readable but cannot restore a number.
+    var uniquenessProven: Bool? = nil
 }
 
 struct PresetNumberMemory {
@@ -36,7 +37,8 @@ struct PresetNumberMemory {
         guard let name = names.temporaryName, let records = try? store.load() else { return nil }
         let digest = try Self.digest(of: dump)
         return records.last {
-            $0.route.matches(route) && $0.name == name && $0.candidates == names.candidates
+            $0.uniquenessProven == true && $0.route.matches(route) && $0.name == name && $0.candidates == names
+                .candidates
                 && $0.definitionDigest == digest && names.candidates.contains($0.number)
         }?.number
     }
@@ -46,7 +48,7 @@ struct PresetNumberMemory {
         let record = PresetNumberRecord(
             route: evidence.route, name: evidence.name, candidates: evidence.candidates,
             definitionDigest: Self.digest(device: evidence.device, definition: evidence.definition),
-            number: evidence.number, recordedAt: now
+            number: evidence.number, recordedAt: now, uniquenessProven: evidence.uniquenessProven
         )
         // An unreadable file is only a cache of proofs; replace it rather than block the display.
         var records = (try? store.load()) ?? []

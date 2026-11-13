@@ -8,6 +8,37 @@ final class PresetDocumentSafetyTests: XCTestCase {
             + BCLFixtures.encoderSections() + buttons + ["$end"])
     }
 
+    func testRingModesFollowTheDevicesCurrentWorkingCopyOnlyForMatchingIdentities() throws {
+        // The map still describes an aligned copy (pan/bar); the device reverted to 1dot.
+        var map = try BCLFixtures.encoderMap()
+        let p11 = BCRControlID.pushEncoder(group: 1, 1), p17 = BCRControlID.pushEncoder(group: 1, 7)
+        let p12 = BCRControlID.pushEncoder(group: 1, 2), p13 = BCRControlID.pushEncoder(group: 1, 3)
+        try map.bind(p11, to: .init(kind: .controlChange, channel: 0, number: 1), ringMode: .pan)
+        try map.bind(p17, to: .init(kind: .controlChange, channel: 0, number: 7), ringMode: .bar)
+        try map.bind(p12, to: .init(kind: .controlChange, channel: 0, number: 2), ringMode: .pan)
+        try map.bind(p13, to: .init(kind: .controlChange, channel: 0, number: 3), ringMode: .pan)
+        let dump = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Safe'", ".egroups 4", ".lock off"]
+            + BCLFixtures.encoderSections { number in
+                switch number {
+                // A different identity: never adopt that encoder's mode.
+                case 2: [".easypar CC 1 99 0 127 absolute", ".mode 1dot"]
+                // No explicit mode: keep the map's mode rather than guess a firmware default.
+                case 3: [".easypar CC 1 3 0 127 absolute"]
+                default: [".easypar CC 1 \(number) 0 127 absolute", ".mode 1dot"]
+                }
+            } + ["$end"])
+        let (synced, changed) = try BCRPresetAlignment.syncingRingModes(map, with: dump)
+        XCTAssertEqual(Set(changed), [p11, p17])
+        XCTAssertEqual(synced.ringMode(for: p11), .oneDot)
+        XCTAssertEqual(synced.ringMode(for: p17), .oneDot)
+        XCTAssertEqual(synced.ringMode(for: p12), .pan)
+        XCTAssertEqual(synced.ringMode(for: p13), .pan)
+        XCTAssertEqual(synced.entries.map(\.midi), map.entries.map(\.midi))
+        let (again, none) = try BCRPresetAlignment.syncingRingModes(synced, with: dump)
+        XCTAssertEqual(again, synced)
+        XCTAssertTrue(none.isEmpty)
+    }
+
     func testDuplicateButtonAddressPrefersLearnedOwnerIndependentOfBlockOrder() throws {
         let address = MIDIControlID(kind: .controlChange, channel: 15, number: 90)
         var map = try BCLFixtures.encoderMap()

@@ -18,7 +18,7 @@ struct PresetNumberConfirmationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(L10n.text("核对实机预设编号")).font(.title2.bold())
-            Text(L10n.text("设备不直接报告当前编号。请查看实机屏幕并选择一致的编号；仅确认本次连接的显示，不写入设备。"))
+            Text(L10n.text("设备不直接报告当前编号。请查看实机屏幕并选择一致的编号；没有内容唯一性证明的手动确认仅本次连接有效，不写入设备。"))
                 .fixedSize(horizontal: false, vertical: true)
             Text(context.names.temporaryName ?? "—").font(.headline)
             Text(L10n.text("实机屏幕编号")).font(.subheadline.bold())

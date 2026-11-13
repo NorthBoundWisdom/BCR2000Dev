@@ -945,13 +945,13 @@
 
 "当前名称没有对应的存储预设，无法确认编号。" = "The current name has no matching stored preset, so its number cannot be confirmed.";
 
-"已按实机屏幕确认预设编号 {0}；仅用于本次连接，不写入设备。" = "Preset number {0} confirmed from the device screen for this connection only. Nothing was written to the device.";
+"已按实机屏幕确认预设编号 {0}；未证明内容唯一性，仅本次连接有效，不写入设备。" = "Preset number {0} confirmed from the device screen. Without content-uniqueness proof it is valid only for this connection. Nothing was written to the device.";
 
 "核对实机预设编号" = "Check Device Preset Number";
 
 "核对实机预设编号…" = "Check Device Preset Number…";
 
-"设备不直接报告当前编号。请查看实机屏幕并选择一致的编号；仅确认本次连接的显示，不写入设备。" = "The device does not report its current number directly. Check its screen and select the matching number. This confirms the display for this connection only and writes nothing to the device.";
+"设备不直接报告当前编号。请查看实机屏幕并选择一致的编号；没有内容唯一性证明的手动确认仅本次连接有效，不写入设备。" = "The device does not report its current number directly. Check its screen and select the matching number. Manual confirmation without content-uniqueness proof is valid only for this connection and writes nothing to the device.";
 
 "实机屏幕编号" = "Number on Device Screen";
 
@@ -968,3 +968,9 @@
 "未选中" = "Not Selected";
 
 "编号证据与当前预设不一致，请重新核对。" = "The preset number evidence does not match the current preset. Please check again.";
+
+"已按设备当前预设更新 {0} 个旋钮的灯环显示模式；未写入设备。" = "Updated the LED ring display mode of {0} encoder(s) from the device's current preset; nothing was written to the device.";
+
+"已确认预设编号 {0}；已有内容唯一性证明，定义一致时可跨连接恢复，不写入设备。" = "Preset number {0} confirmed. Existing content-uniqueness proof permits restoring it across connections for the same definition. Nothing was written to the device.";
+
+"未能读取设备显示设置或同步灯环：{0}" = "Could not read device display settings or synchronize LED rings: {0}";

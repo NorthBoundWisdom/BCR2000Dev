@@ -641,15 +641,15 @@ final class ConsoleViewModel: ObservableObject {
             guard let self else { return }
             defer { if self.displayReadID == id { self.displayReadTask = nil; self.displayReadID = nil } }
             await previous?.value
+            var freshNames: BCRPresetNames?
             do {
                 let names = try await self.presetNames(on: route)
-                let candidates = names.candidates
-                let cached = self.displayProfile.flatMap { $0.name == names.temporaryName ? $0 : nil }
-                let needsNumber = self.display.preset == nil && candidates.count > 1
-                guard cached == nil || needsNumber else { return }
+                freshNames = names
+                let needsNumber = self.display.preset == nil && names.candidates.count > 1
                 let temporary = try await self.withDisplayTransfer { try await self.midi.readCurrentPreset() }
                 try self.requirePresetRoute(route)
                 self.updateDisplayProfile(from: temporary)
+                self.syncRingModes(from: temporary, route: route)
                 if needsNumber {
                     try await self.resolveDisplayNumber(temporary: temporary, names: names, route: route)
                 }
@@ -657,25 +657,33 @@ final class ConsoleViewModel: ObservableObject {
                 guard self.displayReadID == id, !Task.isCancelled,
                       self.source == .hardware, self.connection.hasSameRoute(as: route), !self.isLearning
                 else { return }
-                self.invalidateDisplayNumber()
-                if !(error is CancellationError) {
+                if let number = freshNames?.presetNumber {
+                    self.setDisplayPreset(number)
                     self.notice = ConsoleNotice(level: .warning,
-                                                message: "未能核对预设编号，显示未知：\(error: error)")
+                                                message: "未能读取设备显示设置或同步灯环：\(error: error)")
+                } else {
+                    self.invalidateDisplayNumber()
+                    if !(error is CancellationError) {
+                        self.notice = ConsoleNotice(level: .warning,
+                                                    message: "未能核对预设编号，显示未知：\(error: error)")
+                    }
                 }
             }
         }
     }
 
     private func rememberPresetNumber(_ number: Int?, dump: Data, names: BCRPresetNames,
-                                      route: MIDIConnectionSnapshot, originalDefinition: [String]? = nil) throws
+                                      route: MIDIConnectionSnapshot, originalDefinition: [String]? = nil,
+                                      uniquenessProven: Bool = false) throws
     {
         let evidence = try PresetNumberEvidence(number: number, dump: dump, names: names, route: route,
-                                                originalDefinition: originalDefinition)
+                                                originalDefinition: originalDefinition,
+                                                uniquenessProven: uniquenessProven)
         guard number == nil || evidence != nil else {
             throw PresetOperationError("编号证据与当前预设不一致，请重新核对。")
         }
         presetNumberEvidence = evidence
-        // Persist the proof for this exact definition so a restart does not fall back to ----.
+        // Persist the provenance too: session-only confirmations must not become restart proofs.
         if let evidence {
             do { try presetNumberMemory.remember(evidence) } catch { report(error) }
         }
@@ -691,7 +699,8 @@ final class ConsoleViewModel: ObservableObject {
         try requirePresetRoute(route)
         if let evidence = presetNumberEvidence, try evidence.matches(temporary, names: names, on: route) {
             try rememberPresetNumber(evidence.number, dump: temporary, names: names, route: route,
-                                     originalDefinition: evidence.originalDefinition)
+                                     originalDefinition: evidence.originalDefinition,
+                                     uniquenessProven: evidence.uniquenessProven)
             return
         }
         let profile = try BCRDisplayProfile.read(fromPresetDump: temporary)
@@ -700,7 +709,8 @@ final class ConsoleViewModel: ObservableObject {
         if let number = verifiedConfiguredNumber(names, route: route, locked: profile.locked == true)
             ?? names.presetNumber ?? remembered
         {
-            try rememberPresetNumber(number, dump: temporary, names: names, route: route)
+            try rememberPresetNumber(number, dump: temporary, names: names, route: route,
+                                     uniquenessProven: remembered == number)
             return
         }
         presetNumberEvidence = nil
@@ -717,7 +727,8 @@ final class ConsoleViewModel: ObservableObject {
         let latest = try await presetNames(on: route)
         guard latest.temporaryName == names.temporaryName, latest.candidates == candidates else { return }
         let number = try BCRPresetNames.resolve(temporary: temporary, candidates: dumps)
-        try rememberPresetNumber(number, dump: temporary, names: latest, route: route)
+        try rememberPresetNumber(number, dump: temporary, names: latest, route: route,
+                                 uniquenessProven: number != nil)
     }
 
     /// Failure to identify the LED number must not block a validated preset operation.
@@ -755,6 +766,20 @@ final class ConsoleViewModel: ObservableObject {
             // The profile is a disposable settings cache, never a source of number evidence.
             // Fresh device data must repair malformed JSON instead of reloading it here.
             try displayProfileStore.save(profile)
+        } catch { report(error) }
+    }
+
+    /// The device's working copy can change without this app (a power cycle or preset recall
+    /// reverts an alignment). After every fresh read-only dump, draw each learned encoder's ring
+    /// with the mode the device is actually using, so the panel shows what the hardware shows.
+    private func syncRingModes(from dump: Data, route: MIDIConnectionSnapshot) {
+        guard source == .hardware, connection.hasSameRoute(as: route), !isLearning else { return }
+        do {
+            let (map, changed) = try BCRPresetAlignment.syncingRingModes(session.learnedHardwareMap, with: dump)
+            guard !changed.isEmpty else { return }
+            try installVerifiedMap(map)
+            notice = ConsoleNotice(level: .info,
+                                   message: "已按设备当前预设更新 \(changed.count) 个旋钮的灯环显示模式；未写入设备。")
         } catch { report(error) }
     }
 
@@ -811,9 +836,22 @@ final class ConsoleViewModel: ObservableObject {
               latestDisplayDump?.dump == context.dump,
               verifiedDisplayNames?.names == context.names else { return }
         do {
-            try rememberPresetNumber(number, dump: context.dump, names: context.names, route: connection)
+            let matchingEvidence = try presetNumberEvidence.flatMap { evidence -> PresetNumberEvidence? in
+                guard evidence.number == number,
+                      try evidence.matches(context.dump, names: context.names, on: connection) else { return nil }
+                return evidence
+            }
+            let inSessionProof = matchingEvidence?.uniquenessProven ?? false
+            let recordedProof = try presetNumberMemory.number(for: context.dump, names: context.names,
+                                                              route: connection) == number
+            let uniquenessProven = inSessionProof || recordedProof
+            try rememberPresetNumber(number, dump: context.dump, names: context.names, route: connection,
+                                     originalDefinition: matchingEvidence?.originalDefinition,
+                                     uniquenessProven: uniquenessProven)
             pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
-            notice = ConsoleNotice(level: .info, message: "已按实机屏幕确认预设编号 \(number)；仅用于本次连接，不写入设备。")
+            notice = ConsoleNotice(level: .info, message: uniquenessProven
+                ? "已确认预设编号 \(number)；已有内容唯一性证明，定义一致时可跨连接恢复，不写入设备。"
+                : "已按实机屏幕确认预设编号 \(number)；未证明内容唯一性，仅本次连接有效，不写入设备。")
         } catch { report(error) }
     }
 
@@ -1207,6 +1245,7 @@ final class ConsoleViewModel: ObservableObject {
                 try self.requirePresetRoute(route)
                 self.presetDump = dump; self.presetPreviewRoute = route
                 self.updateDisplayProfile(from: dump)
+                self.syncRingModes(from: dump, route: route)
                 if let context = self.verifiedDisplayNames {
                     try await self.tryResolveDisplayNumber(temporary: dump, names: context.names, route: route)
                 }
@@ -1344,7 +1383,8 @@ final class ConsoleViewModel: ObservableObject {
                         dump: readback,
                         names: finalNames,
                         route: route,
-                        originalDefinition: carriedEvidence?.originalDefinition
+                        originalDefinition: carriedEvidence?.originalDefinition,
+                        uniquenessProven: carriedEvidence?.uniquenessProven ?? false
                     )
                 } else { self.presetNumberEvidence = nil }
                 self.updateDisplayProfile(from: readback)
@@ -1570,7 +1610,8 @@ final class ConsoleViewModel: ObservableObject {
            restoredLocked || restoredDefinition == evidence.originalDefinition
         {
             try rememberPresetNumber(evidence.number, dump: readback, names: finalNames, route: context.route,
-                                     originalDefinition: evidence.originalDefinition)
+                                     originalDefinition: evidence.originalDefinition,
+                                     uniquenessProven: evidence.uniquenessProven)
         }
         updateDisplayProfile(from: readback)
         try installVerifiedMap(context.point.hardwareMap)

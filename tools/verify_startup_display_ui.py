@@ -64,6 +64,8 @@ ui.wait(lambda: led_value() == "P- 1", "Confirmed preset 1 did not reach the seg
 ui.capture(directory / "verified-preset-one.png", width=1200)
 assert state()["memoryReads"] == 0
 assert state()["voiceWrites"] == state()["presetWrites"] == 0
+records = json.loads((directory / "preset-number-evidence.json").read_text())
+assert records and all(record.get("uniquenessProven") is False for record in records)
 print(
     "PASS surface/MCP usable before MIDI ready; locked same-named preset skips slot dumps; screen confirmation shows P- 1 and writes nothing"
 )
