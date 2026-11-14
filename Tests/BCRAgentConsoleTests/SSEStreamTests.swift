@@ -63,7 +63,7 @@ final class SSEStreamTests: XCTestCase {
     }
 
     private func until(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         if !condition() { XCTFail("Timed out waiting for SSE state"); throw CancellationError() }
     }
@@ -79,8 +79,11 @@ final class SSEStreamTests: XCTestCase {
         defer { server.stop() }
         let probe = SSEProbe(port: port)
         try await until { server.activeStreamCount == 1 }
+        try await until { !writes.isEmpty } // The initial full snapshot.
         for value in 1 ... 100 { source.setParameter("arm.j1", to: Double(value)) }
-        try await Task.sleep(for: .milliseconds(80))
+        try await until { writes.count >= 2 }
+        // The burst ran within one main-actor turn, so a late flush still sends a single update.
+        for _ in 0 ..< 20 { await Task.yield() }
         XCTAssertEqual(writes.count, 2) // Initial full snapshot plus one coalesced update.
         let payload = try XCTUnwrap(String(data: try XCTUnwrap(writes.last), encoding: .utf8)?.split(separator: "\n")
             .first(where: { $0.hasPrefix("data: ") }))

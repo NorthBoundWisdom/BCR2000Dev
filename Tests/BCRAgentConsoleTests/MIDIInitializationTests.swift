@@ -38,10 +38,7 @@ final class MIDIInitializationTests: XCTestCase {
         let model = ConsoleViewModel(stores: .temporary(), midiService: device,
                                      initialPreset: .robotArm, automaticallyAdvancesMock: false)
         XCTAssertTrue(model.startingMIDI)
-        for _ in 0 ..< 100 {
-            if device.startup != nil { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { device.startup != nil }
         XCTAssertEqual(device.synchronousStarts, 0)
         XCTAssertEqual(device.asynchronousStarts, 1)
         model.setParameter("arm.j1", to: 42)
@@ -51,25 +48,16 @@ final class MIDIInitializationTests: XCTestCase {
         XCTAssertEqual(device.writes, 0)
         XCTAssertEqual(model.source, .mock)
         device.startup?.resume(); device.startup = nil
-        for _ in 0 ..< 100 {
-            if !model.startingMIDI { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { !model.startingMIDI }
         XCTAssertFalse(model.startingMIDI)
     }
 
     func testAsyncStartupFailureIsVisibleAndLeavesMockUsable() async throws {
         let device = PendingStartupMIDI()
         let model = ConsoleViewModel(stores: .temporary(), midiService: device, automaticallyAdvancesMock: false)
-        for _ in 0 ..< 100 {
-            if device.startup != nil { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { device.startup != nil }
         device.startup?.resume(throwing: MIDIStartupError.noReply); device.startup = nil
-        for _ in 0 ..< 100 {
-            if !model.startingMIDI { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { !model.startingMIDI }
         XCTAssertFalse(model.startingMIDI)
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertEqual(model.source, .mock)
@@ -85,12 +73,7 @@ final class MIDIInitializationTests: XCTestCase {
                 _ = release.wait(timeout: .now() + 2)
             }
         }
-        var workerStarted = false
-        for _ in 0 ..< 1000 {
-            if began.value { workerStarted = true; break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
-        XCTAssertTrue(workerStarted)
+        try await waitUntil("the blocking worker to start") { began.value }
         // The main actor reached here while the simulated blocking system call still waits.
         release.signal()
         try await work.value

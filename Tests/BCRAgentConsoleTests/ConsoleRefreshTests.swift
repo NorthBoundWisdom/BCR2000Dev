@@ -1,4 +1,5 @@
 import BCRAgentCore
+import BCRTestSupport
 import Combine
 import Foundation
 import XCTest
@@ -33,14 +34,16 @@ final class ConsoleRefreshTests: XCTestCase {
         model.selectSource(.hardware)
         XCTAssertEqual(model.source, .hardware)
         model.followsTouch = false
-        try await Task.sleep(for: .milliseconds(40))
+        try await model.waitForBackgroundWork()
         var publications = 0
         let subscription = model.objectWillChange.sink { publications += 1 }
         let control = BCRControlID.pushEncoder(group: 2, 3)
         let identity = try XCTUnwrap(map.midi(for: control))
         for value in 1 ... 100 { midi.onMessages?([MIDI1UMPCodec.feedback(control: identity, value: UInt8(value))]) }
         XCTAssertEqual(publications, 0)
-        try await Task.sleep(for: .milliseconds(50))
+        // The burst arrived within one main-actor turn, so however late the frame runs it publishes once.
+        try await waitUntil("the coalesced frame") { publications > 0 }
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(publications, 1)
         subscription.cancel()
         model.followsTouch = true
@@ -49,7 +52,7 @@ final class ConsoleRefreshTests: XCTestCase {
         XCTAssertEqual(model.source, .hardware)
         XCTAssertEqual(model.observedHardwareGroup, 2)
         XCTAssertEqual(model.selectedControl, oldSelection)
-        try await Task.sleep(for: .milliseconds(50))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.selectedControl, control)
         XCTAssertEqual(model.visibleGroup, 2)
     }

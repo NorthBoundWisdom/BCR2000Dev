@@ -23,7 +23,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
     }
 
     private func wait(_ session: CodexSessionCoordinator, slot: AgentSlotID, phase: CodexTurnPhase) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while ContinuousClock.now < deadline {
             if await session.snapshot().states[slot]?.phase == phase { return }
             try await Task.sleep(for: .milliseconds(5))
@@ -105,7 +105,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
             modelID: "fixture",
             permission: .init(type: .safeRead)
         )
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await session.snapshot().approvals.count < 2, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
@@ -168,7 +168,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
             modelID: "fixture",
             permission: .init(type: .safeRead)
         )
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await session.snapshot().approvals.count < 2,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         let requests = await session.snapshot().approvals
@@ -202,7 +202,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
             modelID: "fixture",
             permission: .init(type: .safeRead)
         )
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await session.snapshot().approvals.count < 2,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         let requests = await session.snapshot().approvals
@@ -318,7 +318,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
             )
             try await wait(session, slot: AgentSlotID(1), phase: .completed)
             await process.stop()
-            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            let deadline = ContinuousClock.now.advanced(by: .seconds(10))
             while await session.snapshot().phase != .failed,
                   ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
             let state = await session.snapshot()

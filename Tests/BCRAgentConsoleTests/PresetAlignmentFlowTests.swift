@@ -48,11 +48,9 @@ final class PresetAlignmentFlowTests: XCTestCase {
     }
 
     private func wait(_ model: ConsoleViewModel, until done: (PresetAlignmentState.Phase) -> Bool) async throws {
-        for _ in 0 ..< 100 {
-            if let phase = model.presetAlignment?.phase, done(phase) { return }
-            try await Task.sleep(for: .milliseconds(10))
+        try await waitUntil("the alignment phase to settle (\(String(describing: model.presetAlignment?.phase)))") {
+            model.presetAlignment.map { done($0.phase) } ?? false
         }
-        XCTFail("alignment phase did not settle: \(String(describing: model.presetAlignment?.phase))")
     }
 
     func testPreviewWritesNothingUntilConfirmedThenVerifiesAndInstallsMap() async throws {

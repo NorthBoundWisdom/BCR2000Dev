@@ -1,3 +1,4 @@
+import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentCore
@@ -77,9 +78,14 @@ final class CodexProcessSupervisorTests: XCTestCase {
         let reply = try await supervisor.readLine()
         XCTAssertEqual(reply, message)
         // Read protocol data exactly; diagnostics must still mask credentials.
+        let echoed = await supervisor.stdoutHistory().count
         try await supervisor.sendLine(message)
-        try await Task.sleep(for: .milliseconds(50))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while await supervisor.stdoutHistory().count <= echoed, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
         let history = await supervisor.stdoutHistory()
+        XCTAssertGreaterThan(history.count, echoed, "The second echo must reach the history before checking it")
         XCTAssertFalse(history.joined().contains("fixture-value"))
         await supervisor.stop()
     }
@@ -97,8 +103,13 @@ final class CodexProcessSupervisorTests: XCTestCase {
 
     func testProtocolOverflowFailsVisiblyInsteadOfDroppingResponses() async throws {
         let supervisor = CodexProcessSupervisor(maxQueuedLines: 1)
+        let lines = SendableCounter()
+        await supervisor.setEventHandlers(onStdout: { _ in lines.increment() })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "printf 'one\\ntwo\\n'; read -r line"])
-        try await Task.sleep(for: .milliseconds(100))
+        // The handler runs in the same actor turn that queues (or overflows on) each line.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while lines.value < 2, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(lines.value, 2)
         do {
             _ = try await supervisor.readLine()
             XCTFail("Overflow must fail visibly")
@@ -112,7 +123,7 @@ final class CodexProcessSupervisorTests: XCTestCase {
         await supervisor.setEventHandlers(onExit: { event in Task { await events.append(event) } })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "exit 7"],
                                    autoRestartLimit: 2, autoRestartInitialDelayMs: 5, autoRestartMaxDelayMs: 10)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await events.count < 3, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -136,6 +147,9 @@ final class CodexProcessSupervisorTests: XCTestCase {
         let events = ExitEvents()
         await supervisor.setEventHandlers(onExit: { event in Task { await events.append(event) } })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "exit 0"], autoRestartLimit: 2)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while await events.count == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        // Give a wrongly scheduled restart time to show up.
         try await Task.sleep(for: .milliseconds(150))
         let recorded = await events.values
         XCTAssertEqual(recorded.map(\.reason), [.exited(code: 0)])
@@ -163,8 +177,10 @@ final class CodexProcessSupervisorTests: XCTestCase {
         let events = ExitEvents()
         await supervisor.setEventHandlers(onExit: { event in Task { await events.append(event) } })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "exit 7"],
-                                   autoRestartLimit: 3, autoRestartInitialDelayMs: 200)
-        try await Task.sleep(for: .milliseconds(80))
+                                   autoRestartLimit: 3, autoRestartInitialDelayMs: 2_000)
+        // Stop once the first exit is recorded, well inside the 2 s backoff even on a loaded machine.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while await events.count == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         await supervisor.stop()
         try await Task.sleep(for: .milliseconds(250))
         let count = await events.count

@@ -31,7 +31,7 @@ final class CodexAgentControllerTests: XCTestCase {
         XCTAssertEqual(controller.modelID, "fixture")
         controller.prompt = "hold"
         controller.start(AgentSlotID(1))
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller.slots[0].state != .running, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }
@@ -47,7 +47,7 @@ final class CodexAgentControllerTests: XCTestCase {
     }
 
     private func waitFor(_ controller: CodexAgentController, phase: AgentRunState) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller.slots[0].state != phase,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(controller.slots[0].state, phase)
@@ -93,7 +93,7 @@ final class CodexAgentControllerTests: XCTestCase {
         await controller.connect()
         controller.prompt = "parallel_approval"
         controller.start(AgentSlotID(1))
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller.approvals.count < 2,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(controller.approvals.count, 2)
@@ -153,7 +153,7 @@ final class CodexAgentControllerTests: XCTestCase {
         await controller.connect()
         controller.prompt = "hold"
         controller.start(AgentSlotID(2))
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller.slots[1].state != .running,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         controller.prompt = "delayed_hold"

@@ -154,22 +154,20 @@ final class LEDDisplayTests: XCTestCase {
         let knob = BCRControlID.encoder(row: 1, 1)
         XCTAssertEqual(model.displayText, "----")
         model.turn(knob, by: 5)
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(model.displayText.trimmingCharacters(in: .whitespaces), String(model.displayValue(of: knob)))
+        try await waitUntil("the turned value") {
+            model.displayText.trimmingCharacters(in: .whitespaces) == String(model.displayValue(of: knob))
+        }
         model.press(.button(row: 1, 1))
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(model.displayText, "  on")
+        try await waitUntil("the button state") { model.displayText == "  on" }
         model.release(.button(row: 1, 1))
-        try await Task.sleep(for: .milliseconds(1_600))
         // The device never reports its preset, so nothing is guessed.
-        XCTAssertEqual(model.displayText, "----")
+        try await waitUntil("the hold to return to an unknown preset") { model.displayText == "----" }
     }
 
     func testSourceChangeClearsDisplayedValue() async throws {
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm)
         model.turn(.encoder(row: 1, 1), by: 5)
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertNotEqual(model.displayText, "----")
+        try await waitUntil("the turned value") { model.displayText != "----" }
         model.selectSource(.hardware)
         XCTAssertEqual(model.displayText, "----")
     }
@@ -190,6 +188,19 @@ private final class DisplayDevice: MIDIService {
     var dumps = 0
     init(temporary: Data, names: BCRPresetNames) { self.temporary = temporary; self.names = names }
     var dumpDelay = Duration.zero
+    /// While set, preset dumps wait for `releaseDumps()` instead of a fixed delay.
+    var holdsDumps = false
+    private var heldDumps: [CheckedContinuation<Void, Never>] = []
+    func releaseDumps() {
+        holdsDumps = false
+        heldDumps.forEach { $0.resume() }; heldDumps = []
+    }
+
+    private func transfer() async throws {
+        if holdsDumps { await withCheckedContinuation { heldDumps.append($0) } }
+        try await Task.sleep(for: dumpDelay)
+    }
+
     var nameReadFails = false
     var memoryReadFails = false
     var currentReadFails = false
@@ -198,7 +209,7 @@ private final class DisplayDevice: MIDIService {
     func configureStartup(_ program: MIDIStartupProgram) async throws {}
     func readMemoryPreset(_ number: Int) async throws -> Data {
         dumps += 1; memoryReads.append(number)
-        try await Task.sleep(for: dumpDelay)
+        try await transfer()
         if memoryReadFails { throw CocoaError(.fileReadUnknown) }
         return memory[number] ?? temporary
     }
@@ -212,7 +223,7 @@ private final class DisplayDevice: MIDIService {
 
     func readCurrentPreset() async throws -> Data {
         dumps += 1
-        try await Task.sleep(for: dumpDelay)
+        try await transfer()
         if currentReadFails { throw HardwareSnapshotError.invalid }
         return temporary
     }
@@ -265,7 +276,7 @@ final class DeviceDisplayTests: XCTestCase {
         let device = DisplayDevice(temporary: preset, names: names)
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(200))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(model.displayPresetName, "Redrum")
         XCTAssertEqual(device.writes, 0)
@@ -275,13 +286,12 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayText, "P- 1")
         // The IN indicator flashes for any device message, then clears.
         XCTAssertTrue(model.deviceActivity)
-        try await Task.sleep(for: .milliseconds(250))
-        XCTAssertFalse(model.deviceActivity)
+        try await waitUntil("the IN indicator to clear") { !model.deviceActivity }
         XCTAssertNil(model.deviceKeysLocked)
-        device.onMessages?([.controlChange(channel: 0, number: 8, value: 64)])
-        XCTAssertEqual(model.displayText, "  64")
-        try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds + 0.1))
-        XCTAssertEqual(model.displayText, "P- 1")
+        // Not the connection feedback value, which would be suppressed as its echo for 180 ms.
+        device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
+        XCTAssertEqual(model.displayText, " 100")
+        try await waitUntil("the value hold to end") { model.displayText == "P- 1" }
     }
 
     func testUnknownPresetNameIsNotGuessed() async throws {
@@ -294,7 +304,7 @@ final class DeviceDisplayTests: XCTestCase {
                                                                             memory: (1 ... 32).map { "P\($0)" }))
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(200))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "----")
         XCTAssertEqual(model.displayPresetName, "Edited")
     }
@@ -316,13 +326,13 @@ final class DeviceDisplayTests: XCTestCase {
         var memory = (1 ... 32).map { "P\($0)" }; memory[0] = "Redrum"; memory[7] = "Redrum"
         let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Redrum", memory: memory))
         device.memory = [1: preset, 8: other]
-        device.dumpDelay = .milliseconds(100)
+        device.holdsDumps = true
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(50))
         // While the device dumps (its display animating), the panel shows busy too.
-        XCTAssertTrue(model.displayBusy)
-        try await Task.sleep(for: .milliseconds(500))
+        try await waitUntil("the display to show busy during the dump") { model.displayBusy }
+        device.releaseDumps()
+        try await model.waitForBackgroundWork()
         XCTAssertFalse(model.displayBusy)
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.dumps, 3)
@@ -330,7 +340,7 @@ final class DeviceDisplayTests: XCTestCase {
         device.temporary = other
         model.selectSource(.mock)
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(500))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "P- 8")
         XCTAssertEqual(device.dumps, 6)
     }
@@ -371,13 +381,9 @@ final class LockedPresetDisplayTests: XCTestCase {
 
     private func readLockedPreset(_ model: ConsoleViewModel) async throws {
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(50))
+        try await model.waitForBackgroundWork()
         model.beginPresetAlignment()
-        for _ in 0 ..< 100 {
-            if model.presetAlignment?.phase == .preview { return }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        XCTFail("Read-only preset preview did not settle")
+        try await waitUntil("the read-only preset preview") { model.presetAlignment?.phase == .preview }
     }
 
     func testFreshLockedReadCannotTrustAnAmbiguousCandidateCache() async throws {
@@ -394,8 +400,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         model.dismissPresetAlignment()
         device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
         XCTAssertEqual(model.displayText, " 100")
-        try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds + 0.1))
-        XCTAssertEqual(model.displayText, "----")
+        try await waitUntil("the value hold to end") { model.displayText == "----" }
     }
 
     func testLockedReadCannotReuseNumberFromADifferentPresetName() async throws {
@@ -461,7 +466,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         device.memory[1] = device.temporary
         device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(250))
+        try await model.waitForBackgroundWork()
         // Connecting reads only names and the working copy; no ~24 s of extra device busy time.
         XCTAssertEqual(model.displayContent, .unknown)
         XCTAssertEqual(device.memoryReads, [])
@@ -475,13 +480,10 @@ final class LockedPresetDisplayTests: XCTestCase {
         device.memory[1] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
         device.memory[8] = device.memory[1]
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayContent, .unknown)
         model.requestPresetNumberConfirmation()
-        for _ in 0 ..< 100 {
-            if model.pendingPresetNumberConfirmation != nil { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil("the number confirmation") { model.pendingPresetNumberConfirmation != nil }
         let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
         model.confirmDisplayPresetNumber(context.id, number: 2)
         XCTAssertEqual(model.displayContent, .unknown)
@@ -501,7 +503,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         // cannot restore the number on a new connection.
         let memoryReads = device.memoryReads
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayContent, .unknown)
         XCTAssertEqual(device.memoryReads, memoryReads)
         XCTAssertEqual(device.writes, 0)
@@ -513,7 +515,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         device.memory[1] = device.temporary
         device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", ".lock on", "$end"])
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(250))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayContent, .preset(1))
 
         // Same device, same directory, new process: identical copy -> number without memory dumps.
@@ -522,7 +524,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         let sameCopy = DisplayDevice(temporary: device.temporary, names: device.names)
         let restarted = ConsoleViewModel(stores: stores, midiService: sameCopy, initialPreset: .robotArm)
         restarted.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(250))
+        try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .preset(1))
         XCTAssertEqual(sameCopy.memoryReads, [])
 
@@ -534,7 +536,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         let otherCopy = DisplayDevice(temporary: edited, names: device.names)
         let other = ConsoleViewModel(stores: stores, midiService: otherCopy, initialPreset: .robotArm)
         other.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(250))
+        try await other.waitForBackgroundWork()
         XCTAssertEqual(other.displayContent, .unknown)
         XCTAssertEqual(otherCopy.writes, 0)
     }
@@ -557,7 +559,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         // Mock mode draws the mock map; the persisted hardware map is what hardware mode uses.
         XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
         reverted.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(250))
+        try await reverted.waitForBackgroundWork()
         XCTAssertEqual(reverted.engine.hardwareMap.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
         XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
         XCTAssertEqual(device.writes, 0)
@@ -572,12 +574,9 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertEqual(try BCRPresetAlignment.identityLines(of: one), try BCRPresetAlignment.identityLines(of: eight))
         device.temporary = one; device.memory = [1: one, 8: eight]
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         model.requestPresetNumberConfirmation()
-        for _ in 0 ..< 100 {
-            if model.pendingPresetNumberConfirmation != nil { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil("the number confirmation") { model.pendingPresetNumberConfirmation != nil }
         let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
         model.confirmDisplayPresetNumber(context.id, number: 1)
         XCTAssertEqual(model.displayContent, .preset(1))
@@ -587,7 +586,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         recalledEight.memory = device.memory
         let restarted = ConsoleViewModel(stores: stores, midiService: recalledEight, initialPreset: .robotArm)
         restarted.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .unknown)
         XCTAssertEqual(restarted.displayText, "----")
         XCTAssertEqual(recalledEight.writes, 0)
@@ -607,7 +606,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         try JSONFileStore<[PresetNumberRecord]>(fileURL: directory.appending(path: "preset-number-evidence.json"))
             .save([record])
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayContent, .unknown)
         XCTAssertNotEqual(model.notice?.level, .error)
     }
@@ -632,28 +631,20 @@ final class LockedPresetDisplayTests: XCTestCase {
     }
 
     private func connectForReadback(_ model: ConsoleViewModel) async throws {
-        for _ in 0 ..< 200 {
-            if let prompt = model.pendingHardwareConnection {
-                model.connectHardware(prompt.id, mode: .read)
-                return
-            }
-            try await Task.sleep(for: .milliseconds(5))
-        }
-        XCTFail("Read-only connection prompt missing")
+        try await waitUntil("the read-only connection prompt") { model.pendingHardwareConnection != nil }
+        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .read)
     }
 
     func testUniqueCachedNameStillReadsWorkingCopyAndPersistsActualRingMode() async throws {
         let (model, device, stores, directory) = try uniqueRingReadbackContext()
         defer { try? FileManager.default.removeItem(at: directory) }
-        device.dumpDelay = .milliseconds(100)
+        device.holdsDumps = true
         try await connectForReadback(model)
-        for _ in 0 ..< 100 {
-            if device.dumps > 0 { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil("the working-copy read to start") { device.dumps > 0 }
         XCTAssertEqual(device.dumps, 1)
         XCTAssertEqual(model.display.preset, 1, "Names establish the number before the working-copy read finishes")
-        try await Task.sleep(for: .milliseconds(150))
+        device.releaseDumps()
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.engine.hardwareMap.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
         XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .oneDot)
         XCTAssertEqual(device.voiceWrites, 0)
@@ -665,7 +656,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         device.currentReadFails = true
         try await connectForReadback(model)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(device.dumps, 1)
         XCTAssertEqual(model.displayContent, .preset(1))
         XCTAssertEqual(model.notice?.level, .warning)
@@ -682,7 +673,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         }
         try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: stores.hardwareMap.fileURL.path)
         try await connectForReadback(model)
-        try await Task.sleep(for: .milliseconds(200))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
         XCTAssertEqual(device.voiceWrites, 0)
@@ -696,7 +687,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         device.memory[1] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
         device.memory[8] = device.memory[1]
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayContent, .unknown)
     }
 
@@ -704,14 +695,11 @@ final class LockedPresetDisplayTests: XCTestCase {
         let (model, device, directory) = try model(cachedName: "Redrum", cachedPreset: nil)
         defer { try? FileManager.default.removeItem(at: directory) }
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(100))
+        try await model.waitForBackgroundWork()
         device.names = .init(temporary: "New", memory: ["New"])
         device.temporary = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".lock on", "$end"])
         model.requestPresetNumberConfirmation()
-        for _ in 0 ..< 100 {
-            if model.pendingPresetNumberConfirmation != nil { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil("the number confirmation") { model.pendingPresetNumberConfirmation != nil }
         let context = try XCTUnwrap(model.pendingPresetNumberConfirmation)
         XCTAssertEqual(try BCRDisplayProfile.read(fromPresetDump: context.dump).name, "New")
         model.confirmDisplayPresetNumber(context.id, number: 1)
@@ -722,12 +710,13 @@ final class LockedPresetDisplayTests: XCTestCase {
     func testLearningInterruptsDisplayReadWithoutAWarning() async throws {
         let (model, device, directory) = try model(cachedName: "Redrum")
         defer { try? FileManager.default.removeItem(at: directory) }
-        device.dumpDelay = .milliseconds(150)
+        device.holdsDumps = true
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(30))
+        try await waitUntil("the working-copy read to start") { model.displayBusy }
         model.beginLearning(at: .userButton(1))
         let notice = model.notice
-        try await Task.sleep(for: .milliseconds(250))
+        device.releaseDumps()
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.notice?.text, notice?.text)
         XCTAssertEqual(model.notice?.level, .info)
         XCTAssertFalse(model.displayBusy)
@@ -765,7 +754,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         device.memory[1] = device.temporary
         device.memory[8] = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Redrum'", "$end"])
         model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(200))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "----")
         XCTAssertNil(model.displayProfile?.resolvedPreset)
         XCTAssertEqual(device.memoryReads, [1, 8])
@@ -789,12 +778,9 @@ final class LockedPresetDisplayTests: XCTestCase {
                                        memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["Old"]
                                    ))
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        for _ in 0 ..< 80 {
-            if let prompt = model
-                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
+        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .hardware)
         XCTAssertNil(model.startupConfiguredPreset)
         XCTAssertEqual(model.displayText, "P- 1")
@@ -820,12 +806,9 @@ final class LockedPresetDisplayTests: XCTestCase {
                                    ))
         device.memoryReadFails = true
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        for _ in 0 ..< 80 {
-            if let prompt = model
-                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
+        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .hardware)
         XCTAssertNil(model.startupConfiguredPreset)
         XCTAssertEqual(model.displayText, "----")
@@ -850,12 +833,9 @@ final class LockedPresetDisplayTests: XCTestCase {
                                    ))
         device.memoryReadFails = true
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        for _ in 0 ..< 80 {
-            if let prompt = model
-                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
+        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .hardware)
         XCTAssertNil(model.startupConfiguredPreset)
         XCTAssertEqual(model.displayText, "----")
@@ -880,12 +860,9 @@ final class LockedPresetDisplayTests: XCTestCase {
                                    ))
         device.memoryReadFails = true
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        for _ in 0 ..< 80 {
-            if let prompt = model
-                .pendingHardwareConnection { model.connectHardware(prompt.id, mode: .initialize); break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
+        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .hardware)
         XCTAssertEqual(model.startupConfiguredPreset, 8)
         XCTAssertEqual(model.displayText, "P- 8")

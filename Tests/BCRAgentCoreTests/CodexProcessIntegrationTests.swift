@@ -1,3 +1,4 @@
+import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentCore
@@ -84,8 +85,11 @@ final class CodexProcessIntegrationTests: XCTestCase {
 
     func testDuplicateResponseFailsConnectionRatherThanReusingIt() async throws {
         let client = try await connection(mode: "duplicate")
+        let disconnects = SendableCounter()
+        await client.setDisconnectHandler { _ in disconnects.increment() }
         _ = try await client.sendRequest(.accountRead)
-        try await Task.sleep(for: .milliseconds(50))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while disconnects.value == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         do {
             _ = try await client.sendRequest(.modelList)
             XCTFail("A duplicate response must close the connection")

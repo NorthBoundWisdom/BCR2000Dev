@@ -90,11 +90,9 @@ final class PresetRestoreSafetyTests: XCTestCase {
     }
 
     private func settle(_ model: ConsoleViewModel, _ predicate: (PresetAlignmentState.Phase) -> Bool) async throws {
-        for _ in 0 ..< 200 {
-            if let phase = model.presetAlignment?.phase, predicate(phase) { return }
-            try await Task.sleep(for: .milliseconds(10))
+        try await waitUntil("the preset operation to settle (\(String(describing: model.presetAlignment?.phase)))") {
+            model.presetAlignment.map { predicate($0.phase) } ?? false
         }
-        XCTFail("Operation failed to settle: \(String(describing: model.presetAlignment?.phase))")
     }
 
     private func failed(_ phase: PresetAlignmentState.Phase) -> Bool {
@@ -149,10 +147,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         device.suspendsNextDump = true
         model.beginPresetAlignment()
-        for _ in 0 ..< 100 {
-            if device.suspendedDump != nil { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        try await waitUntil { device.suspendedDump != nil }
         XCTAssertNotNil(device.suspendedDump)
         let route = device.connection
         device.connection = .init(); device.onConnection?(device.connection)
@@ -161,6 +156,8 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.hardware))
         model.requestSource(.hardware)
         model.selectSource(.hardware)
+        // The alignment read is held open, so background work cannot settle here. Waiting past the
+        // 300 ms connection-offer delay can only miss a late offer on a slow machine, never fail.
         try await Task.sleep(for: .milliseconds(350))
         XCTAssertEqual(model.source, .mock)
         XCTAssertNil(model.pendingHardwareConnection)
@@ -168,10 +165,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await settle(model, failed)
         model.dismissPresetAlignment()
         model.requestSource(.hardware)
-        for _ in 0 ..< 100 {
-            if model.pendingHardwareConnection != nil { break }
-            try await Task.sleep(for: .milliseconds(5))
-        }
+        try await waitUntil { model.pendingHardwareConnection != nil }
         XCTAssertNotNil(model.pendingHardwareConnection)
         XCTAssertTrue(device.batches.isEmpty)
     }
@@ -395,10 +389,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertEqual(device.memoryReads, reads)
         model.dismissPresetAlignment()
         model.requestPresetNumberConfirmation()
-        for _ in 0 ..< 100 {
-            if model.pendingPresetNumberConfirmation != nil { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil { model.pendingPresetNumberConfirmation != nil }
         let confirmation = try XCTUnwrap(model.pendingPresetNumberConfirmation)
         model.confirmDisplayPresetNumber(confirmation.id, number: 1)
         model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
@@ -409,7 +400,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await align(model)
         let readsBeforeReconnect = device.memoryReads
         model.selectSource(.mock); model.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "P- 1")
         XCTAssertEqual(device.memoryReads, readsBeforeReconnect)
         XCTAssertTrue(try XCTUnwrap(proofStore.load()).allSatisfy { $0.uniquenessProven == true })
@@ -427,7 +418,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         // 2026-11-14 on hardware: after an app restart the restore wrote the original back but showed ----.
         let restarted = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         restarted.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(150))
+        try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayText, "P- 1")
         let reads = device.memoryReads
         restarted.restorePresetBeforeAlignment(); try await settle(restarted) { $0 == .finished }
@@ -454,12 +445,9 @@ final class PresetRestoreSafetyTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let original = device.preset
         device.memory = [1: original, 8: original]
-        try await Task.sleep(for: .milliseconds(100))
+        try await model.waitForBackgroundWork()
         model.requestPresetNumberConfirmation()
-        for _ in 0 ..< 100 {
-            if model.pendingPresetNumberConfirmation != nil { break }
-            try await Task.sleep(for: .milliseconds(2))
-        }
+        try await waitUntil { model.pendingPresetNumberConfirmation != nil }
         let confirmation = try XCTUnwrap(model.pendingPresetNumberConfirmation)
         model.confirmDisplayPresetNumber(confirmation.id, number: 1)
         try await align(model)
@@ -467,7 +455,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         restartedDevice.memory = device.memory
         let restarted = ConsoleViewModel(stores: stores, midiService: restartedDevice)
         restarted.selectSource(.hardware)
-        try await Task.sleep(for: .milliseconds(100))
+        try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .unknown)
         model.restorePresetBeforeAlignment(); try await settle(model) { $0 == .finished }
         let records = try JSONFileStore<[PresetNumberRecord]>(fileURL: root

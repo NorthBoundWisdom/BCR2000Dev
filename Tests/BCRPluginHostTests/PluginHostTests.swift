@@ -224,7 +224,7 @@ final class MockAgentHostTests: XCTestCase {
         clock.time = 2.65
         host.startDriving()
         defer { host.stopDriving() }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while try host.slots[0].state != .waitingApproval, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(5))
         }

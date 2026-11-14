@@ -29,7 +29,7 @@ final class FeedbackSettingsTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(controller).isPolling)
         controller?.apply(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
         XCTAssertTrue(try XCTUnwrap(controller).isPolling)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller?.isPolling == true, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(10))
         }

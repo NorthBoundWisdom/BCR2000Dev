@@ -24,10 +24,7 @@ final class HardwareConnectionStatusTests: XCTestCase {
     }
 
     private func prompt(_ model: ConsoleViewModel) async throws -> HardwareConnectionPrompt {
-        for _ in 0 ..< 40 {
-            if let prompt = model.pendingHardwareConnection { return prompt }
-            try await Task.sleep(for: .milliseconds(25))
-        }
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
         return try XCTUnwrap(model.pendingHardwareConnection, "A connected fake device must offer confirmation")
     }
 

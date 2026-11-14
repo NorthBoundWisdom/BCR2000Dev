@@ -78,7 +78,7 @@ final class AgentLEDBlinkTests: XCTestCase {
         model.setBlinksAgentLEDs(true)
         midi.sent.removeAll()
         model.applyAgentSlots(slots(.waitingApproval, in: model), changed: AgentSlotID(1))
-        try await Task.sleep(for: .milliseconds(700))
+        try await waitUntil("a full blink") { led(midi).contains(127) && led(midi).contains(0) }
         let blinking = led(midi)
         XCTAssertTrue(blinking.contains(127))
         XCTAssertTrue(blinking.contains(0))

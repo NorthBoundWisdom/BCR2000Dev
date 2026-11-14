@@ -4,6 +4,7 @@ import BCRProviderMCPAdapter
 import BCRSurfaceDomain
 import Foundation
 import SurfaceControlContracts
+import BCRTestSupport
 import XCTest
 
 /// Contract 1.1 adoption in the BCR host (P2-B): vocabulary, deterministic revision, hold/renew/expiry.
@@ -275,51 +276,92 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(expiry["time"]?.finiteNumber, 10.5) // recorded at the preflight, not later
     }
 
+    /// Records what the default scheduler asks the clock for; `release` lets the sleep return.
+    @MainActor final class SleepRecorder {
+        var requests: [(deadline: SuspendingClock.Instant, tolerance: Duration)] = []
+        var waiters: [CheckedContinuation<Void, Never>] = []
+        func release() { for waiter in waiters { waiter.resume() }; waiters = [] }
+    }
+
+    private func recordingScheduler(now: SuspendingClock.Instant, recorder: SleepRecorder)
+        -> BCRSurfaceControlAdapter.HoldScheduler
+    {
+        BCRSurfaceControlAdapter.holdScheduler(now: { now }, sleep: { deadline, tolerance in
+            await withCheckedContinuation { continuation in
+                Task { @MainActor in
+                    recorder.requests.append((deadline, tolerance))
+                    recorder.waiters.append(continuation)
+                }
+            }
+        })
+    }
+
     private func occupyMainActor(for seconds: TimeInterval) {
         // Synchronous by design: delay the new scheduler Task before its first actor turn.
         Thread.sleep(forTimeInterval: seconds)
     }
 
-    func testSchedulerDeadlineIncludesTimeQueuedBeforeItsTaskStarts() async throws {
-        let delay = 0.2
-        let start = ProcessInfo.processInfo.systemUptime
-        var firedAt: Double?
-        let cancel = BCRSurfaceControlAdapter.defaultHoldScheduler(delay) {
-            firedAt = ProcessInfo.processInfo.systemUptime
-        }
+    func testSchedulerDeadlineIsFixedWhenScheduledNotWhenItsTaskStarts() async throws {
+        let recorder = SleepRecorder()
+        let start = SuspendingClock().now
+        var fired = 0
+        let cancel = recordingScheduler(now: start, recorder: recorder)(0.2) { fired += 1 }
         defer { cancel() }
-        // The actor is free 50 ms before the original deadline; it must not start a fresh 200 ms wait.
-        occupyMainActor(for: 0.15)
-        try await Task.sleep(for: .milliseconds(300))
-        let fired = try XCTUnwrap(firedAt)
-        XCTAssertGreaterThanOrEqual(fired, start + delay)
-        XCTAssertLessThan(fired - (start + delay), 0.1)
+        // However long the actor stays busy before the task's first turn, the deadline was fixed
+        // at scheduling time, so queueing never starts a fresh 200 ms wait.
+        occupyMainActor(for: 0.05)
+        try await waitUntil("the scheduler to request its sleep") { recorder.requests.count == 1 }
+        XCTAssertEqual(recorder.requests[0].deadline, start.advanced(by: .milliseconds(201)))
+        XCTAssertEqual(fired, 0)
+        recorder.release()
+        try await waitUntil("the hold action to run") { fired == 1 }
     }
 
-    func testRealSchedulerExpiryLagStaysSmallForLongAndShortLeases() async throws {
-        // The timer uses an explicit small tolerance, so lag does not scale with the lease length.
-        for seconds in [0.2, 2.0] {
-            let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
-                                         configuration: SurfaceControlMCPModule.simulationConfiguration(),
-                                         saveHardwareMap: { _ in }, saveConfiguration: { _ in })
-            let gateway = MCPApplicationGateway(session: session, permissions: .init(deviceControl: true),
-                                                includeAgent: false)
-            _ = try SurfaceControlMCPModule.install(on: gateway, instanceID: "fixture",
-                                                    permissions: .init(input: true))
-            let held = try call(gateway, "input", press(gateway, true, holdSeconds: seconds)).objectValue!
-            let deadline = try XCTUnwrap(held["hold_deadline"]?.finiteNumber)
-            try await Task.sleep(for: .seconds(seconds + 0.3))
-            XCTAssertEqual(session.engine.value(of: "simulation.hold"), 0)
-            // Read the journal directly: no request ran in between, so the timer recorded this event.
-            let current = try discovery(gateway)
-            let page = try call(gateway, "events", ["instance_id": .string("fixture"),
-                                                    "epoch": current["expected"]!.objectValue!["epoch"]!,
-                                                    "after_sequence": .string("1"), "limit": .number(8)])
-            let time = try XCTUnwrap(page.objectValue?["events"]?.arrayValue?.first?.objectValue?["time"]?
-                .finiteNumber)
-            XCTAssertGreaterThanOrEqual(time, deadline)
-            XCTAssertLessThan(time - deadline, 0.1, "hold_s \(seconds)")
-        }
+    func testSchedulerToleranceDoesNotGrowWithTheLeaseLength() async throws {
+        // Without an explicit tolerance the runtime may coalesce a sleep by a fraction of its length.
+        let recorder = SleepRecorder()
+        let start = SuspendingClock().now
+        let scheduler = recordingScheduler(now: start, recorder: recorder)
+        let cancels = [0.2, 2.0, BCRSurfaceControlAdapter.maximumButtonHoldSeconds].map { scheduler($0) {} }
+        defer { cancels.forEach { $0() } }
+        try await waitUntil("three sleep requests") { recorder.requests.count == 3 }
+        XCTAssertEqual(recorder.requests.map(\.tolerance), Array(repeating: .milliseconds(2), count: 3))
+        XCTAssertEqual(recorder.requests.map(\.deadline).sorted(),
+                       [201, 2001, 5001].map { start.advanced(by: .milliseconds($0)) })
+        XCTAssertEqual(BCRSurfaceControlAdapter.holdTimerTolerance, .milliseconds(2))
+    }
+
+    func testCancelledHoldNeverRunsEvenIfItsSleepReturns() async throws {
+        let recorder = SleepRecorder()
+        var fired = 0
+        let cancel = recordingScheduler(now: SuspendingClock().now, recorder: recorder)(0.2) { fired += 1 }
+        try await waitUntil("the scheduler to request its sleep") { recorder.requests.count == 1 }
+        cancel()
+        recorder.release()
+        for _ in 0 ..< 20 { await Task.yield() }
+        XCTAssertEqual(fired, 0)
+    }
+
+    func testRealSchedulerRecordsExpiryAfterTheDeadline() async throws {
+        // Real clock, end to end through the adapter. The exact lag depends on machine load, so this
+        // checks only order and that the timer itself (no request in between) recorded the event; the
+        // requested tolerance is checked exactly above.
+        let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
+                                     configuration: SurfaceControlMCPModule.simulationConfiguration(),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let gateway = MCPApplicationGateway(session: session, permissions: .init(deviceControl: true),
+                                            includeAgent: false)
+        _ = try SurfaceControlMCPModule.install(on: gateway, instanceID: "fixture", permissions: .init(input: true))
+        let held = try call(gateway, "input", press(gateway, true, holdSeconds: 0.2)).objectValue!
+        let deadline = try XCTUnwrap(held["hold_deadline"]?.finiteNumber)
+        try await waitUntil("the lease to expire") { session.engine.value(of: "simulation.hold") == 0 }
+        let current = try discovery(gateway)
+        let page = try call(gateway, "events", ["instance_id": .string("fixture"),
+                                                "epoch": current["expected"]!.objectValue!["epoch"]!,
+                                                "after_sequence": .string("1"), "limit": .number(8)])
+        let expiry = try XCTUnwrap(page.objectValue?["events"]?.arrayValue?.first?.objectValue)
+        XCTAssertEqual(expiry["reason"], .string("hold_expired"))
+        XCTAssertGreaterThanOrEqual(try XCTUnwrap(expiry["time"]?.finiteNumber), deadline)
     }
 
     func testRealSchedulerExpiresAShortLease() async throws {
@@ -331,8 +373,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         _ = try SurfaceControlMCPModule.install(on: gateway, instanceID: "fixture", permissions: .init(input: true))
         _ = try call(gateway, "input", press(gateway, true, holdSeconds: 0.2))
         XCTAssertEqual(session.engine.value(of: "simulation.hold"), 1)
-        try await Task.sleep(nanoseconds: 600_000_000)
-        XCTAssertEqual(session.engine.value(of: "simulation.hold"), 0)
+        try await waitUntil("the lease to expire") { session.engine.value(of: "simulation.hold") == 0 }
         XCTAssertEqual(try discovery(gateway)["latest_sequence"], .string("2"))
     }
 }

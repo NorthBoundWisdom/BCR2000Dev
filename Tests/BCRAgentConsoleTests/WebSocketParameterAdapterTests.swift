@@ -21,12 +21,12 @@ final class WebSocketParameterAdapterTests: XCTestCase {
         var failure: String?
         adapter.onFailure = { failure = $0 } // Deliberately does not call stop().
         try adapter.start(host: "127.0.0.1", port: port)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !adapter.isConnected, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         try adapter.ping(at: Date())
         while failure == nil, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertNotNil(failure)
-        try await Task.sleep(for: .milliseconds(150))
+        while await process.isRunning(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         let peerRunning = await process.isRunning()
         XCTAssertFalse(peerRunning, "A failed adapter must close the peer socket itself")
         XCTAssertFalse(adapter.isConnected)
@@ -50,7 +50,7 @@ final class WebSocketParameterAdapterTests: XCTestCase {
             adapter.onHeartbeat = { _ in heartbeat = true }
             adapter.onFailure = { _ in failures += 1 }
             try adapter.start(host: "127.0.0.1", port: port)
-            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            let deadline = ContinuousClock.now.advanced(by: .seconds(10))
             while !adapter.isConnected, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
             try adapter.ping(at: Date())
             while !heartbeat, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
@@ -60,7 +60,9 @@ final class WebSocketParameterAdapterTests: XCTestCase {
             while failures == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
             XCTAssertEqual(failures, 1)
             XCTAssertFalse(adapter.isConnected)
-            try await Task.sleep(for: .milliseconds(150))
+            while await process.isRunning(), ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(5))
+            }
             let running = await process.isRunning()
             XCTAssertFalse(running)
             adapter.stop()
@@ -83,7 +85,7 @@ final class WebSocketParameterAdapterTests: XCTestCase {
         adapter.onHeartbeat = { _ in heartbeats += 1 }
         adapter.onPeerReset = { _ in resets += 1 }
         try adapter.start(host: "127.0.0.1", port: port)
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while !adapter.isConnected, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         for expected in 1 ... 2 {
             try adapter.ping(at: Date())
@@ -114,7 +116,7 @@ final class WebSocketParameterAdapterTests: XCTestCase {
             adapter.onSamples = { samples = $0 }
             adapter.onFailure = { failure = $0 }
             try adapter.start(host: "127.0.0.1", port: port)
-            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            let deadline = ContinuousClock.now.advanced(by: .seconds(10))
             while !adapter.isConnected, failure == nil, ContinuousClock.now < deadline {
                 try await Task.sleep(for: .milliseconds(5))
             }

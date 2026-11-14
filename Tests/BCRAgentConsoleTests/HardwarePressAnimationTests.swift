@@ -38,8 +38,7 @@ final class HardwarePressAnimationTests: XCTestCase {
             .controlChange(channel: 15, number: 0, value: 0)
         ])
         XCTAssertTrue(model.presentation(of: push).hardwarePressed)
-        try await Task.sleep(for: .milliseconds(120))
-        XCTAssertFalse(model.presentation(of: push).hardwarePressed)
+        try await waitUntil("the short tap to release") { !model.presentation(of: push).hardwarePressed }
     }
 
     func testHeldPressIsClearedWhenTheRouteDisappears() async throws {
@@ -83,8 +82,8 @@ final class HardwarePressAnimationTests: XCTestCase {
         XCTAssertTrue(model.presentation(of: pad).hardwarePressed)
         XCTAssertTrue(model.slots.allSatisfy { $0.state == .idle })
         XCTAssertTrue(midi.sent.isEmpty)
-        try await Task.sleep(for: .milliseconds(240))
-        XCTAssertFalse(model.presentation(of: push).hardwarePressed)
-        XCTAssertFalse(model.presentation(of: pad).hardwarePressed)
+        try await waitUntil("both pulses to release") {
+            !model.presentation(of: push).hardwarePressed && !model.presentation(of: pad).hardwarePressed
+        }
     }
 }

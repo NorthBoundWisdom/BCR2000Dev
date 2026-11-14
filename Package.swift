@@ -220,6 +220,7 @@ let package = Package(
             name: "BCRProviderAdapterTests",
             dependencies: [
                 "BCRPluginRuntime",
+                "BCRTestSupport",
                 .product(name: "AgentPlugin", package: "SurfacePlugins"),
                 .product(name: "AgentRemoteBinding", package: "SurfacePlugins"),
                 .product(name: "RemoteToolContracts", package: "SurfacePlugins"),

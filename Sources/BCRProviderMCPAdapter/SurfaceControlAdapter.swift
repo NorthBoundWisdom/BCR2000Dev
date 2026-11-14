@@ -39,17 +39,28 @@ public final class BCRSurfaceControlAdapter {
     /// Sleeps on the suspending clock (the same time base as `systemUptime`) with a fixed small
     /// tolerance, then runs on the main actor. Expiry lag is therefore the tolerance plus the time
     /// the main actor needs to finish the jobs already queued ahead of the timer.
-    public static let defaultHoldScheduler: HoldScheduler = { delay, action in
-        let clock = SuspendingClock()
-        // Capture before enqueuing: waiting for the first actor turn is already part of the delay.
-        let deadline = clock.now.advanced(by: .seconds(max(0, delay)) + .milliseconds(1))
-        let task = Task { @MainActor in
-            do {
-                try await clock.sleep(until: deadline, tolerance: holdTimerTolerance)
-            } catch { return }
-            action()
+    public static let defaultHoldScheduler: HoldScheduler = holdScheduler()
+
+    /// Sleeps until an absolute suspending-clock deadline with the given tolerance.
+    public typealias HoldSleep = @Sendable (_ deadline: SuspendingClock.Instant, _ tolerance: Duration) async throws
+        -> Void
+
+    /// The default scheduler with its clock and sleep injectable, so tests can check the deadline and
+    /// tolerance it requests exactly instead of measuring wall-clock lag on a loaded machine.
+    public static func holdScheduler(
+        now: @escaping @Sendable () -> SuspendingClock.Instant = { SuspendingClock().now },
+        sleep: @escaping HoldSleep = { try await SuspendingClock().sleep(until: $0, tolerance: $1) }
+    ) -> HoldScheduler {
+        { delay, action in
+            // Capture before enqueuing: waiting for the first actor turn is already part of the delay.
+            let deadline = now().advanced(by: .seconds(max(0, delay)) + .milliseconds(1))
+            let task = Task { @MainActor in
+                do { try await sleep(deadline, holdTimerTolerance) } catch { return }
+                guard !Task.isCancelled else { return }
+                action()
+            }
+            return { task.cancel() }
         }
-        return { task.cancel() }
     }
 
     private let surface: SurfaceSession

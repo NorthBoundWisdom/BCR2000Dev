@@ -27,7 +27,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
     }
 
     private func wait(_ model: ConsoleViewModel, state: AgentRunState) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while model.slots[0].state != state,
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(model.slots[0].state, state)

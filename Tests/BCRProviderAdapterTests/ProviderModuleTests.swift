@@ -1,3 +1,4 @@
+import BCRTestSupport
 import BCRFoundation
 import BCRSurfaceDomain
 import BCRProviderApplication
@@ -250,7 +251,11 @@ final class ProviderModuleTests: XCTestCase {
         _ = try app.executeChassis(.enable(proof(1)), access: access)
         _ = try app.executeChassis(.drive(proof(2), 0.5, 0, 0.15), access: access)
         app.start(); defer { app.stopClock() }
-        try await Task.sleep(for: .milliseconds(650))
+        // The chassis is also "stopped" before it first moves; the watchdog is what releases control.
+        try await waitUntil("the lease watchdog to stop the chassis") {
+            let state = try app.chassisState()
+            return state.stopped && !state.metadata.enabled && (state.actual?.pose_m_rad[0] ?? 0) > 0
+        }
         let stopped = try app.chassisState()
         XCTAssertTrue(stopped.stopped)
         XCTAssertFalse(stopped.metadata.enabled)
@@ -311,13 +316,11 @@ final class ProviderModuleTests: XCTestCase {
         _ = try app.executeChassis(.enable(proof(1)), access: access)
         _ = try app.executeChassis(.drive(proof(2), 0.8, 0.2, 2), access: access)
         app.start(); defer { app.stopClock() }
-        try await Task.sleep(for: .milliseconds(300))
-        XCTAssertGreaterThan(try XCTUnwrap(app.chassisState().actual).speed_m_s, 0)
+        try await waitUntil("the chassis to move") { (try app.chassisState().actual?.speed_m_s ?? 0) > 0 }
         gateway.permissions.parameterWrite = false
         XCTAssertFalse(try app.chassisState().metadata.enabled)
         XCTAssertNil(try app.chassisState().metadata.control_owner)
-        try await Task.sleep(for: .milliseconds(650))
-        XCTAssertTrue(try app.chassisState().stopped)
+        try await waitUntil("revoked permission to stop the chassis") { try app.chassisState().stopped }
         gateway.permissions.parameterWrite = true
         XCTAssertThrowsError(try app.executeChassis(.drive(proof(3), 0.5, 0, 1), access: access))
         XCTAssertEqual(try app.chassisState().target_speed_m_s, 0)

@@ -186,6 +186,55 @@ final class ConsoleViewModel: ObservableObject {
     private var pressStarted: [BCRControlID: Double] = [:]
     private var hardwareConnectionTask: Task<Void, Never>?
     private var midiInitializationTask: Task<Void, Never>?
+
+    /// Suspends until the device work started so far has finished: MIDI start, the connection offer,
+    /// a hardware connection, display/preset reads, alignment and the coalesced frame publish. Work
+    /// those tasks start in turn is awaited too. Display hold, blink and notice timers are not work.
+    /// Tests use this instead of sleeping for an assumed duration. Work that waits on something the
+    /// caller has not released yet (a held device reply) would never finish, so it throws after `timeout`.
+    func waitForBackgroundWork(timeout: Duration = .seconds(10)) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        var finished = Set<Task<Void, Never>>()
+        var idleChecks = 0
+        while idleChecks < 3 {
+            let running = [midiInitializationTask, connectionOfferTask, hardwareConnectionTask, displayReadTask,
+                           alignmentTask, uiPublishTask].compactMap { $0 }.filter { !finished.contains($0) }
+            guard !running.isEmpty else {
+                // Let callbacks already queued on the main actor start their tasks before concluding.
+                idleChecks += 1
+                await Task.yield()
+                continue
+            }
+            idleChecks = 0
+            for task in running {
+                guard await Self.finishes(task, before: deadline) else {
+                    throw BackgroundWorkTimeout(timeout: timeout)
+                }
+                finished.insert(task)
+            }
+        }
+    }
+
+    struct BackgroundWorkTimeout: Error, CustomStringConvertible {
+        let timeout: Duration
+        var description: String { "Background device work did not finish within \(timeout)" }
+    }
+
+    /// Races the task against the deadline without cancelling it. Not a task group: a group waits
+    /// for every child, and awaiting a task's value does not end on cancellation.
+    private static func finishes(_ task: Task<Void, Never>, before deadline: ContinuousClock.Instant) async -> Bool {
+        @MainActor final class Race {
+            var continuation: CheckedContinuation<Bool, Never>?
+            func resolve(_ value: Bool) { continuation?.resume(returning: value); continuation = nil }
+        }
+        let race = Race()
+        return await withCheckedContinuation { continuation in
+            race.continuation = continuation
+            Task { @MainActor in await task.value; race.resolve(true) }
+            Task { @MainActor in try? await Task.sleep(until: deadline, clock: .continuous); race.resolve(false) }
+        }
+    }
+
     @Published private(set) var startingMIDI = false
     @Published var selectedControl: BCRControlID? = .pushEncoder(group: 1, 1)
     /// Select whichever control was last touched on the device.

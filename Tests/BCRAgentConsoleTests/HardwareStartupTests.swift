@@ -44,6 +44,14 @@ private final class StartupMIDI: MIDIService {
     var sent: [MIDIVoiceMessage] = []
     var failure = false
     var delay = Duration.zero
+    /// While set, snapshot reads wait for `releaseSnapshot()`, so a test can act during the read.
+    var holdsSnapshot = false
+    private var heldSnapshots: [CheckedContinuation<Void, Never>] = []
+    func releaseSnapshot() {
+        holdsSnapshot = false
+        heldSnapshots.forEach { $0.resume() }; heldSnapshots = []
+    }
+
     func start() throws { onConnection?(connection) }
     func selectEndpoints(_ selection: MIDIEndpointSelection) {}
     func send(_ message: MIDIVoiceMessage) throws {
@@ -54,6 +62,7 @@ private final class StartupMIDI: MIDIService {
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
         guard !dumpInFlight else { throw HardwareSnapshotError.invalid }
         snapshotReads += 1
+        if holdsSnapshot { await withCheckedContinuation { heldSnapshots.append($0) } }
         try await Task.sleep(for: delay)
         if failure { throw HardwareSnapshotError.invalid }
         return snapshot
@@ -70,18 +79,15 @@ final class HardwareStartupTests: XCTestCase {
     }
 
     private func waitForPrompt(_ model: ConsoleViewModel) async throws -> HardwareConnectionPrompt {
-        for _ in 0 ..< 40 {
-            if let prompt = model.pendingHardwareConnection { return prompt }
-            try await Task.sleep(for: .milliseconds(25))
-        }
-        throw ConfigurationFileError(reason: "connection prompt did not appear")
+        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
+        return try XCTUnwrap(model.pendingHardwareConnection)
     }
 
     private func confirmRead(_ model: ConsoleViewModel, settle: Bool = true) async throws {
         let prompt = try await waitForPrompt(model)
         XCTAssertTrue(prompt.canRead)
         model.connectHardware(prompt.id, mode: .read)
-        if settle { try await Task.sleep(for: .milliseconds(80)) }
+        if settle { try await model.waitForBackgroundWork() }
     }
 
     func testFirstRunWithoutLearnedControlsEntersHardwareWithoutWriting() async throws {
@@ -89,7 +95,7 @@ final class HardwareStartupTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let device = StartupMIDI()
         let model = ConsoleViewModel(stores: stores, midiService: device)
-        try await Task.sleep(for: .milliseconds(400))
+        try await model.waitForBackgroundWork()
         XCTAssertNil(model.pendingHardwareConnection)
         model.requestSource(.hardware)
         XCTAssertEqual(model.source, .hardware)
@@ -101,10 +107,7 @@ final class HardwareStartupTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let device = StartupMIDI()
         let model = ConsoleViewModel(stores: stores, midiService: device)
-        for _ in 0 ..< 100 {
-            if !model.startingMIDI { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil("MIDI to start") { !model.startingMIDI }
         model.requestSource(.hardware)
         model.beginLearning(at: .pushEncoder(group: 1, 1))
         device.onMessages?([.controlChange(channel: 0, number: 20, value: 5)])
@@ -129,7 +132,7 @@ final class HardwareStartupTests: XCTestCase {
         let prompt = try await waitForPrompt(model)
         XCTAssertTrue(device.sent.isEmpty)
         model.connectHardware(prompt.id, mode: .write)
-        try await Task.sleep(for: .milliseconds(50))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .hardware)
         XCTAssertFalse(device.sent.isEmpty)
     }
@@ -155,11 +158,7 @@ final class HardwareStartupTests: XCTestCase {
             }
             let model = ConsoleViewModel(stores: stores, midiService: device)
             model.selectSource(.hardware)
-            for _ in 0 ..< 100 {
-                if device.dumpInFlight { break }
-                try await Task.sleep(for: .milliseconds(5))
-            }
-            XCTAssertTrue(device.dumpInFlight)
+            try await waitUntil("the display dump to start") { device.dumpInFlight }
             model.selectSource(.mock)
             model.requestSource(.hardware)
             let prompt = try await waitForPrompt(model)
@@ -172,10 +171,8 @@ final class HardwareStartupTests: XCTestCase {
             XCTAssertEqual(device.startupWrites, 0)
             XCTAssertEqual(device.sent.count, writes)
             device.finishCancelledDump()
-            for _ in 0 ..< 100 {
-                if !model.connectingHardware { break }
-                try await Task.sleep(for: .milliseconds(5))
-            }
+            try await model.waitForBackgroundWork()
+            XCTAssertFalse(model.connectingHardware)
             XCTAssertEqual(model.source, .hardware)
             XCTAssertNotEqual(model.notice?.level, .error)
         }
@@ -235,7 +232,7 @@ final class HardwareStartupTests: XCTestCase {
         XCTAssertNil(model.observedHardwareGroup)
         XCTAssertTrue(device.sent.isEmpty)
         device.onMessages?([MIDI1UMPCodec.feedback(control: midi, value: 4)])
-        try await Task.sleep(for: .milliseconds(50))
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.visibleGroup, 4)
         XCTAssertEqual(model.observedHardwareGroup, 4)
     }
@@ -260,15 +257,16 @@ final class HardwareStartupTests: XCTestCase {
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
         try stores.hardwareMap.save(.mockPreset())
-        let device = StartupMIDI(); device.delay = .milliseconds(100)
+        let device = StartupMIDI(); device.holdsSnapshot = true
         device.snapshot = HardwareMap.mockPreset().entries.filter { $0.control.isContinuous }.map {
             MIDI1UMPCodec.feedback(control: $0.midi, value: 0)
         }
         let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
         try await confirmRead(model, settle: false)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitUntil("the hardware read to start") { device.snapshotReads == 1 }
         model.setParameter("arm.j1", to: 45)
-        try await Task.sleep(for: .milliseconds(160))
+        device.releaseSnapshot()
+        try await model.waitForBackgroundWork()
         XCTAssertEqual(model.source, .mock)
         XCTAssertEqual(model.engine.value(of: "arm.j1"), 45)
         XCTAssertEqual(model.notice?.level, .error)

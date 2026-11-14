@@ -1,3 +1,4 @@
+import BCRTestSupport
 import BCRAgentCore
 import Foundation
 import XCTest
@@ -67,10 +68,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         midi.connection.sourceEndpoints = [.init(id: 7, name: "BCR2000")]
         midi.connection.destinationEndpoints = [.init(id: 9, name: "BCR2000")]
         let model = ConsoleViewModel(stores: stores(directory), midiService: midi)
-        for _ in 0 ..< 200 {
-            if !model.startingMIDI, model.connection.sourceEndpoints.count == 1 { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { !model.startingMIDI && model.connection.sourceEndpoints.count == 1 }
         model.mcp.service.permissions.deviceControl = true
         let result = model.mcp.service.call("set_midi_endpoints", arguments: .object([
             "sourceID": .number(7), "destinationID": .number(9)
@@ -112,10 +110,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertTrue(model.endpointSettingsNeedRepair, "an unchanged choice must stay applicable")
         model.applyEndpointSelection(.init())
         XCTAssertFalse(model.endpointSettingsNeedRepair)
-        for _ in 0 ..< 100 {
-            if !model.startingMIDI { break }
-            try await Task.sleep(for: .milliseconds(1))
-        }
+        try await waitUntil { !model.startingMIDI }
         XCTAssertEqual(midi.starts, 1)
     }
 
