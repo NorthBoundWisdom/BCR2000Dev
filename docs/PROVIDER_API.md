@@ -103,3 +103,17 @@ HTTP 鉴权、实例 pin、语法与媒体类型错误在工具执行前失败�
 
 机器人/底盘的模拟合格不授予真实硬件资格。实际控件编码、断插和灯环视觉结论按实测范围声明，
 未验证的实体 Relative/NRPN 行为明确列为未资格化；不借用软件测试结果代替。
+
+## Physical output delivery visibility
+
+Provider 1.0 write responses acknowledge the software parameter, not a physical display.
+For an attended physical workflow start with `--source hardware --hardware-output write`.
+The `provider.ready` JSON contains `hardware_output`; verify it before preparing operations.
+The default `observe` policy accepts input and software writes but sends zero device messages.
+Read `console_events` in the current `generation`: `feedback.sent` means the transport accepted
+that message, `feedback.suppressed` means the policy blocked it, and `feedback.failed` or
+`feedback.disconnected` means it was not delivered. A generation change invalidates the cursor.
+Parameter setters (`set_parameter`, `set_parameters`, `nudge_parameter`, `reset_group`), shared
+indicator updates, configuration updates and synchronization all use this same session journal.
+A successful tool response alone never certifies delivery or physical display. Existing tool
+names, schemas and error meanings remain unchanged; no new Provider 1.0 fields are required.

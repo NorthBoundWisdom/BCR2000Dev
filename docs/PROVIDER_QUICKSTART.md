@@ -66,3 +66,19 @@ and platform/device actions require their own consumer-side interpretation.
 
 The manifest records hashes, source commit and working-tree status. This is a reproducible local
 handoff; uploading a public release or connecting industrial actuators requires separate scope.
+
+## Attended physical workflow
+
+Use an isolated copy of an explicitly learned map and configuration:
+
+```sh
+BCRProviderService --source hardware --hardware-output write \
+  --hardware-map /private/isolated/hardware-map.json \
+  --configuration /private/isolated/surface-configuration.json --port 0 --token-stdin
+```
+
+Read the startup `provider.ready.hardware_output` and require `write` when feedback is needed.
+For observation only, omit `--hardware-output` (default `observe`, zero device sends).
+After a write read `console_events` with its current generation and sequence: `feedback.sent`
+records transport acceptance; `feedback.suppressed` records policy suppression. Software write
+success does not mean the device displayed the value. Reprepare after generation changes.
