@@ -252,8 +252,8 @@ private struct BCRProviderService {
                 ).migrated() }
                 let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(), hardwareMap: map,
                                              configuration: configuration ?? simulationConfiguration ??
-                                                 SurfaceControlMCPModule
-                                                 .simulationConfiguration(),
+                                                 (options.hardwareProfile ? .neutral() : SurfaceControlMCPModule
+                                                     .simulationConfiguration()),
                                              saveHardwareMap: { _ in }, saveConfiguration: { _ in })
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(

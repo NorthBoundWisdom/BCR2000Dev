@@ -37,6 +37,20 @@ def run(binary, output, sdk):
     map_path = output / "TEST-ONLY-map.json"
     map_path.write_text(json.dumps(mapping))
 
+    described = json.loads(
+        subprocess.check_output(
+            [
+                str(binary),
+                "--source",
+                "hardware",
+                "--hardware-profile",
+                "--hardware-map",
+                str(map_path),
+                "--describe-surface",
+            ]
+        )
+    )["discovery"]
+
     def error(action, code):
         try:
             action()
@@ -86,6 +100,10 @@ def run(binary, output, sdk):
                     assert ready["test_only_hardware_double"] is True and ready["hardware_output"] == policy
                     client = Client(ready["url"], token, "e-hardware", accepted_sources=("hardware",))
                     d = client.discover(versions=("1.4",))
+                    assert (
+                        d["profile"] == described["profile"]
+                        and d["expected"]["mapping_revision"] == described["expected"]["mapping_revision"]
+                    )
                     assert d["source"] == "hardware" and client.snapshot()["inputs"] == {}
                     legacy = Client(ready["url"], token, "e-hardware")
                     error(legacy.discover, "unsupported_contract")
