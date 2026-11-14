@@ -173,6 +173,53 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         ):
             raise ValueError("Invalid offline role readiness report")
         (output / "hardware-role-readiness.json").write_bytes(readiness.stdout)
+        shutil.copy2(ROOT / "docs/HARDWARE_CANDIDATES.md", output / "HARDWARE_CANDIDATES.md")
+        candidate = output / "candidates/unverified-four-role"
+        staged_candidate = subprocess.run(
+            [
+                str(output / "BCRProfileTool"),
+                "--stage-hardware-candidate",
+                str(output / "hardware-map.json"),
+                str(output / "role-readiness-request.json"),
+                str(candidate),
+            ],
+            capture_output=True,
+            cwd=output,
+        )
+        if staged_candidate.returncode != 0:
+            raise ValueError("Independent candidate staging failed without changing source files")
+        checked_candidate = subprocess.run(
+            [str(output / "BCRProfileTool"), "--verify-hardware-candidate", str(candidate)],
+            capture_output=True,
+            cwd=output,
+        )
+        if checked_candidate.returncode != 0 or json.loads(checked_candidate.stdout).get("ready") is not False:
+            raise ValueError("Unverified candidate integrity/status check failed")
+        evidence = {
+            "artifact": "candidate-attended-evidence-plan",
+            "executable_now": False,
+            "candidate": "candidates/unverified-four-role/candidate-manifest.json",
+            "hardware_qualified": False,
+            "automatic_application": False,
+            "automatic_device_connection": False,
+            "required_fields": [
+                "current_preset_capture_sha256",
+                "learned_map_sha256",
+                "endpoint_identity",
+                "epoch",
+                "link_state",
+                "event_gap_absent",
+            ],
+            "per_selected_button": {
+                "control_id": "from candidate changes",
+                "input_midi_identity": "unchanged learned address",
+                "observed_press_release": "record actual values, timestamps and source capture hash; do not infer from declarations",
+                "display_output_identity_and_encoding": "requires independent evidence; existing route is a proposal",
+                "physical_on_off_observation": "record user response after a separately authorized attended display request",
+            },
+            "instructions": "No physical step has run; do not modify presets, auto-apply, or treat software_ready as qualification",
+        }
+        (output / "candidate-attended-evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
         shutil.copy2(
             ROOT / "configs/hardware_surface_conformance_roles.json", output / "hardware-conformance-roles.json"
         )
@@ -257,6 +304,21 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
                 "mapping_revision": example_discovery["expected"]["mapping_revision"],
             },
         },
+        "hardware_candidates": (
+            [
+                {
+                    "manifest": "candidates/unverified-four-role/candidate-manifest.json",
+                    "ready": False,
+                    "software_ready": True,
+                    "hardware_qualified": False,
+                    "test_only": True,
+                    "evidence_plan": "candidate-attended-evidence.json",
+                    "documentation": "HARDWARE_CANDIDATES.md",
+                }
+            ]
+            if hardware_discovery is not None
+            else []
+        ),
         "hardware_role_readiness": (
             {
                 "report": "hardware-role-readiness.json",
