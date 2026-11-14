@@ -27,11 +27,11 @@ jobs:
       - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
       - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
       - run: git diff --check
-      - name: Preserve XCTest worker evidence
+      - name: Preserve the Swift test log
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: xctest-worker-evidence-${{ github.run_id }}
+          name: swift-test-log-${{ github.run_id }}
           path: build/test-runs/
           retention-days: 7
           if-no-files-found: error

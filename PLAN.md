@@ -282,6 +282,12 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 `BCRProviderService` 没有启用连接确认，连接后仍自动整体回写。它没有界面可弹窗。选项：保持现状；
 或增加启动参数显式选择“读硬件 / 写入 / 不同步”。涉及 Provider 行为，与 AstroController 的工作有交集，需要用户裁定。
 
+- 已裁定（2026-11-14，用户委托 AstroController 监督裁定，编号 D32）：取第二个选项。`BCRProviderService` 增加
+  `--hardware-output observe|write`，仅用于 `--source hardware`，缺省 `observe`（照常接收输入、更新参数，对设备零输出，
+  连接与重连时不整体回写）；`write` 保持现有行为，须显式给出。实现原定由 AstroController 的 B 窗口完成，范围限于
+  `Sources/BCRProviderService/` 与 `SurfaceSession` 输出出口；该窗口已停工，截至本条记录 `origin/main` 尚无此提交。
+  “先读设备快照再连接”这次不做。
+
 ### D4 启动设置文件
 
 `hardware-startup.json` 的“初始化并连接”路径没有界面入口，只能手写文件，且切换预设后固定等待 150 ms 未实测。
@@ -379,6 +385,7 @@ HW6（高速转动的速率与 30 分钟 soak）。HW3 见 D2。
 2. `list_midi_endpoints` 应列出 `BCR2000` 输入/输出；`set_midi_endpoints` 选中后 `get_status.hardwareConnection.connected` 为真。
 3. 验证拒绝路径：外部输出运行时、控件学习中、预设操作中、ID 不存在时均报错且选择不变。
 4. 独立服务（`BCRProviderService`）未接这两个回调，调用会报服务不可用。是否接入、选择存在哪里，需按 D3 的连接策略一并决定。
+   D3 已裁定（D32，见 D 组），但端口回调接入不在其范围内，仍待定。
 5. 待解释：当晚只读快照返回 90 条 CC，而 2026-11-13 早些时候记录为 108 条（工具与统计口径可能不同）。先确认口径再判断是否有差异。
 
 ### G5 设置窗口收尾（不需要设备）
@@ -1170,3 +1177,22 @@ E6 与 E9 不在本次范围（E6 等用户决定，E9 后来已取消）。
    App 自动重连，再跑一次供目视：用户所见“第一个 → 4、5 → 中间 → 倒数第 4、5 → 最后一个 → 恢复”，
    与 App 灯环模型预测 1、4+5、8、11+12、15 一致（用户注明 4、5 号不完全确定）。G6 第 2 条完成，G7 可开始。
 - 澄清：`12dot` 是“单点/相邻双点”，不是从左到右逐格填满（执行窗口请用户目视前的描述有误，已在对话中纠正）。
+
+### CI 计时用例与测试运行方式（2026-11-14，AstroController 监督转交；用户授权不受旧测试包袱约束）
+
+- 归因：远端 7 次失败中 2 次（43463817515、43462739752）未分到 macOS runner，未跑测试；其余失败均为计时敏感用例，
+  除转交列出的 4 个外还有 `DeviceDisplayTests.testDuplicateNamesAreResolvedAgainAfterDeviceRecall`、
+  `HardwareStartupTests.testUserEditDuringReadIsPreservedInsteadOfBeingOverwritten`，以及模拟侧的
+  `SurfaceControlHoldTests` 两个计时断言（原属 B 窗口，该窗口停工，一并处理）。根因是约 140 处固定 `sleep` 后立即断言。
+- 测试改法：断言前等待所断言的状态（`BCRTestSupport.waitUntil`，10 秒上限）；需要等设备读取、连接、对齐结束的用例改用
+  `ConsoleViewModel.waitForBackgroundWork()`（10 秒超时即抛错，不会挂住）；要在读取进行中操作的用例，假设备把应答挂起到
+  测试释放为止，不再赌延时。只做“不应出现”检查的固定等待保留（慢机只会漏报，不会误报）。
+- 发现：`testHardwareModeReadsPresetNumberAndShowValueWithoutWriting` 原本依赖累计等待超过 180 ms 回声窗口，
+  否则与连接回写同值的输入被当作回声忽略；改为发送不可能是回声的值。
+- 保持计时器：`BCRSurfaceControlAdapter.holdScheduler(now:sleep:)` 可注入时钟，截止时间与 2 ms 容差改为精确断言；
+  真实时钟只保留顺序检查。已取消的保持即使休眠返回也不再执行动作。
+- 运行方式：`macos_workflow.py test` 原为每个用例单独起一个 XCTest 进程并串行执行（653 个进程），外加 worker/XML
+  对账层；本机 10 分钟以上，CI 8–17 分钟（任务上限 20 分钟），一个挂住的用例会卡满整轮。现改为一次普通 `swift test`，
+  按 bundle 汇总校验（每个必需模块齐全、用例起止完整、无失败），15 分钟总时限，超时报出正在运行的用例；日志留在
+  `build/test-runs/run-*/swift-test.log`，CI 上传该日志。删除 `configs/xctest_worker_results.py` 与相关夹具。
+- 验证：全量 653 个用例 0 失败，97 秒；8 核机器上另开 16 个满载循环，全量连跑两次均通过。工作流自测 111 个通过。

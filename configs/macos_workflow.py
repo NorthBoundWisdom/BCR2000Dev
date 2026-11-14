@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +25,6 @@ if str(REPO_ROOT) not in sys.path:
 from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import use_build_environment  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
-from configs.xctest_worker_results import validate_workers  # noqa: E402
 
 BUILD_ROOT = REPO_ROOT / "build"
 SWIFTPM_BUILD_ROOT = BUILD_ROOT / "swiftpm"
@@ -47,55 +47,11 @@ def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_R
     return completed.stdout.strip() if capture else ""
 
 
-def _case_identifier(name: str) -> str | None:
-    """Normalize XCTest's display name to SwiftPM's list/filter selector."""
-    objc = re.fullmatch(r"-\[([^ ]+) ([^ ]+)\]", name)
-    if objc:
-        return objc[1] + "/" + objc[2]
-    if "/" in name:
-        return name
-    owner, dot, method = name.rpartition(".")
-    return owner + "/" + method if dot and "." in owner else None
+def summarize_tests(output: str, expected: list[str], returncode: int, *, aggregate_name: str | None = None) -> bool:
+    """Verify SwiftPM's per-target bundles, or its one package bundle (older toolchains).
 
-
-def _selected_suite_summary(output: str) -> dict | None:
-    """A filtered old XCTest may have only one complete Selected tests root."""
-    starts = list(re.finditer(r"Test Suite 'Selected tests' started\b", output))
-    terminals = list(re.finditer(r"Test Suite 'Selected tests' (?:passed|failed)\b", output))
-    summaries = list(
-        re.finditer(
-            r"Test Suite 'Selected tests' (passed|failed)\b[^\n]*\n[ \t]*"
-            r"Executed (\d+) tests?, with (\d+) failures?(?: \((\d+) unexpected\))?",
-            output,
-        )
-    )
-    if len(starts) != 1 or len(terminals) != 1 or len(summaries) != 1:
-        return None
-    start, summary = starts[0], summaries[0]
-    cases = list(re.finditer(r"Test Case '[^']+' (?:started|passed|failed)\b", output))
-    if start.end() >= summary.start() or not cases:
-        return None
-    if any(case.start() < start.end() or case.end() > summary.start() for case in cases):
-        return None
-    return {
-        "status": summary[1],
-        "tests": int(summary[2]),
-        "failures": int(summary[3]),
-        "unexpected": int(summary[4]) if summary[4] is not None else None,
-    }
-
-
-def summarize_tests(
-    output: str,
-    expected: list[str],
-    returncode: int,
-    *,
-    aggregate_name: str | None = None,
-    case_inventory: set[str] | None = None,
-    empty_bundles: set[str] | None = None,
-    statistics: dict | None = None,
-) -> bool:
-    """Verify either SwiftPM's per-target bundles or its single package XCTest bundle."""
+    Every expected module must report complete, passing cases; a zero exit code alone is not enough.
+    """
     bundles = {}
     bundle_starts = set()
     pending = None
@@ -138,29 +94,9 @@ def summarize_tests(
                 case_ends[name] = status
         if re.search(r"Test Case .* failed\b", line):
             failed_cases.append(line.strip())
-    # This compatibility path is forbidden for unfiltered runs: only a discovered exact
-    # single-module inventory can authorize a root without a physical bundle name.
-    if case_inventory is not None and len(expected) == 1 and not bundles:
-        selected = _selected_suite_summary(output)
-        if selected is not None:
-            aggregate_name = "Selected tests"
-            bundles[aggregate_name] = selected
-            bundle_starts.add(aggregate_name)
     print("\nSwift test bundle summary:", flush=True)
     success = returncode == 0 and bool(expected) and not failed_cases
     total = failures = 0
-    if case_inventory is not None:
-        started_ids = {_case_identifier(name) for name in case_starts}
-        terminal_ids = {_case_identifier(name) for name in case_ends}
-        if (
-            not case_inventory
-            or started_ids != case_inventory
-            or terminal_ids != case_inventory
-            or len(started_ids) != len(case_starts)
-            or len(terminal_ids) != len(case_ends)
-        ):
-            print("  FAIL selected module cases do not exactly match the discovered inventory", flush=True)
-            success = False
     if aggregate_name and set(bundles) == {aggregate_name}:
         result = bundles[aggregate_name]
         expected_modules = {name.removesuffix(".xctest") for name in expected}
@@ -197,8 +133,7 @@ def summarize_tests(
         success = success and passed
         total, failures = result["tests"] or 0, result["failures"] or 0
     else:
-        permitted_empty = empty_bundles or set()
-        if not set(expected).issubset(bundles) or not set(bundles).issubset(set(expected) | permitted_empty):
+        if set(bundles) != set(expected):
             success = False
         if case_starts or case_ends:
             complete = set(case_starts) == set(case_ends)
@@ -212,22 +147,6 @@ def summarize_tests(
                 success = False
         for name in dict.fromkeys([*expected, *bundles]):
             result = bundles.get(name)
-            if name in permitted_empty and name not in expected:
-                empty = (
-                    result is not None
-                    and result["status"] == "passed"
-                    and result["tests"] == 0
-                    and result["failures"] == 0
-                    and result["unexpected"] in (None, 0)
-                    and not any(owner == name.removesuffix(".xctest") for owner in case_starts.values())
-                )
-                print(
-                    f"  {'PASS' if empty else 'FAIL'} {name}: filtered-out bundle must contain zero cases", flush=True
-                )
-                success = success and empty
-                total += (result or {}).get("tests") or 0
-                failures += (result or {}).get("failures") or 0
-                continue
             if result is None or result["tests"] is None or result["tests"] == 0:
                 print(f"  FAIL {name}: missing complete test results", flush=True)
                 success = False
@@ -246,14 +165,6 @@ def summarize_tests(
         f"Total: {total} tests, {failures} failures; {'PASS' if success else 'FAIL'} (swift exit {returncode})",
         flush=True,
     )
-    if statistics is not None:
-        statistics.update(
-            tests=total,
-            failures=failures,
-            started=len(case_starts),
-            completed=len(case_ends),
-            identifiers={_case_identifier(name) for name in case_starts},
-        )
     return success
 
 
@@ -267,96 +178,65 @@ REQUIRED_TEST_MODULES = frozenset(
     }
 )
 
+# The whole suite runs in about two minutes; a run far beyond that is a hung test, not a slow machine.
+TEST_TIMEOUT_S = 15 * 60
+
+
+def _unfinished_case(output: list[str]) -> str | None:
+    started, finished = [], set()
+    for line in output:
+        case = re.search(r"Test Case '([^']+)' (started|passed|failed|skipped)\b", line)
+        if case:
+            (started.append if case[2] == "started" else finished.add)(case[1])
+    return next((name for name in reversed(started) if name not in finished), None)
+
 
 def _run_tests(command: list[str | Path]) -> None:
-    # SwiftPM's single worker launches a fresh XCTest process for every discovered case.
-    # Both its synthesized XML and each child's real verbose output must agree with discovery.
+    """One ordinary `swift test` run (each bundle in one process), streamed to a kept log."""
     manifest = (REPO_ROOT / "Package.swift").read_text()
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)
     package = re.search(r'\bPackage\(\s*name:\s*"([^"]+)"', manifest)
     aggregate_name = package[1] + "PackageTests.xctest" if package else None
-    if not REQUIRED_TEST_MODULES <= set(modules):
+    if not modules or not REQUIRED_TEST_MODULES <= set(modules):
         raise RuntimeError("Swift test bundle verification failed: required test module is missing")
     command = [str(part) for part in command]
     runs = REPO_ROOT / "build/test-runs"
     runs.mkdir(parents=True, exist_ok=True)
-    artifacts = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
-    primary, sidecar = artifacts / "xctest.xml", artifacts / "xctest-swift-testing.xml"
-    if any(path.exists() or path.is_symlink() for path in (primary, sidecar)):
-        raise RuntimeError("Swift test bundle verification failed: test reports already exist")
-    print(f"Test artifacts: {artifacts}", flush=True)
-    print(">>", " ".join([*command, "list"]), flush=True)
-    discovery = subprocess.run([*command, "list"], cwd=REPO_ROOT, capture_output=True, text=True)
-    (artifacts / "inventory.stdout.log").write_text(discovery.stdout)
-    (artifacts / "inventory.stderr.log").write_text(discovery.stderr)
-    if discovery.stderr:
-        print(discovery.stderr, end="", file=sys.stderr, flush=True)
-    inventory = {module: set() for module in modules}
-    valid = discovery.returncode == 0 and bool(modules) and len(modules) == len(inventory)
-    for line in discovery.stdout.splitlines():
-        selector = line.strip()
-        if not selector:
-            continue
-        match = re.fullmatch(r"([^.\s/]+)\.[^\s/]+/[^\s]+", selector)
-        if not match or match[1] not in inventory or selector in inventory[match[1]]:
-            valid = False
-        else:
-            inventory[match[1]].add(selector)
-    if not valid or any(not cases for cases in inventory.values()):
-        raise RuntimeError("Swift test bundle verification failed: invalid or incomplete test inventory")
-    (artifacts / "inventory.json").write_text(
-        json.dumps({name: sorted(cases) for name, cases in inventory.items()}, indent=2) + "\n"
-    )
-    execution = [
-        *command,
-        "--skip-build",
-        "--parallel",
-        "--num-workers",
-        "1",
-        "--verbose",
-        "--xunit-output",
-        str(primary),
-    ]
-    print(">>", " ".join(execution), flush=True)
-    output, returncode = [], -1
+    log_path = Path(tempfile.mkdtemp(prefix="run-", dir=runs)) / "swift-test.log"
+    print(">>", " ".join(command), flush=True)
+    output: list[str] = []
+    timed_out = threading.Event()
     started = time.monotonic()
-    with (artifacts / "swift-test.log").open("w") as log:
+    with (
+        log_path.open("w") as log,
+        subprocess.Popen(
+            command, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
+        ) as process,
+    ):
+
+        def expire() -> None:
+            timed_out.set()
+            process.kill()
+
+        watchdog = threading.Timer(TEST_TIMEOUT_S, expire)
+        watchdog.start()
         try:
-            with subprocess.Popen(
-                execution, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-            ) as process:
-                for line in process.stdout:
-                    print(line, end="", flush=True)
-                    log.write(line)
-                    log.flush()
-                    output.append(line)
-                returncode = process.wait()
-        except Exception as error:
-            print(f"FAIL SwiftPM worker driver: {type(error).__name__}", flush=True)
+            for line in process.stdout:
+                print(line, end="", flush=True)
+                log.write(line)
+                output.append(line)
+            returncode = process.wait()
+        finally:
+            watchdog.cancel()
     elapsed = time.monotonic() - started
-    (artifacts / "execution.json").write_text(
-        json.dumps({"command": execution, "returncode": returncode, "elapsed_s": elapsed}, indent=2) + "\n"
-    )
-    try:
-        result = validate_workers("".join(output), primary, sidecar, inventory, aggregate_name, summarize_tests)
-        if returncode != 0:
-            raise ValueError(f"SwiftPM worker driver exited {returncode}")
-    except (OSError, ValueError) as error:
-        print(f"FAIL worker verification: {error}; artifacts: {artifacts}", flush=True)
-        raise RuntimeError("Swift test bundle verification failed; inspect worker logs and XML") from error
-    result["elapsed_s"] = elapsed
-    (artifacts / "verification.json").write_text(json.dumps(result, indent=2) + "\n")
-    print("\nSingle-worker XCTest summary:", flush=True)
-    for module in modules:
-        print(
-            f"  PASS {module}: {len(inventory[module])} complete / {len(inventory[module])} discovered tests",
-            flush=True,
-        )
-    print(
-        f"Total: {result['tests']} tests, 0 failures; PASS "
-        f"({len(modules)}/{len(modules)} modules, {result['tests']} fresh XCTest processes; {elapsed:.3f}s)",
-        flush=True,
-    )
+    print(f"Test log: {log_path} ({elapsed:.1f}s)", flush=True)
+    if timed_out.is_set():
+        hung = _unfinished_case(output) or "unknown"
+        raise RuntimeError(f"Swift test bundle verification failed: exceeded {TEST_TIMEOUT_S}s while running {hung}")
+    if not summarize_tests(
+        "".join(output), [name + ".xctest" for name in modules], returncode, aggregate_name=aggregate_name
+    ):
+        raise RuntimeError(f"Swift test bundle verification failed; see {log_path}")
 
 
 def _architectures(architecture: str) -> tuple[str, ...]:

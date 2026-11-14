@@ -176,10 +176,12 @@ class TestSummaryTests(unittest.TestCase):
             import re
 
             cases = [
-                macos_workflow._case_identifier(match[1])
-                for match in re.finditer(r"Test Case '([^']+)' started", self.fixture("swift6_aggregate_success.txt"))
+                match[1] + "/" + match[2]
+                for match in re.finditer(
+                    r"Test Case '-\[([^ ]+) ([^\]]+)\]' started", self.fixture("swift6_aggregate_success.txt")
+                )
             ]
-            self.fake_swift(root, cases, package="BCRAgentConsole")
+            self.fake_swift(root, cases, package="BCRAgentConsole", layout="aggregate")
             with (
                 patch.object(macos_workflow, "REPO_ROOT", root),
                 patch.object(macos_workflow, "ensure_dependency"),
@@ -211,179 +213,47 @@ class TestSummaryTests(unittest.TestCase):
                     macos_workflow.main(["test"])
             self.assertIn("FAIL First.xctest", output.getvalue())
 
-    def test_filtered_real_split_accepts_only_known_empty_other_bundles(self):
-        module = "BCRProviderAdapterTests"
-        cases = {
-            line for line in self.fixture("swift_test_inventory_532.txt").splitlines() if line.startswith(module + ".")
-        }
-        rendered = io.StringIO()
-        with contextlib.redirect_stdout(rendered):
-            passed = macos_workflow.summarize_tests(
-                self.fixture("swift62_filtered_adapter_success.txt"),
-                [module + ".xctest"],
-                0,
-                aggregate_name="BCRAgentConsolePackageTests.xctest",
-                case_inventory=cases,
-                empty_bundles={
-                    name + ".xctest"
-                    for name in [
-                        "BCRPluginHostTests",
-                        "BCRAgentCoreTests",
-                        "BCRAgentConsoleTests",
-                        "BCRProviderDomainTests",
-                    ]
-                },
-            )
-        self.assertTrue(passed)
-        self.assertEqual(len(cases), 66)
-        self.assertIn("Total: 66 tests, 0 failures; PASS", rendered.getvalue())
-
-    def test_selected_root_requires_an_explicit_exact_inventory_and_complete_terminal(self):
-        module = "BCRProviderAdapterTests"
-        inventory = {
-            line for line in self.fixture("swift_test_inventory_532.txt").splitlines() if line.startswith(module + ".")
-        }
-
-        def selected(log, cases=inventory):
-            with contextlib.redirect_stdout(io.StringIO()):
-                return macos_workflow.summarize_tests(
-                    log,
-                    [module + ".xctest"],
-                    0,
-                    aggregate_name="BCRAgentConsolePackageTests.xctest",
-                    case_inventory=cases,
-                )
-
-        valid = self.fixture("selected_root_adapter_success.txt")
-        self.assertTrue(selected(valid))
-        self.assertFalse(selected(valid, None))  # Never weaken an unfiltered run.
-        self.assertFalse(selected(self.fixture("selected_root_adapter_truncated.txt")))
-        for invalid in [
-            valid.replace("Executed 66 tests", "Executed 65 tests"),
-            valid.replace("0 unexpected", "1 unexpected"),
-            valid.replace("0 failures", "1 failures"),
-            valid.replace("started at <STRUCTURAL", "passed at <STRUCTURAL"),
-            valid.replace(" passed (", " failed (", 1),
-            valid.replace("BCRProviderAdapterTests.", "UnknownModule."),
-            valid + valid,
-            "Test Suite 'Selected tests' started.\nTest Suite 'Selected tests' passed.\n"
-            "Executed 0 tests, with 0 failures (0 unexpected)\n",
-        ]:
-            self.assertFalse(selected(invalid))
-        self.assertFalse(selected(valid, set()))
-
-    def test_all_cases_use_distinct_worker_processes_and_sum_the_full_inventory(self):
+    def test_runner_invokes_swift_test_once_and_accepts_both_layouts(self):
         cases = ["First.Sample/testOne", "First.Sample/testTwo", "Last.Sample/testThree"]
-        for layout in ["aggregate", "split", "selected"]:
+        for layout in ["aggregate", "split"]:
             with self.subTest(layout=layout), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 output = self.run_fake_modules(root, ["First", "Last"], cases, layout=layout)
                 calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                runs = [call for call in calls if call["action"] == "run"]
-                self.assertEqual(len(runs), 1)
-                workers = [call for call in calls if call["action"] == "worker"]
-                self.assertEqual(len(workers), 3)
-                self.assertEqual(len({call["pid"] for call in workers}), 3)
-                self.assertEqual([call["arguments"][-1] for call in workers], cases)
-                self.assertIn("Total: 3 tests, 0 failures; PASS (2/2 modules, 3 fresh XCTest processes;", output)
+                self.assertEqual(len(calls), 1)
+                self.assertNotIn("--num-workers", calls[0])
+                self.assertIn("Total: 3 tests, 0 failures; PASS", output)
+                self.assertTrue(list((root / "build/test-runs").glob("run-*/swift-test.log")))
 
-    def test_ignored_filter_empty_selection_and_omitted_case_fail_both_layouts(self):
-        cases = ["First.Sample/testOne", "First.Sample/testTwo", "Last.Sample/testThree"]
-        for layout in ["aggregate", "split", "selected"]:
-            for mutation in [{"ignore_filter": True}, {"empty": True}, {"omit": "First.Sample/testTwo"}]:
-                with self.subTest(layout=layout, mutation=mutation), tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                        self.run_fake_modules(root, ["First", "Last"], cases, layout=layout, **mutation)
-                    calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                    self.assertEqual(len([call for call in calls if call["action"] == "run"]), 1)
-                    self.assertEqual(len([call for call in calls if call["action"] == "worker"]), len(cases))
-
-    def test_worker_raw_results_cannot_hide_behind_exit_zero_and_green_xml(self):
+    def test_failure_nonzero_exit_and_missing_module_fail_the_run(self):
         cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
-        for layout in ("aggregate", "split", "selected"):
-            for mutation in (
-                {"skip_case": cases[0]},
-                {"empty": True},
-                {"wrong_case": True},
-                {"duplicate_case": cases[0]},
-                {"unknown_case": True},
-                {"fail_module": "First", "force_xml_green": True, "force_exit_zero": True},
-            ):
-                with self.subTest(layout=layout, mutation=mutation), tempfile.TemporaryDirectory() as directory:
-                    root = Path(directory)
-                    with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                        self.run_fake_modules(root, ["First", "Last"], cases, layout=layout, **mutation)
-                    calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-                    self.assertEqual(len([call for call in calls if call["action"] == "worker"]), len(cases))
-
-    def test_nonzero_worker_driver_exit_cannot_be_overridden_by_good_reports(self):
-        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
+        for options in [{"fail_module": "First"}, {"exit_code": 7}]:
+            with self.subTest(options=options), tempfile.TemporaryDirectory() as directory:
+                with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
+                    self.run_fake_modules(Path(directory), ["First", "Last"], cases, **options)
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                self.run_fake_modules(Path(directory), ["First", "Last"], cases, exit_code=7, force_xml_green=True)
+                self.run_fake_modules(Path(directory), ["First", "Last"], cases[:1])
 
-    def test_worker_driver_launch_exception_is_fatal_and_artifacts_are_preserved(self):
-        original = subprocess.Popen
-
-        def launch(arguments, **options):
-            if "--parallel" in arguments:
-                raise OSError("injected driver launch failure")
-            return original(arguments, **options)
-
-        with tempfile.TemporaryDirectory() as directory, patch.object(subprocess, "Popen", side_effect=launch):
-            root = Path(directory)
-            with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                self.run_fake_modules(root, ["First"], ["First.Sample/testOne"])
-            artifacts = list((root / "build/test-runs").glob("run-*"))
-            self.assertEqual(len(artifacts), 1)
-            self.assertTrue((artifacts[0] / "execution.json").is_file())
-            self.assertTrue((artifacts[0] / "swift-test.log").is_file())
-
-    def test_a_previous_run_report_is_never_reused(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            old = root / "previous"
-            old.mkdir()
-            (old / "xctest.xml").write_text("old report")
-            with patch.object(macos_workflow.tempfile, "mkdtemp", return_value=str(old)):
-                with self.assertRaisesRegex(RuntimeError, "reports already exist"):
-                    self.run_fake_modules(root, ["First"], ["First.Sample/testOne"])
-            self.assertEqual((old / "xctest.xml").read_text(), "old report")
-
-    def test_additional_modules_and_cases_are_included_automatically(self):
-        modules = sorted(macos_workflow.REQUIRED_TEST_MODULES) + ["AdditionalTests"]
-        cases = [module + ".Sample/testOne" for module in modules] + ["AdditionalTests.Sample/testTwo"]
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.run_fake_modules(root, modules, cases, required_modules=macos_workflow.REQUIRED_TEST_MODULES)
-            calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-            workers = [call for call in calls if call["action"] == "worker"]
-            self.assertEqual([call["arguments"][-1] for call in workers], cases)
-
-    def test_required_module_removed_from_manifest_or_discovery_is_fatal(self):
+    def test_required_module_missing_from_the_manifest_is_fatal(self):
         modules = sorted(macos_workflow.REQUIRED_TEST_MODULES)
-        cases = [module + ".Sample/testOne" for module in modules]
-        for missing in modules:
-            for remove_from_manifest in (False, True):
-                with (
-                    self.subTest(missing=missing, manifest=remove_from_manifest),
-                    tempfile.TemporaryDirectory() as directory,
-                ):
-                    with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
-                        self.run_fake_modules(
-                            Path(directory),
-                            [m for m in modules if m != missing] if remove_from_manifest else modules,
-                            [case for case in cases if not case.startswith(missing + ".")],
-                            required_modules=macos_workflow.REQUIRED_TEST_MODULES,
-                        )
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "required test module is missing"):
+                self.run_fake_modules(
+                    Path(directory),
+                    modules[1:],
+                    [module + ".Sample/testOne" for module in modules[1:]],
+                    required_modules=macos_workflow.REQUIRED_TEST_MODULES,
+                )
 
-    def test_invalid_inventory_cannot_skip_a_module_or_create_a_partial_pass(self):
-        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
-        for inventory in [[], [cases[0]], cases + [cases[0]], cases + ["Unknown.Sample/testOther"]]:
-            with self.subTest(inventory=inventory), tempfile.TemporaryDirectory() as directory:
-                with self.assertRaisesRegex(RuntimeError, "incomplete test inventory"):
-                    self.run_fake_modules(Path(directory), ["First", "Last"], cases, inventory=inventory)
+    def test_a_hung_test_is_killed_and_named(self):
+        cases = ["First.Sample/testOne", "First.Sample/testHangs"]
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(macos_workflow, "TEST_TIMEOUT_S", 1),
+        ):
+            with self.assertRaisesRegex(RuntimeError, r"exceeded 1s while running -\[First.Sample testHangs\]"):
+                self.run_fake_modules(Path(directory), ["First"], cases, hang_case="First.Sample/testHangs")
 
 
 if __name__ == "__main__":
