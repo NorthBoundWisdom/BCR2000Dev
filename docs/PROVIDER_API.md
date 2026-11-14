@@ -117,3 +117,23 @@ Parameter setters (`set_parameter`, `set_parameters`, `nudge_parameter`, `reset_
 indicator updates, configuration updates and synchronization all use this same session journal.
 A successful tool response alone never certifies delivery or physical display. Existing tool
 names, schemas and error meanings remain unchanged; no new Provider 1.0 fields are required.
+
+## Optional hardware surface contract 1.4
+
+`--source hardware --hardware-profile --hardware-map PATH` explicitly installs the hardware
+surface interface; it conflicts with simulation profiles and is never enabled by default.
+Every control is remote-read-only (`accepts_input: false`). The journal observes decoded physical
+input only, with hardware source/origin; Provider writes and echoes do not become input.
+New generations start unknown. Snapshot/event pages include `link`; disconnect, reconnect,
+endpoint, configuration and learned-map changes rotate epoch and discard previous observations.
+Physical encoder-group selection is unknown until an input identifies a specific stable control.
+
+Only learned 7-bit absolute continuous controls and learned buttons are described. Relative and
+NRPN controls remain excluded until separately qualified, with reasons in `--describe-surface`.
+Visualization-only learned buttons remain observable as ignored input; they have no feedback.
+Consumers must not infer a functional held-enable from ignored inputs or guess a release.
+Hardware input/renew/reset return permission_denied/unsupported_hold/unsupported_tool and consume
+no journal sequence. Display feedback requires both `--hardware-output write` and
+`--allow-surface-feedback`; missing either gives permission_denied with zero sends. A transport
+failure is delivery_failed and does not record an accepted display event. The parameter engine
+and existing output exit are shared with Provider 1.0.

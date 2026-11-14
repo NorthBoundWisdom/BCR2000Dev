@@ -47,6 +47,27 @@ public enum SurfaceControlMCPModule {
         return adapter
     }
 
+    public static func installHardware(on gateway: MCPApplicationGateway, instanceID: String,
+                                       permissions: BCRSurfaceControlAdapter.Permissions = .init(),
+                                       principals: SurfaceControlPrincipals = .init()) throws
+    {
+        guard let surface = gateway.surfaceSession else { throw ControlContractError("unsupported_source") }
+        let adapter = try BCRHardwareSurfaceControlAdapter(surface: surface, instanceID: instanceID,
+                                                           permissions: permissions, principals: principals)
+        let tools = SurfaceControlTools.descriptors(source: .hardware).map { descriptor in JSONValue.object([
+            "name": .string(descriptor.name), "description": .string("Hardware surface control 1.4"),
+            "inputSchema": descriptor.inputSchema, "outputSchema": descriptor.outputSchema,
+            "annotations": .object(["readOnlyHint": .bool(!descriptor.isMutation), "openWorldHint": .bool(false)])
+        ]) }
+        try gateway.registerModule(id: "surface.controls.1", tools: tools, rawResults: true, validatesInHandler: true,
+                                   failureEncoder: {
+                                       .object(["code": .string(BCRSurfaceControlAdapter.failureCode($0))])
+                                   }) { [weak gateway] name, arguments in
+            guard let gateway else { throw ControlContractError("not_initialized") }
+            return try adapter.execute(SurfaceControlTools.parse(name, arguments: .object(arguments)), gateway: gateway)
+        }
+    }
+
     /// An explicitly selected, ordinary-input fixture. No business operation is implemented here.
     public static func simulationConfiguration() -> SurfaceConfiguration {
         let commands = ["arm", "start", "pause", "cancel", "progress"]

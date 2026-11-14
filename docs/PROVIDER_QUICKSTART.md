@@ -82,3 +82,9 @@ For observation only, omit `--hardware-output` (default `observe`, zero device s
 After a write read `console_events` with its current generation and sequence: `feedback.sent`
 records transport acceptance; `feedback.suppressed` records policy suppression. Software write
 success does not mean the device displayed the value. Reprepare after generation changes.
+
+For explicit hardware surface 1.4, add `--hardware-profile --surface-instance-id operator-bcr`.
+Keep the learned `--hardware-map` required above. Read-only input observation uses default
+`observe` and no display permission. For displays add BOTH `--hardware-output write` and
+`--allow-surface-feedback`. SDK 1.4.0 must explicitly accept hardware; ordinary simulation
+continues to advertise 1.3. This does not grant physical qualification.

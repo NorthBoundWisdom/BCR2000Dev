@@ -118,6 +118,7 @@ public enum ProviderMCPModule {
 
     public static func install(on service: AgentControlService, application: ProviderApplication,
                                enableSurfaceControl: Bool = false,
+                               enableHardwareSurface: Bool = false,
                                surfaceInstanceID: String? = nil,
                                surfacePermissions: BCRSurfaceControlAdapter.Permissions = .init(),
                                surfacePrincipals: SurfaceControlPrincipals = .init(),
@@ -148,7 +149,7 @@ public enum ProviderMCPModule {
                 // With the optional surface contract installed, all simulated input must pass its
                 // permission and CAS fences. Without it, Provider 1.0 behavior is unchanged.
                 try ProviderValidation.require(
-                    !enableSurfaceControl,
+                    !enableSurfaceControl && !enableHardwareSurface,
                     "permission_denied",
                     "Surface control is enabled; use surface_control_input for simulated input"
                 )
@@ -245,7 +246,14 @@ public enum ProviderMCPModule {
                 .chassisControl &&
                 !(new.parameterWrite && new.chassisControl) { application?.revokeControl(domain: "chassis") }
         }
-        if enableSurfaceControl {
+        if enableHardwareSurface {
+            try SurfaceControlMCPModule.installHardware(
+                on: service,
+                instanceID: surfaceInstanceID ?? application.providerID,
+                permissions: surfacePermissions,
+                principals: surfacePrincipals
+            )
+        } else if enableSurfaceControl {
             try SurfaceControlMCPModule.install(on: service, instanceID: surfaceInstanceID ?? application.providerID,
                                                 permissions: surfacePermissions, principals: surfacePrincipals,
                                                 writeLimits: surfaceWriteLimits)

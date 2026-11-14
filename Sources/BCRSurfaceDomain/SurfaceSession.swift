@@ -128,6 +128,12 @@ public final class SurfaceSession {
 
     public func removeAcceptedInputObserver(_ token: UUID) { acceptedInputObservers[token] = nil }
 
+    /// Optional trusted contract transaction hooks; never exposed through remote tools.
+    /// Preflight runs before the candidate engine changes; commit runs before both values publish.
+    public var hardwareInputPreflight: (@MainActor (BCRControlID, MIDIVoiceMessage) throws -> Void)?
+    public var hardwareInputCommit: (@MainActor (BCRControlID, MIDIVoiceMessage, SurfaceEngine, Bool) throws -> Void)?
+    private var immediateDisplayFeedback = false
+
     private let hardwareDevice: any SurfaceDevice
     private let requiresHardwareConfirmation: Bool
     public let hardwareOutput: HardwareOutputPolicy
@@ -410,6 +416,29 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    /// Explicit display-only request through the existing effect/transmit exit. No input or parameter write.
+    public func setHardwareDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
+        guard source == .hardware, hardwareOutput == .write, connection.isConnected,
+              !diagnosticReadbackActive, let midi = engine.hardwareMap.midi(for: control),
+              !engine.hardwareMap.isVisualizationOnly(control), midi.kind != .nrpn, rawValue <= 127
+        else { throw ProviderDomainError("permission_denied", "Hardware display output is not permitted") }
+        let previous = engine
+        var candidate = engine
+        let effects = try candidate.setDisplayFeedback(control, rawValue: rawValue, at: now())
+        guard !effects.isEmpty else { throw ProviderDomainError("unsupported_feedback", "No display route") }
+        let mark = nextEventID
+        engine = candidate
+        immediateDisplayFeedback = true
+        defer { immediateDisplayFeedback = false }
+        withWriteOrigin(.external) { perform(effects) }
+        let outputs = events.filter { $0.id > mark && $0.direction == .output }
+        guard !outputs.isEmpty, outputs.allSatisfy({ $0.delivery == .sent }) else {
+            engine = previous
+            throw ProviderDomainError("delivery_failed", "Display transport did not accept output")
+        }
+        publishChange()
+    }
+
     public func clearSimulationDisplayFeedback() throws {
         guard source == .mock
         else { throw ProviderDomainError("unsupported", "Simulation feedback requires Mock source") }
@@ -586,7 +615,21 @@ public final class SurfaceSession {
             }
             guard inputGeneration == inputEvents.generation else { continue }
             let previousCount = control.map { engine.state(of: $0).eventCount }
-            let effects = engine.handleInput(message, at: now())
+            let trusted = inputSource == .hardware && source == .hardware && !engine.isFeedbackEcho(message, at: now())
+            var candidate = engine
+            let effects: [SurfaceEffect]
+            do {
+                if trusted, let control { try hardwareInputPreflight?(control, message) }
+                effects = candidate.handleInput(message, at: now())
+                if trusted, let control {
+                    try hardwareInputCommit?(control, message, candidate,
+                                             previousCount != candidate.state(of: control).eventCount)
+                }
+            } catch {
+                onEvent?(.failed(.feedback, "Trusted hardware input rejected before commit"))
+                continue
+            }
+            engine = candidate
             if let control, previousCount != engine.state(of: control).eventCount {
                 scheduler?.cancel(message.controlID)
                 notifyFeedbackQueue()
@@ -648,7 +691,9 @@ public final class SurfaceSession {
                 ignored: true, delivery: .suppressed)
             return
         }
-        if source == .hardware, feedbackPolicy.enabled, connection.connectedDestination != nil {
+        if source == .hardware, !immediateDisplayFeedback, feedbackPolicy.enabled,
+           connection.connectedDestination != nil
+        {
             scheduler?.enqueue(message, origin: writeOrigin)
             notifyFeedbackQueue()
         } else { transmitNow(message) }

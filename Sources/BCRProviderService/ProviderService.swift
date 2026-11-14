@@ -31,6 +31,7 @@ private struct Options {
     var exportContract: URL?
     var tokenStdin = false
     var simulationProfile = false
+    var hardwareProfile = false
     var simulationConfiguration: URL?
     var usesSimulationConfiguration: Bool { simulationProfile || simulationConfiguration != nil }
     var describeSurface = false
@@ -72,6 +73,7 @@ private struct Options {
             case "--allow-chassis-control": result.permissions.chassisControl = true
             case "--allow-simulation-control": result.permissions.simulationControl = true
             case "--token-stdin": result.tokenStdin = true
+            case "--hardware-profile": result.hardwareProfile = true
             case "--simulation-profile": result.simulationProfile = true
             case "--simulation-configuration": result.simulationConfiguration = URL(fileURLWithPath: try value())
                 .standardizedFileURL
@@ -108,6 +110,23 @@ private struct Options {
             }
             i += 1
         }
+        guard !result
+            .hardwareProfile ||
+            (result.console && result.source == .hardware && !result.usesSimulationConfiguration && result
+                .hardwareMap != nil)
+        else {
+            throw BootError(
+                reason: "--hardware-profile requires --source hardware and an explicit learned --hardware-map; simulation options are mutually exclusive"
+            )
+        }
+        guard !result
+            .hardwareProfile ||
+            !(result.surfacePermissions.input || result.surfacePermissions.reset || result.surfaceWriteLimits != nil)
+        else {
+            throw BootError(
+                reason: "Hardware surface cannot grant input/reset; category limits are not supported in this host mode"
+            )
+        }
         guard !(result.aggregateWriteLimitSpecified && result.surfaceWriteLimits != nil) else {
             throw BootError(reason: "--write-limit and --write-limits are mutually exclusive")
         }
@@ -137,8 +156,8 @@ private struct Options {
         }
         guard !(result.surfacePermissions.input || result.surfacePermissions.feedback || result.surfacePermissions
             .reset) ||
-            (result.console && result.source == .mock)
-        else { throw BootError(reason: "Surface simulation permissions require a Mock console") }
+            (result.console && (result.source == .mock || result.hardwareProfile))
+        else { throw BootError(reason: "Surface permissions require a Mock console or explicit hardware profile") }
         return result
     }
 }
@@ -188,13 +207,15 @@ private struct BCRProviderService {
     --token-stdin                 Read a 64-byte lowercase hex token from an anonymous pipe
     --simulation-profile          Explicit ordinary-input simulation fixture; memory-only Mock
     --simulation-configuration PATH Strict simulation-only SurfaceConfiguration v7; implies memory-only Mock
-    --describe-surface            Print the simulation profile's published control contract (JSON), then exit
+    --hardware-profile            Contract 1.4 hardware input journal; explicit learned map required
+                                  Display requires BOTH --hardware-output write and --allow-surface-feedback
+    --describe-surface            Print the selected profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
     --surface-principal-file PATH Explicit private host-issued principal record; default memory only
     --write-limits input=N,feedback=N,renew=N,admin=N
                                   Surface-only independent budgets, mutually exclusive with --write-limit
     --allow-surface-input --allow-surface-feedback --allow-surface-reset
-                                  Separate simulation permissions; default OFF, never hardware
+                                  Input/reset are simulation-only; feedback also supports explicit hardware profile
     Credentials: BCR_PROVIDER_TOKEN environment, or --token-stdin. Never pass tokens in argv.
     No GUI, actual robot/chassis driver, vendor program or LAN listener is started.
     """
@@ -221,15 +242,27 @@ private struct BCRProviderService {
             } else { simulationConfiguration = nil }
             if options.describeSurface {
                 // Static description of the --simulation-profile configuration; no device, port or token.
-                let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
-                                             configuration: simulationConfiguration ?? SurfaceControlMCPModule
+                let map = try options.hardwareMap.map { try JSONDecoder().decode(
+                    HardwareMap.self,
+                    from: Data(contentsOf: $0)
+                ) } ?? HardwareMap()
+                let configuration = try options.configuration.map { try JSONDecoder().decode(
+                    SurfaceConfiguration.self,
+                    from: Data(contentsOf: $0)
+                ).migrated() }
+                let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(), hardwareMap: map,
+                                             configuration: configuration ?? simulationConfiguration ??
+                                                 SurfaceControlMCPModule
                                                  .simulationConfiguration(),
                                              saveHardwareMap: { _ in }, saveConfiguration: { _ in })
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(
-                    encoder.encode(BCRSurfaceControlAdapter.publishedContract(
-                        surface: session, writeLimits: options.surfaceWriteLimits
-                    )) + Data("\n".utf8)
+                    encoder
+                        .encode(options.hardwareProfile ? BCRHardwareSurfaceControlAdapter
+                            .publishedContract(surface: session) : BCRSurfaceControlAdapter.publishedContract(
+                                surface: session,
+                                writeLimits: options.surfaceWriteLimits
+                            )) + Data("\n".utf8)
                 )
                 return
             }
@@ -308,17 +341,32 @@ private struct BCRProviderService {
                 else { throw BootError(reason: "Learned map validation failed; original file was preserved")
                 }; map = read.value
             }
+            var testDevice: TestOnlyHardwareDevice?
             var native: CoreMIDIService?
             let hardware: any SurfaceDevice
             if options.console && options.source == .hardware {
-                let driver = CoreMIDIService(); try driver.start(); native = driver; hardware = driver
-                let deadline = ProcessInfo.processInfo.systemUptime + 3
-                while !driver.connection.isConnected && ProcessInfo.processInfo.systemUptime < deadline {
-                    try await Task.sleep(for: .milliseconds(20))
+                let environment = ProcessInfo.processInfo.environment
+                if environment["BCR_PROVIDER_TEST_HARDWARE"] == "1" {
+                    guard let script = environment["BCR_PROVIDER_TEST_HARDWARE_SCRIPT"],
+                          let report = environment["BCR_PROVIDER_TEST_HARDWARE_REPORT"]
+                    else {
+                        throw BootError(reason: "Test-only hardware double requires local script and report paths")
+                    }
+                    let fake = TestOnlyHardwareDevice(
+                        commands: URL(fileURLWithPath: script),
+                        report: URL(fileURLWithPath: report)
+                    )
+                    testDevice = fake; hardware = fake
+                } else {
+                    let driver = CoreMIDIService(); try driver.start(); native = driver; hardware = driver
+                    let deadline = ProcessInfo.processInfo.systemUptime + 3
+                    while !driver.connection.isConnected && ProcessInfo.processInfo.systemUptime < deadline {
+                        try await Task.sleep(for: .milliseconds(20))
+                    }
+                    guard driver.connection.isConnected,
+                          driver.connection.lastError == nil
+                    else { throw BootError(reason: "Hardware MIDI route is unavailable; no Mock fallback was used") }
                 }
-                guard driver.connection.isConnected,
-                      driver.connection.lastError == nil
-                else { throw BootError(reason: "Hardware MIDI route is unavailable; no Mock fallback was used") }
             } else { hardware = MockSurfaceDevice() }
             let session: SurfaceSession? = options.console ? SurfaceSession(
                 hardwareDevice: hardware, hardwareMap: map, configuration: profile,
@@ -347,6 +395,7 @@ private struct BCRProviderService {
                                               .surfaceInstanceID != nil ||
                                               options.surfacePermissions.input || options.surfacePermissions
                                               .feedback || options.surfacePermissions.reset,
+                                          enableHardwareSurface: options.hardwareProfile,
                                           surfaceInstanceID: options.surfaceInstanceID,
                                           surfacePermissions: options.surfacePermissions, surfacePrincipals: principals,
                                           surfaceWriteLimits: options.surfaceWriteLimits)
@@ -367,6 +416,7 @@ private struct BCRProviderService {
                 "event": .string("provider.ready"), "contract_version": .string("1.0"),
                 "provider_id": .string(application.providerID),
                 "url": .string("http://127.0.0.1:\(port)/mcp"), "pid": .number(Int(getpid())),
+                "test_only_hardware_double": .bool(testDevice != nil),
                 "console": .bool(options.console), "source": .string(options.source.rawValue),
                 "hardware_output": options.source == .hardware ? .string(options.hardwareOutput.rawValue) : .null,
                 "robot": .bool(options.robot), "chassis": .bool(options.chassis),
@@ -375,7 +425,9 @@ private struct BCRProviderService {
             ])
             print(try ready.jsonText)
             fflush(stdout)
+            testDevice?.start()
             let shutdown = ShutdownSignal(); await shutdown.wait()
+            testDevice?.stop()
             server.stop(); application.stopClock()
             print("{\"event\":\"provider.stopped\"}")
         } catch {
