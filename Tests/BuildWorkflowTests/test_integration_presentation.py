@@ -1,7 +1,10 @@
 import importlib.util
 import io
+import os
 from pathlib import Path
+import plistlib
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -16,6 +19,36 @@ with patch.dict(sys.modules, {"mcp_smoke": mcp_smoke, "native_ui": native_ui}):
 
 
 class IntegrationPresentationTests(unittest.TestCase):
+    def test_offscreen_bundle_is_an_accessory_before_the_process_starts(self):
+        # AppKit reads LSUIElement before didFinishLaunching; a delegate-only
+        # activation-policy change races the desktop auditor on hosted runners.
+        for flags, expected in (([], True), (["--foreground"], False)):
+            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                bundle = root / "Source.app"
+                macos = bundle / "Contents/MacOS"
+                macos.mkdir(parents=True)
+                (macos / "App").touch()
+                (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": "App"}))
+
+                def launch(command, **kwargs):
+                    info = plistlib.loads((Path(command[0]).parents[1] / "Info.plist").read_bytes())
+                    self.assertEqual(info.get("LSUIElement", False), expected)
+                    raise RuntimeError("launch inspected")
+
+                previous = Path.cwd()
+                try:
+                    os.chdir(root)
+                    with (
+                        patch.object(integration.subprocess, "run"),
+                        patch.object(integration, "DesktopAudit"),
+                        patch.object(integration.subprocess, "Popen", side_effect=launch),
+                        self.assertRaisesRegex(RuntimeError, "launch inspected"),
+                    ):
+                        integration.main(["--bundle", str(bundle), *flags])
+                finally:
+                    os.chdir(previous)
+
     def test_protocol_only_defaults_offscreen_and_script_defaults_foreground(self):
         self.assertTrue(integration.uses_offscreen(integration.parse_arguments([])))
         self.assertFalse(integration.uses_offscreen(integration.parse_arguments(["--script", "case.py"])))
@@ -44,17 +77,50 @@ class IntegrationPresentationTests(unittest.TestCase):
         self.assertNotIn("--offscreen", integration.app_arguments(Path("app"), args))
 
     def test_offscreen_shutdown_never_requests_interactive_termination(self):
-        app = Mock()
+        app = Mock(poll=Mock(return_value=None))
         integration.stop_app(app, True)
         app.kill.assert_called_once_with()
         app.terminate.assert_not_called()
         app.wait.assert_called_once_with(timeout=5)
 
     def test_foreground_shutdown_keeps_graceful_termination(self):
-        app = Mock()
+        app = Mock(poll=Mock(return_value=None))
         integration.stop_app(app, False)
         app.terminate.assert_called_once_with()
         app.kill.assert_not_called()
+
+    def test_startup_failure_preserves_signal_source_phase_and_app_log_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "lifecycle-phase.txt").write_text("launch")
+            (root / "desktop-audit-signals.jsonl").write_text(
+                '{"source":"desktop_audit","signal":"SIGKILL","reason":"target became frontmost"}\n'
+            )
+            (root / "app.log").write_text("bcr.integration_startup: app.init\n")
+            app = Mock(pid=123, poll=Mock(return_value=-9))
+            error = integration.startup_failure(app, root, "isolated app exited before listening")
+            report = str(error)
+            for evidence in (
+                "pid=123",
+                "SIGKILL",
+                "phase=launch",
+                "desktop_audit",
+                "target became frontmost",
+                "app.init",
+            ):
+                self.assertIn(evidence, report)
+            integration.stop_app(app, True)
+            app.kill.assert_not_called()
+            self.assertEqual((root / "launch-failure.txt").read_text(), report)
+
+    def test_startup_failure_reports_empty_log_and_unknown_signal_sender(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "lifecycle-phase.txt").write_text("launch")
+            app = Mock(pid=123, poll=Mock(return_value=-9))
+            report = str(integration.startup_failure(app, root, "isolated app exited before listening"))
+            self.assertIn("signal sender unknown", report)
+            self.assertIn("no app startup marker reached", report)
 
     def test_invalid_port_fails_before_any_process_or_directory_setup(self):
         with patch("sys.stderr", new_callable=io.StringIO), self.assertRaises(SystemExit):

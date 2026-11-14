@@ -18,8 +18,10 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        IntegrationStartupLog.write("application.didFinishLaunching")
         NSApp.setActivationPolicy(OffscreenPresentation.isEnabled ? .accessory : .regular)
         OffscreenPresentation.install()
+        IntegrationStartupLog.write("application.presentationInstalled")
         #if DEBUG
             if CommandLine.arguments.contains("--integration-test"),
                let path = ProcessInfo.processInfo.environment["BCR_INTEGRATION_DIRECTORY"]
@@ -121,6 +123,7 @@ struct BCRAgentConsoleApp: App {
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        IntegrationStartupLog.write("app.init")
         _ = LanguageSettings.shared
         let smoke = CommandLine.arguments.contains("--startup-smoke")
         let connectionFixture = CommandLine.arguments.contains("--connection-fixture")
@@ -149,8 +152,10 @@ struct BCRAgentConsoleApp: App {
         if CommandLine.arguments.contains("--integration-test") {
             #if DEBUG
                 do {
+                    IntegrationStartupLog.write("integration.context.begin")
                     guard !smoke else { throw MCPHTTPParseError(reason: L10n.text("集成测试与 startup-smoke 不能同时启用")) }
                     let context = try IntegrationTestContext(environment: ProcessInfo.processInfo.environment)
+                    IntegrationStartupLog.write("integration.context.ready")
                     let fixture = connectionFixture ? try IntegrationMIDIFixture(
                         directory: context.directory,
                         environment: ProcessInfo.processInfo.environment

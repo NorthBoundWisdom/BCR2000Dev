@@ -36,6 +36,7 @@ jobs:
             build/test-runs/
             build/mcp-integration/*/*.log
             build/mcp-integration/*/*.json
+            build/mcp-integration/*/*.jsonl
             build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error

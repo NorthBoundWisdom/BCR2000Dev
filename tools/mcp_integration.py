@@ -8,6 +8,7 @@ import plistlib
 import shutil
 from pathlib import Path
 import secrets
+import signal
 import subprocess
 import sys
 import tempfile
@@ -65,6 +66,8 @@ def app_arguments(executable, args):
 
 
 def stop_app(app, offscreen):
+    if app.poll() is not None:
+        return
     if offscreen:
         # An isolated fixture has no user documents to save or interactive quit flow to preserve.
         app.kill()
@@ -75,6 +78,32 @@ def stop_app(app, offscreen):
     except subprocess.TimeoutExpired:
         app.kill()
         app.wait()
+
+
+def startup_failure(app, directory, reason):
+    """Capture evidence before cleanup changes the lifecycle phase or sends its own signal."""
+    code = app.poll()
+    status = str(code)
+    if code is not None and code < 0:
+        try:
+            status += f" ({signal.Signals(-code).name})"
+        except ValueError:
+            status += " (unknown signal)"
+
+    def tail(name, lines=30):
+        path = directory / name
+        return "".join(path.read_text(errors="replace").splitlines(True)[-lines:]) if path.exists() else ""
+
+    audit_signals = tail("desktop-audit-signals.jsonl")
+    report = (
+        f"{reason}; pid={app.pid}, returncode={status}, phase={tail('lifecycle-phase.txt').strip()}\n"
+        f"artifacts: {directory}\n"
+        "desktop audit signal records (recorded before sending; results follow):\n"
+        f"{audit_signals or '<none; signal sender unknown if externally terminated>\n'}"
+        f"app.log tail (unbuffered startup markers):\n{tail('app.log') or '<empty; no app startup marker reached>\n'}"
+    )
+    (directory / "launch-failure.txt").write_text(report)
+    return RuntimeError(report)
 
 
 def main(argv=None):
@@ -124,6 +153,10 @@ def main(argv=None):
     info["CFBundleName"] = executable_name
     info["CFBundleDisplayName"] = executable_name
     info["CFBundleIdentifier"] = "dev.bcragentconsole.integration." + executable_name.lower()
+    if offscreen:
+        # AppKit must know this before SwiftUI starts. didFinishLaunching is too
+        # late: a regular app can briefly activate and the strict auditor kills it.
+        info["LSUIElement"] = True
     with info_path.open("wb") as destination:
         plistlib.dump(info, destination)
     subprocess.run(
@@ -147,10 +180,7 @@ def main(argv=None):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     if app.poll() is not None:
-                        tail = "".join((directory / "app.log").read_text(errors="replace").splitlines(True)[-20:])
-                        raise RuntimeError(
-                            f"isolated app exited ({app.returncode}) before listening; app.log tail:\n{tail}"
-                        )
+                        raise startup_failure(app, directory, "isolated app exited before listening")
                     try:
                         if client.rpc("ping")[0] == 200:
                             break
@@ -158,7 +188,7 @@ def main(argv=None):
                         pass
                     time.sleep(0.1)
                 else:
-                    raise RuntimeError("isolated listener did not start on the configured port")
+                    raise startup_failure(app, directory, "isolated listener did not start on the configured port")
                 (directory / "lifecycle-phase.txt").write_text("protocol")
                 for flags in ([], ["--legacy"]):
                     subprocess.run(

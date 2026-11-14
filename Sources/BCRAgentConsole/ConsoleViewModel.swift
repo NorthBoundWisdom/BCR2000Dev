@@ -239,6 +239,8 @@ final class ConsoleViewModel: ObservableObject {
          mockClock: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
          automaticallyAdvancesMock: Bool = true)
     {
+        if integrationTest { IntegrationStartupLog.write("model.init.begin") }
+        defer { if integrationTest { IntegrationStartupLog.write("model.init.ready") } }
         provider = ProviderApplication(configuration: providerConfiguration, monotonic: mockClock)
         codex = CodexAgentController(
             directory: stores.configuration.fileURL.deletingLastPathComponent(),

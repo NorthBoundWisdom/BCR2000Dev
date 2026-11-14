@@ -41,6 +41,42 @@ var frontEvents: [[String: Any]] = []
 var lastFront = initial
 var visibleWindows: [[String: Any]] = []
 var stopped = Set<pid_t>()
+let signalLog = directory.appending(path: "desktop-audit-signals.jsonl")
+FileManager.default.createFile(atPath: signalLog.path, contents: nil)
+let signalOutput = try FileHandle(forWritingTo: signalLog)
+defer { try? signalOutput.close() }
+
+func recordSignal(_ event: [String: Any]) {
+    do {
+        var data = try JSONSerialization.data(withJSONObject: event, options: [.sortedKeys])
+        data.append(0x0A)
+        try signalOutput.write(contentsOf: data)
+        try signalOutput.synchronize()
+    } catch {
+        FileHandle.standardError.write(Data("Could not persist desktop audit signal: \(error)\n".utf8))
+        exit(2)
+    }
+}
+
+@MainActor
+func stopTarget(_ pid: pid_t, reason: String) {
+    guard stopped.insert(pid).inserted else { return }
+    let phase = (try? String(
+        contentsOf: directory.appending(path: "lifecycle-phase.txt"),
+        encoding: .utf8
+    )) ?? "unknown"
+    // Persist the sender/reason before SIGKILL can make the parent start cleanup.
+    let event: [String: Any] = [
+        "source": "desktop_audit", "senderPID": getpid(), "targetPID": pid,
+        "signal": "SIGKILL", "reason": reason, "phase": phase,
+        "time": Date().timeIntervalSince1970
+    ]
+    recordSignal(event.merging(["type": "signal-request"]) { _, new in new })
+    let result = kill(pid, SIGKILL)
+    let failure = result == 0 ? 0 : errno
+    recordSignal(event.merging(["type": "signal-result", "result": result, "errno": failure]) { _, new in new })
+}
+
 var displayCount: UInt32 = 0
 CGGetActiveDisplayList(0, nil, &displayCount)
 var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
@@ -72,7 +108,7 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
     }
     if targets.contains(front) {
         targetWasFront = true
-        if stopped.insert(front).inserted { kill(front, SIGKILL) }
+        stopTarget(front, reason: "target became frontmost")
     }
     var focused: CFTypeRef?
     if AXUIElementCopyAttributeValue(systemAccessibility, kAXFocusedApplicationAttribute as CFString, &focused) ==
@@ -85,7 +121,7 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
             focusedPIDs.insert(pid)
             if targets.contains(pid) {
                 focusedTargetSamples += 1
-                if stopped.insert(pid).inserted { kill(pid, SIGKILL) }
+                stopTarget(pid, reason: "target received keyboard focus")
             }
         } else { focusReadFailures += 1 }
     } else { focusReadFailures += 1 }
@@ -112,7 +148,7 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
                     "layer": window[kCGWindowLayer as String] ?? -1
                 ])
             }
-            if owner > 0, targets.contains(owner), stopped.insert(owner).inserted { kill(owner, SIGKILL) }
+            if owner > 0, targets.contains(owner) { stopTarget(owner, reason: "target displayed a visible window") }
         }
     }
     samples += 1

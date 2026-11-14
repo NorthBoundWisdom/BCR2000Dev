@@ -234,6 +234,7 @@ final class MCPController: ObservableObject {
     }
 
     private func start() async {
+        if integrationTest { IntegrationStartupLog.write("mcp.start.begin") }
         let requestGeneration = generation
         isStarting = true
         defer { if generation == requestGeneration { isStarting = false } }
@@ -242,8 +243,10 @@ final class MCPController: ObservableObject {
             let token = try await credentials.loadOrCreate()
             guard generation == requestGeneration, settings.enabled else { return }
             _ = try await server.start(port: UInt16(settings.port), token: token)
+            if integrationTest { IntegrationStartupLog.write("mcp.listening") }
             if generation == requestGeneration { error = nil }
         } catch {
+            if integrationTest { IntegrationStartupLog.write("mcp.start.failed: \(error.localizedDescription)") }
             if generation == requestGeneration, settings.enabled { self.error = error.localizedDescription }
         }
     }

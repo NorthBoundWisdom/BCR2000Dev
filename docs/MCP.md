@@ -132,6 +132,16 @@ App 显示迁移提示，并保持原文件直到用户后续修改配置。
 可用 --script 指定额外本机验收脚本；脚本通过本地环境取得测试端点、测试凭据及测试 App PID。
 测试环境缺失或格式错误时明确失败，不回退到用户数据。
 
+无脚本时默认离屏（CI 也一样）；隔离副本在重签名、启动之前设置 `LSUIElement=true`，
+避免 AppKit 在 `applicationDidFinishLaunching` 设置 accessory 策略之前抢到前台。
+`--foreground` 与带脚本的默认前台模式保留普通应用呈现。离屏审计仍严格检查前台、键盘焦点与可见窗口；
+发现目标越界时会发送 `SIGKILL`，因此 `Offscreen desktop audit failed` 可能就是监听前 `-9` 退出的原因。
+审计器先将发送者 PID、目标 PID、信号、原因和阶段写入 `desktop-audit-signals.jsonl`，再发送信号并记录结果。
+应用直接向 stderr 输出 `bcr.integration_startup` 阶段标记（应用初始化、隔离上下文、模型、呈现和 MCP 监听），
+不经 stdout 缓冲，也不包含凭据。监听前退出或超时时，终端与 `launch-failure.txt` 都包含退出信号、清理前阶段、
+审计信号记录和 `app.log` 尾部；无日志时明确指出尚未收到应用标记，未知信号来源不会推测为审计器。
+CI 的 `test-logs-*` artifact 保留这些诊断及完整审计结果。
+
 新增 target JSON 分支可通过同一个 assign_control 工具使用，无客户端专属工具：
 stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {id, values}。
 例如 target={"stepParameter":{"id":"arm.j1","step":0.5,"wraps":false}}。
