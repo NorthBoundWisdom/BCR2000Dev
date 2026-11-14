@@ -1,0 +1,385 @@
+{
+  "device_instance" : "mock-fixture",
+  "format_version" : 1,
+  "scenario" : "press-page-release",
+  "steps" : [
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : 1
+        },
+        "element" : "button.row1.1",
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+          [
+            176,
+            65,
+            127
+          ]
+        ],
+        "operation" : "press",
+        "payload" : {
+
+        },
+        "role" : "press",
+        "source" : "mock",
+        "time" : 1001
+      },
+      "observation" : {
+        "binding_revision" : "0",
+        "confirmed_device_display" : null,
+        "connected" : true,
+        "connection_generation" : 0,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "button"
+            },
+            "last_generated_feedback" : 0,
+            "last_input" : 127
+          },
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : null,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 2,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : null,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 3,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : null,
+            "last_input" : null
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "observed"
+          },
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/1/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/1/last_generated_feedback",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/2/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/2/last_generated_feedback",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/3/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/3/last_generated_feedback",
+            "state" : "unknown"
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "button.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/0",
+            "target" : "button.row1.1.light"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+          [
+            176,
+            65,
+            0
+          ]
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 1,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    },
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : 1
+        },
+        "element" : null,
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+
+        ],
+        "operation" : "select_page",
+        "payload" : "second",
+        "role" : null,
+        "source" : "mock",
+        "time" : 1002
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : true,
+        "connection_generation" : 0,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "button"
+            },
+            "last_generated_feedback" : 0,
+            "last_input" : 127
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "observed"
+          },
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "encoder.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/0",
+            "target" : "encoder.row1.1.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.2"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/1",
+            "target" : "encoder.row1.2.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.3"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/2",
+            "target" : "encoder.row1.3.ring"
+          },
+          {
+            "affected" : [
+              "button.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/3",
+            "target" : "button.row1.1.light"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+          [
+            176,
+            81,
+            0
+          ],
+          [
+            176,
+            82,
+            0
+          ],
+          [
+            176,
+            83,
+            0
+          ],
+          [
+            176,
+            65,
+            0
+          ]
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    },
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : 1
+        },
+        "element" : "button.row1.1",
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+          [
+            176,
+            65,
+            0
+          ]
+        ],
+        "operation" : "release",
+        "payload" : {
+
+        },
+        "role" : "press",
+        "source" : "mock",
+        "time" : 1003
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : true,
+        "connection_generation" : 0,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "button"
+            },
+            "last_generated_feedback" : 0,
+            "last_input" : 0
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "observed"
+          },
+          {
+            "element" : "button.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "button.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/0",
+            "target" : "button.row1.1.light"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+          [
+            176,
+            65,
+            0
+          ]
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    }
+  ]
+}

@@ -1,0 +1,571 @@
+{
+  "device_instance" : "mock-fixture",
+  "format_version" : 1,
+  "scenario" : "write-reconnect",
+  "steps" : [
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : null
+        },
+        "element" : null,
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+
+        ],
+        "operation" : "connect",
+        "payload" : {
+
+        },
+        "role" : null,
+        "source" : "hardware",
+        "time" : 1001
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : true,
+        "connection_generation" : 1,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 10,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 2,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 20,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 3,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 30,
+            "last_input" : null
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "encoder.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/0",
+            "target" : "encoder.row1.1.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.2"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/1",
+            "target" : "encoder.row1.2.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.3"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/2",
+            "target" : "encoder.row1.3.ring"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+          [
+            176,
+            81,
+            10
+          ],
+          [
+            176,
+            82,
+            20
+          ],
+          [
+            176,
+            83,
+            30
+          ]
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    },
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : null
+        },
+        "element" : null,
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+
+        ],
+        "operation" : "disconnect",
+        "payload" : {
+
+        },
+        "role" : null,
+        "source" : "hardware",
+        "time" : 1002
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : false,
+        "connection_generation" : 1,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 10,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 2,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 20,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 3,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 30,
+            "last_input" : null
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    },
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : null
+        },
+        "element" : null,
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+
+        ],
+        "operation" : "software_parameter",
+        "payload" : {
+          "p1" : 90
+        },
+        "role" : null,
+        "source" : "hardware",
+        "time" : 1003
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : false,
+        "connection_generation" : 1,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 90,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 2,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 20,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 3,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 30,
+            "last_input" : null
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "encoder.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/rejected/0",
+            "target" : "encoder.row1.1.ring"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+          {
+            "message" : [
+              176,
+              81,
+              90
+            ],
+            "reason" : "disconnected"
+          }
+        ],
+        "sent" : [
+
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+          "p1" : 90
+        },
+        "reason" : null
+      }
+    },
+    {
+      "input" : {
+        "context" : {
+          "kind" : "group",
+          "value" : null
+        },
+        "element" : null,
+        "hardware_context" : {
+          "group" : 1
+        },
+        "messages" : [
+
+        ],
+        "operation" : "reconnect",
+        "payload" : {
+
+        },
+        "role" : null,
+        "source" : "hardware",
+        "time" : 1004
+      },
+      "observation" : {
+        "binding_revision" : "1",
+        "confirmed_device_display" : null,
+        "connected" : true,
+        "connection_generation" : 2,
+        "controls" : [
+          {
+            "control" : {
+              "index" : 1,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 90,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 2,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 20,
+            "last_input" : null
+          },
+          {
+            "control" : {
+              "index" : 3,
+              "row" : 1,
+              "section" : "encoder"
+            },
+            "last_generated_feedback" : 30,
+            "last_input" : null
+          }
+        ],
+        "declarations" : [
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.1",
+            "source_field" : "/observation/controls/0/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.2",
+            "source_field" : "/observation/controls/1/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_input",
+            "state" : "unknown"
+          },
+          {
+            "element" : "encoder.row1.3",
+            "source_field" : "/observation/controls/2/last_generated_feedback",
+            "state" : null
+          },
+          {
+            "element" : null,
+            "source_field" : "/observation/confirmed_device_display",
+            "state" : "unknown"
+          }
+        ]
+      },
+      "output" : {
+        "declarations" : [
+          {
+            "affected" : [
+              "encoder.row1.1"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/0",
+            "target" : "encoder.row1.1.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.2"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/1",
+            "target" : "encoder.row1.2.ring"
+          },
+          {
+            "affected" : [
+              "encoder.row1.3"
+            ],
+            "category" : "display",
+            "source_field" : "/output/sent/2",
+            "target" : "encoder.row1.3.ring"
+          }
+        ],
+        "deferred" : [
+
+        ],
+        "rejected" : [
+
+        ],
+        "sent" : [
+          [
+            176,
+            81,
+            90
+          ],
+          [
+            176,
+            82,
+            20
+          ],
+          [
+            176,
+            83,
+            30
+          ]
+        ],
+        "suppressed" : [
+
+        ]
+      },
+      "result" : {
+        "accepted" : true,
+        "action_count" : 0,
+        "parameter_changes" : {
+
+        },
+        "reason" : null
+      }
+    }
+  ]
+}
