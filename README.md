@@ -1,69 +1,71 @@
 <div align="center">
 
-<img src="assets/AppIcon.png" width="128" alt="BCR Agent Console 图标">
+<img src="assets/AppIcon.png" width="128" alt="BCR Agent Console icon">
 
 # BCR Agent Console
 
-**把 Behringer BCR2000 变成双向实体控制台的原生 macOS 应用**
+**A native macOS app that turns the Behringer BCR2000 into a bidirectional physical console**
 
-转动旋钮改参数，参数再回写灯环；同一份参数状态同时开放给界面、实体硬件和 AI Agent。
+Turn a knob to change a parameter, then send its value back to the LED ring. The UI, physical hardware, and AI agents share the same parameter state.
+
+[中文](README.zh-CN.md)
 
 [![CI](https://github.com/NorthBoundWisdom/BCR2000Dev/actions/workflows/ci.yml/badge.svg)](https://github.com/NorthBoundWisdom/BCR2000Dev/actions/workflows/ci.yml)
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-1f2328?logo=apple)
 ![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
 ![SwiftUI + CoreMIDI](https://img.shields.io/badge/SwiftUI-CoreMIDI-0A84FF)
 
-[项目状态](#项目状态) · [快速开始](#快速开始) · [连接实体设备](#连接实体-bcr2000) · [功能](#功能) · [文档](#文档)
+[Project status](#project-status) · [Quick start](#quick-start) · [Connect hardware](#connect-a-physical-bcr2000) · [Features](#features) · [Documentation](#documentation)
 
-<img src="docs/images/console-overview.png" alt="BCR Agent Console 主界面：左侧为 BCR2000 虚拟面板，中间为参数工作区，右侧为检查器">
+<img src="docs/images/console-overview.png" alt="BCR Agent Console: virtual BCR2000 panel on the left, parameter workspace in the center, and inspector on the right">
 
 </div>
 
-## 项目状态
+## Project status
 
-截至 2026-11-13：
+As of 2026-11-13:
 
-| 方面 | 状态 |
+| Area | Status |
 | --- | --- |
-| Mock 与软件功能 | 参数、学习、预设对齐、Agent（Mock / Codex）、MCP、输出安全门、Provider 与 Surface 模拟均已实现，并有非硬件回归测试。 |
-| 实体设备 | 固件 1.10、USB 模式 U-1、Preset 8，已接回开发机。身份查询、108 条 CC 快照和临时预设只读回读通过；56 个旋钮位置已实测学习，GUI 启动可读回 56/56 当前值。 |
-| 连接与写入实测 | 连接确认、读硬件、暂不连接、拔插、按住拔线、受控写入与恢复已在现场通过。业务按键与锁图标只做了样本验证；Agent 按键灯、显示屏节奏和其余灯环模式仍待实测。 |
-| USB 双向通讯 | 部分 Mac 需要开发签署的 DriverKit 修复才能写设备。本机已验证可用；另一台 Mac 的驱动签署仍受阻。 |
-| 分发 | CI 产出 ad-hoc 签名的主程序包，未经 Apple 公证，也不含 DriverKit 修复。正式分发暂停。 |
+| Mock and software features | Parameters, learning, preset alignment, agents (Mock / Codex), MCP, output safety gates, Provider, and Surface simulation are implemented and covered by non-hardware regression tests. |
+| Physical device | Firmware 1.10, USB mode U-1, Preset 8; connected to the development Mac again. Identity queries, a 108-CC snapshot, and read-only temporary-preset readback passed. All 56 logical knob positions have been learned on hardware, and GUI startup reads back 56/56 current values. |
+| Connection and write validation | Connection confirmation, reading hardware, deferring connection, unplug/replug, unplugging while holding a button, controlled writes, and restoration passed on site. Assigned button actions and lock icons have only been spot-checked; agent button LEDs, display timing, and remaining LED ring modes still need hardware validation. |
+| Bidirectional USB communication | Some Macs need a development-signed DriverKit fix to write to the device. It works on this Mac; driver signing on another Mac remains blocked. |
+| Distribution | CI produces an ad-hoc-signed main app package without Apple notarization or the DriverKit fix. Public distribution is on hold. |
 
-剩余实机项（HW0–HW6）和待决策事项见 [TODO](TODO.md)；当前执行顺序见 [后续规划](PLAN.md)；
-连接现场步骤见 [硬件连接实测清单](HARDWARE_CONNECT_TEST.md)。
+See [TODO](TODO.md) for remaining hardware checks (HW0–HW6) and pending decisions, [Next steps](PLAN.md) for the current execution order,
+and the [hardware connection checklist](HARDWARE_CONNECT_TEST.md) for on-site procedures.
 
-## 亮点
+## Highlights
 
 | | |
 | --- | --- |
-| 🎛️ **108 控件虚拟面板** | 按真实面板布局呈现旋钮、按键、四位七段显示屏及右侧设备列；灯环按预设实际显示模式绘制，设备本地键的禁用/锁定状态清晰可见。 |
-| 🔁 **真正的双向同步** | 软件参数是唯一事实来源：硬件输入改参数，参数决定反馈。滑块、旋钮和 Agent 写入走同一条管线。 |
-| 🧪 **不接硬件也能用** | `Mock 设备` 模式下面板本身就是模拟硬件，拖动旋钮、按下按键即可体验完整流程。 |
-| 🔐 **连接前先确认方向** | 已有映射时，连接前选择“按硬件现状连接”、“写入并连接”或“暂不连接”；确认前不改动设备。 |
-| 🎓 **学习与显式预设对齐** | 逐控件学习、全台旋钮批量学习读取现有映射；对齐预设先备份和预览，确认后才写临时预设并回读核对，可跨重启恢复。 |
-| 🤖 **Agent 槽位与 MCP 接口** | 8 个槽位可由实体按键启动或中断；可接入本机 Codex，审批必须在 Agent 页确认；本机 MCP 服务让任意客户端读写参数。 |
+| 🎛️ **108-control virtual panel** | Knobs, buttons, a four-digit seven-segment display, and the right-hand device controls follow the physical layout. LED rings reflect the preset's actual display modes, with clear disabled/locked states for device-local buttons. |
+| 🔁 **Bidirectional synchronization** | Software parameters are the source of truth: hardware input changes parameters, and parameters determine feedback. Sliders, knobs, and agent writes use the same pipeline. |
+| 🧪 **Works without hardware** | In Mock Device mode, the panel itself acts as simulated hardware. Drag knobs and press buttons to try the full workflow. |
+| 🔐 **Confirm synchronization before connecting** | With an existing mapping, choose to read hardware, write software values and connect, or defer connection. The device stays unchanged until confirmation. |
+| 🎓 **Learning and explicit preset alignment** | Learn individual controls or read existing mappings with bulk knob learning. Preset alignment starts with a backup and preview; only confirmation writes the temporary preset and verifies it by readback. Restoration survives app restarts. |
+| 🤖 **Agent slots and MCP** | Eight slots can be started or interrupted by physical buttons. Connect a local Codex backend, review approvals on the Agent page, or use the local MCP service to read and write parameters from any client. |
 
-## 界面一览
+## Interface tour
 
-| Agent 槽位 | MIDI 监视 |
+| Agent slots | MIDI monitor |
 | :---: | :---: |
-| <img src="docs/images/workspace-agents.png" alt="Agent 工作区：8 个槽位显示等待批准、运行中与空闲状态"> | <img src="docs/images/workspace-midi-monitor.png" alt="MIDI 监视工作区：实时显示 IN / OUT 消息与对应控件"> |
-| B1 行按键即 Agent 主操作；可在 Agent 设置中启用状态闪烁 | 区分设备输入、软件回写与 Agent 写入 |
+| <img src="docs/images/workspace-agents.png" alt="Agent workspace: eight slots showing approval, running, and idle states"> | <img src="docs/images/workspace-midi-monitor.png" alt="MIDI monitor: live IN / OUT messages and their associated controls"> |
+| B1-row buttons perform the primary agent action; state blinking is available in Agent settings | Distinguishes device input, software feedback, and agent writes |
 
-| 专业面板：机械臂预览（手动启用） |
+| Optional panel: arm preview (enabled manually) |
 | :---: |
-| <img src="docs/images/workspace-arm-preview.png" alt="从面板菜单启用后的机械臂预览：侧视与俯视姿态示意"> |
-| 由 J1–J6、夹爪等软件参数驱动的姿态示意，说明硬件与软件编辑落在同一份参数状态 |
+| <img src="docs/images/workspace-arm-preview.png" alt="Arm preview enabled from the Panels menu, with side and top views"> |
+| A pose preview driven by J1–J6, gripper, and other software parameters, illustrating how hardware and software edits share one parameter state |
 
-| 连接确认（隔离假设备） | 对齐预览（隔离假设备） |
+| Connection confirmation (isolated fake device) | Alignment preview (isolated fake device) |
 | :---: | :---: |
-| <img src="docs/images/connection-confirmation.png" alt="连接确认：选择读取硬件或写入软件值，确认前保持 Mock"> | <img src="docs/images/preset-alignment.png" alt="对齐临时预设：选项、修改清单、备份和明确写入按钮"> |
-| 确认同步方向前不改动设备 | 预览只读；确认后逐行写入、回读核对，可恢复原预设 |
+| <img src="docs/images/connection-confirmation.png" alt="Connection confirmation: choose to read hardware or write software values; Mock remains active until confirmation"> | <img src="docs/images/preset-alignment.png" alt="Temporary preset alignment: options, change list, backup, and explicit write button"> |
+| The device stays unchanged until the synchronization direction is confirmed | Preview is read-only; confirmation writes line by line and verifies readback, with restoration available |
 
-截图从隔离实例生成并载入“机械臂示例”预置。前四张使用 Mock，连接/对齐两张使用内存假设备
-（图中 `Fixture BCR2000`），仅用于展示界面，不代表硬件验证结果。只截取应用自身窗口：
+Screenshots use isolated instances with the Arm Example preset. The first four use Mock; the connection and alignment screenshots use an in-memory fake device
+(named `Fixture BCR2000`). They demonstrate the UI and do not constitute hardware validation. Only the app's own window is captured:
 
 ```bash
 python3 configs/macos_workflow.py build
@@ -71,222 +73,224 @@ python3 tools/mcp_integration.py --language zh-Hans --configuration-write --scri
 BCR_CAPTURE_README=1 python3 tools/mcp_integration.py --language zh-Hans --connection-fixture --script tools/verify_connection_ui.py
 ```
 
-需要辅助功能与屏幕录制权限；两条截图命令按顺序运行。
+Accessibility and Screen Recording permissions are required. Run the two capture commands in order. The current screenshots show the Chinese UI.
 
-## 快速开始
+## Quick start
 
-需要 macOS 14+、Swift 6 工具链、Python 3 与 Git。
+Requires macOS 14+, a Swift 6 toolchain, Python 3, and Git.
 
 ```bash
-python3 configs/setup_local_project.py   # 获取并编译锁定的共享依赖，生成本机配置，启用提交钩子
-python3 configs/macos_workflow.py run    # 构建并在当前终端运行，Ctrl+C 停止
+python3 configs/setup_local_project.py   # Fetch and compile the locked shared dependency, create local config, enable commit hooks
+python3 configs/macos_workflow.py run    # Build and run in this terminal; stop with Ctrl+C
 ```
 
-或者构建后像普通应用一样打开：
+Or build and open it like a regular app:
 
 ```bash
 python3 configs/macos_workflow.py build
 open build/app/BCRAgentConsole.app
 ```
 
-共享业务包 `SurfacePlugins` 由 `configs/surface_plugins.lock.json` 固定到完整 commit，该提交已推送到
-HTTPS 远端。Setup 只用标准库和 Git 把它获取到 `build/seed/SurfacePlugins` 并编译；直接运行 `swift`
-命令前先执行 `python3 configs/surface_plugins_dependency.py ensure`。构建不需要 FreeCM。
-本地获取源（`SURFACE_PLUGINS_SOURCE`）、升级锁与校验规则见 [共享插件接入](docs/SHARED_PLUGINS.md)。
+The shared business package `SurfacePlugins` is pinned to a full commit in `configs/surface_plugins.lock.json`; that commit is available on the
+HTTPS remote. Setup uses only the standard library and Git to fetch it into `build/seed/SurfacePlugins` and compile it. Before running `swift`
+commands directly, run `python3 configs/surface_plugins_dependency.py ensure`. FreeCM is not required to build.
+See [shared plugin integration](docs/SHARED_PLUGINS.md) for local acquisition sources (`SURFACE_PLUGINS_SOURCE`), lock upgrades, and validation rules.
 
-首次启动处于 **Mock 设备** 模式并载入中性的“默认配置”：`P1-1…P1-8` 是 8 个通用参数（0–100 %），
-`B1` 行是 Agent 1–8，`B2-8` 复位参数组，全部都可以在检查器里修改。
+On first launch, the app uses **Mock Device** mode and a neutral default configuration: `P1-1…P1-8` control eight generic parameters (0–100%),
+the `B1` row controls Agents 1–8, and `B2-8` resets the parameter group. All assignments can be edited in the inspector.
 
-想看完整的领域示例，在“参数”页点 **载入预置…** 选择“机械臂示例”（J1–J6、夹爪、速度、使能与复位）；
-同一菜单也可回到默认配置。载入预置会替换参数与功能分配，不影响已学习的实体映射；已移除的控件会清零反馈，
-运行中的外部输出会停止，需要重新确认并启动。
+For a complete domain example, use **Load Preset…** on the Parameters page and choose Arm Example (J1–J6, gripper, speed, enable, and reset).
+The same menu restores the default configuration. Loading a preset replaces parameters and function assignments while preserving learned hardware mappings.
+Feedback for removed controls is cleared, and active external output stops; it must be confirmed and started again.
 
-## 界面结构
+## Interface layout
 
-- **顶栏**：设备源切换（`Mock 设备` / `实体 BCR2000`）、跟随触碰、输出、MCP 与 MIDI 端口状态、设置。
-- **BCR2000 虚拟面板**：Mock 模式下它是模拟硬件；实体模式下它是镜像，操作即软件修改并回写硬件。
-  显示屏重现预设号、数值、按键 on/oFF 与预设读写动画；硬件按键输入有按压动画。
-- **工作区**：`参数`、`Agent`、`MIDI 监视`，以及按需启用的专业面板。
-- **检查器**：查看和学习控件的 MIDI 身份，分配参数、Agent 主操作或复位参数组，编辑参数名称、单位、范围和默认值。
-- **设置**（齿轮或 ⌘,）：一个固定大小的窗口，六页：通用（语言、配置库）、设备（MIDI 端口、反馈调度）、
-  输出、MCP、Agent（Mock / Codex）、页面与宏；顶栏的输出 / MCP / MIDI 端口状态直达对应页。
-  设备、反馈调度、输出、MCP 的表单改动点“应用”后生效，未应用时按钮旁提示，切换页面会丢弃；
-  语言、MCP 服务开关、LED 环显示即时生效；Agent 页改动立即用于本次运行，“保存设置”后重启仍保留。
-- **自适应布局**：放大窗口时面板等比放大并居中；空间足够时工作区移到面板右侧。
+- **Top bar**: device source (Mock Device / Physical BCR2000), follow touch, output, MCP and MIDI port status, and settings.
+- **Virtual BCR2000 panel**: simulated hardware in Mock mode; a mirror in physical mode, where interaction makes software changes and sends feedback to hardware.
+  The display reproduces preset numbers, values, button on/oFF states, and preset read/write animations. Hardware button input triggers press animations.
+- **Workspace**: Parameters, Agent, MIDI Monitor, and optional specialist panels.
+- **Inspector**: view and learn a control's MIDI identity; assign parameters, agent primary actions, or group resets; edit parameter names, units, ranges, and defaults.
+- **Settings** (gear or ⌘,): a fixed-size window with six pages: General (language and configuration library), Device (MIDI ports and feedback scheduling),
+  Output, MCP, Agent (Mock / Codex), and Pages & Macros. Top-bar output / MCP / MIDI status opens the corresponding page.
+  Device, feedback scheduling, output, and MCP form changes take effect after Apply; pending changes are indicated beside the button and discarded when switching pages.
+  Language, the MCP service toggle, and LED ring display settings take effect immediately. Agent changes apply to the current run; Save Settings preserves them across restarts.
+- **Adaptive layout**: the panel scales proportionally and stays centered as the window grows; the workspace moves to its right when space permits.
 
-### 专业面板
+### Optional panels
 
-点击工作区分页右侧的 **面板** 菜单勾选启用；选择保存在本机 `workspace-panels.json`。
+Enable panels from the **Panels** menu to the right of the workspace tabs. Selections are saved locally in `workspace-panels.json`.
 
-| 面板 | 内容 | 默认 |
+| Panel | Contents | Default |
 | --- | --- | --- |
-| 机械臂预览 | 示例机械臂侧视 / 俯视姿态示意，由 `arm.*` 参数驱动 | 隐藏 |
-| 输出 | 目标值、受限输出与实际回传读数 | 隐藏；输出运行期间始终显示 |
+| Arm preview | Side and top views of the example arm, driven by `arm.*` parameters | Hidden |
+| Output | Targets, limited output, and actual feedback values | Hidden; always visible while output is running |
 
-### 界面语言
+### Interface language
 
-默认跟随 macOS 首选语言，支持简体中文与 English，其他语言回退到 English。在设置中选择
-“跟随系统 / 简体中文 / English”后立即生效并自动保存，不会重置设备连接、Agent 会话或参数值。
-内置名称跟随语言显示，但存储、导出和 MCP 保留原值；用户命名保持原文。
-macOS 系统菜单、文件面板、系统对话框按钮和系统错误描述可能保持启动时的语言，重启应用后切换。
+The app follows the preferred macOS language by default, supports Simplified Chinese and English, and falls back to English for other languages.
+Selecting Follow System, Simplified Chinese, or English in Settings takes effect immediately and saves automatically without resetting device connections,
+agent sessions, or parameter values. Built-in names follow the display language while storage, exports, and MCP retain their original values; user-defined names remain unchanged.
+macOS system menus, file panels, system dialog buttons, and system error descriptions may retain the launch language until the app restarts.
 
-## 连接实体 BCR2000
+## Connect a physical BCR2000
 
-1. 用 USB 连接 BCR2000，建议设为 USB 模式 **U-1**（支持软件 parameter feedback）：同时按 `EDIT + STORE`
-   进入 Global Setup，用 Push Encoder 1 选择 `U-1`，按 `EXIT` 保存，等待 USB 重新连接。
-   见 [官方手册](https://mediadl.musictribe.com/media/PLM/data/docs/P0245/BCF2000_BCR2000_M_EN.pdf)。
-2. 在顶栏切换到 `实体 BCR2000`。应用优先连接 **BCR2000 Port 1**；点击设备状态可手动选择输入/输出端口
-   （含通用 USB-MIDI 接口）。手动选择的端口缺失时不会自动换路由，而是显示未连接。
-3. **确认同步方向**：已有可回写映射时，启动或重连都会先保持 Mock 并弹出确认：
-   - “按硬件现状连接”：读取已学习旋钮的当前值，成功后进入实体模式，读取失败则保持 Mock 并报错。回车默认选这一项。
-     不改旋钮值与预设；连接后只把按键灯刷新为软件状态（如 Agent），因为设备无法报告这些灯。
-   - “写入并连接”：把软件当前值回写到设备。
-   - “暂不连接”：保留 Mock（Esc）。
+1. Connect the BCR2000 over USB. **U-1** USB mode is recommended for software parameter feedback: press `EDIT + STORE` together
+   to enter Global Setup, use Push Encoder 1 to select `U-1`, press `EXIT` to save, and wait for USB to reconnect.
+   See the [official manual](https://mediadl.musictribe.com/media/PLM/data/docs/P0245/BCF2000_BCR2000_M_EN.pdf).
+2. Select Physical BCR2000 in the top bar. The app prefers **BCR2000 Port 1**. Click device status to choose input/output ports manually
+   (including generic USB-MIDI interfaces). If a manually selected port is missing, the app shows a disconnected state rather than rerouting automatically.
+3. **Confirm synchronization direction**: when a feedback-capable mapping exists, startup and reconnection keep Mock active and request confirmation:
+   - Connect using hardware values: read the current values of learned knobs, then enter physical mode. If reading fails, remain in Mock and show an error. This is the Return-key default.
+     Knob values and the preset stay unchanged. After connecting, only button LEDs are refreshed from software state (such as agents), because the device cannot report those LEDs.
+   - Write and connect: send current software values to the device.
+   - Defer connection: stay in Mock (Esc).
 
-   确认前不改动设备；重连不重放断线期间的旧输入。
-4. **学习映射**：在面板上选中控件，在检查器点“从这里开始学习”，然后转动编码器或按下按键；
-   学完自动跳到本区下一个未学习控件。也可从实体当前预设与快照一次批量学习全部 32 个旋钮（56 个逻辑位置），
-   只为未分配旋钮创建参数，不猜测 CC、不改写设备预设。见 [全台旋钮批量学习](docs/CONTROL_MAP.md#全台旋钮批量学习)。
-5. **对齐设备预设**：要补齐按键、设置灯环或锁定设备本地键时，从面板标题中的设备菜单选择“对齐设备预设…”。
-   - 先只读读取、备份并显示修改清单；点“写入设备”才修改**临时**预设并回读核对，不写永久存储。
-   - “恢复原预设”恢复对齐前的临时预设与本机映射，关闭窗口或重启 App 后仍可恢复，最多保留 5 层恢复点。
-   - 实体按键的业务功能默认不启用，需在预览中或检查器里逐键明确启用。
-   - 预设读写期间，MCP 与界面的设备源切换都会被拒绝。
+   The device stays unchanged until confirmation. Reconnection does not replay stale input from the disconnected period.
+4. **Learn mappings**: select a control on the panel, start learning from the inspector, then turn the encoder or press the button.
+   Learning advances automatically to the next unlearned control in that section. Bulk learning can read all 32 physical knobs (56 logical positions)
+   from the current hardware preset and snapshot, creating parameters only for unassigned knobs without guessing CCs or rewriting the device preset.
+   See [bulk knob learning](docs/CONTROL_MAP.md#%E5%85%A8%E5%8F%B0%E6%97%8B%E9%92%AE%E6%89%B9%E9%87%8F%E5%AD%A6%E4%B9%A0).
+5. **Align the device preset**: to configure buttons, LED rings, or locks on device-local buttons, choose Align Device Preset… from the device menu in the panel header.
+   - First read, back up, and preview the changes. Only Write to Device changes the **temporary** preset and verifies readback; permanent storage is untouched.
+   - Restore Original Preset restores the previous temporary preset and local mapping, even after closing the window or restarting the app. Up to five restore points are retained.
+   - Assigned actions for physical buttons are disabled by default and must be explicitly enabled per button in the preview or inspector.
+   - Device source changes from MCP or the UI are rejected during preset reads and writes.
 
-学到的映射保存在 `~/Library/Application Support/BCRAgentConsole/hardware-map.json`，不进入仓库；
-预设备份在同目录 `Backups/`，可从设备菜单打开。
+Learned mappings are stored in `~/Library/Application Support/BCRAgentConsole/hardware-map.json` and stay out of the repository.
+Preset backups live in `Backups/` under the same directory, accessible from the device menu.
 
-**显示与已知限制**
+**Display behavior and known limitations**
 
-- 灯环按预设实际显示模式绘制（当前顶部 15 灯单双点交替、下方 15 灯单点）；模式未知或未校准时显示问号。
-  低端边界已校准，其余档位与其他模式待人工验收。
-- 硬件分组键不报告当前组，界面显示“硬件组未确认”，转动顶部旋钮后跟随。
-- 预设编号依据当前证据显示；跨重启恢复只接受经同名候选全文唯一比对证明的记录，并重新核对工作副本定义。
-  未证明唯一性的手动确认仅本次连接有效；旧记录或无法证明时显示 `----`。连接后始终只读回读工作副本同步灯环，保存失败会提示。
-- 读写动画的方向与速度来自现场观察，精确硬件时序仍待校准。
-- 无界面服务 `BCRProviderService` 连接设备后仍自动整体回写，尚未接入确认流程（PLAN D3）。
+- LED rings use the preset's actual display mode (currently alternating single/dual dots across 15 LEDs on the top row, and single dots across 15 LEDs below).
+  Unknown or uncalibrated modes show a question mark. Low-end boundaries are calibrated; other positions and modes still need manual validation.
+- Hardware group buttons do not report the current group. The UI shows an unconfirmed hardware group until a top-row knob is turned.
+- Preset numbers reflect the available evidence. Restoration across restarts accepts only records proven unique by full-definition comparison of same-name candidates,
+  then rechecks the working-copy definition. Manual confirmation without uniqueness proof lasts only for the current connection; old or unproven records show `----`.
+  After connecting, a read-only working-copy readback always synchronizes LED rings; save failures remain visible.
+- Read/write animation direction and speed follow on-site observations; exact hardware timing still needs calibration.
+- The headless `BCRProviderService` still sends a full software snapshot automatically after connecting; it does not yet use the confirmation flow (PLAN D3).
 
 > [!NOTE]
-> 部分 Mac 上 BCR2000 的 USB OUT 管道需要 DriverKit 兼容修复才能双向工作。CI 安装包只含主程序，
-> **不包含也不会自动安装该修复**；见 [构建、打包与发布](#构建打包与发布)。
+> On some Macs, the BCR2000 USB OUT pipe needs a DriverKit compatibility fix for bidirectional operation. CI packages contain only the main app and
+> **neither include nor automatically install this fix**. See [Build, package, and release](#build-package-and-release).
 
-## 功能
+## Features
 
-### 参数、步进与批量分配
+### Parameters, stepping, and bulk assignment
 
-- 按键可配置参数步进（正负与越界循环）、指定值、按顺序循环预设。
-- 参数可启用步长吸附；软件与设备输入使用同一量化规则，必要时校正来源灯环。
-- 编码器支持绝对、相对 1 / 相对 2 模式与相对步长，灯环始终保持绝对位置；Mock 下可用 14-bit NRPN
-  验证高分辨率。实体的相对模式与 NRPN 仍待真机验证（HW3），见 [控制映射说明](docs/CONTROL_MAP.md)。
-- 批量分配按控件区/行和参数组进行，先看差异再确认。
-- 页面/层共享参数状态，切换时整体回写 LED；宏按顺序执行最多 64 个参数操作。
+- Buttons support parameter stepping (positive/negative, with wraparound), setting a specific value, and cycling through preset values.
+- Parameters can snap to a step size. Software and device input use the same quantization rules, correcting the source LED ring when needed.
+- Encoders support absolute, Relative 1 / Relative 2 modes, and relative step sizes, while LED rings retain absolute positions. Mock supports 14-bit NRPN
+  for high-resolution validation. Physical relative modes and NRPN still need hardware validation (HW3); see [control mapping](docs/CONTROL_MAP.md).
+- Bulk assignment works by control section/row and parameter group, with a difference preview before confirmation.
+- Pages/layers share parameter state and refresh all LEDs on switching; macros execute up to 64 parameter operations in sequence.
 
-### 配置、导入导出与配置库
+### Configuration, import/export, and library
 
-- 参数页可导入/导出版本化 JSON，只含参数定义与功能分配，不含实体映射、MCP 凭据或运行值；导入先校验、确认后才替换。
-- 设置页的“配置库”可命名保存当前配置，确认后载入或删除（`configuration-library.json`，不含硬件映射）。
-- 损坏或非法的本地文件保持原样，另存指纹命名的备份并持续提示。旧版配置显式迁移到当前版本，保存前备份。
+- The Parameters page imports/exports versioned JSON containing parameter definitions and function assignments, without hardware mappings, MCP credentials, or runtime values. Imports are validated and require confirmation before replacement.
+- The configuration library in Settings saves named configurations, with confirmation before loading or deleting (`configuration-library.json`, without hardware mappings).
+- Corrupt or invalid local files remain intact, with fingerprint-named backups and persistent warnings. Older configurations are explicitly migrated and backed up before saving.
 
-### Agent 槽位与 Codex
+### Agent slots and Codex
 
-8 个槽位共享一个状态机：`空闲 → 排队 → 运行 → 等待批准 → 完成`。绑定的实体按键在空闲/终态时启动、
-运行/排队时中断，LED 随状态回写；可在 Agent 设置中启用状态闪烁。
+Eight slots share a state machine: `Idle → Queued → Running → Awaiting Approval → Completed`. Assigned physical buttons start idle/terminal slots
+and interrupt running/queued slots. LEDs follow agent state; optional state blinking is available in Agent settings.
 
-默认由确定性的 Mock Agent 驱动。在设置中选择 Codex 并指定本机 `codex` 可执行文件与工作目录后，
-每个槽位使用独立 Thread；默认只读。真实审批只能在 Agent 页的具体请求详情中批准或拒绝，实体按键和 MCP
-都不能批准。见 [Codex 后端](docs/CODEX.md)。
+A deterministic Mock Agent is the default. Select Codex in Settings and specify a local `codex` executable and working directory to give each slot
+an independent thread; access is read-only by default. Real approvals must be accepted or rejected in the specific request details on the Agent page.
+Physical buttons and MCP cannot approve requests. See the [Codex backend](docs/CODEX.md).
 
-### 通用 MCP 控制接口
+### General-purpose MCP control
 
-设置窗口的 MCP 页（顶栏 MCP 状态可直达）可开启只绑定 `127.0.0.1` 的 Streamable HTTP 服务（默认端口 8787，默认关闭）。
-Token 首次启用时生成并存入 Keychain；权限、逐参数 `agentWritable`、限速和调用记录都可在应用内查看。
-设备源切换、未绑定控件学习、停止学习与连接确认状态查询也可经 MCP 完成。支持 MCP 2026-07-28，
-兼容 2025-11-25 握手。Agent 写入经过与滑块相同的会话管线，在 MIDI 监视中标为 `AGENT`；
-机械臂示例中的 `arm.enabled` 默认不可写。
+The MCP Settings page (also accessible from top-bar MCP status) enables a Streamable HTTP service bound only to `127.0.0.1` (default port 8787, disabled by default).
+A token is generated on first activation and stored in Keychain. Permissions, per-parameter `agentWritable` flags, rate limits, and call logs are visible in the app.
+MCP also supports device source changes, learning unbound controls, stopping learning, and querying connection confirmation state. It supports MCP 2026-07-28
+with 2025-11-25 handshake compatibility. Agent writes use the same session pipeline as sliders and appear as `AGENT` in the MIDI monitor.
+The Arm Example's `arm.enabled` parameter is not writable by default.
 
 ```bash
-export BCR_MCP_TOKEN=…                                     # 从 MCP 设置中复制
-python3 tools/mcp_smoke.py --parameter general.1           # 默认配置，现代协议
-python3 tools/mcp_smoke.py --parameter general.1 --legacy  # 兼容协议
-python3 tools/mcp_stdio.py                                 # 给仅支持 stdio 的客户端使用的桥接
+export BCR_MCP_TOKEN=…                                     # Copy from MCP Settings
+python3 tools/mcp_smoke.py --parameter general.1           # Default configuration, modern protocol
+python3 tools/mcp_smoke.py --parameter general.1 --legacy  # Compatibility protocol
+python3 tools/mcp_stdio.py                                 # Bridge for stdio-only clients
 ```
 
-共享业务的统一 `surface_` 工具与 Provider 1.0 并存，见 [MCP](docs/MCP.md) 与 [新工具与权限](docs/SHARED_REMOTE_TOOLS.md)。
+The shared business modules' unified `surface_` tools coexist with Provider 1.0. See [MCP](docs/MCP.md) and [tools and permissions](docs/SHARED_REMOTE_TOOLS.md).
 
-### 外部输出（OSC / WebSocket / ROS 2）
+### External output (OSC / WebSocket / ROS 2)
 
-输出支持 OSC UDP、WebSocket JSON 与 ROS 2 rosbridge，三者共用同一安全门：软限位、单周期变化、速度、
-使能边沿、300 ms 心跳/实际值期限和断线停机。心跳中断后必须先关闭再开启使能，不会自动恢复；
-应用启动也不会恢复输出。
+OSC UDP, WebSocket JSON, and ROS 2 rosbridge share one safety gate: soft limits, per-cycle change limits, speed limits,
+enable edges, 300 ms heartbeat/actual-value deadlines, and shutdown on disconnection. After heartbeat loss, enable must be turned off and on again;
+output never resumes automatically, including after app startup.
 
 ```bash
 python3 tools/arm_sim.py --port 9000
 ```
 
-输出需要一个开关类型的使能参数：先载入“机械臂示例”，在输出设置中选择使能参数，重新生成并检查限位草稿后应用；
-在顶栏“输出”中连接本机 9000 端口并手动启动，再先关闭、后开启使能（Mock `B2-1`）。
-见 [OSC 说明](docs/OSC.md) 与 [WebSocket / ROS 2 输出](docs/NETWORK_OUTPUT.md)。
-连接真实机械臂前，必须先完成独立停机方案评审（TODO 第 6 节）。
+Output requires a toggle-type enable parameter. Load Arm Example, select the enable parameter in Output settings, regenerate and review the limit draft, then apply it.
+Connect to local port 9000 from top-bar Output and start manually, then turn enable off and on (Mock `B2-1`).
+See [OSC](docs/OSC.md) and [WebSocket / ROS 2 output](docs/NETWORK_OUTPUT.md).
+Before connecting a real robot arm, complete a separate shutdown-plan review (TODO section 6).
 
-### Provider 接口与 Surface 模拟
+### Provider interfaces and Surface simulation
 
-控制台、六关节参考机器人和 Ackermann 底盘可经本机 MCP/HTTP/SSE 使用。两个设备模块是明确标注
-`simulation` 的最小参考实现，不提供 IK、工业驱动或碰撞资格；Agent 权限不授予设备控制权。
-GUI 通过 `--robot-sim` / `--chassis-sim` 显式启用，默认不开启。
+The console, six-joint reference robot, and Ackermann chassis are available through local MCP/HTTP/SSE. Both device modules are minimal reference implementations
+explicitly marked `simulation`; they provide no IK, industrial drivers, or collision qualification. Agent permissions do not grant device control.
+The GUI enables them explicitly with `--robot-sim` / `--chassis-sim`; both are off by default.
 
-无界面的 `BCRProviderService` 不需要 GUI 或 Agent 后端。`python3 configs/package_provider.py --output <新目录>`
-生成可执行文件、版本化 SDK、Schema、诊断 CLI 和示例，消费方只依赖这些产物。
+The headless `BCRProviderService` requires neither a GUI nor an agent backend. `python3 configs/package_provider.py --output <new-directory>`
+packages the executable, versioned SDK, schemas, diagnostic CLI, and examples. Consumers depend only on these artifacts.
 
-可选的 `surface_control_*` 1.3 合同提供稳定 Mock profile、输入与独立显示反馈；输入、反馈和 reset 权限默认关闭，
-模拟事件不算实体操作。见 [Provider API](docs/PROVIDER_API.md)、[接线说明](docs/PROVIDER_QUICKSTART.md)、
-[Surface 模拟](docs/SURFACE_SIMULATION.md) 与 [ADR 0001](docs/adr/0001-provider-domain-boundaries.md)。
+The optional `surface_control_*` 1.3 contract provides stable Mock profiles, input, and independent display feedback. Input, feedback, and reset permissions are disabled by default;
+simulated events do not count as physical operation. See [Provider API](docs/PROVIDER_API.md), [integration quick start](docs/PROVIDER_QUICKSTART.md),
+[Surface simulation](docs/SURFACE_SIMULATION.md), and [ADR 0001](docs/adr/0001-provider-domain-boundaries.md).
 
-### 实机诊断
+### Hardware diagnostics
 
-- 无第三方依赖的 Windows / macOS Python 灯环测试，自动学习实际 CC：见 [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md)。
-- 远程接线、只读预检、自动读回矩阵和 GUI 会话入口：见 [Mac 远程测试计划](docs/MAC_REMOTE_TEST_PLAN.md)；
-  `tools/package_macos_diagnostics.py` 生成带校验清单的诊断包，默认不写实体 CC。
+- Dependency-free Windows / macOS Python LED ring tests that learn actual CCs automatically: see [MIDI diagnostics](docs/MIDI_DIAGNOSTICS.md).
+- Remote connection, read-only preflight, automated readback matrices, and GUI sessions: see the [Mac remote test plan](docs/MAC_REMOTE_TEST_PLAN.md).
+  `tools/package_macos_diagnostics.py` creates a diagnostic package with a checksum manifest; physical CC writes are disabled by default.
 
-## 架构
+## Architecture
 
 ```text
-物理控件 → 硬件映射（学习得到） → 功能分配 → 参数状态（唯一事实来源）
-                                                   ↓
-                        LED / 灯环反馈 ← SurfaceEffect ← SurfaceSession
+Physical controls → Learned hardware mapping → Function assignments → Parameter state (source of truth)
+                                                                             ↓
+                                  LED / ring feedback ← SurfaceEffect ← SurfaceSession
 ```
 
-- `BCRSurfaceDomain`、`BCRAgentDomain`、`BCRRobotDomain`、`BCRChassisDomain` 各自拥有独立状态与测试，不依赖 UI、CoreMIDI 或 MCP。
-- `BCRFoundation` 提供共享值合同与本地化；Codex、CoreMIDI、持久化及 MCP/HTTP 分属适配模块。
-- `BCRProviderApplication` 装配可选模拟设备；GUI 与独立 `BCRProviderService` 复用同一实现。
-- `BCRAgentCore` 只保留兼容导出，新领域不能依赖它；`BCRAgentConsole` 是 GUI 装配宿主。
-- Agent、参考模拟器、输出安全门和示例数据来自锁定的 `SurfacePlugins`，与 XTouchCompactDev 共用同一提交；控制台引擎与硬件适配各自保留。
-- `SurfaceSession` 统一执行效果、设备路由、学习、反馈丢弃计数与 MIDI 日志；`SurfaceDevice` 分别由 Mock 与 CoreMIDI 适配器实现，会话测试使用假设备。
+- `BCRSurfaceDomain`, `BCRAgentDomain`, `BCRRobotDomain`, and `BCRChassisDomain` have independent state and tests, without dependencies on UI, CoreMIDI, or MCP.
+- `BCRFoundation` provides shared value contracts and localization; Codex, CoreMIDI, persistence, and MCP/HTTP live in separate adapter modules.
+- `BCRProviderApplication` composes optional simulated devices; the GUI and standalone `BCRProviderService` reuse the same implementation.
+- `BCRAgentCore` provides compatibility exports only; new domains cannot depend on it. `BCRAgentConsole` is the GUI composition host.
+- Agents, reference simulators, output safety gates, and example data come from the locked `SurfacePlugins` package, shared at the same commit with XTouchCompactDev. Each host retains its own console engine and hardware adapters.
+- `SurfaceSession` handles effects, device routing, learning, dropped-feedback counts, and MIDI logging. `SurfaceDevice` is implemented by Mock and CoreMIDI adapters; session tests use fake devices.
 
-分层设计见 [控制器映射与反馈](docs/CONTROL_MAP.md) 与 [开发设计](docs/DEVELOPMENT_DESIGN.md)。
+See [control mapping and feedback](docs/CONTROL_MAP.md) and [development design](docs/DEVELOPMENT_DESIGN.md) for the layered design.
 
-## 构建、打包与发布
+## Build, package, and release
 
-版本默认值在 `configs/app_build.json`，本机环境及签名设置放在被 Git 忽略的 `build.local.json`。
+Version defaults live in `configs/app_build.json`; local environment and signing settings belong in the Git-ignored `build.local.json`.
 
 ```bash
-python3 configs/macos_workflow.py package                              # 当前架构：ad-hoc DMG + ZIP、SHA-256 与构建记录
+python3 configs/macos_workflow.py package                              # Current architecture: ad-hoc DMG + ZIP, SHA-256, build records
 python3 configs/macos_workflow.py package --architecture universal     # Apple Silicon + Intel
 ```
 
-产物位于 `build/package/`。Developer ID 签名与公证见 [打包指南](docs/PACKAGING.md)。
+Artifacts are written to `build/package/`. See the [packaging guide](docs/PACKAGING.md) for Developer ID signing and notarization.
 
-**CI**：main / PR 与版本 tag 都使用无需证书的 ad-hoc 构建，不读取 Apple 凭据或 GitHub Secrets。
-推送 `v1.2.3` 这类 tag 后，测试与 ARM / Intel 包验证通过才创建 GitHub Release；手动触发只构建不发布。
-这些包未经 Apple 公证。见 [Tag 发布](docs/TAG_RELEASE_SETUP.md)。
+**CI**: main / PR and version-tag builds use ad-hoc signing without certificates, Apple credentials, or GitHub Secrets.
+Pushing a tag such as `v1.2.3` creates a GitHub Release only after tests and ARM / Intel package validation pass; manual runs build without publishing.
+These packages are not notarized by Apple. See [tag releases](docs/TAG_RELEASE_SETUP.md).
 
-**DriverKit USB 修复**：含修复的完整安装包需要 Apple 开发者证书与对应授权/profile。自用可用付费账号开发签署，
-在已登记的 Mac 上运行；面向未登记用户公开分发还需正式 DriverKit 分发授权、Developer ID 签署和公证，目前暂停申请。
-实测与维护步骤见 [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md)。
+**DriverKit USB fix**: a complete installer with the fix requires Apple developer certificates and the appropriate entitlements/profiles. Personal use can rely on
+paid-account development signing for registered Macs. Public distribution to unregistered users also requires formal DriverKit distribution entitlement,
+Developer ID signing, and notarization; that application process is currently on hold. See [DriverKit validation](docs/DRIVERKIT_USB_PROOF.md) for test and maintenance procedures.
 
-**FreeCM（可选）**：`configs/freecm.commands.jsonc` 提供 Config / Build / Run / Test / Package 入口，
-`configs/source_root_workflow.py` 负责插件初始化与清理；构建本身不需要 FreeCM。
+**FreeCM (optional)**: `configs/freecm.commands.jsonc` provides Config / Build / Run / Test / Package entries;
+`configs/source_root_workflow.py` handles plugin initialization and cleanup. FreeCM is not required for the build itself.
 
-## 验证
+## Verification
 
 ```bash
 python3 configs/format_repo.py --all --check
@@ -294,30 +298,30 @@ python3 -m compileall -q configs
 python3 configs/validate_repo_commands.py .
 python3 configs/check_domain_boundaries.py
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
-python3 configs/macos_workflow.py test     # 汇总各测试包结果，任一失败即返回非零
+python3 configs/macos_workflow.py test     # Aggregate all test packages; any failure returns a nonzero exit code
 python3 configs/macos_workflow.py build
 python3 configs/macos_workflow.py smoke
-python3 configs/codex_schema.py verify     # 更新 schema 后先执行 generate
+python3 configs/codex_schema.py verify     # Run generate first after updating schemas
 git diff --check
 ```
 
-开发版可用 `--startup-smoke --render-ui` 与 `BCR_UI_SNAPSHOT_DIRECTORY` 生成自身视图的隔离渲染快照，不连接实体 MIDI。
-提交约定见 [开发规范](CONTRIBUTING.md)；隔离实例的交互验收与离屏模式限制见 [原生 UI 验收](docs/UI_ACCEPTANCE.md)。
-软件测试与假设备验收都不代替实机资格。
+Development builds can use `--startup-smoke --render-ui` with `BCR_UI_SNAPSHOT_DIRECTORY` to render isolated snapshots of their own views without connecting to physical MIDI.
+See [contribution guidelines](CONTRIBUTING.md) for commit conventions and [native UI acceptance](docs/UI_ACCEPTANCE.md) for isolated interaction checks and offscreen-mode limitations.
+Software tests and fake-device acceptance do not replace physical hardware qualification.
 
-## 文档
+## Documentation
 
-| 主题 | 文档 |
+| Topic | Documents |
 | --- | --- |
-| 计划与待办 | [TODO](TODO.md) · [后续规划](PLAN.md) · [路线图](ROADMAP.md) · [领域与接口 TODO](TODO_DOMAIN_INTERFACES.md) |
-| 架构与设计 | [开发设计](docs/DEVELOPMENT_DESIGN.md) · [控制器映射与反馈](docs/CONTROL_MAP.md) · [选型 ADR](docs/adr/001-native-swift-mvp.md) · [共享插件接入](docs/SHARED_PLUGINS.md) |
-| 接口 | [Provider 1.0](docs/PROVIDER_API.md) · [接线入口](docs/PROVIDER_QUICKSTART.md) · [Schema](Schemas/Provider/1.0/provider.schema.json) · [MCP](docs/MCP.md) · [surface_ 工具](docs/SHARED_REMOTE_TOOLS.md) · [Surface 模拟](docs/SURFACE_SIMULATION.md) · [Codex](docs/CODEX.md) · [OSC](docs/OSC.md) · [网络输出](docs/NETWORK_OUTPUT.md) |
-| 实机与诊断 | [实机验证记录](docs/HARDWARE_VALIDATION.md) · [连接实测清单](HARDWARE_CONNECT_TEST.md) · [MIDI 诊断](docs/MIDI_DIAGNOSTICS.md) · [DriverKit 验证](docs/DRIVERKIT_USB_PROOF.md) · [Mac 远程测试](docs/MAC_REMOTE_TEST_PLAN.md) |
-| 验收 | [原生 UI 验收](docs/UI_ACCEPTANCE.md) · [非硬件验收](docs/OFFLINE_ACCEPTANCE.md) · [Provider 验收](docs/PROVIDER_ACCEPTANCE.md) |
-| 构建与发布 | [打包、签名与 CI](docs/PACKAGING.md) · [Tag 发布](docs/TAG_RELEASE_SETUP.md) · [图标说明](assets/README.md) |
-| 协作 | [开发规范](CONTRIBUTING.md) · [Agent 指南](AGENTS.md) · [封存索引](docs/archive/README.md) |
+| Plans and tasks | [TODO](TODO.md) · [Next steps](PLAN.md) · [Roadmap](ROADMAP.md) · [Domain and interface TODO](TODO_DOMAIN_INTERFACES.md) |
+| Architecture and design | [Development design](docs/DEVELOPMENT_DESIGN.md) · [Control mapping and feedback](docs/CONTROL_MAP.md) · [Technology ADR](docs/adr/001-native-swift-mvp.md) · [Shared plugin integration](docs/SHARED_PLUGINS.md) |
+| Interfaces | [Provider 1.0](docs/PROVIDER_API.md) · [Integration quick start](docs/PROVIDER_QUICKSTART.md) · [Schema](Schemas/Provider/1.0/provider.schema.json) · [MCP](docs/MCP.md) · [surface_ tools](docs/SHARED_REMOTE_TOOLS.md) · [Surface simulation](docs/SURFACE_SIMULATION.md) · [Codex](docs/CODEX.md) · [OSC](docs/OSC.md) · [Network output](docs/NETWORK_OUTPUT.md) |
+| Hardware and diagnostics | [Hardware validation](docs/HARDWARE_VALIDATION.md) · [Connection checklist](HARDWARE_CONNECT_TEST.md) · [MIDI diagnostics](docs/MIDI_DIAGNOSTICS.md) · [DriverKit validation](docs/DRIVERKIT_USB_PROOF.md) · [Mac remote testing](docs/MAC_REMOTE_TEST_PLAN.md) |
+| Acceptance | [Native UI acceptance](docs/UI_ACCEPTANCE.md) · [Offline acceptance](docs/OFFLINE_ACCEPTANCE.md) · [Provider acceptance](docs/PROVIDER_ACCEPTANCE.md) |
+| Build and release | [Packaging, signing, and CI](docs/PACKAGING.md) · [Tag releases](docs/TAG_RELEASE_SETUP.md) · [Icon notes](assets/README.md) |
+| Collaboration | [Contribution guidelines](CONTRIBUTING.md) · [Agent guide](AGENTS.md) · [Archive index](docs/archive/README.md) |
 
-## 许可证
+## License
 
-本项目采用 [MIT 许可证](LICENSE)。第三方代码保留各自的版权与许可声明，见
-[vendored validator 说明](configs/_vendor/README.md)。
+This project uses the [MIT License](LICENSE). Third-party code retains its own copyright and license notices;
+see the [vendored validator notes](configs/_vendor/README.md).
