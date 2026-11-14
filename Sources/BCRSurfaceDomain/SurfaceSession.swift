@@ -130,6 +130,7 @@ public final class SurfaceSession {
 
     private let hardwareDevice: any SurfaceDevice
     private let requiresHardwareConfirmation: Bool
+    public let hardwareOutput: HardwareOutputPolicy
     private let mockDevice: MockSurfaceDevice
     private let now: @MainActor () -> Date
     private let saveHardwareMap: @MainActor (HardwareMap) throws -> Void
@@ -161,12 +162,14 @@ public final class SurfaceSession {
         configuration: SurfaceConfiguration = .neutral(),
         pluginBindings: SurfacePluginBindings = .init(),
         requiresHardwareConfirmation: Bool = false,
+        hardwareOutput: HardwareOutputPolicy = .write,
         now: @escaping @MainActor () -> Date = { .now },
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
     ) {
         self.hardwareDevice = hardwareDevice
         self.requiresHardwareConfirmation = requiresHardwareConfirmation
+        self.hardwareOutput = hardwareOutput
         self.mockDevice = mockDevice
         self.hardwareMap = hardwareMap
         self.now = now
@@ -638,6 +641,11 @@ public final class SurfaceSession {
     }
 
     private func transmit(_ message: MIDIVoiceMessage) {
+        if source == .hardware, hardwareOutput == .observe {
+            log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
+                ignored: true, delivery: .suppressed)
+            return
+        }
         if source == .hardware, feedbackPolicy.enabled, connection.connectedDestination != nil {
             scheduler?.enqueue(message, origin: writeOrigin)
             notifyFeedbackQueue()

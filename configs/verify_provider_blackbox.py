@@ -149,6 +149,23 @@ def main():
             return
         raise AssertionError("Invalid operation was accepted")
 
+    # D32: hardware output is a hardware-only startup choice; anything else fails before listening.
+    for flags, reason in (
+        (["--hardware-output", "write"], "--hardware-output requires --source hardware"),
+        (["--source", "hardware", "--hardware-output", "send"], "Hardware output must be observe or write"),
+    ):
+        refused = subprocess.run(
+            [str(artifact / "BCRProviderService"), "--port", "0", *flags],
+            cwd=tempfile.gettempdir(),
+            env={**os.environ, "BCR_PROVIDER_TOKEN": secrets.token_hex(32), "BCR_PROVIDER_PACKAGED": "1"},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert refused.returncode != 0 and reason in refused.stderr, "Invalid hardware output option was accepted"
+    passed("hardware output option is hardware-only and validated", "service startup")
+
     host = Host(
         "manual",
         [
@@ -167,6 +184,7 @@ def main():
     )
     try:
         c = host.client
+        assert host.ready["hardware_output"] is None, "Mock startup must not report a hardware output policy"
         caps = c.call("provider_capabilities")
         assert caps["provider_id"] == host.ready["provider_id"]
         assert caps["resources"] == "embedded" and caps["contract_version"] == "1.0"

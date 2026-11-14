@@ -43,7 +43,14 @@ changes are intentionally memory-only.
 
 For the physical BCR console, explicitly use `--source hardware --hardware-map <learned-map.json>`
 and `--allow-device-control`; missing hardware fails without a Mock fallback. Do not infer MIDI
-identities or write a device preset. The published diagnostic entry is:
+identities or write a device preset.
+
+With `--source hardware`, `--hardware-output observe|write` chooses whether the service may write the
+device. The default `observe` takes inputs and updates parameters as usual but sends nothing: no
+feedback, no LED writes and no full resynchronisation on connect or reconnect; each held-back message
+is visible as a `feedback.suppressed` event. `write` restores feedback and resynchronisation and must
+be given explicitly. The `provider.ready` record reports the choice as `hardware_output` (null without
+hardware); the option is refused without `--source hardware`. The published diagnostic entry is:
 
 ```sh
 python3 diagnostics/bcr_device_diagnostics.py snapshot --provider "$BCR_PROVIDER_URL" \

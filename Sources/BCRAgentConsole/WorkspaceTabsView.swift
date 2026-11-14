@@ -356,8 +356,7 @@ private struct MIDIMonitorView: View {
                                 (event.origin == .external ? "STATE" : (event.source == .mock ? "MOCK" : "HW  ")))
                                 .foregroundStyle(.secondary)
                             if let delivery = event.delivery {
-                                Text(delivery == .sent ? L10n
-                                    .text("已送达") : (delivery == .failed ? L10n.text("发送失败") : L10n.text("未连接丢弃")))
+                                Text(Self.deliveryLabel(delivery))
                                     .foregroundStyle(delivery == .sent ? Color.secondary : Color.orange)
                             }
                             Text(event.message.diagnosticDescription)
@@ -372,6 +371,17 @@ private struct MIDIMonitorView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+private extension MIDIMonitorView {
+    static func deliveryLabel(_ delivery: FeedbackDelivery) -> String {
+        switch delivery {
+        case .sent: L10n.text("已送达")
+        case .failed: L10n.text("发送失败")
+        case .disconnected: L10n.text("未连接丢弃")
+        case .suppressed: L10n.text("仅观察，未发送")
         }
     }
 }

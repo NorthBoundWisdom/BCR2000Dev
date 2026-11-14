@@ -1000,3 +1000,4 @@
 "codex 可执行文件的绝对路径" = "Absolute path to the codex executable";
 "工作目录的绝对路径" = "Absolute workspace path";
 "描述要执行的任务" = "Describe the task";
+"仅观察，未发送" = "Observe only, not sent";

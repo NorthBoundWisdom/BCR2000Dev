@@ -8,6 +8,15 @@ public enum DeviceSource: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+/// Whether the session may write to the hardware device (PLAN D3, decision D32).
+public enum HardwareOutputPolicy: String, CaseIterable, Sendable {
+    /// Inputs and parameters work as usual; nothing is sent to the device, including the full
+    /// resynchronisation on connect and reconnect. Suppressed messages stay visible as events.
+    case observe
+    /// Feedback, LED and full resynchronisation are sent as usual.
+    case write
+}
+
 /// Value-only connection information; CoreMIDI endpoint lifetimes stay in the app.
 public struct MIDIConnectionSnapshot: Equatable, Sendable {
     public var sourceEndpoints: [MIDIEndpointDescriptor] = []

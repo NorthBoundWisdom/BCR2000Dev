@@ -18,6 +18,9 @@ private struct BootError: Error, LocalizedError {
 private struct Options {
     var port: UInt16 = 8787
     var source: DeviceSource = .mock
+    /// nil until given; only meaningful with `--source hardware`, where it defaults to observe (D32).
+    var hardwareOutputOption: HardwareOutputPolicy?
+    var hardwareOutput: HardwareOutputPolicy { hardwareOutputOption ?? .observe }
     var console = true
     var robot = false
     var chassis = false
@@ -52,6 +55,10 @@ private struct Options {
             case "--source":
                 guard let source = DeviceSource(rawValue: try value())
                 else { throw BootError(reason: "Source must be mock or hardware") }; result.source = source
+            case "--hardware-output":
+                guard let policy = HardwareOutputPolicy(rawValue: try value())
+                else { throw BootError(reason: "Hardware output must be observe or write") }
+                result.hardwareOutputOption = policy
             case "--clock":
                 guard let clock = ProviderClock(rawValue: try value())
                 else { throw BootError(reason: "Clock must be realtime or manual") }; result.clock = clock
@@ -111,6 +118,8 @@ private struct Options {
                 reason: "Surface principal and category limits require an explicit simulation profile/configuration"
             )
         }
+        guard result.hardwareOutputOption == nil || (result.console && result.source == .hardware)
+        else { throw BootError(reason: "--hardware-output requires --source hardware") }
         guard !result.permissions.configurationWrite || result.permissions.parameterWrite
         else { throw BootError(reason: "Read-only mode cannot grant configuration writes") }
         guard result.console || (result.source == .mock && result.configuration == nil && result.hardwareMap == nil)
@@ -162,6 +171,10 @@ private struct BCRProviderService {
     BCRProviderService — macOS loopback MCP/HTTP/SSE provider, contract 1.0
     --port PORT                    Default 8787; zero selects an isolated ephemeral port
     --source mock|hardware        Default mock; hardware requires an actual bidirectional MIDI route
+    --hardware-output observe|write
+                                  With --source hardware only. Default observe: inputs update parameters,
+                                  nothing is sent to the device (no resync on connect or reconnect).
+                                  write sends feedback and resyncs as before and must be given explicitly
     --no-console                  Run device simulator modules without a console
     --robot-sim --chassis-sim      Explicitly enable independent reference modules
     --clock realtime|manual       Default realtime; manual advancement is separately authorized
@@ -310,6 +323,7 @@ private struct BCRProviderService {
             let session: SurfaceSession? = options.console ? SurfaceSession(
                 hardwareDevice: hardware, hardwareMap: map, configuration: profile,
                 pluginBindings: AgentBindingTranslation.bindings,
+                hardwareOutput: options.hardwareOutput,
                 saveHardwareMap: { value in
                     if let mapURL { try ProtectedJSONFile.hardware(JSONFileStore(fileURL: mapURL)).save(value) }
                 },
@@ -354,6 +368,7 @@ private struct BCRProviderService {
                 "provider_id": .string(application.providerID),
                 "url": .string("http://127.0.0.1:\(port)/mcp"), "pid": .number(Int(getpid())),
                 "console": .bool(options.console), "source": .string(options.source.rawValue),
+                "hardware_output": options.source == .hardware ? .string(options.hardwareOutput.rawValue) : .null,
                 "robot": .bool(options.robot), "chassis": .bool(options.chassis),
                 "clock": .string(options.clock.rawValue),
                 "persistence": .string(options.dataDirectory == nil ? "memory" : "owned_profile_directory")

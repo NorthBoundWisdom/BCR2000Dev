@@ -40,12 +40,14 @@ private final class SessionFixture {
     var triggers: [AgentSlotID] = []
     let session: SurfaceSession
 
-    init(map: HardwareMap = .mockPreset(), configuration: SurfaceConfiguration = .robotArmDemo()) {
+    init(map: HardwareMap = .mockPreset(), configuration: SurfaceConfiguration = .robotArmDemo(),
+         hardwareOutput: HardwareOutputPolicy = .write)
+    {
         // Separate retained state gives the injected clock and stores no dependency on XCTest.
         let state = FixtureState()
         session = SurfaceSession(
             hardwareDevice: device, mockDevice: mockDevice, hardwareMap: map, configuration: configuration,
-            now: { state.time },
+            hardwareOutput: hardwareOutput, now: { state.time },
             saveHardwareMap: {
                 if state.failsSave { throw SessionTestError.unavailable }
                 state.maps.append($0)
@@ -100,6 +102,33 @@ final class SurfaceSessionTests: XCTestCase {
         f.device.failsSend = true
         f.session.setParameter("j", to: 60)
         XCTAssertEqual(f.session.events.last?.delivery, .failed)
+    }
+
+    func testObserveOutputNeverWritesTheDeviceButStillTakesInput() throws {
+        // PLAN D3 / D32: the headless default observes hardware without any output.
+        let f = SessionFixture(configuration: mirroredConfiguration(), hardwareOutput: .observe)
+        f.device.connect(true)
+        f.session.selectSource(.hardware) // Write mode resynchronises here.
+        f.session.setParameter("j", to: 50) // ...and feeds back here.
+        try f.session.configureFeedback(.init(enabled: true, messagesPerSecond: 100, burst: 128))
+        f.session.setParameter("j", to: 60)
+        f.session.flushFeedback()
+        f.device.connect(false)
+        f.device.connect(true) // ...and resynchronises on reconnect.
+        f.device.receive([message(a, 70)]) // Mirrored control b would get feedback in write mode.
+        XCTAssertEqual(f.session.engine.value(of: "j"), 70)
+        XCTAssertTrue(f.device.sent.isEmpty)
+        XCTAssertEqual(f.session.pendingFeedbackCount, 0)
+        XCTAssertEqual(f.session.events.last { $0.direction == .output }?.delivery, .suppressed)
+        XCTAssertEqual(f.session.hardwareOutput, .observe)
+    }
+
+    func testWriteOutputIsTheDefaultAndKeepsResynchronising() {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        XCTAssertEqual(f.session.hardwareOutput, .write)
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        XCTAssertFalse(f.device.sent.isEmpty)
     }
 
     func testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect() throws {

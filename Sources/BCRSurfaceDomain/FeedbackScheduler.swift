@@ -85,4 +85,6 @@ public struct FeedbackScheduler: Sendable {
 
 public enum FeedbackDelivery: String, Equatable, Sendable {
     case sent, disconnected, failed
+    /// Held back by an observe-only hardware output policy; never reached the device.
+    case suppressed
 }
