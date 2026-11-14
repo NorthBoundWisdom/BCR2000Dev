@@ -16,6 +16,13 @@ public enum BCRIndicatorPresentation {
     }
 }
 
+/// A BCR2000 button LED has no brightness. Firmware 1.10 lights it for 64…127 and leaves it dark
+/// below (hardware, 2026-11-14: 63 off, 64 on; Agent values 0/20 off, 72/96/127 on).
+public enum BCRButtonLED {
+    public static let threshold: UInt8 = 64
+    public static func isLit(_ value: UInt8) -> Bool { value >= threshold }
+}
+
 /// How a two-state button LED shows a semantic: steady, or blinking between on and off.
 /// The BCR2000's button LEDs have no brightness, so states differ by rhythm only.
 public enum BCRIndicatorBlink: Equatable, Sendable {

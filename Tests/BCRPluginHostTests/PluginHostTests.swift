@@ -207,6 +207,16 @@ final class MockAgentHostTests: XCTestCase {
         XCTAssertEqual(IndicatorSemantic.allCases.map(BCRIndicatorPresentation.value), [0, 40, 127, 96, 72, 20, 8])
     }
 
+    func testButtonLEDLightsFrom64LikeTheDevice() {
+        XCTAssertFalse(BCRButtonLED.isLit(63))
+        XCTAssertTrue(BCRButtonLED.isLit(64))
+        // With blinking off, only active, waiting and done states light a device LED.
+        XCTAssertEqual(
+            IndicatorSemantic.allCases.filter { BCRButtonLED.isLit(BCRIndicatorPresentation.value(for: $0)) },
+            [.active, .attention, .done]
+        )
+    }
+
     func testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot() throws {
         let host = try BCRMockAgentHost(clock: { 0 })
         let before = try host.snapshot()

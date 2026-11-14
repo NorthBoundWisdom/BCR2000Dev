@@ -476,12 +476,13 @@ private struct UserKeyCell: View {
 
     var body: some View {
         let down = isDown || presentation.hardwarePressed
-        let level = Double(presentation.value) / 127
+        // Drawn like the device LED: on or off, never dimmed.
+        let lit = BCRButtonLED.isLit(presentation.value)
         VStack(spacing: m(2)) {
             Capsule()
-                .fill(level > 0 ? Theme.led.opacity(0.35 + 0.65 * level) : Theme.ledOff)
+                .fill(lit ? Theme.led : Theme.ledOff)
                 .frame(width: m(16), height: m(3))
-                .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 3)
+                .shadow(color: lit ? Theme.led : .clear, radius: 3)
             Text(presentation.control.shortName)
                 .font(m.font(7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.tertiary)
@@ -696,11 +697,12 @@ private struct PadCell: View {
                 )
                 .overlay { RoundedRectangle(cornerRadius: m(6)).stroke(Color.white.opacity(0.12)) }
                 .overlay {
-                    let level = Double(presentation.value) / 127
+                    // Drawn like the device LED: on or off, never dimmed.
+                    let lit = BCRButtonLED.isLit(presentation.value)
                     Capsule()
-                        .fill(level > 0 ? Theme.led.opacity(0.35 + 0.65 * level) : Theme.ledOff)
+                        .fill(lit ? Theme.led : Theme.ledOff)
                         .frame(width: m(24), height: m(4))
-                        .shadow(color: level > 0 ? Theme.led.opacity(level) : .clear, radius: 4)
+                        .shadow(color: lit ? Theme.led : .clear, radius: 4)
                 }
                 .frame(width: m(52), height: m(28))
                 .scaleEffect(isDown || presentation.hardwarePressed ? 0.94 : 1)
