@@ -160,8 +160,12 @@ public struct SurfaceEngine: Sendable {
     }
 
     public func isFeedbackEcho(_ message: MIDIVoiceMessage, at time: Date) -> Bool {
-        let mode = hardwareMap.control(for: message.controlID).flatMap { configuration.assignment(for: $0) }?
-            .encoderMode ?? .absolute
+        let control = hardwareMap.control(for: message.controlID)
+        // Buttons are never echoes. The BCR2000 does not return button LED feedback (G7 on hardware,
+        // 2026-11-14: about 250 blink messages, no input), while a real press sends the same 127/0 that
+        // a blinking LED is sent; suppressing it dropped genuine presses during a blink.
+        if let control, !control.isContinuous { return false }
+        let mode = control.flatMap { configuration.assignment(for: $0) }?.encoderMode ?? .absolute
         guard mode == .absolute, let feedback = recentFeedback[message.controlID] else { return false }
         return feedback.value == message.dataValue && time.timeIntervalSince(feedback.sentAt) < echoWindow
     }

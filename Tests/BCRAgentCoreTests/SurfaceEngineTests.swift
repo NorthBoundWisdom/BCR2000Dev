@@ -90,6 +90,25 @@ final class SurfaceEngineTests: XCTestCase {
         XCTAssertEqual(engine.value(of: "j"), -90)
     }
 
+    func testButtonPressMatchingRecentLEDFeedbackIsNotAnEcho() {
+        // Hardware, 2026-11-14: a blinking Agent LED was sent 127 134 ms before the user's real press.
+        let slot = AgentSlotID(2)
+        let button = BCRControlID.button(row: 1, 2)
+        var engine = makeEngine([ControlAssignment(control: button, target: .agentPrimaryAction(slot))])
+        let number = UInt8(midi(button).number)
+        XCTAssertEqual(sent(engine.setAgentFeedback(slot, value: 127, at: t0)),
+                       [.controlChange(channel: 0, number: number, value: 127)])
+        let press = MIDIVoiceMessage.controlChange(channel: 0, number: number, value: 127)
+        XCTAssertFalse(engine.isFeedbackEcho(press, at: t0.addingTimeInterval(0.134)))
+        let effects = engine.handleInput(press, at: t0.addingTimeInterval(0.134))
+        XCTAssertTrue(effects.contains {
+            switch $0 {
+            case .triggerAgent(slot), .triggerAction: true
+            default: false
+            }
+        }, "\(effects)")
+    }
+
     func testToggleButtonFlipsOnPressAndHoldsLEDOnRelease() {
         let button = BCRControlID.button(row: 2, 1)
         var engine = makeEngine([ControlAssignment(control: button, target: .parameter("on"))])
