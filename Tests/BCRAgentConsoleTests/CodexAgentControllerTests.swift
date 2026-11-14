@@ -237,6 +237,7 @@ final class CodexAgentControllerTests: XCTestCase {
 
     func testMultiSlotPublicationUpdatesEveryLED() {
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false)
+        model.setBlinksAgentLEDs(false) // Steady levels; blinking is covered in AgentLEDBlinkTests.
         var slots = model.slots
         slots[0].state = .running
         slots[1].state = .waitingApproval

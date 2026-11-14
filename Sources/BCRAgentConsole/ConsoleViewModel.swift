@@ -269,7 +269,9 @@ final class ConsoleViewModel: ObservableObject {
         restorePointStore = JSONFileStore(fileURL: supportDirectory.appending(path: "preset-alignment-restore.json"))
         presetRestorePoint = try? restorePointStore.load()
         blinkPreference = JSONFileStore(fileURL: supportDirectory.appending(path: "agent-led-blink.json"))
-        blinksAgentLEDs = (try? blinkPreference.load()) ?? false
+        // On by default: with steady levels the device LED (lit from 64) shows error, stopped and
+        // queued as dark like idle, and approval like running (hardware, PLAN B3, 2026-11-14).
+        blinksAgentLEDs = (try? blinkPreference.load()) ?? true
         let configurationFile = ProtectedJSONFile.configuration(stores.configuration, preset: initialPreset)
         self.configurationFile = configurationFile
         let hardwareFile = ProtectedJSONFile.hardware(stores.hardwareMap)

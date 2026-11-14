@@ -12,7 +12,7 @@ struct CodexAgentSettingsView: View {
                     get: { model.blinksAgentLEDs }, set: { model.setBlinksAgentLEDs($0) }
                 ))
                 AgentLEDBlinkPreview()
-                Text(L10n.text("按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭时发送原有数值，实体灯是否区分数值待实测。"))
+                Text(L10n.text("按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭后发送原有数值，实体灯在 64 及以上才亮：出错、中断、排队与空闲都灭，等待审批与运行都亮。"))
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
             }
             Picker(L10n.text("Agent 后端"), selection: Binding(get: { controller.backend }, set: { value in

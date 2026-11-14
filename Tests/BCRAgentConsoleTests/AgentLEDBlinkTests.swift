@@ -53,11 +53,11 @@ final class AgentLEDBlinkTests: XCTestCase {
         midi.sent.compactMap { if case let .controlChange(0, 65, value) = $0 { value } else { nil } }
     }
 
-    func testBlinkingIsOptInAndPersisted() throws {
+    func testBlinkingIsOnByDefaultAndTheChoiceIsPersisted() throws {
         let (model, _, directory) = try model()
         defer { try? FileManager.default.removeItem(at: directory) }
-        XCTAssertFalse(model.blinksAgentLEDs)
-        model.setBlinksAgentLEDs(true)
+        XCTAssertTrue(model.blinksAgentLEDs)
+        model.setBlinksAgentLEDs(false)
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
         let reopened = ConsoleViewModel(
@@ -69,7 +69,7 @@ final class AgentLEDBlinkTests: XCTestCase {
             initialPreset: .robotArm,
             automaticallyAdvancesMock: false
         )
-        XCTAssertTrue(reopened.blinksAgentLEDs)
+        XCTAssertFalse(reopened.blinksAgentLEDs)
     }
 
     func testAttentionBlinksOnAndOffThenSteadyStateStopsTraffic() async throws {
@@ -93,6 +93,7 @@ final class AgentLEDBlinkTests: XCTestCase {
     func testDisabledKeepsOriginalLevels() throws {
         let (model, midi, directory) = try model()
         defer { try? FileManager.default.removeItem(at: directory) }
+        model.setBlinksAgentLEDs(false)
         midi.sent.removeAll()
         model.applyAgentSlots(slots(.waitingApproval, in: model), changed: AgentSlotID(1))
         XCTAssertEqual(led(midi).last, AgentRunState.waitingApproval.feedbackValue)

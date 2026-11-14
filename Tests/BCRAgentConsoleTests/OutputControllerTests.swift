@@ -361,6 +361,7 @@ final class OutputControllerTests: XCTestCase {
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false,
                                      providerConfiguration: .init(robot: true, chassis: true, clock: .manual),
                                      mockClock: { 0 }, automaticallyAdvancesMock: false)
+        model.setBlinksAgentLEDs(false) // Steady levels; blinking is covered in AgentLEDBlinkTests.
         XCTAssertTrue(try XCTUnwrap(model.mockAgents).runtime === model.provider.runtime)
         XCTAssertTrue(model.output.runtime === model.provider.runtime)
         let data = try model.provider.runtime.call("surface_capabilities", arguments: .object([:]))
