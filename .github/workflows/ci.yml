@@ -27,11 +27,15 @@ jobs:
       - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
       - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
       - run: git diff --check
-      - name: Preserve the Swift test log
+      - name: Preserve test and MCP acceptance logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: swift-test-log-${{ github.run_id }}
-          path: build/test-runs/
+          name: test-logs-${{ github.run_id }}
+          path: |
+            build/test-runs/
+            build/mcp-integration/*/*.log
+            build/mcp-integration/*/*.json
+            build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error

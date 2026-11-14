@@ -130,6 +130,7 @@ def main(argv=None):
         ["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)], check=True, capture_output=True
     )
     audit = DesktopAudit(directory) if offscreen else None
+    failed = True
     try:
         with (directory / "app.log").open("w") as log:
             (directory / "lifecycle-phase.txt").write_text("launch")
@@ -146,7 +147,10 @@ def main(argv=None):
                 deadline = time.monotonic() + 15
                 while time.monotonic() < deadline:
                     if app.poll() is not None:
-                        raise RuntimeError("isolated app exited before listening; inspect its app.log")
+                        tail = "".join((directory / "app.log").read_text(errors="replace").splitlines(True)[-20:])
+                        raise RuntimeError(
+                            f"isolated app exited ({app.returncode}) before listening; app.log tail:\n{tail}"
+                        )
                     try:
                         if client.rpc("ping")[0] == 200:
                             break
@@ -168,9 +172,16 @@ def main(argv=None):
             finally:
                 (directory / "lifecycle-phase.txt").write_text("shutdown")
                 stop_app(app, offscreen)
+        failed = False
     finally:
         if audit:
-            audit.finish()
+            try:
+                audit.finish()
+            except RuntimeError as error:
+                # Never let the audit replace the error that ended the run.
+                if not failed:
+                    raise
+                print("Also:", error, file=sys.stderr)
     print("Isolated native MCP acceptance passed; artifacts:", directory.relative_to(Path.cwd()))
 
 
