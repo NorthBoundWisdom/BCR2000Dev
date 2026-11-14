@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "fixtures": {
+    "surface-control-hardware-v1.4": {
+      "roles": {
+        "input_a": "pushEncoder.1.1",
+        "relative_input": null,
+        "button_input": "button.1.1",
+        "touch_input": null,
+        "feedback_state": null,
+        "feedback_progress": "pushEncoder.2.1"
+      }
+    }
+  }
+}
