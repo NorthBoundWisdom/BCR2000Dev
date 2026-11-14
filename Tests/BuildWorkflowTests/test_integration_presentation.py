@@ -22,8 +22,13 @@ class IntegrationPresentationTests(unittest.TestCase):
     def test_offscreen_bundle_is_an_accessory_before_the_process_starts(self):
         # AppKit reads LSUIElement before didFinishLaunching; a delegate-only
         # activation-policy change races the desktop auditor on hosted runners.
-        for flags, expected in (([], True), (["--foreground"], False)):
-            with self.subTest(flags=flags), tempfile.TemporaryDirectory() as temporary:
+        for flags, expected, ci in (
+            ([], True, ""),
+            ([], True, "true"),
+            ([], True, "false"),
+            (["--foreground"], False, "true"),
+        ):
+            with self.subTest(flags=flags, ci=ci), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 bundle = root / "Source.app"
                 macos = bundle / "Contents/MacOS"
@@ -40,12 +45,17 @@ class IntegrationPresentationTests(unittest.TestCase):
                 try:
                     os.chdir(root)
                     with (
+                        patch.dict(os.environ, {"GITHUB_ACTIONS": ci}),
                         patch.object(integration.subprocess, "run"),
-                        patch.object(integration, "DesktopAudit"),
+                        patch.object(integration, "DesktopAudit") as audit,
                         patch.object(integration.subprocess, "Popen", side_effect=launch),
                         self.assertRaisesRegex(RuntimeError, "launch inspected"),
                     ):
                         integration.main(["--bundle", str(bundle), *flags])
+                    if expected:
+                        self.assertEqual(audit.call_args.kwargs, {"prepare_ci_desktop": ci == "true"})
+                    else:
+                        audit.assert_not_called()
                 finally:
                     os.chdir(previous)
 

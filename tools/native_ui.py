@@ -22,42 +22,80 @@ def native_binary(stem="native_ui"):
 class DesktopAudit:
     """Finite sampling, scoped to the isolated PID, including startup and shutdown."""
 
-    def __init__(self, directory, bundle_id=None):
+    def __init__(self, directory, bundle_id=None, *, prepare_ci_desktop=False):
         self.directory = Path(directory)
+        self.focus_host = None
         if bundle_id:
             (self.directory / "desktop-audit-bundle.txt").write_text(bundle_id)
-        self.process = subprocess.Popen(
-            [str(native_binary("desktop_audit")), str(os.getpid()), str(directory)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        deadline = time.monotonic() + 10
-        while not (self.directory / "desktop-audit.ready").exists():
-            if self.process.poll() is not None:
-                raise RuntimeError("Desktop sampler failed: " + self.process.stderr.read())
-            if time.monotonic() >= deadline:
-                self.process.terminate()
-                self.process.wait(timeout=3)
-                raise RuntimeError("Desktop sampler did not become ready")
-            time.sleep(0.02)
+        auditor = native_binary("desktop_audit")
+        helper = native_binary("desktop_focus_host") if prepare_ci_desktop else None
+        self.process = None
+        try:
+            if helper:
+                # Hosted smoke can leave no AX focus owner. Use a dedicated
+                # window, without opening user documents or changing TCC.
+                # Ordinary developer offscreen runs never activate this fixture.
+                with (self.directory / "desktop-focus-host.log").open("w") as log:
+                    self.focus_host = subprocess.Popen([str(helper)], stdout=log, stderr=subprocess.STDOUT)
+                (self.directory / "desktop-focus-host-pid.txt").write_text(str(self.focus_host.pid))
+            self.process = subprocess.Popen(
+                [
+                    str(auditor),
+                    str(os.getpid()),
+                    str(directory),
+                    *(["--baseline-pid", str(self.focus_host.pid)] if self.focus_host else []),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            deadline = time.monotonic() + 10
+            while not (self.directory / "desktop-audit.ready").exists():
+                if self.process.poll() is not None:
+                    raise RuntimeError(
+                        f"Desktop sampler failed; artifacts: {self.directory}\n" + self.process.stderr.read()
+                    )
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("Desktop sampler did not become ready")
+                time.sleep(0.02)
+        except BaseException:
+            try:
+                if self.process and self.process.poll() is None:
+                    self.process.terminate()
+                    self.process.wait(timeout=3)
+            finally:
+                self._stop_focus_host()
+            raise
+
+    def _stop_focus_host(self):
+        if self.focus_host:
+            self.focus_host.terminate()
+            try:
+                self.focus_host.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.focus_host.kill()
+                self.focus_host.wait()
+            self.focus_host = None
 
     def finish(self):
-        (self.directory / "desktop-audit.stop").touch()
-        _, errors = self.process.communicate(timeout=5)
-        if self.process.returncode:
-            raise RuntimeError("Desktop sampler failed: " + errors)
-        result = json.loads((self.directory / "desktop-audit.json").read_text())
-        if (
-            result["samples"] == 0
-            or not result["targetPIDs"]
-            or result["targetWasFront"]
-            or result["visibleSamples"]
-            or not result["focusedPIDs"]
-            or result["focusedTargetSamples"]
-        ):
-            raise RuntimeError("Offscreen desktop audit failed: " + json.dumps(result))
-        print("Offscreen desktop audit:", json.dumps(result), flush=True)
+        try:
+            (self.directory / "desktop-audit.stop").touch()
+            _, errors = self.process.communicate(timeout=5)
+            if self.process.returncode:
+                raise RuntimeError("Desktop sampler failed: " + errors)
+            result = json.loads((self.directory / "desktop-audit.json").read_text())
+            if (
+                result["samples"] == 0
+                or not result["targetPIDs"]
+                or result["targetWasFront"]
+                or result["visibleSamples"]
+                or not result["focusedPIDs"]
+                or result["focusedTargetSamples"]
+            ):
+                raise RuntimeError("Offscreen desktop audit failed: " + json.dumps(result))
+            print("Offscreen desktop audit:", json.dumps(result), flush=True)
+        finally:
+            self._stop_focus_host()
 
 
 class NativeUI:

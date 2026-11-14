@@ -4,7 +4,8 @@ import Foundation
 
 // Finite, read-only sampling for an explicitly scoped acceptance run. Never activates an app.
 let args = CommandLine.arguments
-if args.count != 3 || Int32(args[1]) == nil { exit(2) }
+if !(args.count == 3 || (args.count == 5 && args[3] == "--baseline-pid" && (Int32(args[4]) ?? -1) > 0)) ||
+    Int32(args[1]) == nil { exit(2) }
 let parent = Int32(args[1])!
 let directory = URL(fileURLWithPath: args[2], isDirectory: true)
 let bundle = try? String(contentsOf: directory.appending(path: "desktop-audit-bundle.txt"), encoding: .utf8)
@@ -26,16 +27,75 @@ func isOffscreenSmoke(_ pid: pid_t) -> Bool {
     } catch { return false }
 }
 
+let accessibilityTrusted = AXIsProcessTrusted()
+let systemAccessibility = AXUIElementCreateSystemWide()
+@MainActor
+func focusedApplicationPID() -> (pid: pid_t?, error: AXError) {
+    var focused: CFTypeRef?
+    let status = AXUIElementCopyAttributeValue(
+        systemAccessibility, kAXFocusedApplicationAttribute as CFString, &focused
+    )
+    guard status == .success else { return (nil, status) }
+    guard let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return (nil, .invalidUIElement) }
+    var pid: pid_t = 0
+    let result = AXUIElementGetPid(focused as! AXUIElement, &pid)
+    return (result == .success ? pid : nil, result)
+}
+
+@MainActor
+func desktopSnapshot() -> [String: Any] {
+    let front = NSWorkspace.shared.frontmostApplication
+    let focus = focusedApplicationPID()
+    return [
+        "accessibilityTrusted": accessibilityTrusted, "focusError": focus.error.rawValue,
+        "focusedPID": focus.pid ?? -1, "frontmostPID": front?.processIdentifier ?? -1,
+        "frontmostBundle": front?.bundleIdentifier ?? "unknown",
+        "frontmostName": front?.localizedName ?? "unknown"
+    ]
+}
+
+var displayCount: UInt32 = 0
+CGGetActiveDisplayList(0, nil, &displayCount)
+var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+CGGetActiveDisplayList(displayCount, &displayIDs, &displayCount)
+let displays = displayIDs.map { CGDisplayBounds($0) }
+
+if args.count == 5 {
+    let baselinePID = Int32(args[4])!
+    let deadline = Date().addingTimeInterval(6)
+    var baseline: [String: Any] = [:]
+    var ready = false
+    repeat {
+        // Establish/refresh the WindowServer connection before the AX read,
+        // just as the ordinary sampler does between consecutive focus reads.
+        _ = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID)
+        baseline = desktopSnapshot()
+        ready = baseline["focusedPID"] as? pid_t == baselinePID
+            && baseline["frontmostPID"] as? pid_t == baselinePID
+        if ready { break }
+        RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    } while Date() < deadline
+    let data = try JSONSerialization.data(withJSONObject: baseline, options: [.sortedKeys])
+    try data.write(to: directory.appending(path: "desktop-preflight.json"), options: .atomic)
+    guard ready else {
+        FileHandle.standardError
+            .write(Data("CI desktop has no verified keyboard-focus baseline for PID \(baselinePID): ".utf8))
+        FileHandle.standardError.write(data)
+        exit(2)
+    }
+}
+
+let initialDesktop = desktopSnapshot()
 let initial = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1
 var fronts = Set<pid_t>([initial])
 var targets = Set<pid_t>()
 var samples = 0
 var maxWindows = 0
 var visibleSamples = 0
-let systemAccessibility = AXUIElementCreateSystemWide()
 var focusedPIDs = Set<pid_t>()
 var focusedTargetSamples = 0
 var focusReadFailures = 0
+var focusErrors: [String: Int] = [:]
 var targetWasFront = false
 var frontEvents: [[String: Any]] = []
 var lastFront = initial
@@ -77,11 +137,6 @@ func stopTarget(_ pid: pid_t, reason: String) {
     recordSignal(event.merging(["type": "signal-result", "result": result, "errno": failure]) { _, new in new })
 }
 
-var displayCount: UInt32 = 0
-CGGetActiveDisplayList(0, nil, &displayCount)
-var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-CGGetActiveDisplayList(displayCount, &displayIDs, &displayCount)
-let displays = displayIDs.map { CGDisplayBounds($0) }
 try Data().write(to: directory.appending(path: "desktop-audit.ready"))
 while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop-audit.stop").path),
       kill(parent, 0) == 0
@@ -110,21 +165,17 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
         targetWasFront = true
         stopTarget(front, reason: "target became frontmost")
     }
-    var focused: CFTypeRef?
-    if AXUIElementCopyAttributeValue(systemAccessibility, kAXFocusedApplicationAttribute as CFString, &focused) ==
-        .success,
-       let focused, CFGetTypeID(focused) == AXUIElementGetTypeID()
-    {
-        let element = focused as! AXUIElement
-        var pid: pid_t = 0
-        if AXUIElementGetPid(element, &pid) == .success {
-            focusedPIDs.insert(pid)
-            if targets.contains(pid) {
-                focusedTargetSamples += 1
-                stopTarget(pid, reason: "target received keyboard focus")
-            }
-        } else { focusReadFailures += 1 }
-    } else { focusReadFailures += 1 }
+    let focus = focusedApplicationPID()
+    if let pid = focus.pid {
+        focusedPIDs.insert(pid)
+        if targets.contains(pid) {
+            focusedTargetSamples += 1
+            stopTarget(pid, reason: "target received keyboard focus")
+        }
+    } else {
+        focusReadFailures += 1
+        focusErrors[String(focus.error.rawValue), default: 0] += 1
+    }
     let windows = (CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []).filter {
         targets.contains(($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value ?? -1)
     }
@@ -158,6 +209,7 @@ while !FileManager.default.fileExists(atPath: directory.appending(path: "desktop
 let data = try JSONSerialization.data(withJSONObject: [
     "focusedPIDs": focusedPIDs.sorted(), "focusedTargetSamples": focusedTargetSamples,
     "focusReadFailures": focusReadFailures,
+    "focusErrors": focusErrors, "initialDesktop": initialDesktop,
     "samples": samples, "frontmostPIDs": fronts.sorted(), "foregroundStable": fronts.count == 1,
     "targetPIDs": targets.sorted(), "targetWasFront": targetWasFront, "frontEvents": frontEvents,
     "maxOwnedWindows": maxWindows,

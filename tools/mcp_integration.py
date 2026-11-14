@@ -162,7 +162,9 @@ def main(argv=None):
     subprocess.run(
         ["codesign", "--force", "--sign", "-", "--timestamp=none", str(bundle)], check=True, capture_output=True
     )
-    audit = DesktopAudit(directory) if offscreen else None
+    audit = (
+        DesktopAudit(directory, prepare_ci_desktop=os.environ.get("GITHUB_ACTIONS") == "true") if offscreen else None
+    )
     failed = True
     try:
         with (directory / "app.log").open("w") as log:

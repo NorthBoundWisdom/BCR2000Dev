@@ -10,6 +10,46 @@ from tools import native_ui
 
 
 class NativeOffscreenSafetyTests(unittest.TestCase):
+    def test_ci_focus_host_precedes_sampling_and_is_cleaned_up(self):
+        for prepare in (False, True):
+            with self.subTest(prepare=prepare), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "desktop-audit.ready").touch()
+                host = Mock(pid=321)
+                sampler = Mock()
+                with (
+                    patch.object(native_ui, "native_binary", side_effect=lambda name: Path(name)),
+                    patch.object(native_ui.subprocess, "run") as run,
+                    patch.object(
+                        native_ui.subprocess, "Popen", side_effect=[host, sampler] if prepare else [sampler]
+                    ) as launch,
+                ):
+                    audit = native_ui.DesktopAudit(root, prepare_ci_desktop=prepare)
+                run.assert_not_called()
+                if prepare:
+                    self.assertEqual(launch.call_args_list[0].args[0], ["desktop_focus_host"])
+                    self.assertEqual(launch.call_args.args[0][-2:], ["--baseline-pid", "321"])
+                    audit._stop_focus_host()
+                    host.terminate.assert_called_once_with()
+                    host.wait.assert_called_once_with(timeout=3)
+                else:
+                    self.assertEqual(launch.call_count, 1)
+                    self.assertNotIn("--baseline-pid", launch.call_args.args[0])
+
+    def test_unavailable_baseline_is_an_error_and_stops_the_owned_focus_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            host = Mock(pid=321)
+            sampler = Mock(poll=Mock(return_value=2))
+            sampler.stderr.read.return_value = "no verified keyboard-focus baseline; focusError=-25204"
+            with (
+                patch.object(native_ui, "native_binary", side_effect=lambda name: Path(name)),
+                patch.object(native_ui.subprocess, "Popen", side_effect=[host, sampler]),
+                self.assertRaisesRegex(RuntimeError, "focusError=-25204"),
+            ):
+                native_ui.DesktopAudit(temporary, prepare_ci_desktop=True)
+            host.terminate.assert_called_once_with()
+            host.wait.assert_called_once_with(timeout=3)
+
     def ui(self, offscreen):
         result = native_ui.NativeUI.__new__(native_ui.NativeUI)
         result.pid = 123
@@ -89,10 +129,13 @@ class NativeOffscreenSafetyTests(unittest.TestCase):
             )
             audit = native_ui.DesktopAudit.__new__(native_ui.DesktopAudit)
             audit.directory = root
+            host = Mock()
+            audit.focus_host = host
             audit.process = Mock(returncode=0)
             audit.process.communicate.return_value = ("", "")
             with self.assertRaisesRegex(RuntimeError, "Offscreen desktop audit failed"):
                 audit.finish()
+            host.terminate.assert_called_once_with()
 
 
 if __name__ == "__main__":

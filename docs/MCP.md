@@ -141,6 +141,10 @@ App 显示迁移提示，并保持原文件直到用户后续修改配置。
 不经 stdout 缓冲，也不包含凭据。监听前退出或超时时，终端与 `launch-failure.txt` 都包含退出信号、清理前阶段、
 审计信号记录和 `app.log` 尾部；无日志时明确指出尚未收到应用标记，未知信号来源不会推测为审计器。
 CI 的 `test-logs-*` artifact 保留这些诊断及完整审计结果。
+GitHub Actions 的离屏运行在采样前启动独立的 `desktop_focus_host` 测试窗口，要求真实 AX 焦点 PID 与其前台 PID
+一致后才启动测试 App；未取得基线则明确失败。基线窗口保留到审计结束后再清理，启动失败也会清理。
+普通本机离屏运行不启动此窗口；被测 App 始终按原离屏要求验收。审计断言保持不变，
+结果额外记录初始桌面应用、Accessibility 信任状态与 AX 错误码，基线写入 `desktop-preflight.json`。
 
 新增 target JSON 分支可通过同一个 assign_control 工具使用，无客户端专属工具：
 stepParameter: {id, step, wraps}；setParameter: {id, value}；cycleParameter: {id, values}。
