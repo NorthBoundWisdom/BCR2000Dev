@@ -13,11 +13,12 @@ import selectors
 import subprocess
 import sys
 import time
+import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(binary, profile_tool, source_map, request, output, sdk):
+def run(binary, profile_tool, source_map, request, output, sdk, diagnostics=False):
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(sdk))
     from surface_control import Client, SurfaceError
@@ -182,6 +183,136 @@ def run(binary, profile_tool, source_map, request, output, sdk):
                         time.sleep(0.02)
                     assert len(json.loads(report.read_text())["sent"]) == expected
                     assert client.snapshot()["latest_input_sequence"] == "4", "Display became operator input"
+                    if diagnostics and policy == "write" and permission:
+                        from surface_control_diagnostics import DEFAULT_LIMITS, ReadOnlyClient, capture, encoded, verify
+
+                        observed_tools = []
+                        snapshot_seen = threading.Event()
+
+                        class ObservedReadOnlyClient(ReadOnlyClient):
+                            def call(self, name, arguments=None):
+                                observed_tools.append(name)
+                                result = super().call(name, arguments)
+                                if name == "surface_control_snapshot":
+                                    snapshot_seen.set()
+                                return result
+
+                        diagnostic_client = ObservedReadOnlyClient(
+                            ready["url"], token, "candidate-process", accepted_sources=("hardware",)
+                        )
+                        errors = []
+
+                        def operate_fake_buttons():
+                            try:
+                                assert snapshot_seen.wait(5)
+                                inject(rows)
+                            except Exception as error:
+                                errors.append(type(error).__name__)
+
+                        operator = threading.Thread(target=operate_fake_buttons)
+                        operator.start()
+                        limits = dict(
+                            DEFAULT_LIMITS,
+                            duration_s=1.0,
+                            max_polls=10,
+                            max_events=64,
+                            max_bytes=1048576,
+                            interval_s=0.05,
+                        )
+                        document = capture(
+                            diagnostic_client,
+                            "bcr2000.hardware",
+                            "1.4",
+                            required_controls=[roles["enable"], roles["stop"]],
+                            limits=limits,
+                        )
+                        operator.join(timeout=5)
+                        assert not operator.is_alive() and not errors
+                        diagnostic_report = verify(document)
+                        assert document["end"]["event_count"] == 4
+                        assert (
+                            diagnostic_report["exit_code"] == 0 and diagnostic_report["physical_qualification"] is False
+                        )
+                        assert set(observed_tools) <= {
+                            "surface_control_discover",
+                            "surface_control_snapshot",
+                            "surface_control_events",
+                        }
+                        raw_capture = encoded(document)
+                        assert token.encode() not in raw_capture and ready["url"].encode() not in raw_capture
+                        (directory / "diagnostic-capture.json").write_bytes(raw_capture)
+                        (directory / "diagnostic-report.json").write_text(
+                            json.dumps(diagnostic_report, indent=2) + "\n"
+                        )
+                        # Exercise the capture CLI without writing the credential to any file.
+                        read_fd, write_fd = os.pipe()
+                        os.write(write_fd, token.encode())
+                        os.close(write_fd)
+                        try:
+                            cli = subprocess.run(
+                                [
+                                    sys.executable,
+                                    "-B",
+                                    "-m",
+                                    "surface_control_diagnostics",
+                                    "capture",
+                                    "--url",
+                                    ready["url"],
+                                    "--token-file",
+                                    "/dev/fd/" + str(read_fd),
+                                    "--instance-id",
+                                    "candidate-process",
+                                    "--profile-id",
+                                    "bcr2000.hardware",
+                                    "--profile-version",
+                                    "1.4",
+                                    "--accept-hardware",
+                                    "--require-control",
+                                    roles["enable"],
+                                    "--require-control",
+                                    roles["stop"],
+                                    "--max-polls",
+                                    "1",
+                                    "--output",
+                                    str(directory / "diagnostic-cli-capture.json"),
+                                ],
+                                env=dict(os.environ, PYTHONPATH=str(sdk)),
+                                pass_fds=(read_fd,),
+                                capture_output=True,
+                                text=True,
+                            )
+                        finally:
+                            os.close(read_fd)
+                        assert cli.returncode == 0, "Read-only diagnostic CLI failed"
+                        offline_cli = subprocess.run(
+                            [
+                                sys.executable,
+                                "-B",
+                                "-m",
+                                "surface_control_diagnostics",
+                                "verify",
+                                "--capture",
+                                str(directory / "diagnostic-cli-capture.json"),
+                            ],
+                            env=dict(os.environ, PYTHONPATH=str(sdk)),
+                            capture_output=True,
+                            text=True,
+                        )
+                        assert (
+                            offline_cli.returncode == 0
+                            and json.loads(offline_cli.stdout)["physical_qualification"] is False
+                        )
+                        cases.append(
+                            {
+                                "name": "read-only-diagnostic-api-cli-and-offline-verify",
+                                "passed": True,
+                                "diagnostic_status": diagnostic_report["diagnostic_status"],
+                                "captured_new_button_edges": document["end"]["event_count"],
+                                "physical_qualification": False,
+                                "tools": sorted(set(observed_tools)),
+                                "credential_storage": "anonymous pipe only",
+                            }
+                        )
                     cases.append(
                         {
                             "name": name,
@@ -223,8 +354,12 @@ def main():
     parser.add_argument("--request", type=Path, default=ROOT / "examples/hardware/role-readiness-request.json")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--sdk", type=Path, default=ROOT / "build/seed/SurfacePlugins/clients/python")
+    parser.add_argument("--diagnostics", action="store_true")
     args = parser.parse_args()
-    run(*(getattr(args, key).resolve() for key in ("binary", "profile_tool", "source_map", "request", "output", "sdk")))
+    run(
+        *(getattr(args, key).resolve() for key in ("binary", "profile_tool", "source_map", "request", "output", "sdk")),
+        diagnostics=args.diagnostics,
+    )
 
 
 if __name__ == "__main__":

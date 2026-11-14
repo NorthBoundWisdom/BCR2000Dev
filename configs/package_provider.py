@@ -33,6 +33,8 @@ SURFACE_FILES = {
     "control-tools.json": "docs/surface-control-tools.json",
     "hardware-control-tools.json": "docs/surface-control-hardware-tools.json",
     "hardware-control-examples.json": "docs/surface-control-hardware-examples.json",
+    "surface-control-diagnostics.md": "docs/surface-control-diagnostics.md",
+    "surface-control-diagnostic-capture.schema.json": "docs/surface-control-diagnostic-capture.schema.json",
     "surface-control-hardware-v1.4.json": "fixtures/surface-control-hardware-v1.4.json",
     "surface-control-hardware-independent-v1.4.json": "fixtures/surface-control-hardware-independent-v1.4.json",
     "surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
@@ -110,7 +112,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     sdk_sources = sorted(
         path
-        for name in ("surface_control", "surface_conformance", "surface_control_testing")
+        for name in ("surface_control", "surface_conformance", "surface_control_testing", "surface_control_diagnostics")
         for path in (shared / "clients/python" / name).rglob("*")
         if path.is_file() and path.suffix in (".py", ".md")
     )
@@ -195,7 +197,20 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         )
         if checked_candidate.returncode != 0 or json.loads(checked_candidate.stdout).get("ready") is not False:
             raise ValueError("Unverified candidate integrity/status check failed")
+        candidate_plan = json.loads(staged_candidate.stdout)
         evidence = {
+            "selected_buttons": [
+                {
+                    "role": row["role"],
+                    "control_id": row["control_id"],
+                    "learned_midi_identity": row["midi"],
+                    "press_release_capture": None,
+                    "current_preset_match": None,
+                    "physical_led_observation": None,
+                }
+                for row in candidate_plan["changes"]
+                if row["role"] in ("enable", "stop")
+            ],
             "artifact": "candidate-attended-evidence-plan",
             "executable_now": False,
             "candidate": "candidates/unverified-four-role/candidate-manifest.json",
