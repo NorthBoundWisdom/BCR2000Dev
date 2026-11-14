@@ -319,14 +319,12 @@ struct SurfacePanelView: View {
         .frame(width: m(80))
     }
 
-    /// The encoder group the device is believed to show: the last one an input came from, or the
-    /// one this app set at startup. Nil when unknown.
-    private var deviceGroup: Int? { model.observedHardwareGroup ?? model.startupConfiguredGroup }
+    /// The encoder group the device is believed to show: the last one an input came from. Nil when unknown.
+    private var deviceGroup: Int? { model.observedHardwareGroup }
 
     private var groupHelp: String {
         guard model.source == .hardware else { return L10n.text("切换 Mock 设备的编码器组（与实体一样不发送 MIDI）") }
         let known = model.observedHardwareGroup.map { L10n.text("最后输入组 \($0)") }
-            ?? model.startupConfiguredGroup.map { L10n.text("启动设为组 \($0)") }
             ?? L10n.text("硬件组未确认")
         return known + L10n.text("。") + L10n.text("实体设备不会报告当前组；这里只切换显示。操作实体编码器时会自动跟随。")
             + L10n.text(" 圆点标出设备所在的组。")

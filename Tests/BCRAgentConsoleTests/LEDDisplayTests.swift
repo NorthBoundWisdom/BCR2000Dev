@@ -218,7 +218,6 @@ private final class DisplayDevice: MIDIService {
     var currentReadFails = false
     var memoryReads: [Int] = []
     var nameResponses: [BCRPresetNames] = []
-    func configureStartup(_ program: MIDIStartupProgram) async throws {}
     func readMemoryPreset(_ number: Int) async throws -> Data {
         dumps += 1; memoryReads.append(number)
         try await transfer()
@@ -770,115 +769,6 @@ final class LockedPresetDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayText, "----")
         XCTAssertNil(model.displayProfile?.resolvedPreset)
         XCTAssertEqual(device.memoryReads, [1, 8])
-    }
-
-    func testConfiguredNumberCannotOverrideAFreshDifferentPresetName() async throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
-                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
-                                                                         ".egroups 4", ".fkeys on", ".lock off"])
-        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
-        var map = HardwareMap()
-        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
-        try stores.hardwareMap.save(map)
-        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".egroups 4", ".lock on", "$end"])
-        let device = DisplayDevice(temporary: data,
-                                   names: .init(
-                                       temporary: "New",
-                                       memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["Old"]
-                                   ))
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
-        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
-        try await model.waitForBackgroundWork()
-        XCTAssertEqual(model.source, .hardware)
-        XCTAssertNil(model.startupConfiguredPreset)
-        XCTAssertEqual(model.displayText, "P- 1")
-        XCTAssertEqual(model.displayPresetName, "New")
-    }
-
-    func testConfiguredNumberCannotFollowARenamedMemorySlot() async throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
-                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
-                                                                         ".egroups 4", ".fkeys on", ".lock off"])
-        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
-        var map = HardwareMap()
-        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
-        try stores.hardwareMap.save(map)
-        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'New'", ".egroups 4", ".lock on", "$end"])
-        let device = DisplayDevice(temporary: data,
-                                   names: .init(
-                                       temporary: "New",
-                                       memory: ["New"] + (2 ... 7).map { "P\($0)" } + ["New"]
-                                   ))
-        device.memoryReadFails = true
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
-        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
-        try await model.waitForBackgroundWork()
-        XCTAssertEqual(model.source, .hardware)
-        XCTAssertNil(model.startupConfiguredPreset)
-        XCTAssertEqual(model.displayText, "----")
-    }
-
-    func testConfiguredNumberCannotDistinguishSameNamedSlots() async throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
-                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
-                                                                         ".egroups 4", ".fkeys on", ".lock off"])
-        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
-        var map = HardwareMap()
-        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
-        try stores.hardwareMap.save(map)
-        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Old'", ".egroups 4", ".lock on", "$end"])
-        let device = DisplayDevice(temporary: data,
-                                   names: .init(
-                                       temporary: "Old",
-                                       memory: ["Old"] + (2 ... 7).map { "P\($0)" } + ["Old"]
-                                   ))
-        device.memoryReadFails = true
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
-        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
-        try await model.waitForBackgroundWork()
-        XCTAssertEqual(model.source, .hardware)
-        XCTAssertNil(model.startupConfiguredPreset)
-        XCTAssertEqual(model.displayText, "----")
-    }
-
-    func testExplicitLockedRecallUsesFreshWorkingCopyWithoutReadingSameNamedSlots() async throws {
-        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
-                                   configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let program = try MIDIStartupProgram(preset: 8, presetSettings: [".name 'Old'", ".snapshot off", ".request off",
-                                                                         ".egroups 4", ".fkeys on", ".lock on"])
-        try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json")).save(program)
-        var map = HardwareMap()
-        try map.bind(.pushEncoder(group: 1, 1), to: .init(kind: .controlChange, channel: 0, number: 8))
-        try stores.hardwareMap.save(map)
-        let data = BCLFixtures.dump(["$rev R1", "$preset", ".name 'Old'", ".egroups 4", ".lock on", "$end"])
-        let device = DisplayDevice(temporary: data,
-                                   names: .init(
-                                       temporary: "Old",
-                                       memory: ["Old"] + (2 ... 7).map { "P\($0)" } + ["Old"]
-                                   ))
-        device.memoryReadFails = true
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
-        try await waitUntil("the connection prompt") { model.pendingHardwareConnection != nil }
-        model.connectHardware(try XCTUnwrap(model.pendingHardwareConnection).id, mode: .initialize)
-        try await model.waitForBackgroundWork()
-        XCTAssertEqual(model.source, .hardware)
-        XCTAssertEqual(model.startupConfiguredPreset, 8)
-        XCTAssertEqual(model.displayText, "P- 8")
-        XCTAssertTrue(device.memoryReads.isEmpty)
     }
 }
 

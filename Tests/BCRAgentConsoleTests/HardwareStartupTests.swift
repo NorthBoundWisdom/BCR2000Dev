@@ -16,7 +16,6 @@ private final class StartupMIDI: MIDIService {
     var dumpInFlight = false
     var dumpContinuation: CheckedContinuation<Data, any Error>?
     var snapshotReads = 0
-    var startupWrites = 0
 
     func readPresetNames() async throws -> BCRPresetNames {
         .init(temporary: "Drain", memory: (1 ... 32).map { $0 == 8 ? "Drain" : "P\($0)" })
@@ -33,11 +32,6 @@ private final class StartupMIDI: MIDIService {
     func finishCancelledDump() {
         dumpInFlight = false
         dumpContinuation?.resume(throwing: CancellationError()); dumpContinuation = nil
-    }
-
-    func configureStartup(_ program: MIDIStartupProgram) async throws {
-        guard !dumpInFlight else { throw MIDIStartupError.noReply }
-        startupWrites += 1
     }
 
     var snapshot: [MIDIVoiceMessage] = []
@@ -120,7 +114,6 @@ final class HardwareStartupTests: XCTestCase {
         device.onConnection?(route)
         let prompt = try await waitForPrompt(model)
         XCTAssertTrue(prompt.canRead)
-        XCTAssertTrue(prompt.canWrite)
     }
 
     func testWriteOptionEntersHardwareOnlyAfterConfirmation() async throws {
@@ -138,19 +131,10 @@ final class HardwareStartupTests: XCTestCase {
     }
 
     func testEveryConnectionModeWaitsForTheCancelledDisplayStream() async throws {
-        for mode in [HardwareConnectionPrompt.Mode.read, .write, .initialize] {
+        for mode in [HardwareConnectionPrompt.Mode.read, .write] {
             let (stores, directory) = stores()
             defer { try? FileManager.default.removeItem(at: directory) }
             try stores.hardwareMap.save(.mockPreset())
-            let program = try MIDIStartupProgram(
-                preset: 8,
-                presetSettings: [".name 'Drain'", ".snapshot off", ".request off",
-                                 ".egroups 4", ".fkeys on", ".lock on"]
-            )
-            if mode == .initialize {
-                try JSONFileStore<MIDIStartupProgram>(fileURL: directory.appending(path: "hardware-startup.json"))
-                    .save(program)
-            }
             let device = StartupMIDI()
             device.supportsPresets = true; device.suspendsNextDump = true
             device.snapshot = HardwareMap.mockPreset().entries.filter { $0.control.isContinuous }.map {
@@ -168,7 +152,6 @@ final class HardwareStartupTests: XCTestCase {
             XCTAssertTrue(model.connectingHardware)
             XCTAssertEqual(model.source, .mock)
             XCTAssertEqual(device.snapshotReads, 0)
-            XCTAssertEqual(device.startupWrites, 0)
             XCTAssertEqual(device.sent.count, writes)
             device.finishCancelledDump()
             try await model.waitForBackgroundWork()

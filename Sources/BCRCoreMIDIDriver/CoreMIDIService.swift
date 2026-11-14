@@ -28,8 +28,8 @@ public protocol MIDIService: SurfaceDevice {
     func selectEndpoints(_ selection: MIDIEndpointSelection)
     var supportsSnapshotReadback: Bool { get }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
+    /// Whether the device supports the BCL preset reads and writes below (names kept for source compatibility).
     var supportsStartupConfiguration: Bool { get }
-    func configureStartup(_ program: MIDIStartupProgram) async throws
     /// Read-only dump of the current temporary preset (BCL frames, `$rev` … `$end`).
     func readCurrentPreset() async throws -> Data
     /// Read-only names of the temporary preset and the 32 memory presets (short replies, no dump).
@@ -47,7 +47,6 @@ public protocol MIDIService: SurfaceDevice {
 public extension MIDIService {
     func startWhenReady() async throws { try start() }
     var supportsStartupConfiguration: Bool { false }
-    func configureStartup(_ program: MIDIStartupProgram) async throws { throw MIDIStartupError.invalidProgram }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
     func readPresetNames() async throws -> BCRPresetNames { throw MIDIStartupError.invalidProgram }
     func readMemoryPreset(_ number: Int) async throws -> Data { throw MIDIStartupError.invalidProgram }
@@ -258,15 +257,6 @@ public final class CoreMIDIService: MIDIService {
         snapshotTask?.cancel(); snapshotTask = nil
         snapshotExpected = []; snapshotValues = [:]
         continuation?.resume(with: result)
-    }
-
-    public func configureStartup(_ program: MIDIStartupProgram) async throws {
-        let frames = try program.frames()
-        try await exclusiveSysEx { transport, generation in
-            try transport.sendBytes(program.selectBytes, expectedGeneration: generation)
-            try await Task.sleep(for: .milliseconds(150))
-            try await self.acknowledged(frames, transport: transport, generation: generation, progress: { _ in })
-        }
     }
 
     public func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {

@@ -109,10 +109,10 @@ extension LanguagePreferencesTests {
         L10n.setLanguage(.english)
         XCTAssertTrue(L10n.text(message).contains("hardware map"))
         XCTAssertFalse(L10n.text(message).contains("硬件映射"))
-        XCTAssertTrue(notice.text.contains("startup"))
-        XCTAssertFalse(notice.text.contains("未确认"))
+        XCTAssertTrue(notice.text.contains("did not answer the preset operation"))
+        XCTAssertFalse(notice.text.contains("未应答"))
         L10n.setLanguage(.chinese)
         XCTAssertTrue(L10n.text(message).contains("硬件映射未能保存"))
-        XCTAssertTrue(notice.text.contains("未确认"))
+        XCTAssertTrue(notice.text.contains("未应答"))
     }
 }

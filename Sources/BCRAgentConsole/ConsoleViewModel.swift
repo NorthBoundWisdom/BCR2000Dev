@@ -85,13 +85,10 @@ struct PresetAlignmentState {
 }
 
 struct HardwareConnectionPrompt: Identifiable {
-    enum Mode: Equatable { case initialize, write, read }
+    enum Mode: Equatable { case write, read }
     let id = UUID()
     let route: MIDIConnectionSnapshot
-    let program: MIDIStartupProgram?
     let canRead: Bool
-    /// Without a startup program the user may still choose to write software values into the loaded preset.
-    var canWrite: Bool { program == nil }
 }
 
 @MainActor
@@ -137,13 +134,6 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var visibleGroup = 1
     @Published private(set) var pendingHardwareConnection: HardwareConnectionPrompt?
     private var declinedHardwareConnectionRoute: MIDIConnectionSnapshot?
-    private(set) var startupConfiguredGroup: Int?
-    /// Only known after this app loaded the preset itself; the device never reports its preset number.
-    private(set) var startupConfiguredPreset: Int? {
-        didSet { if startupConfiguredPreset == nil { configuredDisplayContext = nil } }
-    }
-
-    private var configuredDisplayContext: (name: String, route: PresetRestoreRoute, locked: Bool)?
     /// The control whose value the panel's LED display shows, as the device does while a control moves.
     /// Not `@Published`: input bursts publish through the session's coalesced frame refresh.
     private(set) var display = BCRDisplayModel()
@@ -155,8 +145,6 @@ final class ConsoleViewModel: ObservableObject {
     /// Proven numbers bound to exact working-copy definitions; survives restarts.
     private let presetNumberMemory: PresetNumberMemory
     private var displayRevertTask: Task<Void, Never>?
-    private var startupProgram: MIDIStartupProgram?
-    private var startupProgramError: (any Error)?
     private var connectionOfferTask: Task<Void, Never>?
     private var startupTaskID: UUID?
     private var startupRoute: MIDIConnectionSnapshot?
@@ -279,10 +267,6 @@ final class ConsoleViewModel: ObservableObject {
         let mapRead = hardwareFile.load()
         let configRead = configurationFile.load()
         let loadedMap = mapRead.value
-        let startupURL = stores.configuration.fileURL.deletingLastPathComponent()
-            .appending(path: "hardware-startup.json")
-        do { startupProgram = try JSONFileStore<MIDIStartupProgram>(fileURL: startupURL).load() }
-        catch { startupProgramError = error }
         let configuration = configRead.value
         let messages = [mapRead.message, configRead.message].compactMap { $0 }
         if !messages.isEmpty {
@@ -568,7 +552,6 @@ final class ConsoleViewModel: ObservableObject {
         }
         connectionOfferTask?.cancel(); connectionOfferTask = nil
         pendingHardwareConnection = nil; declinedHardwareConnectionRoute = nil
-        startupConfiguredGroup = nil; startupConfiguredPreset = nil
         presetNumberEvidence = nil
         latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
         invalidateDisplayNumber()
@@ -667,29 +650,13 @@ final class ConsoleViewModel: ObservableObject {
     /// give the number. Full dumps take 12–15 s each on firmware 1.10 (the device display animates
     /// meanwhile). ShowValue settings can be cached by name; resolving same-named candidates
     /// requires fresh dumps on each connection.
-    /// A number proven on this route can follow an approved edit only while locked.
-    private func verifiedConfiguredNumber(_ names: BCRPresetNames, route: MIDIConnectionSnapshot,
-                                          locked: Bool = false) -> Int?
-    {
-        guard let number = startupConfiguredPreset, let context = configuredDisplayContext,
-              context.route.matches(route), names.temporaryName == context.name,
-              (names.candidates == [number] || (context.locked && locked)),
-              names.memory.indices.contains(number - 1),
-              names.memory[number - 1].trimmingCharacters(in: .whitespaces) == context.name else { return nil }
-        return number
-    }
 
     private func acceptDisplayNames(_ names: BCRPresetNames, route: MIDIConnectionSnapshot) {
         verifiedDisplayNames = (route, names)
         let candidates = names.candidates
-        let configured = verifiedConfiguredNumber(names, route: route)
-        if let context = configuredDisplayContext,
-           !context.route.matches(route) || context.name != names.temporaryName ||
-           !names.candidates.contains(startupConfiguredPreset ?? 0) ||
-           (candidates.count > 1 && !context.locked) { startupConfiguredPreset = nil }
         if let evidence = presetNumberEvidence, !evidence.matches(names, on: route) { presetNumberEvidence = nil }
         let carried = presetNumberEvidence.flatMap { $0.locked ? $0.number : nil }
-        let number = carried ?? configured ?? names.presetNumber
+        let number = carried ?? names.presetNumber
         setDisplayPreset(number)
         if displayProfile?.name == names.temporaryName {
             displayProfile?.resolvedPreset = number
@@ -784,9 +751,7 @@ final class ConsoleViewModel: ObservableObject {
         let profile = try BCRDisplayProfile.read(fromPresetDump: temporary)
         // A number proven earlier (also before a restart) for exactly this definition on this route.
         let remembered = try presetNumberMemory.number(for: temporary, names: names, route: route)
-        if let number = verifiedConfiguredNumber(names, route: route, locked: profile.locked == true)
-            ?? names.presetNumber ?? remembered
-        {
+        if let number = names.presetNumber ?? remembered {
             try rememberPresetNumber(number, dump: temporary, names: names, route: route,
                                      uniquenessProven: remembered == number)
             return
@@ -834,9 +799,7 @@ final class ConsoleViewModel: ObservableObject {
                 if let evidence, try !evidence.matches(dump, names: context.names, on: context.route) {
                     presetNumberEvidence = nil
                 }
-                profile.resolvedPreset = presetNumberEvidence?.number
-                    ?? verifiedConfiguredNumber(context.names, route: context.route, locked: profile.locked == true)
-                    ?? context.names.presetNumber
+                profile.resolvedPreset = presetNumberEvidence?.number ?? context.names.presetNumber
                 profile.resolvedCandidates = context.names.candidates
             } else { presetNumberEvidence = nil }
             displayProfile = profile
@@ -1417,7 +1380,7 @@ final class ConsoleViewModel: ObservableObject {
                 }
                 // A partial write may change the lock. Only verified completion can
                 // install the carried proof for the new working copy.
-                self.presetNumberEvidence = nil; self.startupConfiguredPreset = nil
+                self.presetNumberEvidence = nil
                 self.invalidateDisplayNumber()
                 self.presetAlignment?.phase = .writing(done: 0, total: frames.count)
                 try await self.withDisplayTransfer(.write) {
@@ -1646,7 +1609,7 @@ final class ConsoleViewModel: ObservableObject {
                   try evidence.matches(expected, names: names, on: context.route) else { return nil }
             return evidence
         }
-        presetNumberEvidence = nil; startupConfiguredPreset = nil
+        presetNumberEvidence = nil
         invalidateDisplayNumber()
         var writingPoint = context.point
         writingPoint.restoreAttempted = true
@@ -1836,15 +1799,11 @@ final class ConsoleViewModel: ObservableObject {
             guard self.source == .mock, self.connection.isConnected,
                   self.connection.hasSameRoute(as: route) else { return }
             guard self.hardwareSwitchWrites else { return }
-            let program = self.midi.supportsStartupConfiguration ? self.startupProgram : nil
             self.pendingHardwareConnection = HardwareConnectionPrompt(
-                route: self.connection, program: program,
+                route: self.connection,
                 canRead: self.midi.supportsSnapshotReadback && !self.readableEncoders.isEmpty
             )
-            self.notice = ConsoleNotice(level: self.startupProgramError == nil ? .info : .error,
-                                        message: self.startupProgramError.map { error -> LocalizedMessage in
-                                            "硬件初始化设置不可用：\(error: error)"
-                                        } ?? "请选择如何连接硬件；确认前不会写入设备。")
+            self.notice = ConsoleNotice(level: .info, message: "请选择如何连接硬件；确认前不会写入设备。")
         }
     }
 
@@ -1879,12 +1838,7 @@ final class ConsoleViewModel: ObservableObject {
     func connectHardware(_ id: UUID, mode: HardwareConnectionPrompt.Mode) {
         guard let prompt = pendingHardwareConnection, prompt.id == id,
               source == .mock, connection.isConnected, connection.hasSameRoute(as: prompt.route) else { return }
-        switch mode {
-        case .initialize: guard prompt.program != nil else { return }
-        case .write: guard prompt.canWrite else { return }
-        case .read: guard prompt.canRead else { return }
-        }
-        let usingSoftware = mode == .initialize
+        if mode == .read, !prompt.canRead { return }
         declinedHardwareConnectionRoute = nil
         pendingHardwareConnection = nil
         let operation = UUID(), route = connection
@@ -1902,7 +1856,6 @@ final class ConsoleViewModel: ObservableObject {
         }
         notice = ConsoleNotice(level: .info, message: previousDisplayTask != nil || previousAlignmentTask != nil
             ? "等待设备完成上一轮预设发送，请暂勿操作设备…"
-            : usingSoftware ? "正在初始化预设和分组，请暂勿操作设备…"
             : "正在读取硬件当前值，请暂勿操作旋钮…")
         hardwareConnectionTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -1925,42 +1878,18 @@ final class ConsoleViewModel: ObservableObject {
                     self.session.selectSource(.hardware)
                     return
                 }
-                self.notice = ConsoleNotice(level: .info, message: usingSoftware
-                    ? "正在初始化预设和分组，请暂勿操作设备…"
-                    : "正在读取硬件当前值，请暂勿操作旋钮…")
-                if usingSoftware, let program = prompt.program {
-                    try await self.withDisplayTransfer(.write) { try await self.midi.configureStartup(program) }
-                    try Task.checkCancellation()
-                    guard self.source == .mock, self.connection.isConnected,
-                          self.connection.hasSameRoute(as: route) else { throw MIDIStartupError.noReply }
-                    self.visibleGroup = 1; self.session.selectGroup(1)
-                    self.session.selectSource(.hardware)
-                    self.observedHardwareGroup = nil; self.startupConfiguredGroup = 1
-                    if let line = program.presetSettings.first(where: { $0.hasPrefix(".name '") }) {
-                        self.configuredDisplayContext = (String(line.dropFirst(7).dropLast())
-                            .trimmingCharacters(in: .whitespaces), PresetRestoreRoute(route),
-                            program.presetSettings.contains(".lock on"))
-                    }
-                    self.startupConfiguredPreset = program.preset
-                    self.setDisplayPreset(program.preset)
-                    self.notice = ConsoleNotice(
-                        level: .info,
-                        message: "预设 \(program.preset)、分组 1 已初始化；软件参数已同步到设备。"
-                    )
-                } else {
-                    let expected = self.readableEncoders
-                    let messages = try await self
-                        .withDisplayTransfer { try await self.midi.readSnapshot(expected: expected) }
-                    try Task.checkCancellation()
-                    guard self.source == .mock, self.connection.isConnected, self.connection.hasSameRoute(as: route),
-                          self.session.parameterSnapshot().revision == parameterRevision,
-                          self.session.configurationRevision == configurationRevision
-                    else { throw HardwareSnapshotError.invalid }
-                    try self.session.adoptHardwareSnapshot(messages)
-                    self.observedHardwareGroup = nil; self.startupConfiguredGroup = nil
-                    self.startupConfiguredPreset = nil
-                    self.notice = ConsoleNotice(level: .info, message: "已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。")
-                }
+                self.notice = ConsoleNotice(level: .info, message: "正在读取硬件当前值，请暂勿操作旋钮…")
+                let expected = self.readableEncoders
+                let messages = try await self
+                    .withDisplayTransfer { try await self.midi.readSnapshot(expected: expected) }
+                try Task.checkCancellation()
+                guard self.source == .mock, self.connection.isConnected, self.connection.hasSameRoute(as: route),
+                      self.session.parameterSnapshot().revision == parameterRevision,
+                      self.session.configurationRevision == configurationRevision
+                else { throw HardwareSnapshotError.invalid }
+                try self.session.adoptHardwareSnapshot(messages)
+                self.observedHardwareGroup = nil
+                self.notice = ConsoleNotice(level: .info, message: "已读取硬件当前值；分组尚未确认，转动一个顶部旋钮即可跟随。")
             } catch is CancellationError {
                 guard self.startupTaskID == operation else { return }
                 if self.connection.isConnected == false {
@@ -1968,10 +1897,7 @@ final class ConsoleViewModel: ObservableObject {
                 }
             } catch {
                 guard self.startupTaskID == operation else { return }
-                let recovery: LocalizedMessage = usingSoftware
-                    ? " 设备可能停在部分设置的临时预设；永久存储未改动，重新载入预设或重启设备即可恢复。" : ""
-                let failure: LocalizedMessage = "硬件连接失败：\(error: error)"
-                self.notice = ConsoleNotice(level: .error, message: "\(failure)\(recovery)")
+                self.notice = ConsoleNotice(level: .error, message: "硬件连接失败：\(error: error)")
             }
         }
     }
@@ -1986,7 +1912,7 @@ final class ConsoleViewModel: ObservableObject {
             clearHardwarePresses()
             if source == .hardware { refreshDisplayFromDevice() }
             else {
-                displayReadTask?.cancel(); presetNumberEvidence = nil; startupConfiguredPreset = nil
+                displayReadTask?.cancel(); presetNumberEvidence = nil
                 latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
             }
             switch source {
@@ -1999,7 +1925,6 @@ final class ConsoleViewModel: ObservableObject {
             }
         case let .connected(snapshot):
             observedHardwareGroup = nil
-            startupConfiguredGroup = nil; startupConfiguredPreset = nil
             presetNumberEvidence = nil
             latestDisplayDump = nil; pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
             invalidateDisplayNumber()
