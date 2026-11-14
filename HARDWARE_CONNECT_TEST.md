@@ -2,8 +2,9 @@
 
 对应提交 `162f552`（feat(startup): confirm sync direction before writing to a connected BCR2000）。
 连接/对齐中英文原生假设备验收已通过，入口见 [UI 验收](docs/UI_ACCEPTANCE.md)。
-A–E 本轮现场路径已通过（E 仅本次按键样本）；C3 上轮视觉未通过，17→127 大幅重测及恢复后用户明确确认通过。G 未完成。
-F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
+A–E 本轮现场路径已通过（E 仅本次按键样本）；C3 上轮视觉未通过，17→127 大幅重测及恢复后用户明确确认通过。
+2026-11-14 F（含启用按键、锁图标往返）与 G 在 ethanmacair 实机通过，结果与修复见
+[实机记录 G7](docs/HARDWARE_VALIDATION.md#g7-b-组实机验收2026-11-14ethanmacair新驱动)；只剩“仍需实测确定”各项。
 2026-11-13 设备已接回本机；Port 1 身份、108 条 CC 快照及 554 帧临时预设只读回读通过，尚未完成以下现场步骤。
 2026-11-13 夜 ethanmacair 已装好描述覆盖驱动（OUT 包长 4 → 8），设备在该机双向通讯；该机端点名为 `BCR2000`，
 自动端口可直接连接。驱动实测见 [DRIVERKIT_USB_PROOF](docs/DRIVERKIT_USB_PROOF.md#第二台-macethanmacair2026-11-13-夜--2026-11-14)。
@@ -21,7 +22,7 @@ F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
 
 - 本机配置在 `~/Library/Application Support/BCRAgentConsole/`。新版首次保存会把 `hardware-map.json`
   从 v6 升到 v7，旧版 app 将无法读取；v6 备份在 `Backups/hardware-map.v6.before-162f552.json`。
-- 本机没有 `hardware-startup.json`，确认窗只有“写入并连接”“按硬件现状连接”“暂不连接”，不会出现“初始化并连接”。
+- 确认窗只有“写入并连接”“按硬件现状连接”“暂不连接”（`hardware-startup.json` 初始化路径已按 D4 删除）。
 - 当前本机映射为 v7，52 项含 `pressMode`；52 个按键仍为仅显示。本轮按实际映射核对按下/松开及拔线释放。
 - 构建：`python3 configs/macos_workflow.py build`；先退出旧版 app，并拔掉 BCR2000。
 
@@ -77,5 +78,4 @@ F 有过一次对齐/恢复验证，启用按键及锁图标仍待复核。
 ## 仍需实测确定
 
 - `.request off` 是否影响下次“按硬件现状连接”的读取。
-- 配置 `hardware-startup.json` 后，切换预设后固定等待 150ms 是否足够（不够会在第一行设置超时）。
 - headless 服务（`BCRProviderService`）连接后仍自动整体回写，本次未改。
