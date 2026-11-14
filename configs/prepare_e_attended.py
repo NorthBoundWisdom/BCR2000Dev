@@ -45,7 +45,7 @@ def main():
         (
             "A5",
             True,
-            "stop",
+            "switch-map",
             "我将停止后在隔离映射副本切换一个未使用控件，再重启；不改原映射。",
             None,
             "停止旧进程；仅编辑隔离副本；新上下文拒绝旧身份",
@@ -116,7 +116,7 @@ def main():
         "mapping": {"copy": str(BASE / "bcr/hardware-map.json"), "original_modified": False},
         "limitations": [
             "当前52按键visualizationOnly：事件ignored、无按键灯反馈；不修改原映射。",
-            "A5映射切换需监督在隔离副本执行；当前field脚本不自动改映射。",
+            "A5仅切换隔离副本：备份并移除末尾备用控件、停止后重启，记录新旧代次；不改原映射。",
             "start之间先stop；begin之后用户完成动作才执行end-input或end-reconnect；B断线后surface-rediscover。",
         ],
         "steps": steps,

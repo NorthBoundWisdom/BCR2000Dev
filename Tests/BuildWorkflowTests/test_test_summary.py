@@ -21,6 +21,29 @@ class TestSummaryTests(unittest.TestCase):
     def bundle(self, name, status="passed", tests=4, failures=0):
         return f"Test Suite '{name}.xctest' {status} at now.\n Executed {tests} tests, with {failures} failures\n"
 
+    def test_explicit_skip_terminal_and_exact_suite_count_are_required(self):
+        output = "\n".join(
+            [
+                "Test Suite 'First.xctest' started at now.",
+                "Test Case '-[First.Case attended]' started.",
+                "Test Case '-[First.Case attended]' skipped (0.1 seconds).",
+                "Test Suite 'First.xctest' passed at now.",
+                "Executed 1 test, with 1 test skipped and 0 failures (0 unexpected)",
+            ]
+        )
+        self.assertTrue(self.summary(output, ["First.xctest"])[0])
+        self.assertFalse(
+            self.summary(output.replace("with 1 test skipped", "with 2 tests skipped"), ["First.xctest"])[0]
+        )
+        self.assertFalse(
+            self.summary(output.replace("skipped (0.1 seconds).", "failed (0.1 seconds)."), ["First.xctest"])[0]
+        )
+        self.assertFalse(
+            self.summary(
+                output.replace("Test Case '-[First.Case attended]' skipped (0.1 seconds).", ""), ["First.xctest"]
+            )[0]
+        )
+
     def test_all_bundles_and_totals_are_reported(self):
         passed, output = self.summary(self.bundle("First") + self.bundle("Last", tests=7))
         self.assertTrue(passed)

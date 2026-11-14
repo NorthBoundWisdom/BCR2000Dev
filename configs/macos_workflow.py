@@ -69,17 +69,21 @@ def summarize_tests(output: str, expected: list[str], returncode: int, *, aggreg
             pending = match[1]
             if pending in bundles:
                 case_errors.append(f"duplicate bundle terminal: {pending}")
-            bundles[pending] = {"status": match[2], "tests": None, "failures": None, "unexpected": None}
+            bundles[pending] = {"status": match[2], "tests": None, "failures": None, "unexpected": None, "skipped": 0}
         elif pending and (
-            match := re.search(r"Executed (\d+) tests?, with (\d+) failures?(?: \((\d+) unexpected\))?", line)
+            match := re.search(
+                r"Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures?(?: \((\d+) unexpected\))?",
+                line,
+            )
         ):
             bundles[pending].update(
                 tests=int(match[1]),
-                failures=int(match[2]),
-                unexpected=int(match[3]) if match[3] is not None else None,
+                failures=int(match[3]),
+                unexpected=int(match[4]) if match[4] is not None else None,
+                skipped=int(match[2]) if match[2] is not None else 0,
             )
             pending = None
-        case = re.search(r"Test Case '([^']+)' (started|passed|failed)\b", line)
+        case = re.search(r"Test Case '([^']+)' (started|passed|failed|skipped)\b", line)
         if case:
             name, status = case[1], case[2]
             module = re.match(r"-\[([^. ]+)\.", name) or re.match(r"([^. ]+)\.", name)
@@ -109,7 +113,8 @@ def summarize_tests(output: str, expected: list[str], returncode: int, *, aggreg
             and known_modules
             and counts_match
             and not case_errors
-            and all(status == "passed" for status in case_ends.values())
+            and all(status in ("passed", "skipped") for status in case_ends.values())
+            and sum(status == "skipped" for status in case_ends.values()) == result["skipped"]
             and result["status"] == "passed"
             and result["failures"] == 0
             and result["unexpected"] == 0
@@ -117,7 +122,9 @@ def summarize_tests(output: str, expected: list[str], returncode: int, *, aggreg
         for module in sorted(expected_modules):
             names = {name for name, owner in case_starts.items() if owner == module}
             terminals = names.intersection(case_ends)
-            valid = bool(names) and names == terminals and all(case_ends[name] == "passed" for name in names)
+            valid = (
+                bool(names) and names == terminals and all(case_ends[name] in ("passed", "skipped") for name in names)
+            )
             print(
                 f"  {'PASS' if valid else 'FAIL'} {module}: {len(names)} started, {len(terminals)} complete", flush=True
             )
@@ -142,7 +149,16 @@ def summarize_tests(output: str, expected: list[str], returncode: int, *, aggreg
                 == (bundles.get(name) or {}).get("tests")
                 for name in expected
             )
-            if not complete or not counts_match or case_errors:
+            skips_match = all(
+                sum(
+                    case_ends.get(case) == "skipped"
+                    for case, owner in case_starts.items()
+                    if owner == name.removesuffix(".xctest")
+                )
+                == (bundles.get(name) or {}).get("skipped", 0)
+                for name in expected
+            )
+            if not complete or not counts_match or not skips_match or case_errors:
                 print("  FAIL split-bundle case coverage/counts are incomplete or inconsistent", flush=True)
                 success = False
         for name in dict.fromkeys([*expected, *bundles]):
