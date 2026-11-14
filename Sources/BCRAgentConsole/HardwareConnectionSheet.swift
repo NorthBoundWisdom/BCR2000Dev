@@ -35,8 +35,8 @@ struct HardwareConnectionSheet: View {
             }
             if prompt.canRead {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.text("硬件 → 软件（不改动设备）")).font(.headline)
-                    Text(L10n.text("读取控制器当前旋钮值，不切换预设或改动设备；分组在顶部输入后确认。"))
+                    Text(L10n.text("硬件 → 软件（不改动旋钮与预设）")).font(.headline)
+                    Text(L10n.text("读取控制器当前旋钮值，不切换预设、不改动旋钮值；按键灯随后显示软件状态（如 Agent）。分组在顶部输入后确认。"))
                         .fixedSize(horizontal: false, vertical: true)
                     Button(L10n.text("按硬件现状连接")) { model.connectHardware(prompt.id, mode: .read) }
                         .accessibilityIdentifier("connection.read")

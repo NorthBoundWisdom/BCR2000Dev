@@ -342,6 +342,12 @@ public struct SurfaceEngine: Sendable {
         feedback(to: configuration.assignments.map(\.control), at: now)
     }
 
+    /// Button LEDs only. The software owns them (Agent states, toggles) and the device cannot report
+    /// them, so even a read-only connection shows the software state there; encoders are untouched.
+    public mutating func buttonFeedback(at now: Date = .now) -> [SurfaceEffect] {
+        feedback(to: configuration.assignments.map(\.control).filter { !$0.isContinuous }, at: now)
+    }
+
     public mutating func setActualFeedback(_ values: [ParameterID: Double],
                                            at now: Date = .now) throws -> [SurfaceEffect]
     {

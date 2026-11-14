@@ -238,6 +238,9 @@ public final class SurfaceSession {
         noteMappingContextChanged()
         droppedFeedbackCount = 0
         onEvent?(.sourceChanged(.hardware))
+        // Encoder values came from the device; button LEDs still show the software state, because
+        // after a restart the device keeps lights for Agent states the software no longer has.
+        perform(engine.buttonFeedback(at: now()))
         publishChange()
     }
 

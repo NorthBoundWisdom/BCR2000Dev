@@ -27,7 +27,7 @@ final class HardwareStartupSnapshotTests: XCTestCase {
         ])
     }
 
-    func testStartupAdoptsAbsoluteValuesWithoutFeedbackOrButtonActionsOrTouch() throws {
+    func testStartupAdoptsAbsoluteValuesAndSendsOnlyButtonLEDsWithoutActionsOrTouch() throws {
         let (session, device, snapshot) = try fixture()
         var actions = 0, touches = 0
         session.onTriggerAgent = { _ in actions += 1 }
@@ -39,7 +39,8 @@ final class HardwareStartupSnapshotTests: XCTestCase {
             session.engine.value(of: "arm.j1"),
             session.engine.configuration.parameter("arm.j1")?.value(fromMIDI: 77)
         )
-        XCTAssertTrue(device.sent.isEmpty)
+        // Only the software-owned button LED is written; encoder values stay as read from the device.
+        XCTAssertEqual(device.sent.map(\.controlID.number), [13])
         XCTAssertEqual(actions, 0)
         XCTAssertEqual(touches, 0)
     }
