@@ -23,11 +23,14 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case unknown
     }
 
-    /// Presentation estimates still awaiting PLAN B4 measurements. The transfer animation is not
-    /// timed: it follows `BCRDisplayMarquee`, one step per transferred line.
+    /// Hold times compared by eye against firmware 1.10 beside the panel (PLAN B4, 2026-11-14).
+    /// The transfer animation is not timed: it follows `BCRDisplayMarquee`, one step per line.
     public enum Calibration {
-        /// 2026-11-12 user report: the device returns faster than 1.5 s. 0.8 s is still an estimate.
+        /// Encoder values: the panel and the device returned to the preset together (both lagging
+        /// equally by about 0.2 s), so 0.8 s stands.
         public static let valueHoldSeconds: Double = 0.8
+        /// `on`/`oFF`: at 0.8 s the panel showed them about 0.5 s longer than the device.
+        public static let buttonHoldSeconds: Double = 0.5
     }
 
     /// Compatibility spelling for the shared presentation calibration.
@@ -70,7 +73,8 @@ public struct BCRDisplayModel: Equatable, Sendable {
         case false?: .off
         case nil: .value(rawValue)
         }
-        transient = (content, time + Self.holdSeconds)
+        // Counters show a value like an encoder; press/release states are held shorter.
+        transient = (content, time + (pressed == nil ? Self.holdSeconds : Calibration.buttonHoldSeconds))
     }
 
     public mutating func clearTransient() { transient = nil }

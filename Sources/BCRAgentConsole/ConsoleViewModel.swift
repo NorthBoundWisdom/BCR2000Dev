@@ -635,7 +635,9 @@ final class ConsoleViewModel: ObservableObject {
         guard shows else { return }
         displayRevertTask?.cancel()
         displayRevertTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(BCRDisplayModel.holdSeconds)) } catch { return }
+            // Values and button states are held for different times; wait for whichever is shown.
+            let remaining = (self?.display.transient?.until ?? now) - now
+            do { try await Task.sleep(for: .seconds(max(0, remaining))) } catch { return }
             self?.objectWillChange.send()
             self?.displayRevertTask = nil
         }

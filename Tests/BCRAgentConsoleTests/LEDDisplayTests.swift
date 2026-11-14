@@ -36,6 +36,18 @@ final class BCRDisplayModelTests: XCTestCase {
         XCTAssertEqual(display.content(at: 5), .unknown)
     }
 
+    func testButtonStatesAreHeldShorterThanValues() {
+        var display = BCRDisplayModel(preset: 1)
+        display.buttonChanged(pressed: true, rawValue: 127, showsValue: true, at: 0)
+        XCTAssertEqual(display.content(at: 0.49), .on)
+        XCTAssertEqual(display.content(at: BCRDisplayModel.Calibration.buttonHoldSeconds), .preset(1))
+        display.buttonChanged(pressed: nil, rawValue: 5, showsValue: true, at: 10)
+        XCTAssertEqual(display.content(at: 10.6), .value(5))
+        display.encoderMoved(rawValue: 64, showsValue: true, at: 20)
+        XCTAssertEqual(display.content(at: 20.6), .value(64))
+        XCTAssertEqual(display.content(at: 20 + BCRDisplayModel.holdSeconds), .preset(1))
+    }
+
     func testTransfersShowBusyOverEverythingElse() {
         var display = BCRDisplayModel(preset: 1)
         display.encoderMoved(rawValue: 64, showsValue: true, at: 0)
