@@ -27,10 +27,13 @@ def run(*args):
 
 # Surface control 1.3 deliverables have exactly one source: the locked shared package.
 SURFACE_CONTRACT = "1.3"
-SURFACE_SDK = "1.3.0"
+SURFACE_SDK = "1.4.0"
 # Same root-level names as the other host's delivery, so one consumer loader fits both.
 SURFACE_FILES = {
     "control-tools.json": "docs/surface-control-tools.json",
+    "hardware-control-tools.json": "docs/surface-control-hardware-tools.json",
+    "hardware-control-examples.json": "docs/surface-control-hardware-examples.json",
+    "surface-control-hardware-v1.4.json": "fixtures/surface-control-hardware-v1.4.json",
     "surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
     "surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
     "surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",
@@ -49,7 +52,7 @@ SURFACE_ARTIFACT = "surface-control-simulator"
 SURFACE_MANIFEST = "surface-control-manifest.json"
 
 
-def package(output, configuration="release", skip_build=False):
+def package(output, configuration="release", skip_build=False, hardware_map=None):
     shared = Path(ensure_dependency(ROOT, environ=load_build_environment(ROOT)))
     if not shared.is_absolute():
         shared = ROOT / shared
@@ -106,8 +109,9 @@ def package(output, configuration="release", skip_build=False):
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     sdk_sources = sorted(
         path
-        for name in ("surface_control", "surface_conformance")
-        for path in (shared / "clients/python" / name).rglob("*.py")
+        for name in ("surface_control", "surface_conformance", "surface_control_testing")
+        for path in (shared / "clients/python" / name).rglob("*")
+        if path.is_file() and path.suffix in (".py", ".md")
     )
     if not any(path.parent.name == "surface_conformance" for path in sdk_sources):
         raise ValueError("Locked shared package has no conformance checker")
@@ -126,6 +130,28 @@ def package(output, configuration="release", skip_build=False):
     ).stdout
     (output / "control-contract.json").write_bytes(contract)
     discovery = json.loads(contract)["discovery"]
+    hardware_discovery = None
+    if hardware_map is not None:
+        shutil.copy2(hardware_map, output / "hardware-map.json")
+        hardware_contract = subprocess.run(
+            [
+                str(output / "BCRProviderService"),
+                "--source",
+                "hardware",
+                "--hardware-profile",
+                "--hardware-map",
+                str(output / "hardware-map.json"),
+                "--describe-surface",
+            ],
+            check=True,
+            capture_output=True,
+            cwd=output,
+        ).stdout
+        (output / "hardware-control-contract.json").write_bytes(hardware_contract)
+        hardware_discovery = json.loads(hardware_contract)["discovery"]
+        shutil.copy2(
+            ROOT / "configs/hardware_surface_conformance_roles.json", output / "hardware-conformance-roles.json"
+        )
     shutil.copy2(ROOT / "docs/SURFACE_SIMULATION.md", output / "SURFACE_SIMULATION.md")
     shutil.copy2(ROOT / "docs/SURFACE_CHAIN_STARTUP.md", output / "SURFACE_CHAIN_STARTUP.md")
     shutil.copytree(
@@ -207,6 +233,31 @@ def package(output, configuration="release", skip_build=False):
                 "mapping_revision": example_discovery["expected"]["mapping_revision"],
             },
         },
+        "test_artifacts": [{"artifact": "surface-control-test-only-hardware-double", "qualification": "test-only"}],
+        "surface_control_profiles": [
+            {
+                "contract_version": "1.3",
+                "source": "simulation",
+                "profile_id": discovery["profile"]["id"],
+                "profile_version": discovery["profile"]["version"],
+                "mapping_revision": discovery["expected"]["mapping_revision"],
+            }
+        ]
+        + (
+            [
+                {
+                    "contract_version": "1.4",
+                    "source": "hardware",
+                    "profile_id": hardware_discovery["profile"]["id"],
+                    "profile_version": hardware_discovery["profile"]["version"],
+                    "mapping_revision": hardware_discovery["expected"]["mapping_revision"],
+                    "description": "hardware-control-contract.json",
+                    "mapping": "hardware-map.json",
+                }
+            ]
+            if hardware_discovery is not None
+            else []
+        ),
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "surface_plugins_files_sha256": {
             source: hashlib.sha256((shared / source).read_bytes()).hexdigest()
@@ -245,14 +296,17 @@ def main():
     destination.add_argument("--output-root", type=Path, help="Shared delivery root with atomic INDEX.json")
     parser.add_argument("--configuration", choices=("debug", "release"), default="release")
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument(
+        "--hardware-map", type=Path, help="Explicit learned map to include the optional hardware 1.4 profile"
+    )
     args = parser.parse_args()
     if args.output_root:
         manifest, output, _ = publish(
-            args.output_root, lambda stage: package(stage, args.configuration, args.skip_build)
+            args.output_root, lambda stage: package(stage, args.configuration, args.skip_build, args.hardware_map)
         )
     else:
         output = args.output.resolve()
-        manifest = package(output, args.configuration, args.skip_build)
+        manifest = package(output, args.configuration, args.skip_build, args.hardware_map)
     print(
         json.dumps(
             {

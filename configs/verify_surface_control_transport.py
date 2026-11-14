@@ -223,14 +223,14 @@ def main():
         assert not Path(name).is_absolute() and ".." not in Path(name).parts
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
-    assert manifest["surface_control_contract"] == "1.3" and manifest["surface_control_sdk"] == "1.3.0"
-    sdk = artifact / "surface-control-sdk-1.3.0.zip"
+    assert manifest["surface_control_contract"] == "1.3" and manifest["surface_control_sdk"] == "1.4.0"
+    sdk = artifact / "surface-control-sdk-1.4.0.zip"
     sys.path.insert(0, str(sdk))
     import surface_control
     from surface_control import Client, CommandCursor, SurfaceError
 
     # The delivered SDK is the locked shared package source, byte for byte.
-    assert surface_control.__version__ == "1.3.0" and surface_control.__file__.startswith(str(sdk) + "/")
+    assert surface_control.__version__ == "1.4.0" and surface_control.__file__.startswith(str(sdk) + "/")
 
     cases = []
     hosts = []
