@@ -92,4 +92,29 @@ final class HardwareRoleReadinessTests: XCTestCase {
             XCTAssertFalse(report.missing.isEmpty)
         }
     }
+
+    func testReadOnlyCommandReportsBlockedAndInvalidInputs() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let mapURL = directory.appendingPathComponent("test-only-map.json")
+        let configurationURL = directory.appendingPathComponent("test-only-config.json")
+        let requestURL = directory.appendingPathComponent("test-only-request.json")
+        let (map, configuration, request) = fixture(visualizationOnly: true)
+        let original = try JSONEncoder().encode(map)
+        try original.write(to: mapURL)
+        try JSONEncoder().encode(configuration).write(to: configurationURL)
+        try JSONEncoder().encode(request).write(to: requestURL)
+        let args = [mapURL.path, requestURL.path, "--configuration", configurationURL.path,
+                    "--hardware-output", "write", "--allow-surface-feedback"]
+        let blocked = HardwareRoleReadiness.command(arguments: args)
+        XCTAssertEqual(blocked.exitCode, 3)
+        let report = try JSONSerialization.jsonObject(with: Data(blocked.output.utf8)) as! [String: Any]
+        XCTAssertEqual(report["ready"] as? Bool, false)
+        XCTAssertEqual(report["available_momentary_button_ids"] as? [String], [])
+        XCTAssertEqual(try Data(contentsOf: mapURL), original)
+        let invalid = HardwareRoleReadiness.command(arguments: args + ["--unknown"])
+        XCTAssertEqual(invalid.exitCode, 2)
+        XCTAssertTrue(invalid.output.contains("invalid_readiness_input"))
+    }
 }

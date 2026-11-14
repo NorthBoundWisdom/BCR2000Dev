@@ -34,6 +34,7 @@ SURFACE_FILES = {
     "hardware-control-tools.json": "docs/surface-control-hardware-tools.json",
     "hardware-control-examples.json": "docs/surface-control-hardware-examples.json",
     "surface-control-hardware-v1.4.json": "fixtures/surface-control-hardware-v1.4.json",
+    "surface-control-hardware-independent-v1.4.json": "fixtures/surface-control-hardware-independent-v1.4.json",
     "surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
     "surface-control-software-v1.json": "fixtures/surface-control-software-v1.json",
     "surface-control-software-v1.1.json": "fixtures/surface-control-software-v1.1.json",

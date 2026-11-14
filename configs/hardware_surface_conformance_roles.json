@@ -10,6 +10,16 @@
         "feedback_state": null,
         "feedback_progress": "pushEncoder.2.1"
       }
+    },
+    "surface-control-hardware-independent-v1.4": {
+      "roles": {
+        "button_accepted": null,
+        "button_ignored": "button.1.1",
+        "input_a": "pushEncoder.1.1",
+        "touch_input": null,
+        "feedback_progress": "pushEncoder.1.2",
+        "input_only": "button.1.2"
+      }
     }
   }
 }
