@@ -5,6 +5,17 @@ import Foundation
 struct BCRProfileTool {
     static func main() throws {
         let args = CommandLine.arguments
+        if args.count == 2, args[1] == "--help" {
+            print(
+                "BCRProfileTool <capture-directory> <profile-directory> | --buttons <capture> <profile> | --check-hardware-roles <learned-map.json> <role-request.json> [--configuration PATH] [--hardware-output observe|write] [--allow-surface-feedback]"
+            )
+            return
+        }
+        if args.count >= 2, args[1] == "--check-hardware-roles" {
+            let result = HardwareRoleReadiness.command(arguments: Array(args.dropFirst(2)))
+            print(result.output)
+            exit(result.exitCode)
+        }
         if args.count == 4, args[1] == "--buttons" {
             let result = try ProfileConversion.prepareButtons(
                 capture: URL(fileURLWithPath: args[2]),

@@ -88,3 +88,8 @@ Keep the learned `--hardware-map` required above. Read-only input observation us
 `observe` and no display permission. For displays add BOTH `--hardware-output write` and
 `--allow-surface-feedback`. SDK 1.4.0 must explicitly accept hardware; ordinary simulation
 continues to advertise 1.3. This does not grant physical qualification.
+
+Before preparing a physical four-role consumer, run the delivered `BCRProfileTool
+--check-hardware-roles` mode described in `HARDWARE_ROLE_READINESS.md`. `ready:false` is a
+preparation refusal, including when current buttons are visualization-only. This read-only report
+never changes learned mappings or grants physical qualification.

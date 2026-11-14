@@ -149,6 +149,29 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         ).stdout
         (output / "hardware-control-contract.json").write_bytes(hardware_contract)
         hardware_discovery = json.loads(hardware_contract)["discovery"]
+        shutil.copy2(ROOT / "examples/hardware/role-readiness-request.json", output / "role-readiness-request.json")
+        shutil.copy2(ROOT / "docs/HARDWARE_ROLE_READINESS.md", output / "HARDWARE_ROLE_READINESS.md")
+        readiness = subprocess.run(
+            [
+                str(output / "BCRProfileTool"),
+                "--check-hardware-roles",
+                str(output / "hardware-map.json"),
+                str(output / "role-readiness-request.json"),
+                "--hardware-output",
+                "write",
+                "--allow-surface-feedback",
+            ],
+            capture_output=True,
+            cwd=output,
+        )
+        if readiness.returncode not in (0, 3):
+            raise ValueError("Hardware role readiness input validation failed")
+        readiness_report = json.loads(readiness.stdout)
+        if readiness_report.get("hardware_qualified") is not False or readiness_report.get("ready") != (
+            readiness.returncode == 0
+        ):
+            raise ValueError("Invalid offline role readiness report")
+        (output / "hardware-role-readiness.json").write_bytes(readiness.stdout)
         shutil.copy2(
             ROOT / "configs/hardware_surface_conformance_roles.json", output / "hardware-conformance-roles.json"
         )
@@ -233,6 +256,15 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
                 "mapping_revision": example_discovery["expected"]["mapping_revision"],
             },
         },
+        "hardware_role_readiness": (
+            {
+                "report": "hardware-role-readiness.json",
+                "request": "role-readiness-request.json",
+                "scope": "offline; declared write and display permission; never hardware qualification",
+            }
+            if hardware_discovery is not None
+            else None
+        ),
         "test_artifacts": [{"artifact": "surface-control-test-only-hardware-double", "qualification": "test-only"}],
         "surface_control_profiles": [
             {
