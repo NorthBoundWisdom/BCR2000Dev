@@ -196,7 +196,7 @@ public final class SurfaceSession {
 
     public func configureFeedback(_ policy: FeedbackPolicy) throws {
         let updated = try FeedbackScheduler(policy: policy)
-        engine.recordFeedbackWhenGenerated = !policy.enabled
+        engine.recordFeedbackWhenGenerated = !policy.enabled && source == .mock
         feedbackPolicy = policy
         scheduler = updated
         notifyFeedbackQueue()
@@ -234,6 +234,7 @@ public final class SurfaceSession {
         clearFeedbackQueue()
         engine = candidate
         source = .hardware
+        engine.recordFeedbackWhenGenerated = false
         engine.echoWindow = 0.18
         diagnosticReadbackActive = false; diagnosticToken = nil
         nrpnAssembler.reset()
@@ -252,6 +253,7 @@ public final class SurfaceSession {
         clearFeedbackQueue()
         _ = engine.clearDisplayFeedback(at: now())
         source = newSource
+        engine.recordFeedbackWhenGenerated = !feedbackPolicy.enabled && newSource == .mock
         diagnosticReadbackActive = false; diagnosticToken = nil
         invalidateInputEpoch("source_changed")
         noteMappingContextChanged()
