@@ -108,6 +108,22 @@ def main():
                 on_fail="停止后续发送并stop；记录原始结果，不重试",
             )
         )
+    steps.insert(
+        0,
+        dict(
+            id="E-B0",
+            sends_to_device=False,
+            moves_motors="none",
+            command="python3 build/e/bcr/field.py role-readiness",
+            say_before="先只读检查四角色；不打开MIDI，不改学习映射。",
+            confirm_before=None,
+            user_action=None,
+            ask=None,
+            expected_answer=None,
+            auto_check="机器报告ready=false；enable/stop因visualizationOnly不可用，linear/steer可用；hardware_qualified=false",
+            on_fail="exit3为明确未就绪：禁止准备四角色消费者，保留只读观察/替身演练；无自动修映射",
+        ),
+    )
     value = {
         "schema_version": 1,
         "repository": str(ROOT),
