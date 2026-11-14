@@ -13,8 +13,10 @@ private final class PendingStartupMIDI: MIDIService {
     var startup: CheckedContinuation<Void, any Error>?
     var synchronousStarts = 0
     var asynchronousStarts = 0
+    var begunStartups = 0
     var writes = 0
     func start() throws { synchronousStarts += 1 }
+    func beginStartup() { begunStartups += 1 }
     func startWhenReady() async throws {
         asynchronousStarts += 1
         try await withCheckedThrowingContinuation { startup = $0 }
@@ -38,6 +40,8 @@ final class MIDIInitializationTests: XCTestCase {
         let model = ConsoleViewModel(stores: .temporary(), midiService: device,
                                      initialPreset: .robotArm, automaticallyAdvancesMock: false)
         XCTAssertTrue(model.startingMIDI)
+        // Begun synchronously during init, before the window's first layout frees the main actor.
+        XCTAssertEqual(device.begunStartups, 1)
         try await waitUntil { device.startup != nil }
         XCTAssertEqual(device.synchronousStarts, 0)
         XCTAssertEqual(device.asynchronousStarts, 1)
@@ -77,5 +81,30 @@ final class MIDIInitializationTests: XCTestCase {
         // The main actor reached here while the simulated blocking system call still waits.
         release.signal()
         try await work.value
+    }
+
+    func testCoreMIDIStartupIsDispatchedBeforeTheCallerYields() async throws {
+        let started = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
+        let pending = CoreMIDIStartup.begin(on: DispatchQueue(label: "test.eager-midi-init")) {
+            started.signal()
+            _ = release.wait(timeout: .now() + 2)
+        }
+        // Still inside this main-actor job: the queue work runs although nothing has awaited yet.
+        XCTAssertEqual(started.wait(timeout: .now() + 2), .success)
+        release.signal()
+        try await pending.value()
+    }
+
+    func testCoreMIDIStartupFailureReachesALateAwaiter() async throws {
+        let finished = DispatchSemaphore(value: 0)
+        let pending = CoreMIDIStartup.begin(on: DispatchQueue(label: "test.failed-midi-init")) {
+            defer { finished.signal() }
+            throw MIDIStartupError.noReply
+        }
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        do { try await pending.value(); XCTFail("Expected the startup failure") }
+        catch {
+            guard case .noReply? = error as? MIDIStartupError else { return XCTFail("Unexpected \(error)") }
+        }
     }
 }

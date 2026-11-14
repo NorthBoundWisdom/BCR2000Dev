@@ -25,6 +25,9 @@ public protocol MIDIService: SurfaceDevice {
     func start() throws
     /// GUI readiness path: slow system initialization must not hold the main actor.
     func startWhenReady() async throws
+    /// Begins `startWhenReady` work immediately, without waiting for the main actor to be free;
+    /// a later `startWhenReady` awaits that same startup. Devices without slow startup ignore it.
+    func beginStartup()
     func selectEndpoints(_ selection: MIDIEndpointSelection)
     var supportsSnapshotReadback: Bool { get }
     func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage]
@@ -46,6 +49,7 @@ public protocol MIDIService: SurfaceDevice {
 
 public extension MIDIService {
     func startWhenReady() async throws { try start() }
+    func beginStartup() {}
     var supportsStartupConfiguration: Bool { false }
     func readCurrentPreset() async throws -> Data { throw MIDIStartupError.invalidProgram }
     func readPresetNames() async throws -> BCRPresetNames { throw MIDIStartupError.invalidProgram }
@@ -121,8 +125,10 @@ public final class CoreMIDIService: MIDIService {
     private func makeTransport() -> CoreMIDITransport {
         CoreMIDITransport(
             selection: selection,
-            onMessages: { [weak self] messages, generation in
-                Task { @MainActor [weak self] in self?.receive(messages, generation: generation) }
+            onMessages: { [weak self] messages, generation, receivedAt in
+                Task { @MainActor [weak self] in
+                    self?.receive(messages, generation: generation, receivedAt: receivedAt)
+                }
             },
             onSysEx: { [weak self] chunks, generation in
                 Task { @MainActor [weak self] in self?.receiveSysEx(chunks, generation: generation) }
@@ -181,11 +187,20 @@ public final class CoreMIDIService: MIDIService {
 
     public func startWhenReady() async throws {
         if transportReady { return }
-        if let task = initializationTask { try await task.value; return }
+        beginStartup()
+        guard let task = initializationTask else { return }
+        try await task.value
+    }
+
+    public func beginStartup() {
+        guard !transportReady, initializationTask == nil else { return }
         let transport = makeTransport()
         self.transport = transport
-        let task = Task { @MainActor in
-            do { try await transport.startAsynchronously(); self.markTransportReady() }
+        // Dispatched now, not when a task first runs: the main actor is busy with window layout.
+        let pending = transport.beginStartup()
+        initializationTask = Task { @MainActor in
+            defer { self.initializationTask = nil }
+            do { try await pending.value(); self.markTransportReady() }
             catch {
                 self.transport = nil; self.pendingConnection = nil
                 self.connection.lastError = error.localizedDescription
@@ -193,9 +208,6 @@ public final class CoreMIDIService: MIDIService {
                 throw error
             }
         }
-        initializationTask = task
-        defer { initializationTask = nil }
-        try await task.value
     }
 
     public func send(_ message: MIDIVoiceMessage) throws {
@@ -237,11 +249,13 @@ public final class CoreMIDIService: MIDIService {
         }
     }
 
-    private func receive(_ messages: [MIDIVoiceMessage], generation: UInt) {
+    private func receive(_ messages: [MIDIVoiceMessage], generation: UInt, receivedAt: Double) {
         guard generation == inputGeneration else { return }
         guard startupID == nil || !holdsInput else { return }
         guard let id = snapshotID else { onMessages?(messages); return }
-        snapshotActivity = ProcessInfo.processInfo.systemUptime
+        // The quiet window is the device's silence, measured at IO receipt: a busy main actor
+        // (sheet dismissal, first layout) must not stretch it by delivering the burst late.
+        snapshotActivity = max(snapshotActivity, receivedAt)
         for message in messages where snapshotExpected.contains(message.controlID) {
             if let previous = snapshotValues[message.controlID], previous != message {
                 finishSnapshot(id, result: .failure(HardwareSnapshotError.invalid)); return
@@ -470,7 +484,7 @@ public final class CoreMIDIService: MIDIService {
 /// Owns CoreMIDI objects on a private serial queue. The receive callback only copies/decodes
 /// packet words and immediately hands value types to the application.
 private final class CoreMIDITransport: @unchecked Sendable {
-    typealias MessageHandler = @Sendable ([MIDIVoiceMessage], UInt) -> Void
+    typealias MessageHandler = @Sendable ([MIDIVoiceMessage], UInt, Double) -> Void
     typealias ConnectionHandler = @Sendable (MIDIConnectionSnapshot, UInt) -> Void
     typealias SysExHandler = @Sendable ([MIDISysEx7Chunk], UInt) -> Void
 
@@ -510,8 +524,8 @@ private final class CoreMIDITransport: @unchecked Sendable {
         try managementQueue.sync { try startOnQueue() }
     }
 
-    func startAsynchronously() async throws {
-        try await CoreMIDIStartup.run(on: managementQueue) { [self] in try startOnQueue() }
+    func beginStartup() -> CoreMIDIStartup.Pending {
+        CoreMIDIStartup.begin(on: managementQueue) { [self] in try startOnQueue() }
     }
 
     private func startOnQueue() throws {
@@ -544,10 +558,11 @@ private final class CoreMIDITransport: @unchecked Sendable {
             guard let self else {
                 return
             }
+            let receivedAt = ProcessInfo.processInfo.systemUptime
             let (messages, chunks) = Self.decode(eventList)
             let generation = context.map { UInt(bitPattern: $0) } ?? 0
             if !messages.isEmpty {
-                self.messageHandler(messages, generation)
+                self.messageHandler(messages, generation, receivedAt)
             }
             if !chunks.isEmpty { self.sysExHandler(chunks, generation) }
         }

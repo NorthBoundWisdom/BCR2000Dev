@@ -466,13 +466,18 @@ final class ConsoleViewModel: ObservableObject {
         startingMIDI = true
         let progress = ConsoleNotice(level: .info, message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。")
         if notice == nil { notice = progress }
+        // Start system initialization now; the task below runs only after the first window layout.
+        midi.beginStartup()
         midiInitializationTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.startingMIDI = false; self.midiInitializationTask = nil }
             do {
                 try await self.midi.startWhenReady()
                 if self.notice == progress { self.notice = nil }
-                if self.connection.isConnected { self.offerHardwareConnection() }
+                // The connection event usually offered already; restarting it would only re-wait the settle delay.
+                if self.connection.isConnected, self.connectionOfferTask == nil, self.pendingHardwareConnection == nil {
+                    self.offerHardwareConnection()
+                }
             } catch { self.notice = ConsoleNotice(level: .error, message: "CoreMIDI 启动失败：\(error: error)") }
         }
     }
