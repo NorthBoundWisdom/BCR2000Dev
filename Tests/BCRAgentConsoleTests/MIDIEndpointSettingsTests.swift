@@ -83,6 +83,36 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         XCTAssertEqual(model.mcp.service.call("list_midi_endpoints").value.objectValue?["selection"], result.value)
     }
 
+    func testMCPEndpointToolRefusesWhileOutputRunsOrALearnIsActive() async throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let midi = EndpointFakeMIDI(), output = EndpointFakeOutput()
+        midi.connection.sourceEndpoints = [.init(id: 7, name: "BCR2000")]
+        midi.connection.destinationEndpoints = [.init(id: 9, name: "BCR2000")]
+        let model = ConsoleViewModel(stores: stores(directory), midiService: midi, outputTransport: output,
+                                     initialPreset: .robotArm)
+        try await waitUntil { !model.startingMIDI && model.connection.sourceEndpoints.count == 1 }
+        model.mcp.service.permissions.deviceControl = true
+        let arguments: JSONValue = .object(["sourceID": .number(7), "destinationID": .number(9)])
+        let before = model.endpointSelection, choices = midi.choices.count
+
+        model.output.start()
+        XCTAssertTrue(model.mcp.service.call("set_midi_endpoints", arguments: arguments).isError)
+        XCTAssertTrue(model.output.settings.enabled, "a remote port change must not stop the output")
+        model.output.stop()
+
+        model.requestSource(.hardware)
+        model.beginLearning(at: .pushEncoder(group: 1, 1))
+        XCTAssertTrue(model.isLearning)
+        XCTAssertTrue(model.mcp.service.call("set_midi_endpoints", arguments: arguments).isError)
+        XCTAssertTrue(model.isLearning, "a remote port change must not end the learn")
+        model.stopLearning()
+
+        XCTAssertEqual(model.endpointSelection, before)
+        XCTAssertEqual(midi.choices.count, choices)
+        XCTAssertFalse(model.mcp.service.call("set_midi_endpoints", arguments: arguments).isError)
+    }
+
     func testIsolatedModeRejectsTheMCPEndpointTool() async {
         let midi = EndpointFakeMIDI()
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
