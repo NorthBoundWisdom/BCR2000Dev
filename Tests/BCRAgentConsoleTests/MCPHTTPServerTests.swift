@@ -88,6 +88,21 @@ final class MCPHTTPServerTests: XCTestCase {
         return (data, try XCTUnwrap(response as? HTTPURLResponse))
     }
 
+    func testSurfaceClientCredentialRecordRejectsDuplicatesAndExcludesLegacyPrincipals() throws {
+        let values = ["owner": String(repeating: "a", count: 64), "operator": String(repeating: "b", count: 64),
+                      "display": String(repeating: "c", count: 64)]
+        var clients = try SurfaceClientCredentials(data: JSONSerialization.data(withJSONObject: values))
+        let previous: Set<String> = [clients.operatorWriterID, clients.displayWriterID]
+        clients.excludeWriterIDs(previous)
+        XCTAssertFalse(previous.contains(clients.operatorWriterID))
+        XCTAssertFalse(previous.contains(clients.displayWriterID))
+        XCTAssertNotEqual(clients.operatorWriterID, clients.displayWriterID)
+        let duplicate = "{\"owner\":\"" + values["owner"]! + "\",\"owner\":\"" + values["owner"]!
+            + "\",\"operator\":\"" + values["operator"]! + "\",\"display\":\"" + values["display"]! + "\"}"
+        XCTAssertThrowsError(try SurfaceClientCredentials(data: Data(duplicate.utf8)))
+        XCTAssertThrowsError(try SurfaceClientCredentials(data: Data(repeating: 32, count: 513)))
+    }
+
     func testLoopbackModernDiscoveryWriteReadAndSourceAttribution() async throws {
         let server = makeServer()
         let port = try await server.start(port: 0, token: credential)

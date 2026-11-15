@@ -30,6 +30,7 @@ private struct Options {
     var hardwareMap: URL?
     var exportContract: URL?
     var tokenStdin = false
+    var surfaceClientTokensStdin = false
     var simulationProfile = false
     var hardwareProfile = false
     var simulationConfiguration: URL?
@@ -73,6 +74,10 @@ private struct Options {
             case "--allow-chassis-control": result.permissions.chassisControl = true
             case "--allow-simulation-control": result.permissions.simulationControl = true
             case "--token-stdin": result.tokenStdin = true
+            case "--surface-client-tokens-stdin":
+                guard !result.surfaceClientTokensStdin
+                else { throw BootError(reason: "Repeated surface client option") }
+                result.surfaceClientTokensStdin = true
             case "--hardware-profile": result.hardwareProfile = true
             case "--simulation-profile": result.simulationProfile = true
             case "--simulation-configuration": result.simulationConfiguration = URL(fileURLWithPath: try value())
@@ -109,6 +114,9 @@ private struct Options {
             default: throw BootError(reason: "Unknown provider service option; use --help")
             }
             i += 1
+        }
+        guard !(result.tokenStdin && result.surfaceClientTokensStdin) else {
+            throw BootError(reason: "Surface client token stdin conflicts with legacy token input")
         }
         guard !result
             .hardwareProfile ||
@@ -239,7 +247,7 @@ private struct BCRProviderService {
     --hardware-output observe|write
                                   With --source hardware only. Default observe: inputs update parameters,
                                   nothing is sent to the device (no resync on connect or reconnect).
-                                  write sends feedback and resyncs as before and must be given explicitly
+                                  write permits explicit feedback; lifecycle changes never replay retained displays
     --no-console                  Run device simulator modules without a console
     --robot-sim --chassis-sim      Explicitly enable independent reference modules
     --clock realtime|manual       Default realtime; manual advancement is separately authorized
@@ -257,6 +265,7 @@ private struct BCRProviderService {
                                   Display requires BOTH --hardware-output write and --allow-surface-feedback
     --describe-surface            Print the selected profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
+    --surface-client-tokens-stdin  Three in-memory owner/operator/display tokens from a dedicated JSON pipe
     --surface-principal-file PATH Explicit private host-issued principal record; default memory only
     --write-limits input=N,feedback=N,renew=N,admin=N
                                   Surface-only independent budgets, mutually exclusive with --write-limit
@@ -322,7 +331,24 @@ private struct BCRProviderService {
                 return
             }
             let token: String
-            if options.tokenStdin {
+            var surfaceClients: SurfaceClientCredentials?
+            if options.surfaceClientTokensStdin {
+                guard ProcessInfo.processInfo.environment["BCR_PROVIDER_TOKEN"] == nil else {
+                    throw BootError(reason: "Surface client token stdin conflicts with legacy token input")
+                }
+                var info = stat()
+                guard fstat(STDIN_FILENO, &info) == 0, info.st_mode & S_IFMT == S_IFIFO else {
+                    throw BootError(reason: "Surface client credentials require a dedicated pipe")
+                }
+                var data = Data()
+                while let part = try FileHandle.standardInput.read(upToCount: 513 - data.count), !part.isEmpty {
+                    data.append(part)
+                    guard data.count <= 512 else { throw SurfaceClientCredentials.Invalid() }
+                }
+                let clients = try SurfaceClientCredentials(data: data)
+                surfaceClients = clients; token = clients.owner
+            } else if options.tokenStdin {
+                surfaceClients = nil
                 var info = stat()
                 guard fstat(STDIN_FILENO, &info) == 0, info.st_mode & S_IFMT == S_IFIFO,
                       let data = try FileHandle.standardInput.read(upToCount: 65), let value = String(
@@ -331,7 +357,7 @@ private struct BCRProviderService {
                       )
                 else { throw BootError(reason: "Token stdin requires a dedicated pipe") }
                 token = value
-            } else { token = ProcessInfo.processInfo.environment["BCR_PROVIDER_TOKEN"] ?? "" }
+            } else { surfaceClients = nil; token = ProcessInfo.processInfo.environment["BCR_PROVIDER_TOKEN"] ?? "" }
             guard token.utf8.count == 64,
                   token.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) })
             else {
@@ -342,6 +368,11 @@ private struct BCRProviderService {
             let principals = try options.surfacePrincipalFile
                 .map { try SurfaceControlPrincipals.loadOrCreate(at: $0) } ??
                 SurfaceControlPrincipals()
+            surfaceClients?.excludeWriterIDs([
+                principals.remoteWriterID,
+                principals.interfaceWriterID,
+                principals.systemWriterID
+            ])
             if let directory = options.dataDirectory {
                 try FileManager.default.createDirectory(
                     at: directory,
@@ -398,16 +429,18 @@ private struct BCRProviderService {
                 hardwareDevice: hardware, hardwareMap: map, configuration: profile,
                 pluginBindings: AgentBindingTranslation.bindings,
                 hardwareOutput: options.hardwareOutput,
+                hardwareLifecycleFeedback: false,
                 saveHardwareMap: { value in
                     if let mapURL { try ProtectedJSONFile.hardware(JSONFileStore(fileURL: mapURL)).save(value) }
                 },
                 saveConfiguration: { value in if let profileURL { try profileStore(profileURL).save(value) } }
             ) : nil
             session?.selectSource(options.source)
-            let gateway = MCPApplicationGateway(session: session, permissions: options.permissions, includeAgent: false)
+            let gateway = MCPApplicationGateway(session: session, permissions: options.permissions, includeAgent: false,
+                                                includeDeviceAdministration: false)
             gateway.onSelectSource = { source in
                 guard let session else { throw ProviderDomainError("unsupported", "The console is disabled") }
-                if source == .hardware && native == nil { throw ProviderDomainError(
+                if source == .hardware && native == nil && !usesTestDouble { throw ProviderDomainError(
                     "unsupported",
                     "Restart with --source hardware to open the native driver"
                 ) }
@@ -436,7 +469,7 @@ private struct BCRProviderService {
                     )
                 ]
             )
-            let port = try await server.start(port: options.port, token: token)
+            let port = try await server.start(port: options.port, token: token, surfaceClients: surfaceClients)
             application.start()
             let ready: JSONValue = .object([
                 "event": .string("provider.ready"), "contract_version": .string("1.0"),

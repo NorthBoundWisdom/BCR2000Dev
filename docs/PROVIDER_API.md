@@ -137,3 +137,19 @@ no journal sequence. Display feedback requires both `--hardware-output write` an
 `--allow-surface-feedback`; missing either gives permission_denied with zero sends. A transport
 failure is delivery_failed and does not record an accepted display event. The parameter engine
 and existing output exit are shared with Provider 1.0.
+
+## Frozen tool set and additive catalogue (F decision)
+
+Provider 1.0 的冻结范围是已有工具的名字、Schema、错误语义；新增工具属于加法，不破坏兼容。加法须登记且可核对，仅对应显式开启能力的工具在该能力启用时才出现。
+
+The frozen 25-tool reference is the old `--robot-sim` catalogue; ordinary default startup has its 21-tool
+subset. Complete descriptors use the documented canonical UTF-8 JSON hash in
+`provider-tool-compatibility.json`; `PROVIDER_TOOL_COMPATIBILITY.md` records every addition and gate.
+Headless hosts omit seven GUI endpoint/preset tools whose callbacks they do not install. Shared tools
+exist only when `--robot-sim` or `--chassis-sim` installs their runtime capability. Surface-control tools
+remain explicitly opt-in. Existing frozen descriptors, Schemas and error semantics are unchanged.
+
+Headless lifecycle transitions emit no device writes. Explicit Provider 1.0 parameter writes still use
+the original parameterWrite permission (default on, disabled by `--read-only`) and the hardware `write`
+policy; `--allow-surface-feedback` governs the separate surface-control 1.4 API. It is not a retroactive
+permission on Provider 1.0. A `feedback.sent` event records transport acceptance, not physical display.

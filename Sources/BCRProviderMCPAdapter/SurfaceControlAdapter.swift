@@ -441,12 +441,12 @@ public final class BCRSurfaceControlAdapter {
     /// Records the outcome of an engine change that has already happened. A failure here cannot
     /// be undone, so the context is revoked (new epoch on the next call) before reporting it.
     private func commitInput(_ input: ControlInput, disposition: ControlDisposition, mappedValue: JSONValue?,
-                             reason: String?, at now: Double) throws -> JSONValue
+                             reason: String?, at now: Double, writerID: String) throws -> JSONValue
     {
         do {
             let event = try core.recordInput(input, disposition: disposition, mappedValue: mappedValue,
                                              reason: reason, origin: .remote, at: now,
-                                             writerID: principals.remoteWriterID)
+                                             writerID: writerID)
             rescheduleHoldTimer()
             return try .encoded(event)
         } catch { failClosed("input_record_failed", error: error); throw error }
@@ -480,7 +480,7 @@ public final class BCRSurfaceControlAdapter {
             let now = monotonic(); let descriptor = try core.validateInput(
                 input,
                 at: now,
-                writerID: principals.remoteWriterID
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
             )
             let control = try control(input.control_id)
             guard let id = surface.engine.configuration.assignment(for: control)?.target.parameterID,
@@ -491,7 +491,8 @@ public final class BCRSurfaceControlAdapter {
             if unchanged {
                 return try commitInput(input, disposition: .ignored,
                                        mappedValue: surface.engine.value(of: id).map(JSONValue.double),
-                                       reason: "no_change", at: now)
+                                       reason: "no_change", at: now,
+                                       writerID: gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
             }
             let before = surface.engine.state(of: control).eventCount
             handlingRemote = true
@@ -509,13 +510,18 @@ public final class BCRSurfaceControlAdapter {
             let accepted = before != surface.engine.state(of: control).eventCount
             return try commitInput(input, disposition: accepted ? .accepted : .ignored,
                                    mappedValue: surface.engine.value(of: id).map(JSONValue.double),
-                                   reason: accepted ? nil : "no_change", at: now)
+                                   reason: accepted ? nil : "no_change", at: now,
+                                   writerID: gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
         case let .feedback(update):
             try requireMock()
             guard !handlingRemote else { throw ControlContractError("operation_in_progress") }
             guard permissions.feedback,
                   gateway.permissions.parameterWrite else { throw ControlContractError("permission_denied") }
-            let now = monotonic(); try core.validateFeedback(update, at: now, writerID: principals.remoteWriterID)
+            let now = monotonic(); try core.validateFeedback(
+                update,
+                at: now,
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
+            )
             let control = try control(update.control_id)
             let raw: UInt16
             if update.kind == "indicator" {
@@ -525,7 +531,12 @@ public final class BCRSurfaceControlAdapter {
             else { raw = UInt16(update.value.finiteNumber!) }
             try surface.validateSimulationDisplayFeedback(control, rawValue: raw)
             var next = core
-            let event = try next.recordFeedback(update, origin: .remote, at: now, writerID: principals.remoteWriterID)
+            let event = try next.recordFeedback(
+                update,
+                origin: .remote,
+                at: now,
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
+            )
             let result = try JSONValue.encoded(event)
             try consume(gateway, category: .feedback, at: now)
             handlingRemote = true

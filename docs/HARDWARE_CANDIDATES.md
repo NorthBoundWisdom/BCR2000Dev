@@ -44,8 +44,7 @@ After separate attended authorization, an isolated observation command would be:
 
 This command is documentation, not an auto-apply action. It retains default `observe`; do not run
 it during offline development. Display testing additionally needs BOTH `--hardware-output write`
-and `--allow-surface-feedback` and fresh attended approval. Existing Provider write-mode startup
-resynchronization is unchanged; count startup sends separately from each requested display.
+and `--allow-surface-feedback` and fresh attended approval. Headless startup and reconnection send zero messages; only separately requested display writes may send.
 Use the separate candidate evidence checklist. The default attended checklist is not changed to
 load or apply these files.
 

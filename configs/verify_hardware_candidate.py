@@ -311,6 +311,94 @@ def run(binary, profile_tool, source_map, request, output, sdk, diagnostics=Fals
                             offline_cli.returncode == 0
                             and json.loads(offline_cli.stdout)["physical_qualification"] is False
                         )
+                        # The delivered field probe is exercised as a real subprocess with private stdin.
+                        for action in ("edges", "raw-edges"):
+                            probe = subprocess.Popen(
+                                [
+                                    sys.executable,
+                                    str(ROOT / "Support/NativeDiagnostics/f_candidate_probe.py"),
+                                    "--sdk",
+                                    str(sdk),
+                                    "--provider-sdk",
+                                    str(ROOT / "Clients/Python"),
+                                    "--url",
+                                    ready["url"],
+                                    "--instance",
+                                    "candidate-process",
+                                    "--mapping-revision",
+                                    client.expected["mapping_revision"],
+                                    "--action",
+                                    action,
+                                    "--control",
+                                    roles["enable"],
+                                ],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                text=True,
+                            )
+                            try:
+                                probe.stdin.write(token)
+                                probe.stdin.close()
+                                assert json.loads(probe.stdout.readline())["event"] == (
+                                    "awaiting_new_edges" if action == "edges" else "awaiting_new_raw_edges"
+                                )
+                                inject(rows)
+                                probe_result = json.loads(probe.stdout.readline())
+                                assert probe.wait(timeout=5) == 0
+                                assert (
+                                    probe_result.get("press_release_edges") == 2
+                                    if action == "edges"
+                                    else probe_result.get("raw_press_release") == [127, 0]
+                                )
+                                assert probe_result["physical_qualification"] is False
+                                probe_error = probe.stderr.read()
+                                assert token not in json.dumps(probe_result) + probe_error
+                            finally:
+                                if probe.poll() is None:
+                                    probe.kill()
+                                    probe.wait()
+                                probe.stdout.close()
+                                probe.stderr.close()
+                        for value in ("on", "off"):
+                            displayed = subprocess.run(
+                                [
+                                    sys.executable,
+                                    str(ROOT / "Support/NativeDiagnostics/f_candidate_probe.py"),
+                                    "--sdk",
+                                    str(sdk),
+                                    "--provider-sdk",
+                                    str(ROOT / "Clients/Python"),
+                                    "--url",
+                                    ready["url"],
+                                    "--instance",
+                                    "candidate-process",
+                                    "--mapping-revision",
+                                    client.expected["mapping_revision"],
+                                    "--action",
+                                    "display",
+                                    "--control",
+                                    roles["enable"],
+                                    "--value",
+                                    value,
+                                    "--confirm-attended-display",
+                                ],
+                                input=token,
+                                capture_output=True,
+                                text=True,
+                                timeout=5,
+                            )
+                            assert displayed.returncode == 0 and json.loads(displayed.stdout)["transport_accepted"]
+                            assert token not in displayed.stdout + displayed.stderr
+                        cases.append(
+                            {
+                                "name": "F-field-probe-edges-and-two-display-commands",
+                                "passed": True,
+                                "captured_edges": 2,
+                                "display_requests": 2,
+                                "physical_qualification": False,
+                            }
+                        )
                         cases.append(
                             {
                                 "name": "read-only-diagnostic-api-cli-and-offline-verify",

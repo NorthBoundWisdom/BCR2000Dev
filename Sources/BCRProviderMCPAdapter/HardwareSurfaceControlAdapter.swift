@@ -172,7 +172,11 @@ public final class BCRHardwareSurfaceControlAdapter {
                 at: monotonic()
             ))
         case let .input(input):
-            _ = try core.validateInput(input, at: monotonic(), writerID: principals.remoteWriterID)
+            _ = try core.validateInput(
+                input,
+                at: monotonic(),
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
+            )
             throw ControlContractError("permission_denied")
         case let .renew(renew):
             try core.validateRenew(renew, at: monotonic()); throw ControlContractError("unsupported_hold")
@@ -182,7 +186,11 @@ public final class BCRHardwareSurfaceControlAdapter {
             throw ControlContractError("unsupported_tool")
         case let .feedback(update):
             let now = monotonic()
-            try core.validateFeedback(update, at: now, writerID: principals.remoteWriterID)
+            try core.validateFeedback(
+                update,
+                at: now,
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
+            )
             guard permissions.feedback, gateway.permissions.parameterWrite, surface.hardwareOutput == .write,
                   surface.source == .hardware,
                   surface.connection.isConnected else { throw ControlContractError("permission_denied") }
@@ -199,7 +207,12 @@ public final class BCRHardwareSurfaceControlAdapter {
                 raw = UInt16(number)
             }
             var next = core
-            let event = try next.recordFeedback(update, origin: .remote, at: now, writerID: principals.remoteWriterID)
+            let event = try next.recordFeedback(
+                update,
+                origin: .remote,
+                at: now,
+                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
+            )
             try gateway.consumeWrites(1)
             try surface.setHardwareDisplayFeedback(control, rawValue: raw)
             core = next

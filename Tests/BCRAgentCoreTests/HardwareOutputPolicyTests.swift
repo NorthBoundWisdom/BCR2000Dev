@@ -80,6 +80,37 @@ final class HardwareOutputPolicyTests: XCTestCase {
         }
     }
 
+    func testHeadlessLifecycleDoesNotReplayNonemptyBindingsOrDisplayState() throws {
+        let device = OutputRecordingDevice()
+        let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),
+                                     configuration: Self.configuration(), hardwareOutput: .write,
+                                     hardwareLifecycleFeedback: false,
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        session.selectSource(.hardware)
+        device.connect(1)
+        try session.configureFeedback(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
+        session.synchronize()
+        try session.replaceConfiguration(Self.configuration())
+        session.flushFeedback()
+        session.selectSource(.mock)
+        session.selectSource(.hardware)
+        device.connect(nil)
+        device.connect(2)
+        session.flushFeedback()
+        XCTAssertTrue(device.sent.isEmpty)
+        // An explicit legacy parameter write and explicit 1.4 display keep their existing routes.
+        session.setParameter("p1", to: 42)
+        session.flushFeedback()
+        XCTAssertEqual(device.sent.count, 1)
+        try session.setHardwareDisplayFeedback(.encoder(row: 1, 1), rawValue: 67)
+        XCTAssertEqual(device.sent.count, 2)
+        device.connect(nil)
+        device.connect(3)
+        session.synchronize()
+        session.flushFeedback()
+        XCTAssertEqual(device.sent.count, 2)
+    }
+
     func testObserveSuppressesAllFeedbackButContinuesAcceptingHardwareInput() throws {
         let device = OutputRecordingDevice()
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),

@@ -48,8 +48,8 @@ identities or write a device preset.
 With `--source hardware`, `--hardware-output observe|write` chooses whether the service may write the
 device. The default `observe` takes inputs and updates parameters as usual but sends nothing: no
 feedback, no LED writes and no full resynchronisation on connect or reconnect; each held-back message
-is visible as a `feedback.suppressed` event. `write` restores feedback and resynchronisation and must
-be given explicitly. The `provider.ready` record reports the choice as `hardware_output` (null without
+is visible as a `feedback.suppressed` event. `write` permits explicit feedback requests and must
+be given explicitly. Headless startup, connection, reconnection and source changes never replay retained feedback, even in write mode. The `provider.ready` record reports the choice as `hardware_output` (null without
 hardware); the option is refused without `--source hardware`. The published diagnostic entry is:
 
 ```sh
@@ -93,3 +93,20 @@ Before preparing a physical four-role consumer, run the delivered `BCRProfileToo
 --check-hardware-roles` mode described in `HARDWARE_ROLE_READINESS.md`. `ready:false` is a
 preparation refusal, including when current buttons are visualization-only. This read-only report
 never changes learned mappings or grants physical qualification.
+
+## Additive tool compatibility and separate clients
+
+Provider 1.0 的冻结范围是已有工具的名字、Schema、错误语义；新增工具属于加法，不破坏兼容。加法须登记且可核对，仅对应显式开启能力的工具在该能力启用时才出现。
+
+See `PROVIDER_TOOL_COMPATIBILITY.md` and `provider-tool-compatibility.json`. The old frozen reference
+contains 25 tools with `--robot-sim`; its default subset contains 21. The default headless catalogue is
+21; explicit robot mode is 38. The included read-only `diagnostics/verify_provider_catalogue.py`
+checks every present frozen descriptor and rejects unregistered or incorrectly gated additions.
+
+For separate simulation operator and display clients see `SURFACE_CLIENTS.md`. The optional
+`--surface-client-tokens-stdin` receives **owner, operator, display** credentials through one dedicated
+private JSON pipe; no token belongs in argv, reports or a delivery. The default single-token mode is unchanged.
+The runtime SDK excludes test doubles; `TEST-ONLY-surface-control-testing-1.4.0.zip` is a separate test asset.
+
+Hardware source/profile, button edges, current preset and actual lights still require attended validation.
+A local candidate package and a successful fake-device test do not confer that qualification.

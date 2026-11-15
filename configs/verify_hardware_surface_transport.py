@@ -22,7 +22,7 @@ if not __debug__:
     raise SystemExit("Run without -O: these checks rely on assert")
 
 
-def run(binary, output, sdk):
+def run(binary, output, sdk, scoped_clients=False):
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(sdk))
     from surface_control import Client, SurfaceError
@@ -44,6 +44,40 @@ def run(binary, output, sdk):
     map_path = output / "TEST-ONLY-map.json"
     map_path.write_text(json.dumps(mapping))
 
+    configuration = output / "TEST-ONLY-configuration.json"
+    configuration.write_text(
+        json.dumps(
+            {
+                "version": 7,
+                "name": "TEST ONLY nonempty lifecycle bindings",
+                "pages": [],
+                "macros": [],
+                "parameters": [
+                    {
+                        "id": "test.axis",
+                        "name": "axis",
+                        "minimum": 0,
+                        "maximum": 127,
+                        "defaultValue": 23,
+                        "kind": "continuous",
+                        "agentWritable": True,
+                        "externallyProtected": False,
+                        "step": 1,
+                    }
+                ],
+                "assignments": [
+                    {
+                        "control": {"section": "pushEncoder", "row": 1, "index": 1},
+                        "target": {"parameter": {"_0": "test.axis"}},
+                        "buttonBehavior": "toggle",
+                        "inverted": False,
+                        "encoderMode": "absolute",
+                        "encoderStep": 1,
+                    }
+                ],
+            }
+        )
+    )
     described = json.loads(
         subprocess.check_output(
             [
@@ -53,6 +87,8 @@ def run(binary, output, sdk):
                 "--hardware-profile",
                 "--hardware-map",
                 str(map_path),
+                "--configuration",
+                str(configuration),
                 "--describe-surface",
             ]
         )
@@ -73,7 +109,8 @@ def run(binary, output, sdk):
             directory.mkdir()
             script, report = directory / "commands.json", directory / "device.json"
             script.write_text("[]")
-            token = secrets.token_hex(32)
+            credentials = {role: secrets.token_hex(32) for role in ("owner", "operator", "display")}
+            token = credentials["owner"]
             env = dict(
                 os.environ,
                 BCR_PROVIDER_TOKEN=token,
@@ -81,6 +118,8 @@ def run(binary, output, sdk):
                 BCR_PROVIDER_TEST_HARDWARE_SCRIPT=str(script),
                 BCR_PROVIDER_TEST_HARDWARE_REPORT=str(report),
             )
+            if scoped_clients:
+                env.pop("BCR_PROVIDER_TOKEN", None)
             command = [
                 str(binary),
                 "--source",
@@ -88,22 +127,42 @@ def run(binary, output, sdk):
                 "--hardware-output",
                 policy,
                 "--hardware-profile",
+                "--allow-device-control",
                 "--hardware-map",
                 str(map_path),
+                "--configuration",
+                str(configuration),
                 "--port",
                 "0",
                 "--surface-instance-id",
                 "e-hardware",
             ]
+            if scoped_clients:
+                command.append("--surface-client-tokens-stdin")
             if allowed:
                 command.append("--allow-surface-feedback")
+            lifecycle_mark = None
             with (directory / "stderr.log").open("w") as stderr:
-                host = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=stderr, env=env, text=True)
+                host = subprocess.Popen(
+                    command,
+                    stdout=subprocess.PIPE,
+                    stderr=stderr,
+                    env=env,
+                    text=True,
+                    stdin=subprocess.PIPE if scoped_clients else subprocess.DEVNULL,
+                )
+                if scoped_clients:
+                    host.stdin.write(json.dumps(credentials))
+                    host.stdin.close()
                 try:
                     selector = selectors.DefaultSelector()
                     selector.register(host.stdout, selectors.EVENT_READ)
                     assert selector.select(10), "Provider did not become ready"
                     ready = json.loads(host.stdout.readline())
+                    deadline = time.monotonic() + 5
+                    while not report.exists() and time.monotonic() < deadline:
+                        time.sleep(0.01)
+                    assert json.loads(report.read_text())["sent"] == [], "Startup replayed bound engine feedback"
                     assert ready["test_only_hardware_double"] is True and ready["hardware_output"] == policy
                     client = Client(ready["url"], token, "e-hardware", accepted_sources=("hardware",))
                     d = client.discover(versions=("1.4",))
@@ -153,9 +212,39 @@ def run(binary, output, sdk):
                     assert [e["sequence"] for e in entries] == ["1", "2", "3", "4"]
                     client.snapshot()
                     before = len(json.loads(report.read_text())["sent"])
-                    feedback = lambda: client.feedback("pushEncoder.1.1", "value", 64)
+                    feedback_client = client
+                    if scoped_clients:
+                        operator = Client(
+                            ready["url"], credentials["operator"], "e-hardware", accepted_sources=("hardware",)
+                        )
+                        display = Client(
+                            ready["url"], credentials["display"], "e-hardware", accepted_sources=("hardware",)
+                        )
+                        operator.discover(versions=("1.4",))
+                        display.discover(versions=("1.4",))
+                        remote_input = {
+                            "expected": operator.expected,
+                            "expected_input_sequence": "4",
+                            "control_id": "pushEncoder.1.1",
+                            "encoding": "scalar",
+                            "value": 12,
+                        }
+                        error(lambda: operator.call("surface_control_input", remote_input), "permission_denied")
+                        error(
+                            lambda: operator.call(
+                                "surface_control_renew",
+                                {"expected": operator.expected, "control_id": "button.1.1", "hold_s": 1},
+                            ),
+                            "unsupported_hold",
+                        )
+                        error(lambda: display.call("surface_control_input", remote_input), "http_403")
+                        error(lambda: operator.feedback("pushEncoder.1.1", "value", 12), "http_403")
+                        feedback_client = display
+                    feedback = lambda: feedback_client.feedback("pushEncoder.1.1", "value", 64)
                     if policy == "write" and allowed:
-                        feedback()
+                        feedback_event = feedback()
+                        if scoped_clients:
+                            assert feedback_event["writer_id"] not in {entry["writer_id"] for entry in entries}
                         inject([{"operation": "input", "cc": 8, "value": 64}])
                         assert client.snapshot()["latest_input_sequence"] == "4", "Echo became input"
                         assert len(json.loads(report.read_text())["sent"]) - before == 1
@@ -186,6 +275,7 @@ def run(binary, output, sdk):
                         ),
                     ]:
                         error(lambda tool=tool, args=args: client.call(tool, args), code)
+                    lifecycle_mark = len(json.loads(report.read_text())["sent"])
                     old = dict(client.expected)
                     inject([{"operation": "disconnect"}])
                     error(lambda: page(old), "stale_epoch")
@@ -198,6 +288,16 @@ def run(binary, output, sdk):
                     client.discover(versions=("1.4",))
                     s = client.snapshot()
                     assert s["link"]["state"] == "connected" and s["inputs"] == {} and s["latest_sequence"] == "0"
+                    assert len(json.loads(report.read_text())["sent"]) == lifecycle_mark, "Reconnect replayed feedback"
+                    # Owner explicitly changes the remote source twice. Neither transition replays displays.
+                    for source in ("mock", "hardware"):
+                        result = client.rpc(
+                            "tools/call", {"name": "set_device_source", "arguments": {"source": source}}
+                        )
+                        assert not result.get("isError", False)
+                    assert len(json.loads(report.read_text())["sent"]) == lifecycle_mark, (
+                        "Remote source switch replayed feedback"
+                    )
                     cases.append({"name": name, "passed": True, "device": "test-only", "real_device_sends": 0})
                 finally:
                     host.terminate()
@@ -207,6 +307,8 @@ def run(binary, output, sdk):
                         host.kill()
                         host.wait()
                     host.stdout.close()
+                    if report.exists() and lifecycle_mark is not None:
+                        assert len(json.loads(report.read_text())["sent"]) == lifecycle_mark, "Exit sent feedback"
     result = {
         "passed": True,
         "scope": "real-process-loopback-with-test-only-device",
@@ -225,9 +327,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--scoped-clients", action="store_true")
     parser.add_argument("--sdk", type=Path, default=ROOT / "build/seed/SurfacePlugins/clients/python")
     args = parser.parse_args()
-    run(args.binary.resolve(), args.output.resolve(), args.sdk.resolve())
+    run(args.binary.resolve(), args.output.resolve(), args.sdk.resolve(), args.scoped_clients)
 
 
 if __name__ == "__main__":

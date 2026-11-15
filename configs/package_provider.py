@@ -113,7 +113,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     sdk_sources = sorted(
         path
-        for name in ("surface_control", "surface_conformance", "surface_control_testing", "surface_control_diagnostics")
+        for name in ("surface_control", "surface_conformance", "surface_control_diagnostics")
         for path in (shared / "clients/python" / name).rglob("*")
         if path.is_file() and path.suffix in (".py", ".md")
     )
@@ -125,6 +125,23 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, path.read_bytes())
+    # Test doubles are a separate, unmistakably test-only asset, never a runtime SDK member.
+    testing_sdk = output / f"TEST-ONLY-surface-control-testing-{SURFACE_SDK}.zip"
+    test_support_sources = sorted(
+        path
+        for path in (shared / "clients/python/surface_control_testing").rglob("*")
+        if path.is_file() and path.suffix in (".py", ".md")
+    )
+    with zipfile.ZipFile(testing_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in test_support_sources:
+            info = zipfile.ZipInfo(str(path.relative_to(shared / "clients/python")), date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
+    with zipfile.ZipFile(surface_sdk) as archive:
+        if any(name.startswith("surface_control_testing/") for name in archive.namelist()):
+            raise ValueError("Runtime SDK must not contain test doubles")
+    shutil.copy2(ROOT / "docs/provider-tool-compatibility.json", output / "provider-tool-compatibility.json")
     shutil.copy2(ROOT / "configs/surface_conformance_roles.json", output / "conformance-roles.json")
     for published, source in SURFACE_FILES.items():
         shutil.copy2(shared / source, output / published)
@@ -277,6 +294,18 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
     shutil.copytree(ROOT / "Schemas/Provider/1.0", output / "schemas")
+    for name in (
+        "PROVIDER_TOOL_COMPATIBILITY.md",
+        "SURFACE_CLIENTS.md",
+        "F_PIPE_HANDOFF.md",
+        "F_CANDIDATE_ATTENDED.md",
+    ):
+        shutil.copy2(ROOT / "docs" / name, output / name)
+    subprocess.run(
+        [sys.executable, str(ROOT / "configs/prepare_f_candidate_attended.py"), "--output", str(output / "attended")],
+        check=True,
+        cwd=ROOT,
+    )
     shutil.copy2(ROOT / "docs/PROVIDER_API.md", output / "PROVIDER_API.md")
     (output / "adr").mkdir()
     shutil.copy2(
@@ -301,6 +330,15 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         "source": "simulation",
         "source_commit": source_commit,
         "source_dirty": dirty,
+        "source_origin_main": run("git", "rev-parse", "origin/main"),
+        "source_ahead": int(run("git", "rev-list", "--count", "origin/main..HEAD")),
+        "source_behind": int(run("git", "rev-list", "--count", "HEAD..origin/main")),
+        "source_unpushed": int(run("git", "rev-list", "--count", "origin/main..HEAD")) > 0,
+        "status": "local-unpushed-candidate",
+        "published": False,
+        "physical_qualification": False,
+        "provider_tool_compatibility": "provider-tool-compatibility.json",
+        "test_support_zip": f"TEST-ONLY-surface-control-testing-{SURFACE_SDK}.zip",
         "surface_control_contract": SURFACE_CONTRACT,
         "surface_control_sdk": SURFACE_SDK,
         "profile_id": discovery["profile"]["id"],
@@ -350,7 +388,13 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             if hardware_discovery is not None
             else None
         ),
-        "test_artifacts": [{"artifact": "surface-control-test-only-hardware-double", "qualification": "test-only"}],
+        "test_artifacts": [
+            {
+                "artifact": "surface-control-test-only-hardware-double",
+                "qualification": "test-only",
+                "path": testing_sdk.name,
+            }
+        ],
         "surface_control_profiles": [
             {
                 "contract_version": "1.3",
@@ -378,7 +422,12 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
         "surface_plugins_files_sha256": {
             source: hashlib.sha256((shared / source).read_bytes()).hexdigest()
-            for source in sorted([*SURFACE_FILES.values(), *(str(path.relative_to(shared)) for path in sdk_sources)])
+            for source in sorted(
+                [
+                    *SURFACE_FILES.values(),
+                    *(str(path.relative_to(shared)) for path in [*sdk_sources, *test_support_sources]),
+                ]
+            )
         },
     }
     # `artifact` is the one common field that collides with Provider 1.0 (its consumers require

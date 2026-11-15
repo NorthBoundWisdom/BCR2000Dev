@@ -68,16 +68,33 @@ public final class MCPApplicationGateway {
         Task { @MainActor in for action in cleanup { action() } }
     }
 
+    /// These tools require callbacks installed by the GUI; the headless provider has no such capability.
+    public static let deviceAdministrationTools: Set<String> = [
+        "list_midi_endpoints", "set_midi_endpoints", "get_preset_alignment", "preview_preset_alignment",
+        "apply_preset_alignment", "restore_preset", "dismiss_preset_alignment"
+    ]
+
+    /// Set only by the authenticated HTTP boundary, scoped to one synchronous request.
+    public private(set) var authenticatedSurfaceWriterID: String?
+    public func withAuthenticatedSurfaceWriterID<T>(_ writerID: String?, _ operation: () throws -> T) rethrows -> T {
+        let previous = authenticatedSurfaceWriterID
+        authenticatedSurfaceWriterID = writerID
+        defer { authenticatedSurfaceWriterID = previous }
+        return try operation()
+    }
+
     public var toolDefinitions: [JSONValue] { toolOrder.compactMap { definitions[$0] } }
 
     public init(session: SurfaceSession? = nil, permissions: MCPPermissions = MCPPermissions(),
-                now: @escaping @MainActor () -> Date = { .now }, includeAgent: Bool = true)
+                now: @escaping @MainActor () -> Date = { .now }, includeAgent: Bool = true,
+                includeDeviceAdministration: Bool = true)
     {
         self.surfaceSession = session
         self.permissions = permissions
         self.now = now
         for definition in MCPToolCatalog.tools {
             guard let name = definition.objectValue?["name"]?.stringValue else { continue }
+            if !includeDeviceAdministration, Self.deviceAdministrationTools.contains(name) { continue }
             if AgentMCPModule.names.contains(name) { if !includeAgent { continue } }
             else if session == nil { continue }
             definitions[name] = definition; toolOrder.append(name)

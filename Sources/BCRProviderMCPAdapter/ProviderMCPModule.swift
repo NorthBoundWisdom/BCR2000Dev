@@ -10,6 +10,7 @@ import Foundation
 public enum ProviderMCPModule {
     /// Explicit transport authorization at the composition boundary, never inside a plugin.
     public static func installShared(on service: AgentControlService, application: ProviderApplication) throws {
+        guard application.configuration.robot || application.configuration.chassis else { return }
         let manual = application.configuration.clock == .manual
         try SharedPluginMCPModule.install(on: service, runtime: application.runtime, policies: [
             "agent": { permission, _ in permission.parameterWrite && permission.agentControl },

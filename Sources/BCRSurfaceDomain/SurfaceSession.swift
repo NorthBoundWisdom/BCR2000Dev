@@ -139,6 +139,8 @@ public final class SurfaceSession {
     private let hardwareDevice: any SurfaceDevice
     private let requiresHardwareConfirmation: Bool
     public let hardwareOutput: HardwareOutputPolicy
+    /// Headless hardware-contract hosts never replay retained display state on lifecycle changes.
+    private let hardwareLifecycleFeedback: Bool
     private let mockDevice: MockSurfaceDevice
     private let now: @MainActor () -> Date
     private let saveHardwareMap: @MainActor (HardwareMap) throws -> Void
@@ -171,6 +173,7 @@ public final class SurfaceSession {
         pluginBindings: SurfacePluginBindings = .init(),
         requiresHardwareConfirmation: Bool = false,
         hardwareOutput: HardwareOutputPolicy = .write,
+        hardwareLifecycleFeedback: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
@@ -178,6 +181,7 @@ public final class SurfaceSession {
         self.hardwareDevice = hardwareDevice
         self.requiresHardwareConfirmation = requiresHardwareConfirmation
         self.hardwareOutput = hardwareOutput
+        self.hardwareLifecycleFeedback = hardwareLifecycleFeedback
         self.mockDevice = mockDevice
         self.hardwareMap = hardwareMap
         self.now = now
@@ -208,7 +212,7 @@ public final class SurfaceSession {
         feedbackPolicy = policy
         scheduler = updated
         notifyFeedbackQueue()
-        if source == .hardware { perform(engine.fullFeedback(at: now())) }
+        if source == .hardware { performLifecycleFeedback(engine.fullFeedback(at: now())) }
         publishChange()
     }
 
@@ -227,7 +231,7 @@ public final class SurfaceSession {
     }
 
     public func synchronize() {
-        perform(engine.fullFeedback(at: now()))
+        performLifecycleFeedback(engine.fullFeedback(at: now()))
         publishChange()
     }
 
@@ -252,7 +256,7 @@ public final class SurfaceSession {
         onEvent?(.sourceChanged(.hardware))
         // Encoder values came from the device; button LEDs still show the software state, because
         // after a restart the device keeps lights for Agent states the software no longer has.
-        perform(engine.buttonFeedback(at: now()))
+        performLifecycleFeedback(engine.buttonFeedback(at: now()))
         publishChange()
     }
 
@@ -270,7 +274,7 @@ public final class SurfaceSession {
         engine.replaceHardwareMap(newSource == .mock ? mock.preset : hardwareMap)
         droppedFeedbackCount = 0
         onEvent?(.sourceChanged(newSource))
-        perform(engine.fullFeedback(at: now()))
+        performLifecycleFeedback(engine.fullFeedback(at: now()))
         publishChange()
     }
 
@@ -391,7 +395,7 @@ public final class SurfaceSession {
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
         if let learning { onEvent?(.learningInterruptedByConfiguration(learning)) }
-        perform(clearedFeedback + engine.fullFeedback(at: now()))
+        performLifecycleFeedback(clearedFeedback + engine.fullFeedback(at: now()))
         if persist { persistConfiguration() }
         else { lastConfigurationPersistenceError = nil }
         publishChange()
@@ -570,7 +574,7 @@ public final class SurfaceSession {
         try mockDevice.setNRPN(enabled, for: control)
         engine.replaceHardwareMap(mock.preset)
         nrpnAssembler.reset()
-        perform(engine.fullFeedback(at: now()))
+        performLifecycleFeedback(engine.fullFeedback(at: now()))
         publishChange()
     }
 
@@ -663,6 +667,14 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    private func performLifecycleFeedback(_ effects: [SurfaceEffect]) {
+        guard source != .hardware || hardwareLifecycleFeedback else {
+            clearFeedbackQueue()
+            return
+        }
+        perform(effects)
+    }
+
     private func perform(_ effects: [SurfaceEffect]) {
         for effect in effects {
             switch effect {
@@ -751,7 +763,7 @@ public final class SurfaceSession {
             onEvent?(.connected(snapshot))
             if source == .hardware {
                 droppedFeedbackCount = 0
-                perform(engine.fullFeedback(at: now()))
+                performLifecycleFeedback(engine.fullFeedback(at: now()))
             }
         }
         publishChange()

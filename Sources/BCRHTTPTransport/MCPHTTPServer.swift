@@ -86,6 +86,7 @@ public final class MCPHTTPServer {
     private var startTimeout: Task<Void, Never>?
     private var generation = UUID()
     private var token = ""
+    private var surfaceClients: SurfaceClientCredentials?
     private var port: UInt16 = 0
     private let providerID: String?
 
@@ -162,10 +163,13 @@ public final class MCPHTTPServer {
     }
 
     /// Port zero is only used by isolated loopback tests. The settings controller rejects it.
-    public func start(port: UInt16, token: String) async throws -> UInt16 {
+    public func start(port: UInt16, token: String,
+                      surfaceClients: SurfaceClientCredentials? = nil) async throws -> UInt16
+    {
         stop()
         guard !token.isEmpty else { throw MCPHTTPParseError(reason: L10n.text("缺少 Bearer token")) }
         self.token = token
+        self.surfaceClients = surfaceClients
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = false
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
@@ -231,6 +235,7 @@ public final class MCPHTTPServer {
         connections.removeAll()
         timeouts.removeAll()
         token = ""
+        surfaceClients = nil
         router.stop()
         state = .stopped
         onChange?()
@@ -299,10 +304,17 @@ public final class MCPHTTPServer {
                 return
             }
         }
-        guard let authorization = request.headers["authorization"], authorization.prefix(7).lowercased() == "bearer ",
-              constantTimeEqual(String(authorization.dropFirst(7)), token)
-        else {
+        let authorization = request.headers["authorization"] ?? ""
+        let supplied = String(authorization.dropFirst(7))
+        let owner = constantTimeEqual(supplied, token)
+        let isOperator = surfaceClients.map { constantTimeEqual(supplied, $0.operatorToken) } ?? false
+        let isDisplay = surfaceClients.map { constantTimeEqual(supplied, $0.display) } ?? false
+        guard authorization.prefix(7).lowercased() == "bearer ", owner || isOperator || isDisplay else {
             reject(id, status: 401, detail: L10n.text("Bearer 鉴权失败"))
+            return
+        }
+        if !owner, request.method != "POST" {
+            reject(id, status: 403, detail: "Surface client scope denied")
             return
         }
         if let expected = request.headers["bcr-provider-id"], expected != providerID {
@@ -342,7 +354,31 @@ public final class MCPHTTPServer {
         guard accept.contains("application/json"), accept.contains("text/event-stream") else {
             send(id, reply: MCPReply(status: 406)); return
         }
-        let reply = router.handle(request.body, headers: request.headers)
+        var writerID: String?
+        if !owner {
+            let reads: Set<String> = ["surface_control_discover", "surface_control_snapshot", "surface_control_events"]
+            let writes: Set<String> = isOperator ? ["surface_control_input", "surface_control_renew"] :
+                ["surface_control_feedback"]
+            guard let body = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+                  let method = body["method"] as? String
+            else {
+                reject(id, status: 403, detail: "Surface client scope denied")
+                return
+            }
+            let handshake: Set<String> = ["initialize", "ping", "notifications/initialized"]
+            if !handshake.contains(method) {
+                guard method == "tools/call", let parameters = body["params"] as? [String: Any],
+                      let name = parameters["name"] as? String, reads.union(writes).contains(name)
+                else {
+                    reject(id, status: 403, detail: "Surface client scope denied")
+                    return
+                }
+            }
+            writerID = isOperator ? surfaceClients?.operatorWriterID : surfaceClients?.displayWriterID
+        }
+        let reply = router.service.withAuthenticatedSurfaceWriterID(writerID) {
+            router.handle(request.body, headers: request.headers)
+        }
         send(id, reply: reply)
         onChange?()
     }
