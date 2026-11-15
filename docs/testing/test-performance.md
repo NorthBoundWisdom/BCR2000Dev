@@ -1,0 +1,126 @@
+# 测试耗时优化记录
+
+## P0 基线
+
+测量命令：`swift test --build-path build/swiftpm --parallel --num-workers 1 --xunit-output build/timings/xunit.xml`。
+
+687 例，失败 0，跳过 0；xunit 用例合计 111.278 s，中位数 0.065 s；命令墙钟 129.17 s。
+
+SwiftPM parallel xunit 按单例子进程计时，包含每次 XCTest 装载成本；与 XCTest 进程内用例时间分开比较。
+
+| 类 | 例数 | 基线合计 s | 中位数 s |
+|---|---:|---:|---:|
+| BCRAgentConsoleTests.PresetRestoreSafetyTests | 37 | 11.657 | 0.252 |
+| BCRAgentConsoleTests.LockedPresetDisplayTests | 21 | 6.515 | 0.208 |
+| BCRAgentConsoleTests.HardwareStartupTests | 10 | 5.567 | 0.521 |
+| BCRProviderAdapterTests.ProviderModuleTests | 13 | 5.336 | 0.420 |
+| BCRProviderAdapterTests.SharedSurfaceScenarioTests | 4 | 5.295 | 1.357 |
+| BCRAgentConsoleTests.MonotonicReceiptTests | 5 | 4.274 | 0.737 |
+| BCRProviderAdapterTests.EventRetentionTests | 3 | 3.793 | 0.168 |
+| BCRAgentConsoleTests.OutputControllerTests | 17 | 3.617 | 0.069 |
+| BCRAgentConsoleTests.HardwareConnectionStatusTests | 3 | 2.751 | 0.827 |
+| BCRAgentCoreTests.CodexSessionIntegrationTests | 12 | 2.613 | 0.123 |
+| BCRProviderAdapterTests.SharedRuntimeMCPTests | 5 | 2.567 | 0.436 |
+| BCRAgentCoreTests.CodexApprovalGateTests | 7 | 2.515 | 0.059 |
+| BCRAgentCoreTests.CodexProcessSupervisorTests | 12 | 2.200 | 0.115 |
+| BCRAgentConsoleTests.SurfaceAgentIntentTests | 5 | 2.116 | 0.236 |
+| BCRAgentConsoleTests.ConfigurationPersistenceTests | 14 | 2.062 | 0.184 |
+| BCRAgentConsoleTests.IntegrationMIDIFixtureTests | 2 | 1.932 | 0.966 |
+| BCRAgentCoreTests.SurfaceSessionTests | 30 | 1.890 | 0.061 |
+| BCRAgentConsoleTests.DeviceDisplayTests | 4 | 1.745 | 0.215 |
+| BCRAgentConsoleTests.PresetAlignmentFlowTests | 7 | 1.671 | 0.224 |
+| BCRProviderAdapterTests.SurfaceControlHoldTests | 13 | 1.555 | 0.086 |
+| BCRAgentConsoleTests.CodexAgentControllerTests | 10 | 1.536 | 0.146 |
+| BCRAgentCoreTests.MCPTests | 24 | 1.528 | 0.063 |
+| BCRAgentCoreTests.EncoderPrecisionTests | 16 | 1.318 | 0.062 |
+| BCRProviderAdapterTests.SurfaceControlRegressionTests | 11 | 1.290 | 0.084 |
+| BCRAgentConsoleTests.HardwarePressAnimationTests | 3 | 1.230 | 0.391 |
+| BCRAgentConsoleTests.AgentLEDBlinkTests | 3 | 1.103 | 0.344 |
+| BCRAgentConsoleTests.MIDIEndpointSettingsTests | 6 | 1.060 | 0.175 |
+| BCRAgentCoreTests.SurfaceEngineTests | 18 | 1.048 | 0.058 |
+| BCRAgentConsoleTests.SSEStreamTests | 8 | 0.953 | 0.103 |
+| BCRProviderDomainTests.SimulationTests | 15 | 0.886 | 0.058 |
+| BCRAgentConsoleTests.LEDDisplayTests | 2 | 0.859 | 0.430 |
+| BCRAgentCoreTests.PresetAlignmentTests | 10 | 0.785 | 0.074 |
+| BCRAgentConsoleTests.WindowTitlebarTests | 5 | 0.784 | 0.152 |
+| BCRAgentConsoleTests.HardwareButtonFunctionTests | 4 | 0.772 | 0.193 |
+| BCRProviderAdapterTests.SurfaceControlTests | 8 | 0.728 | 0.080 |
+| BCRAgentConsoleTests.BCRDisplayModelTests | 12 | 0.724 | 0.060 |
+| BCRAgentConsoleTests.MCPHTTPServerTests | 8 | 0.715 | 0.078 |
+| BCRAgentConsoleTests.WorkspacePanelSettingsTests | 5 | 0.691 | 0.063 |
+| BCRAgentConsoleTests.PresetBackupStoreTests | 8 | 0.674 | 0.068 |
+| BCRAgentCoreTests.MotionSafetyTests | 11 | 0.665 | 0.060 |
+| BCRAgentCoreTests.PersistenceValidationTests | 11 | 0.660 | 0.060 |
+| BCRAgentCoreTests.FunctionSystemTests | 10 | 0.625 | 0.062 |
+| BCRAgentConsoleTests.WebSocketParameterAdapterTests | 4 | 0.602 | 0.149 |
+| BCRAgentCoreTests.PresetDocumentSafetyTests | 6 | 0.589 | 0.068 |
+| BCRAgentCoreTests.CodexProcessIntegrationTests | 6 | 0.579 | 0.095 |
+| BCRAgentConsoleTests.MIDIInitializationTests | 5 | 0.535 | 0.063 |
+| BCRAgentConsoleTests.ConfigurationPresetTests | 2 | 0.519 | 0.259 |
+| BCRPluginHostTests.MockAgentHostTests | 8 | 0.517 | 0.062 |
+| BCRAgentCoreTests.LocalizationTests | 8 | 0.494 | 0.061 |
+| BCRProviderAdapterTests.SimulationConfigurationTests | 6 | 0.485 | 0.082 |
+| BCRProviderDomainTests.ConsoleContractTests | 7 | 0.485 | 0.063 |
+| BCRAgentConsoleTests.OffscreenPresentationTests | 4 | 0.476 | 0.136 |
+| BCRAgentCoreTests.SurfaceConfigurationTests | 8 | 0.469 | 0.058 |
+| BCRAgentCoreTests.CodexProtocolTests | 7 | 0.456 | 0.062 |
+| BCRAgentConsoleTests.LanguagePreferencesTests | 5 | 0.445 | 0.063 |
+| BCRAgentCoreTests.OSCCodecTests | 7 | 0.424 | 0.060 |
+| BCRAgentCoreTests.HardwareMapTests | 7 | 0.409 | 0.058 |
+| BCRAgentConsoleTests.FunctionEditorTests | 2 | 0.386 | 0.193 |
+| BCRAgentConsoleTests.SevenSegmentDisplayTests | 5 | 0.384 | 0.060 |
+| BCRAgentCoreTests.BehaviorTraceTests | 6 | 0.384 | 0.063 |
+| BCRAgentCoreTests.FeedbackTransportEvidenceTests | 6 | 0.363 | 0.061 |
+| BCRAgentCoreTests.LEDRingTests | 6 | 0.350 | 0.058 |
+| BCRAgentCoreTests.MIDIModelsTests | 6 | 0.346 | 0.058 |
+| BCRProviderAdapterTests.HardwareSurfaceControlTests | 5 | 0.326 | 0.065 |
+| BCRAgentCoreTests.SurfaceProgramsTests | 5 | 0.307 | 0.061 |
+| BCRProviderAdapterTests.ProviderHardwareVisibilityTests | 1 | 0.306 | 0.306 |
+| BCRAgentCoreTests.ButtonPreviewTests | 5 | 0.304 | 0.061 |
+| BCRAgentConsoleTests.ConsoleLayoutTests | 5 | 0.301 | 0.060 |
+| BCRAgentCoreTests.MockBCR2000Tests | 5 | 0.295 | 0.059 |
+| BCRAgentCoreTests.MIDIEndpointSelectionTests | 5 | 0.289 | 0.058 |
+| BCRProviderDomainTests.HardwareRoleCandidateTests | 4 | 0.271 | 0.068 |
+| BCRAgentConsoleTests.ConfigurationLibraryTests | 4 | 0.271 | 0.067 |
+| BCRAgentConsoleTests.IntegrationTestContextTests | 2 | 0.265 | 0.133 |
+| BCRAgentConsoleTests.ConsoleRefreshTests | 1 | 0.264 | 0.264 |
+| BCRAgentCoreTests.BuiltInNamePresentationTests | 4 | 0.252 | 0.063 |
+| BCRProviderDomainTests.SharedSimulationCompatibilityTests | 4 | 0.242 | 0.059 |
+| BCRAgentCoreTests.SharedOutputCompatibilityTests | 4 | 0.242 | 0.060 |
+| BCRAgentCoreTests.PluginSurfaceCompatibilityTests | 4 | 0.241 | 0.061 |
+| BCRAgentConsoleTests.ParameterDraftTests | 4 | 0.241 | 0.060 |
+| BCRAgentCoreTests.CodexSessionStateMachineTests | 4 | 0.238 | 0.059 |
+| BCRProviderDomainTests.HardwareRoleReadinessTests | 4 | 0.237 | 0.058 |
+| BCRProviderAdapterTests.SurfaceControl13Tests | 3 | 0.236 | 0.075 |
+| BCRAgentCoreTests.WorkspacePolicyTests | 4 | 0.235 | 0.059 |
+| BCRPluginHostTests.PluginRegistrationTests | 4 | 0.234 | 0.058 |
+| BCRAgentCoreTests.BCRPresetEncoderLearningTests | 3 | 0.230 | 0.078 |
+| BCRProviderAdapterTests.TimingIsolationEvidenceTests | 1 | 0.226 | 0.226 |
+| BCRAgentConsoleTests.OffscreenInteractionPanelTests | 2 | 0.217 | 0.108 |
+| BCRAgentConsoleTests.PipedMCPCredentialStoreTests | 3 | 0.189 | 0.062 |
+| BCRAgentCoreTests.AgentStateMachineTests | 3 | 0.182 | 0.060 |
+| BCRAgentConsoleTests.PresetDumpStreamTests | 3 | 0.181 | 0.060 |
+| BCRAgentCoreTests.JSONParameterLinkTests | 3 | 0.177 | 0.059 |
+| BCRAgentCoreTests.FeedbackSchedulerTests | 3 | 0.176 | 0.058 |
+| BCRAgentConsoleTests.OffscreenActivationGuardTests | 2 | 0.140 | 0.070 |
+| BCRAgentCoreTests.HardwareOutputPolicyTests | 2 | 0.134 | 0.067 |
+| BCRAgentCoreTests.ConfigurationPresetCoreTests | 2 | 0.125 | 0.063 |
+| BCRProviderAdapterTests.SurfaceControlPrincipalsTests | 2 | 0.124 | 0.062 |
+| BCRAgentConsoleTests.CoreMIDIAvailabilityTests | 2 | 0.124 | 0.062 |
+| BCRAgentCoreTests.AgentCompatibilityTests | 2 | 0.124 | 0.062 |
+| BCRAgentCoreTests.HardwareStartupSnapshotTests | 2 | 0.123 | 0.061 |
+| BCRAgentCoreTests.SharedSurfaceRegressionTests | 2 | 0.121 | 0.061 |
+| BCRAgentCoreTests.AgentCompatibilityFacadeTests | 2 | 0.121 | 0.060 |
+| BCRAgentConsoleTests.PresetNamesStreamTests | 2 | 0.120 | 0.060 |
+| BCRAgentConsoleTests.FeedbackSettingsTests | 1 | 0.102 | 0.102 |
+| BCRAgentCoreTests.CodexSessionCoordinatorTests | 1 | 0.086 | 0.086 |
+| BCRProviderAdapterTests.IndependentHardwareRuntimeFixtureTests | 1 | 0.083 | 0.083 |
+| BCRAgentConsoleTests.AgentLEDBlinkPatternTests | 1 | 0.074 | 0.074 |
+| BCRProviderAdapterTests.HardwareProfileFixtureTests | 1 | 0.070 | 0.070 |
+| BCRAgentConsoleTests.ArmPreviewTests | 1 | 0.063 | 0.063 |
+| BCRAgentCoreTests.CodexModelCatalogStoreTests | 1 | 0.063 | 0.063 |
+| BCRAgentCoreTests.HardwareConfirmationGatewayTests | 1 | 0.062 | 0.062 |
+| BCRAgentConsoleTests.OutputTransportRouterTests | 1 | 0.061 | 0.061 |
+| BCRAgentConsoleTests.MIDISysExAssemblerTests | 1 | 0.061 | 0.061 |
+| BCRAgentConsoleTests.PresetNumberEvidenceTests | 1 | 0.061 | 0.061 |
+| BCRAgentCoreTests.ParameterChangeAccumulatorTests | 1 | 0.059 | 0.059 |
