@@ -134,7 +134,6 @@ public final class SurfaceSession {
     /// Preflight runs before the candidate engine changes; commit runs before both values publish.
     public var hardwareInputPreflight: (@MainActor (BCRControlID, MIDIVoiceMessage) throws -> Void)?
     public var hardwareInputCommit: (@MainActor (BCRControlID, MIDIVoiceMessage, SurfaceEngine, Bool) throws -> Void)?
-    private var immediateDisplayFeedback = false
 
     private let hardwareDevice: any SurfaceDevice
     private let requiresHardwareConfirmation: Bool
@@ -151,6 +150,7 @@ public final class SurfaceSession {
     private var nrpnAssembler = NRPNAssembler()
     public private(set) var feedbackPolicy = FeedbackPolicy()
     private var scheduler: FeedbackScheduler?
+    private let feedbackPlanner = FeedbackPlanner()
     public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
     private var feedbackObservers: [UUID: @MainActor (Int) -> Void] = [:]
     public func observeFeedbackQueue(_ observer: @escaping @MainActor (Int) -> Void) -> UUID {
@@ -434,17 +434,18 @@ public final class SurfaceSession {
         guard !effects.isEmpty else { throw ProviderDomainError("unsupported_feedback", "No display route") }
         let mark = nextEventID
         engine = candidate
-        immediateDisplayFeedback = true
-        defer { immediateDisplayFeedback = false }
-        withWriteOrigin(.external) { perform(effects) }
-        let outputs = events.filter { $0.id > mark && $0.direction == .output }
-        guard !outputs.isEmpty, outputs.allSatisfy({ $0.delivery == .sent }) else {
-            // Keep the engine on what the device shows: roll back only when nothing reached it.
-            if !outputs.contains(where: { $0.delivery == .sent }) { engine = previous }
+        let plan = FeedbackBatchPlan(effects: effects, origin: .external, timing: .synchronous)
+        try feedbackPlanner.withBatch(plan) {
+            withWriteOrigin(plan.origin) { perform(plan.effects) }
+            let outputs = events.filter { $0.id > mark && $0.direction == .output }
+            guard !outputs.isEmpty, outputs.allSatisfy({ $0.delivery == .sent }) else {
+                // Keep the engine on what the device shows: roll back only when nothing reached it.
+                if !outputs.contains(where: { $0.delivery == .sent }) { engine = previous }
+                publishChange()
+                throw ProviderDomainError("delivery_failed", "Display transport did not accept output")
+            }
             publishChange()
-            throw ProviderDomainError("delivery_failed", "Display transport did not accept output")
         }
-        publishChange()
     }
 
     public func clearSimulationDisplayFeedback() throws {
@@ -675,7 +676,7 @@ public final class SurfaceSession {
         perform(effects)
     }
 
-    private func perform(_ effects: [SurfaceEffect]) {
+    private func perform(_ effects: [SurfaceEffect], timing: FeedbackTiming? = nil) {
         for effect in effects {
             switch effect {
             case .pageChanged:
@@ -692,7 +693,7 @@ public final class SurfaceSession {
                 mockDevice.configureModes(engine.configuration)
                 persistConfiguration()
                 onEvent?(.pageChanged)
-            case let .send(message): transmit(message)
+            case let .send(message): transmit(message, timing: timing)
             case let .triggerAgent(slot): onTriggerAgent?(slot)
             case let .triggerAction(action): onTriggerAction?(action)
             case let .learned(control, midi):
@@ -705,18 +706,21 @@ public final class SurfaceSession {
         }
     }
 
-    private func transmit(_ message: MIDIVoiceMessage) {
+    private func transmit(_ message: MIDIVoiceMessage, timing: FeedbackTiming? = nil) {
+        let plan = feedbackPlanner.message(message, origin: writeOrigin, requestedTiming: timing)
         if source == .hardware, hardwareOutput == .observe {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed)
             return
         }
-        if source == .hardware, !immediateDisplayFeedback, feedbackPolicy.enabled,
-           connection.connectedDestination != nil
-        {
-            scheduler?.enqueue(message, origin: writeOrigin)
+        let canCoalesce = source == .hardware && feedbackPolicy.enabled && connection.connectedDestination != nil
+        switch FeedbackScheduler.dispatch(plan, canCoalesce: canCoalesce) {
+        case .enqueue:
+            scheduler?.enqueue(plan.message, origin: plan.origin)
             notifyFeedbackQueue()
-        } else { transmitNow(message) }
+        case .send:
+            withWriteOrigin(plan.origin) { transmitNow(plan.message) }
+        }
     }
 
     @discardableResult

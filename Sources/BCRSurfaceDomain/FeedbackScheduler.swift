@@ -32,6 +32,46 @@ public struct FeedbackPolicy: Codable, Equatable, Sendable {
     }
 }
 
+/// Delivery timing belongs to the immutable effect plan, never to mutable session state.
+/// Synchronous display requests preserve their existing transport-acknowledgement contract.
+enum FeedbackTiming: Equatable, Sendable { case coalesced, synchronous }
+struct FeedbackPlan: Equatable, Sendable {
+    let message: MIDIVoiceMessage
+    let origin: SurfaceWriteOrigin
+    let timing: FeedbackTiming
+}
+
+/// One validated effect batch. Nested synchronous callbacks create child message plans
+/// under the same delivery policy, while retaining their own current write origin.
+struct FeedbackBatchPlan: Sendable {
+    let effects: [SurfaceEffect]
+    let origin: SurfaceWriteOrigin
+    let timing: FeedbackTiming
+}
+
+@MainActor
+final class FeedbackPlanner {
+    private var activeBatch: FeedbackBatchPlan?
+
+    func withBatch<Result>(_ batch: FeedbackBatchPlan, _ operation: () throws -> Result) rethrows -> Result {
+        activeBatch = batch
+        // Preserve the legacy boundary: completing any acknowledged display invalidates
+        // the current synchronous cause, including an enclosing reentrant request. Do not
+        // restore the parent here; that would expand when its later callbacks can send.
+        defer { activeBatch = nil }
+        return try operation()
+    }
+
+    func message(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
+                 requestedTiming: FeedbackTiming?) -> FeedbackPlan
+    {
+        FeedbackPlan(message: message, origin: origin,
+                     timing: requestedTiming ?? activeBatch?.timing ?? .coalesced)
+    }
+}
+
+enum FeedbackDispatch: Equatable, Sendable { case enqueue, send }
+
 public struct ScheduledFeedback: Equatable, Sendable {
     public let message: MIDIVoiceMessage
     public let origin: SurfaceWriteOrigin
@@ -50,6 +90,12 @@ public struct FeedbackScheduler: Sendable {
         try policy.validate()
         self.policy = policy
         tokens = Double(policy.burst)
+    }
+
+    /// Shared routing decision for normal and acknowledged display plans. A synchronous
+    /// plan leaves the token bucket and any earlier queued value untouched, as before.
+    static func dispatch(_ plan: FeedbackPlan, canCoalesce: Bool) -> FeedbackDispatch {
+        canCoalesce && plan.timing == .coalesced ? .enqueue : .send
     }
 
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin) {
