@@ -1,41 +1,36 @@
-"""Private executable fixture: a SwiftPM-like `swift test` that prints XCTest output for its cases."""
+"""Private executable fixture: a SwiftPM-like parallel `swift test` that writes an xunit report."""
 
 import json
 from pathlib import Path
 import sys
 import time
-
-
-def emit(bundle, entries, options):
-    print(f"Test Suite '{bundle}' started at fixture.")
-    failures = 0
-    for identifier in entries:
-        owner, method = identifier.split("/", 1)
-        name = f"-[{owner} {method}]"
-        print(f"Test Case '{name}' started.", flush=True)
-        if identifier == options.get("hang_case"):
-            time.sleep(3600)
-        failed = owner.split(".", 1)[0] == options.get("fail_module") and failures == 0
-        print(f"Test Case '{name}' {'failed' if failed else 'passed'} (0.001 seconds).")
-        failures += int(failed)
-    print(f"Test Suite '{bundle}' {'failed' if failures else 'passed'} at fixture.")
-    print(f"Executed {len(entries)} tests, with {failures} failures (0 unexpected) in 0.001 seconds")
-    return failures
+from xml.sax.saxutils import quoteattr
 
 
 def main():
     root = Path(__file__).resolve().parent
     options = json.loads((root / "fake-runner.json").read_text())
+    arguments = sys.argv[1:]
     with (root / "fake-calls.jsonl").open("a") as calls:
-        calls.write(json.dumps(sys.argv[1:]) + "\n")
+        calls.write(json.dumps(arguments) + "\n")
+    report = Path(arguments[arguments.index("--xunit-output") + 1])
     cases = options["cases"]
-    failures = 0
-    if options.get("layout", "split") == "split":
-        modules = dict.fromkeys(case.split(".", 1)[0] for case in cases)
-        for module in modules:
-            failures += emit(module + ".xctest", [case for case in cases if case.startswith(module + ".")], options)
-    else:
-        failures = emit(options.get("package", "Fixture") + "PackageTests.xctest", cases, options)
+    rows, failures = [], 0
+    for number, identifier in enumerate(cases, 1):
+        print(f"[{number}/{len(cases)}] Testing {identifier}", flush=True)
+        if identifier == options.get("hang_case"):
+            time.sleep(3600)
+        owner, method = identifier.split("/", 1)
+        failed = owner.split(".", 1)[0] == options.get("fail_module") and failures == 0
+        skipped = identifier == options.get("skip_case")
+        failures += int(failed)
+        body = "<failure message='fixture'/>" if failed else "<skipped/>" if skipped else ""
+        rows.append(f"<testcase classname={quoteattr(owner)} name={quoteattr(method)} time='0.001'>{body}</testcase>")
+    if not options.get("omit_report"):
+        report.write_text(
+            f"<?xml version='1.0' encoding='UTF-8'?><testsuites><testsuite name='TestResults' tests='{len(cases)}' "
+            f"failures='{failures}'>{''.join(rows)}</testsuite></testsuites>"
+        )
     raise SystemExit(options.get("exit_code", 1 if failures else 0))
 
 

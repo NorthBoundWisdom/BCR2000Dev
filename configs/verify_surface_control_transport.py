@@ -235,9 +235,14 @@ def main():
     cases = []
     hosts = []
 
+    last_pass = [time.monotonic()]
+
     def passed(name, **evidence):
+        # Elapsed since the previous case: points at the slow step when CI runs far longer than local.
+        now = time.monotonic()
         cases.append({"name": name, "passed": True, **evidence})
-        print("PASS", name, flush=True)
+        print(f"PASS {name} ({now - last_pass[0]:.2f}s)", flush=True)
+        last_pass[0] = now
 
     def rejected(operation, code):
         try:

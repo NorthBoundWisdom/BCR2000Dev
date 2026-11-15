@@ -19,7 +19,10 @@ final class EventRetentionTests: XCTestCase {
         )
     }
 
-    func testTenThousandIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE() throws {
+    func testManyIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE() throws {
+        // Well beyond the 1024-entry event journal and the 512-entry traces, so an idle tick that
+        // journals or keeps trace would be caught; not so many that the debug test runs for long.
+        let ticks = 2000
         let clock = Clock()
         let owner = try BCRPluginRuntime(clock: { clock.value }, epoch: "retention")
         try owner.install([AgentRemoteBinding(instanceID: AgentRemoteBinding.defaultInstanceID,
@@ -44,25 +47,33 @@ final class EventRetentionTests: XCTestCase {
         let oldSSE = application.events.sequence
         let observer = owner.observe { _ in clock.notifications += 1 }
         defer { owner.removeObserver(observer) }
-        for index in 1 ... 10_000 {
+        for index in 1 ... ticks {
             clock.value = 3 + Double(index) * 0.02
             application.tick()
         }
         XCTAssertEqual(try events(owner), before)
         XCTAssertEqual(clock.notifications, 0, "Silent state commits must not broadcast idle work")
         let robot = try application.robotState(), chassis = try application.chassisState()
-        XCTAssertEqual(robot.metadata.simulated_time_s - oldRobot.metadata.simulated_time_s, 200, accuracy: 1e-8)
-        XCTAssertEqual(chassis.metadata.simulated_time_s - oldChassis.metadata.simulated_time_s, 200, accuracy: 1e-8)
-        XCTAssertEqual(robot.metadata.sequence, oldRobot.metadata.sequence + 10_000)
-        XCTAssertEqual(chassis.metadata.sequence, oldChassis.metadata.sequence + 10_000)
+        XCTAssertEqual(
+            robot.metadata.simulated_time_s - oldRobot.metadata.simulated_time_s,
+            Double(ticks) * 0.02,
+            accuracy: 1e-8
+        )
+        XCTAssertEqual(
+            chassis.metadata.simulated_time_s - oldChassis.metadata.simulated_time_s,
+            Double(ticks) * 0.02,
+            accuracy: 1e-8
+        )
+        XCTAssertEqual(robot.metadata.sequence, oldRobot.metadata.sequence + UInt64(ticks))
+        XCTAssertEqual(chassis.metadata.sequence, oldChassis.metadata.sequence + UInt64(ticks))
         XCTAssertEqual(
             application.events.sequence,
-            oldSSE + 10_000,
+            oldSSE + ticks,
             "Provider 1.0 SSE cadence is a separate compatibility contract"
         )
         XCTAssertEqual(try application.robotTrace().count, 512)
         XCTAssertEqual(try application.chassisTrace().count, 512)
-        XCTAssertGreaterThan(robot.trace_dropped, 9000)
+        XCTAssertGreaterThan(robot.trace_dropped, UInt64(ticks - 512 - 100))
         let records = try XCTUnwrap(before.objectValue?["events"]?.arrayValue)
         XCTAssertTrue(records
             .contains { $0.objectValue?["event"]?.objectValue?["code"] == .string("surface_agent_primary") })

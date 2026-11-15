@@ -17,6 +17,7 @@ import sys
 import tempfile
 import threading
 import time
+from xml.etree import ElementTree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -47,140 +48,50 @@ def _run(command: list[str | Path], *, capture: bool = False, cwd: Path = REPO_R
     return completed.stdout.strip() if capture else ""
 
 
-def summarize_tests(output: str, expected: list[str], returncode: int, *, aggregate_name: str | None = None) -> bool:
-    """Verify SwiftPM's per-target bundles, or its one package bundle (older toolchains).
+def summarize_xunit(reports: list[Path], expected: list[str], returncode: int) -> bool:
+    """Verify SwiftPM's xunit reports: every expected test module ran cases and none failed.
 
-    Every expected module must report complete, passing cases; a zero exit code alone is not enough.
+    A zero exit code alone is not enough, and neither is a report that omits a module.
     """
-    bundles = {}
-    bundle_starts = set()
-    pending = None
-    failed_cases = []
-    case_starts, case_ends = {}, {}
-    case_errors = []
-    for line in output.splitlines():
-        started = re.search(r"Test Suite '([^']+\.xctest)' started\b", line)
-        if started:
-            if started[1] in bundle_starts:
-                case_errors.append(f"duplicate bundle start: {started[1]}")
-            bundle_starts.add(started[1])
-        match = re.search(r"Test Suite '([^']+\.xctest)' (passed|failed)\b", line)
-        if match:
-            pending = match[1]
-            if pending in bundles:
-                case_errors.append(f"duplicate bundle terminal: {pending}")
-            bundles[pending] = {"status": match[2], "tests": None, "failures": None, "unexpected": None, "skipped": 0}
-        elif pending and (
-            match := re.search(
-                r"Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures?(?: \((\d+) unexpected\))?",
-                line,
-            )
-        ):
-            bundles[pending].update(
-                tests=int(match[1]),
-                failures=int(match[3]),
-                unexpected=int(match[4]) if match[4] is not None else None,
-                skipped=int(match[2]) if match[2] is not None else 0,
-            )
-            pending = None
-        case = re.search(r"Test Case '([^']+)' (started|passed|failed|skipped)\b", line)
-        if case:
-            name, status = case[1], case[2]
-            module = re.match(r"-\[([^. ]+)\.", name) or re.match(r"([^. ]+)\.", name)
-            module = module[1] if module else None
-            if status == "started":
-                if name in case_starts:
-                    case_errors.append(f"duplicate case start: {name}")
-                case_starts[name] = module
-            else:
-                if name not in case_starts or name in case_ends:
-                    case_errors.append(f"missing start or duplicate case terminal: {name}")
-                case_ends[name] = status
-        if re.search(r"Test Case .* failed\b", line):
-            failed_cases.append(line.strip())
-    print("\nSwift test bundle summary:", flush=True)
-    success = returncode == 0 and bool(expected) and not failed_cases
-    total = failures = 0
-    if aggregate_name and set(bundles) == {aggregate_name}:
-        result = bundles[aggregate_name]
-        expected_modules = {name.removesuffix(".xctest") for name in expected}
-        complete = set(case_starts) == set(case_ends) and bool(case_starts)
-        known_modules = set(case_starts.values()) == expected_modules
-        counts_match = result["tests"] == len(case_starts) == len(case_ends)
-        passed = (
-            aggregate_name in bundle_starts
-            and complete
-            and known_modules
-            and counts_match
-            and not case_errors
-            and all(status in ("passed", "skipped") for status in case_ends.values())
-            and sum(status == "skipped" for status in case_ends.values()) == result["skipped"]
-            and result["status"] == "passed"
-            and result["failures"] == 0
-            and result["unexpected"] == 0
+    modules: dict[str, dict[str, int]] = {}
+    failures: list[str] = []
+    readable = bool(reports)
+    for report in reports:
+        try:
+            root = ElementTree.parse(report).getroot()
+        except (OSError, ElementTree.ParseError) as error:
+            print(f"  FAIL unreadable test report {report.name}: {error}", flush=True)
+            readable = False
+            continue
+        for case in root.iter("testcase"):
+            module = (case.get("classname") or "").split(".", 1)[0]
+            counts = modules.setdefault(module, {"tests": 0, "failures": 0, "skipped": 0})
+            counts["tests"] += 1
+            if case.find("failure") is not None or case.find("error") is not None:
+                counts["failures"] += 1
+                failures.append(f"{case.get('classname')}.{case.get('name')}")
+            elif case.find("skipped") is not None:
+                counts["skipped"] += 1
+    print("Swift test summary:", flush=True)
+    for name in failures:
+        print(f"  FAIL {name}", flush=True)
+    complete = readable
+    for module in expected:
+        counts = modules.get(module)
+        valid = bool(counts and counts["tests"] and not counts["failures"])
+        complete &= valid
+        detail = (
+            f"{counts['tests']} tests, {counts['failures']} failures, {counts['skipped']} skipped"
+            if counts
+            else "no cases"
         )
-        for module in sorted(expected_modules):
-            names = {name for name, owner in case_starts.items() if owner == module}
-            terminals = names.intersection(case_ends)
-            valid = (
-                bool(names) and names == terminals and all(case_ends[name] in ("passed", "skipped") for name in names)
-            )
-            print(
-                f"  {'PASS' if valid else 'FAIL'} {module}: {len(names)} started, {len(terminals)} complete", flush=True
-            )
-        if not complete or not known_modules or not counts_match:
-            print("  FAIL aggregate case coverage/counts are incomplete or inconsistent", flush=True)
-        print(
-            f"  {'PASS' if passed else 'FAIL'} {aggregate_name}: {result['tests']} tests, "
-            f"{result['failures']} failures, {result['unexpected']} unexpected",
-            flush=True,
-        )
-        for error in case_errors:
-            print(f"  FAIL {error}", flush=True)
-        success = success and passed
-        total, failures = result["tests"] or 0, result["failures"] or 0
-    else:
-        if set(bundles) != set(expected):
-            success = False
-        if case_starts or case_ends:
-            complete = set(case_starts) == set(case_ends)
-            counts_match = all(
-                sum(owner == name.removesuffix(".xctest") for owner in case_starts.values())
-                == (bundles.get(name) or {}).get("tests")
-                for name in expected
-            )
-            skips_match = all(
-                sum(
-                    case_ends.get(case) == "skipped"
-                    for case, owner in case_starts.items()
-                    if owner == name.removesuffix(".xctest")
-                )
-                == (bundles.get(name) or {}).get("skipped", 0)
-                for name in expected
-            )
-            if not complete or not counts_match or not skips_match or case_errors:
-                print("  FAIL split-bundle case coverage/counts are incomplete or inconsistent", flush=True)
-                success = False
-        for name in dict.fromkeys([*expected, *bundles]):
-            result = bundles.get(name)
-            if result is None or result["tests"] is None or result["tests"] == 0:
-                print(f"  FAIL {name}: missing complete test results", flush=True)
-                success = False
-                continue
-            passed = result["status"] == "passed" and result["failures"] == 0 and result["unexpected"] in (None, 0)
-            print(
-                f"  {'PASS' if passed else 'FAIL'} {name}: {result['tests']} tests, {result['failures']} failures",
-                flush=True,
-            )
-            success = success and passed
-            total += result["tests"]
-            failures += result["failures"]
-    for failure in failed_cases:
-        print(f"  FAIL {failure}", flush=True)
-    print(
-        f"Total: {total} tests, {failures} failures; {'PASS' if success else 'FAIL'} (swift exit {returncode})",
-        flush=True,
-    )
+        print(f"  {'PASS' if valid else 'FAIL'} {module}: {detail}", flush=True)
+    total = sum(counts["tests"] for counts in modules.values())
+    failed = sum(counts["failures"] for counts in modules.values())
+    success = complete and returncode == 0 and total > 0 and failed == 0
+    if returncode:
+        print(f"  FAIL swift test exited with {returncode}", flush=True)
+    print(f"Total: {total} tests, {failed} failures; {'PASS' if success else 'FAIL'}", flush=True)
     return success
 
 
@@ -194,33 +105,40 @@ REQUIRED_TEST_MODULES = frozenset(
     }
 )
 
-# The whole suite runs in about two minutes; a run far beyond that is a hung test, not a slow machine.
+# The whole suite runs in about a minute in parallel; far beyond that is a hung test, not a slow machine.
 TEST_TIMEOUT_S = 15 * 60
 
 
-def _unfinished_case(output: list[str]) -> str | None:
-    started, finished = [], set()
-    for line in output:
-        case = re.search(r"Test Case '([^']+)' (started|passed|failed|skipped)\b", line)
-        if case:
-            (started.append if case[2] == "started" else finished.add)(case[1])
-    return next((name for name in reversed(started) if name not in finished), None)
+def test_workers() -> int:
+    """Parallel XCTest processes; BCR_TEST_WORKERS overrides the CPU count."""
+    configured = os.environ.get("BCR_TEST_WORKERS")
+    if configured:
+        if not configured.isdigit() or int(configured) < 1:
+            raise ValueError("BCR_TEST_WORKERS must be a positive integer")
+        return int(configured)
+    return max(1, os.cpu_count() or 1)
 
 
 def _run_tests(command: list[str | Path]) -> None:
-    """One ordinary `swift test` run (each bundle in one process), streamed to a kept log."""
+    """One parallel `swift test` run, streamed to a kept log and verified from its xunit reports."""
     manifest = (REPO_ROOT / "Package.swift").read_text()
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)
-    package = re.search(r'\bPackage\(\s*name:\s*"([^"]+)"', manifest)
-    aggregate_name = package[1] + "PackageTests.xctest" if package else None
     if not modules or not REQUIRED_TEST_MODULES <= set(modules):
         raise RuntimeError("Swift test bundle verification failed: required test module is missing")
-    command = [str(part) for part in command]
     runs = REPO_ROOT / "build/test-runs"
     runs.mkdir(parents=True, exist_ok=True)
-    log_path = Path(tempfile.mkdtemp(prefix="run-", dir=runs)) / "swift-test.log"
+    run = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
+    log_path, xunit = run / "swift-test.log", run / "xunit.xml"
+    workers = test_workers()
+    command = [str(part) for part in command] + [
+        "--parallel",
+        "--num-workers",
+        str(workers),
+        "--xunit-output",
+        str(xunit),
+    ]
     print(">>", " ".join(command), flush=True)
-    output: list[str] = []
+    started_cases: list[str] = []
     timed_out = threading.Event()
     started = time.monotonic()
     with (
@@ -240,18 +158,22 @@ def _run_tests(command: list[str | Path]) -> None:
             for line in process.stdout:
                 print(line, end="", flush=True)
                 log.write(line)
-                output.append(line)
+                if case := re.match(r"\[\d+/\d+\] Testing (\S+)", line):
+                    started_cases.append(case[1])
             returncode = process.wait()
         finally:
             watchdog.cancel()
     elapsed = time.monotonic() - started
-    print(f"Test log: {log_path} ({elapsed:.1f}s)", flush=True)
+    print(f"Test log: {log_path} ({elapsed:.1f}s, {workers} workers)", flush=True)
     if timed_out.is_set():
-        hung = _unfinished_case(output) or "unknown"
-        raise RuntimeError(f"Swift test bundle verification failed: exceeded {TEST_TIMEOUT_S}s while running {hung}")
-    if not summarize_tests(
-        "".join(output), [name + ".xctest" for name in modules], returncode, aggregate_name=aggregate_name
-    ):
+        # Parallel output reports starts only; the hung case is among the last ones started.
+        suspects = ", ".join(started_cases[-workers:]) or "unknown"
+        raise RuntimeError(
+            f"Swift test bundle verification failed: exceeded {TEST_TIMEOUT_S}s; last started: {suspects}"
+        )
+    # Swift Testing writes its own report next to the XCTest one when it has tests.
+    reports = [path for path in (xunit, run / "xunit-swift-testing.xml") if path.is_file()]
+    if not summarize_xunit(reports, modules, returncode):
         raise RuntimeError(f"Swift test bundle verification failed; see {log_path}")
 
 
@@ -267,16 +189,20 @@ def _swift_build(configuration: str, architecture: str) -> Path:
     for arch in _architectures(architecture):
         if arch not in {"arm64", "x86_64"}:
             raise ValueError(f"Unsupported macOS architecture: {arch}")
-        options = [
-            "swift",
-            "build",
-            "--build-path",
-            str(SWIFTPM_BUILD_ROOT / arch),
-            "--configuration",
-            configuration,
-            "--triple",
-            f"{arch}-apple-macosx14.0",
-        ]
+        if architecture == "native":
+            # Same build path and target as `swift test`, so a test run leaves nothing to recompile.
+            options = ["swift", "build", "--build-path", str(SWIFTPM_BUILD_ROOT), "--configuration", configuration]
+        else:
+            options = [
+                "swift",
+                "build",
+                "--build-path",
+                str(SWIFTPM_BUILD_ROOT / arch),
+                "--configuration",
+                configuration,
+                "--triple",
+                f"{arch}-apple-macosx14.0",
+            ]
         _run([*options, "--product", PRODUCT])
         binary = Path(_run([*options, "--show-bin-path"], capture=True)) / PRODUCT
         if not binary.is_file():

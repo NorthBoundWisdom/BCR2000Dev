@@ -17,7 +17,8 @@ jobs:
         with:
           python-version: '3.13'
       - run: python3 configs/surface_plugins_dependency.py ensure
-      - run: python3 configs/setup_local_project.py
+      # setup_local_project.py also builds SurfacePlugins on its own; the test build compiles it anyway.
+      - run: python3 configs/validate_repo_commands.py .
       - run: python3 -m compileall -q configs
       - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
       - run: python3 configs/macos_workflow.py test
