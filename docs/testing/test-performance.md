@@ -207,7 +207,7 @@ ProviderEventJournal.append 构造 ISO8601 formatter；Output 10000 tick 栈也�
 ## P4 子进程与 IO
 
 ProviderModule/SharedRuntimeMCP 未见固定 sleep、子进程或超时消耗；慢在反复读取 Provider 合同。
-P3 缓存后，进程内分别由 4.175/2.074 s 变为 0.404/0.077 s（后者以最终表为准）。
+P3 缓存后，进程内分别由 4.175/2.074 s 变为 0.374/0.030 s（最终测量）。
 Codex 包含真实 Python/sh 启动、管道 EOF 排空、退出轮询和退避。保持真实 IO 与原 stop/kill 期限。
 
 - CodexProcessSupervisor 的 restartSleep 默认仍是 Task.sleep(configured backoff)，测试可手动推进。
@@ -220,3 +220,203 @@ Codex 包含真实 Python/sh 启动、管道 EOF 排空、退出轮询和退避�
   等待 coordinator 的 activeThread 状态（线程已建立、turn 回复仍在途）。保留所有状态/错误/另一槽位断言。
 - 原有 2/5/10/20 ms 状态轮询不是固定完成假设；真实 EOF/进程退出/网络输入到达后立即返回。
   真实分片 UTF-8 的 shell 50 ms 与 delayed_hold 的 Python 200 ms 保留，继续覆盖实际跨读取/在途 RPC。
+
+## 最终对比（同机、同一计时口径）
+
+| 指标 | 优化前 | 优化后 | 结果 |
+|---|---:|---:|---|
+| XCTest 进程内用例合计 | 65.686 s | 20.354 s | 下降 69.0%，≤30 s |
+| XCTest 中位数 | 0.003 s | 0.002 s | |
+| 指定 SwiftPM 串行 xunit 合计 | 111.278 s | 67.091 s | **未达到 ≤30 s**；包含逐例进程启动 |
+| SwiftPM xunit 中位数 | 0.065 s | 0.064 s | |
+| 用例数 | 687 | 695 | 新增 8，无删除 |
+
+进程内计时命令：`swift test --skip-build --build-path build/swiftpm`，随后
+`python3 tools/test_timings.py --xctest-log build/timings/final-inprocess.log --json build/timings/final-native.json`。
+指定口径由 `BCR_TEST_WORKERS=1 python3 configs/macos_workflow.py test` 调用相同的 SwiftPM
+`--parallel --num-workers 1 --xunit-output` 命令；报告用 `tools/test_timings.py` 原样读取，未扣除启动成本。
+
+XCTest 原生日志前后均有一个既有硬件 opt-in skip：`testRealCoreMIDIQualificationIsOptIn`，未设置实机环境变量。
+SwiftPM parallel xunit 没有把这个既有 skip 写成 `<skipped>`，所以其汇总显示 0；不以该显示声称跑过硬件。
+
+### 按类完整对比（秒）
+
+| 类 | 前/后例数 | 原生前 | 原生后 | xunit前 | xunit后 |
+|---|---:|---:|---:|---:|---:|
+| BCRAgentConsoleTests.PresetRestoreSafetyTests | 37/37 | 8.699 | 3.928 | 11.657 | 7.185 |
+| BCRProviderAdapterTests.SharedSurfaceScenarioTests | 4/4 | 4.991 | 2.717 | 5.295 | 2.971 |
+| BCRAgentConsoleTests.HardwareStartupTests | 10/10 | 4.807 | 0.094 | 5.567 | 0.896 |
+| BCRAgentConsoleTests.LockedPresetDisplayTests | 21/21 | 4.795 | 0.173 | 6.515 | 1.951 |
+| BCRProviderAdapterTests.ProviderModuleTests | 13/13 | 4.175 | 0.374 | 5.336 | 1.447 |
+| BCRAgentConsoleTests.MonotonicReceiptTests | 5/5 | 3.955 | 3.224 | 4.274 | 3.587 |
+| BCRProviderAdapterTests.EventRetentionTests | 3/3 | 3.594 | 0.887 | 3.793 | 1.074 |
+| BCRAgentConsoleTests.HardwareConnectionStatusTests | 3/3 | 2.498 | 0.038 | 2.751 | 0.285 |
+| BCRAgentConsoleTests.OutputControllerTests | 17/17 | 2.482 | 0.534 | 3.617 | 1.667 |
+| BCRProviderAdapterTests.SharedRuntimeMCPTests | 5/5 | 2.074 | 0.030 | 2.567 | 0.428 |
+| BCRAgentCoreTests.CodexApprovalGateTests | 7/7 | 2.061 | 0.000 | 2.515 | 0.408 |
+| BCRAgentCoreTests.CodexSessionIntegrationTests | 12/12 | 1.953 | 2.046 | 2.613 | 2.707 |
+| BCRAgentConsoleTests.IntegrationMIDIFixtureTests | 2/3 | 1.820 | 0.023 | 1.932 | 0.211 |
+| BCRAgentConsoleTests.SurfaceAgentIntentTests | 5/5 | 1.701 | 0.161 | 2.116 | 0.587 |
+| BCRAgentCoreTests.CodexProcessSupervisorTests | 12/13 | 1.450 | 0.887 | 2.200 | 1.756 |
+| BCRAgentConsoleTests.DeviceDisplayTests | 4/4 | 1.443 | 0.025 | 1.745 | 0.359 |
+| BCRAgentConsoleTests.PresetAlignmentFlowTests | 7/7 | 1.097 | 0.315 | 1.671 | 0.913 |
+| BCRAgentConsoleTests.ConfigurationPersistenceTests | 14/14 | 1.080 | 0.057 | 2.062 | 1.127 |
+| BCRAgentConsoleTests.HardwarePressAnimationTests | 3/3 | 0.970 | 0.023 | 1.230 | 0.274 |
+| BCRAgentConsoleTests.AgentLEDBlinkTests | 3/3 | 0.878 | 0.041 | 1.103 | 0.271 |
+| BCRAgentConsoleTests.CodexAgentControllerTests | 10/10 | 0.850 | 0.767 | 1.536 | 1.436 |
+| BCRProviderAdapterTests.SurfaceControlHoldTests | 13/13 | 0.730 | 0.727 | 1.555 | 1.559 |
+| BCRAgentConsoleTests.LEDDisplayTests | 2/2 | 0.725 | 0.005 | 0.859 | 0.169 |
+| BCRAgentConsoleTests.MIDIEndpointSettingsTests | 6/6 | 0.597 | 0.028 | 1.060 | 0.523 |
+| BCRProviderAdapterTests.SurfaceControlRegressionTests | 11/11 | 0.570 | 0.346 | 1.290 | 1.084 |
+| BCRAgentConsoleTests.HardwareButtonFunctionTests | 4/4 | 0.470 | 0.014 | 0.772 | 0.358 |
+| BCRAgentConsoleTests.SSEStreamTests | 8/9 | 0.445 | 0.167 | 0.953 | 0.750 |
+| BCRAgentCoreTests.EncoderPrecisionTests | 16/16 | 0.364 | 0.324 | 1.318 | 1.271 |
+| BCRAgentConsoleTests.ConfigurationPresetTests | 2/2 | 0.355 | 0.015 | 0.519 | 0.185 |
+| BCRAgentConsoleTests.WebSocketParameterAdapterTests | 4/4 | 0.348 | 0.363 | 0.602 | 0.637 |
+| BCRAgentConsoleTests.WorkspacePanelSettingsTests | 5/5 | 0.339 | 0.009 | 0.691 | 0.363 |
+| BCRAgentCoreTests.CodexProcessIntegrationTests | 6/6 | 0.254 | 0.227 | 0.579 | 0.597 |
+| BCRProviderAdapterTests.ProviderHardwareVisibilityTests | 1/1 | 0.237 | 0.020 | 0.306 | 0.083 |
+| BCRAgentConsoleTests.FunctionEditorTests | 2/2 | 0.235 | 0.007 | 0.386 | 0.178 |
+| BCRAgentCoreTests.PresetDocumentSafetyTests | 6/6 | 0.234 | 0.230 | 0.589 | 0.590 |
+| BCRProviderAdapterTests.SurfaceControlTests | 8/8 | 0.215 | 0.209 | 0.728 | 0.723 |
+| BCRAgentConsoleTests.MIDIInitializationTests | 5/5 | 0.205 | 0.020 | 0.535 | 0.366 |
+| BCRAgentConsoleTests.ConsoleRefreshTests | 1/1 | 0.187 | 0.017 | 0.264 | 0.099 |
+| BCRProviderAdapterTests.TimingIsolationEvidenceTests | 1/1 | 0.162 | 0.167 | 0.226 | 0.226 |
+| BCRAgentCoreTests.PresetAlignmentTests | 10/10 | 0.156 | 0.156 | 0.785 | 0.779 |
+| BCRAgentConsoleTests.PresetBackupStoreTests | 8/8 | 0.152 | 0.042 | 0.674 | 0.571 |
+| BCRAgentConsoleTests.MCPHTTPServerTests | 8/8 | 0.151 | 0.038 | 0.715 | 0.591 |
+| BCRAgentConsoleTests.LanguagePreferencesTests | 5/5 | 0.122 | 0.008 | 0.445 | 0.340 |
+| BCRAgentConsoleTests.IntegrationTestContextTests | 2/2 | 0.116 | 0.003 | 0.265 | 0.147 |
+| BCRProviderAdapterTests.SimulationConfigurationTests | 6/6 | 0.109 | 0.108 | 0.485 | 0.490 |
+| BCRAgentCoreTests.SurfaceSessionTests | 30/30 | 0.093 | 0.038 | 1.890 | 1.833 |
+| BCRAgentConsoleTests.OffscreenInteractionPanelTests | 2/2 | 0.092 | 0.090 | 0.217 | 0.192 |
+| BCRAgentConsoleTests.WindowTitlebarTests | 5/5 | 0.062 | 0.065 | 0.784 | 0.838 |
+| BCRProviderAdapterTests.SurfaceControl13Tests | 3/3 | 0.045 | 0.041 | 0.236 | 0.233 |
+| BCRAgentCoreTests.BCRPresetEncoderLearningTests | 3/3 | 0.044 | 0.044 | 0.230 | 0.228 |
+| BCRAgentCoreTests.CodexProtocolTests | 7/7 | 0.042 | 0.038 | 0.456 | 0.459 |
+| BCRPluginHostTests.MockAgentHostTests | 8/8 | 0.042 | 0.039 | 0.517 | 0.511 |
+| BCRProviderDomainTests.ConsoleContractTests | 7/9 | 0.039 | 0.050 | 0.485 | 0.587 |
+| BCRAgentCoreTests.MCPTests | 24/24 | 0.039 | 0.035 | 1.528 | 1.521 |
+| BCRAgentConsoleTests.FeedbackSettingsTests | 1/1 | 0.033 | 0.028 | 0.102 | 0.098 |
+| BCRAgentConsoleTests.SevenSegmentDisplayTests | 5/5 | 0.030 | 0.028 | 0.384 | 0.375 |
+| BCRAgentCoreTests.CodexSessionCoordinatorTests | 1/1 | 0.030 | 0.034 | 0.086 | 0.092 |
+| BCRAgentCoreTests.FunctionSystemTests | 10/10 | 0.024 | 0.019 | 0.625 | 0.619 |
+| BCRProviderDomainTests.HardwareRoleCandidateTests | 4/4 | 0.021 | 0.021 | 0.271 | 0.273 |
+| BCRAgentCoreTests.BehaviorTraceTests | 6/6 | 0.021 | 0.012 | 0.384 | 0.373 |
+| BCRProviderAdapterTests.HardwareSurfaceControlTests | 5/5 | 0.020 | 0.017 | 0.326 | 0.325 |
+| BCRProviderAdapterTests.IndependentHardwareRuntimeFixtureTests | 1/1 | 0.019 | 0.018 | 0.083 | 0.082 |
+| BCRAgentConsoleTests.OffscreenPresentationTests | 4/4 | 0.016 | 0.018 | 0.476 | 0.463 |
+| BCRProviderDomainTests.SimulationTests | 15/15 | 0.016 | 0.016 | 0.886 | 0.887 |
+| BCRAgentCoreTests.HardwareOutputPolicyTests | 2/2 | 0.014 | 0.004 | 0.134 | 0.124 |
+| BCRAgentCoreTests.LocalizationTests | 8/8 | 0.014 | 0.014 | 0.494 | 0.500 |
+| BCRAgentConsoleTests.ConfigurationLibraryTests | 4/4 | 0.009 | 0.009 | 0.271 | 0.276 |
+| BCRProviderDomainTests.SharedSimulationCompatibilityTests | 4/4 | 0.009 | 0.009 | 0.242 | 0.244 |
+| BCRAgentCoreTests.FeedbackTransportEvidenceTests | 6/6 | 0.008 | 0.006 | 0.363 | 0.360 |
+| BCRProviderAdapterTests.HardwareProfileFixtureTests | 1/1 | 0.007 | 0.006 | 0.070 | 0.070 |
+| BCRProviderAdapterTests.SurfaceControlPrincipalsTests | 2/2 | 0.006 | 0.006 | 0.124 | 0.127 |
+| BCRAgentCoreTests.CodexModelCatalogStoreTests | 1/1 | 0.004 | 0.002 | 0.063 | 0.060 |
+| BCRAgentConsoleTests.OffscreenActivationGuardTests | 2/2 | 0.003 | 0.004 | 0.140 | 0.152 |
+| BCRAgentCoreTests.AgentStateMachineTests | 3/3 | 0.003 | 0.003 | 0.182 | 0.184 |
+| BCRAgentCoreTests.PersistenceValidationTests | 11/11 | 0.003 | 0.003 | 0.660 | 0.660 |
+| BCRAgentCoreTests.SurfaceProgramsTests | 5/5 | 0.003 | 0.003 | 0.307 | 0.310 |
+| BCRAgentCoreTests.BuiltInNamePresentationTests | 4/4 | 0.003 | 0.003 | 0.252 | 0.251 |
+| BCRAgentCoreTests.SharedSurfaceRegressionTests | 2/2 | 0.003 | 0.002 | 0.121 | 0.119 |
+| BCRAgentCoreTests.AgentCompatibilityTests | 2/2 | 0.002 | 0.002 | 0.124 | 0.129 |
+| BCRAgentCoreTests.ConfigurationPresetCoreTests | 2/2 | 0.002 | 0.002 | 0.125 | 0.125 |
+| BCRAgentCoreTests.HardwareStartupSnapshotTests | 2/2 | 0.002 | 0.002 | 0.123 | 0.124 |
+| BCRAgentCoreTests.ButtonPreviewTests | 5/5 | 0.002 | 0.002 | 0.304 | 0.303 |
+| BCRAgentCoreTests.PluginSurfaceCompatibilityTests | 4/4 | 0.001 | 0.001 | 0.241 | 0.242 |
+| BCRAgentCoreTests.HardwareConfirmationGatewayTests | 1/1 | 0.001 | 0.001 | 0.062 | 0.062 |
+| BCRAgentCoreTests.HardwareMapTests | 7/7 | 0.001 | 0.001 | 0.409 | 0.410 |
+| BCRAgentCoreTests.SurfaceConfigurationTests | 8/8 | 0.001 | 0.001 | 0.469 | 0.469 |
+| BCRAgentCoreTests.AgentCompatibilityFacadeTests | 2/2 | 0.001 | 0.001 | 0.121 | 0.142 |
+| BCRPluginHostTests.PluginRegistrationTests | 4/4 | 0.001 | 0.001 | 0.234 | 0.232 |
+| BCRAgentConsoleTests.PresetDumpStreamTests | 3/3 | 0.001 | 0.001 | 0.181 | 0.183 |
+| BCRAgentConsoleTests.PipedMCPCredentialStoreTests | 3/3 | 0.001 | 0.001 | 0.189 | 0.191 |
+| BCRAgentCoreTests.MockBCR2000Tests | 5/5 | 0.001 | 0.001 | 0.295 | 0.295 |
+| BCRProviderDomainTests.HardwareRoleReadinessTests | 4/4 | 0.001 | 0.001 | 0.237 | 0.239 |
+| BCRAgentCoreTests.WorkspacePolicyTests | 4/4 | 0.000 | 0.000 | 0.235 | 0.237 |
+| BCRAgentConsoleTests.CoreMIDIAvailabilityTests | 2/2 | 0.000 | 0.000 | 0.124 | 0.120 |
+| BCRAgentConsoleTests.BCRDisplayModelTests | 12/12 | 0.000 | 0.000 | 0.724 | 0.723 |
+| BCRAgentConsoleTests.PresetNamesStreamTests | 2/2 | 0.000 | 0.000 | 0.120 | 0.121 |
+| BCRAgentCoreTests.MIDIModelsTests | 6/6 | 0.000 | 0.000 | 0.346 | 0.348 |
+| BCRAgentConsoleTests.OutputTransportRouterTests | 1/1 | 0.000 | 0.000 | 0.061 | 0.060 |
+| BCRAgentCoreTests.SharedOutputCompatibilityTests | 4/4 | 0.000 | 0.000 | 0.242 | 0.243 |
+| BCRAgentCoreTests.MotionSafetyTests | 11/11 | 0.000 | 0.000 | 0.665 | 0.668 |
+| BCRAgentCoreTests.ParameterChangeAccumulatorTests | 1/1 | 0.000 | 0.000 | 0.059 | 0.058 |
+| BCRAgentConsoleTests.ConsoleTimingTests | 0/3 | 0.000 | 0.017 | 0.000 | 0.221 |
+| BCRAgentConsoleTests.AgentLEDBlinkPatternTests | 1/1 | 0.000 | 0.000 | 0.074 | 0.060 |
+| BCRAgentConsoleTests.MIDISysExAssemblerTests | 1/1 | 0.000 | 0.000 | 0.061 | 0.061 |
+| BCRAgentCoreTests.FeedbackSchedulerTests | 3/3 | 0.000 | 0.000 | 0.176 | 0.177 |
+| BCRAgentCoreTests.LEDRingTests | 6/6 | 0.000 | 0.000 | 0.350 | 0.353 |
+| BCRAgentConsoleTests.ParameterDraftTests | 4/4 | 0.000 | 0.000 | 0.241 | 0.241 |
+| BCRAgentConsoleTests.ConsoleLayoutTests | 5/5 | 0.000 | 0.000 | 0.301 | 0.301 |
+| BCRAgentCoreTests.MIDIEndpointSelectionTests | 5/5 | 0.000 | 0.000 | 0.289 | 0.292 |
+| BCRAgentCoreTests.SurfaceEngineTests | 18/18 | 0.000 | 0.000 | 1.048 | 1.054 |
+| BCRAgentConsoleTests.ArmPreviewTests | 1/1 | 0.000 | 0.000 | 0.063 | 0.063 |
+| BCRAgentConsoleTests.PresetNumberEvidenceTests | 1/1 | 0.000 | 0.000 | 0.061 | 0.062 |
+| BCRAgentCoreTests.OSCCodecTests | 7/7 | 0.000 | 0.000 | 0.424 | 0.422 |
+| BCRAgentCoreTests.CodexSessionStateMachineTests | 4/4 | 0.000 | 0.000 | 0.238 | 0.236 |
+| BCRAgentCoreTests.JSONParameterLinkTests | 3/3 | 0.000 | 0.000 | 0.177 | 0.179 |
+
+### 新增用例与超 1 s 例外
+
+- P1：ConsoleTimingTests 3 例（默认常量/时钟、手动 deadline/取消、300 ms 连接边界）。
+- P2：fixture 默认节奏、SSE 默认合并时长，各 1 例。
+- P3：journal UTC/每次时间、缓存合同对照发布资源，各 1 例。
+- P4：进程 stop/backoff 默认值 1 例。
+- Shared package 另新增 ImmutableDescriptorTests 1 例，不计入 BCR 的 695。
+
+保留超过 1 s 的三例（没有缩小常量）：
+- MonotonicReceiptTests.testRealIOReceiptRetainsItsAgeWhileMainActorIsBlocked：原生 1.478 s；两个真实 loopback 协议各阻塞 0.65 s，证明生产接收时间戳不会随 MainActor 延迟刷新。
+- MonotonicReceiptTests.testBoundedRealReceiveOverflowIsVisibleAndClosesWithoutAnOwnerStop：原生 1.463 s；两个协议各阻塞 0.65 s，使实际后台接收越过容量并验证自动关闭。
+- CodexSessionIntegrationTests.testProtocolAndStateMachineSoak：原生 1.051 s；保留既有默认 1 s 真实子进程 soak，未缩小时间或循环。
+
+### 未完成与边界
+
+- **未声称全部性能验收达标**：原生测试体 ≤30 s 已满足；指定 SwiftPM xunit 合计仍 67.091 s，默认并行墙钟减半也尚未满足。
+- 主要剩余差额是 SwiftPM 逐例 XCTest 进程启动。保留现有 `swift test --parallel`、build/cache 与 xunit 验证流程，没有改变测量口径或以减少用例/循环隐藏它。
+- P5 的 XTouch 优化/独立测量未启动：遵守 BCR 全部达标后再做的顺序；XTouch 已按开工要求 status/fetch，保持干净无提交。
+- SurfacePlugins 的改动是 BCR P3 直接依赖热点修复；该阶段验证额外测得 Python 94 例 12.531 s、Pipe 10 例 0.047 s，全通过，未改 Python 测试或开展 P5 优化。
+- 未运行实机 opt-in；未创建分支/worktree、stash/reset、tag/release 或 push。
+- SurfacePlugins 本地锁 revision 尚未推送，干净新机需由用户决定发布，或按现有约定用 acquisition source 获取提交。
+
+## 最终验证与提交
+
+| 命令 | 结果 |
+|---|---|
+| `python3 configs/macos_workflow.py test` 默认 8 worker，连续三遍（独占 SwiftPM） | 每遍 695 例，0 失败；17.4 / 15.4 / 15.6 s |
+| `BCR_TEST_WORKERS=2 python3 configs/macos_workflow.py test` | 695 例，0 失败；46.6 s |
+| `BCR_TEST_WORKERS=1 python3 configs/macos_workflow.py test` | 695 例，0 失败；70.4 s；xunit 用例合计 67.091 s |
+| `python3 -m unittest discover -s Tests/BuildWorkflowTests` | 113 例，0 失败 |
+| `PYTHONPATH=Clients/Python python3 -m unittest discover -s Clients/Python/tests` | 6 例，0 失败 |
+| `python3 configs/check_domain_boundaries.py` | 20 个模块边界通过 |
+| `python3 configs/format_repo.py --all --check` | 通过 |
+| `python3 configs/validate_repo_commands.py .` / `python3 -m compileall -q configs` | 通过 |
+| `python3 tools/mcp_integration.py` | 两个 MCP 协议版本、鉴权/Origin/保护/原子操作通过，离屏桌面审计通过 |
+| `python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug` | 软件交付件成功 |
+| `python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport` | 17 项通过，0 失败；2 个历史 SDK archive 缺失项按脚本原有逻辑 skip |
+| `python3 configs/macos_workflow.py build` / `smoke` | 构建与中英文 1200×760 离屏原生启动通过 |
+| `python3 tools/mcp_integration.py --connection-fixture --offscreen --script tools/verify_connection_ui.py --configuration-write` | 默认 fixture 节奏下连接/对齐/写入回读/恢复/丢弃确认通过 |
+| `git diff --check` | 通过 |
+
+默认并行基线 23.6 s，优化后独占测量三遍中位数 15.6 s，下降 **33.9%**，尚未减半。
+早先额外三遍也均 0 失败；其中一次包含另一条串行测量等待 SwiftPM 锁的时间（36.8 s），
+明确不用于性能比较，因此补做上表的连续三遍独占测量。没有对失败用例做重试或跳过来通过稳定性检查。
+
+已有输出目录被保存在 ignored `build/timings/preexisting-*` 后再执行要求的 fresh-output 打包命令，
+没有覆盖旧交付件。transport 的两个历史 SDK skip 分别为 1.1.0、1.2.0，原因是 frozen archive 不在本机；
+不是本轮新加的 skip。真机 opt-in 与历史 SDK 两类未验证能力均不算作已验证。
+
+全部提交仅在本地 `main`：
+
+- BCR P0 `13fb1e4` — `test: add xunit timing reports and record baseline`
+- BCR P1 `e5eceff` — `refactor(ui): inject host time without changing production cadence`
+- BCR P2 `eb09671` — `test: drive fixture and duration assertions with injected time`
+- BCR P3 `edf95a5` — `perf: cache immutable contracts and journal timestamp formatting`
+- BCR P4 `9696170` — `test(codex): await process state and inject restart backoff sleep`
+- SurfacePlugins P3 `bd61126225885a12bc162063309292ec5d404945` — `perf: reuse immutable robot chassis and output tool descriptors`
+- XTouch：无提交、无工作区改动。
+
+SurfacePlugins 验证：Swift 150 例、Python SDK 94 例、Pipe 10 例均通过；`configs/check_boundaries.py`
+和 `git diff --check` 通过。各仓库开工 status/fetch 完成，始终在各自 main，没有推送。
