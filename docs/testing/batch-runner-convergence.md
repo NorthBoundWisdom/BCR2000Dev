@@ -43,6 +43,8 @@ cases or generate reports. Case execution always uses `fake_native_xctest.py` an
 native batch runner. The fixture can hang a selected case to retain the original diagnostic test;
 this is deliberate timeout evidence, not a normal test delay.
 
-SurfacePlugins and XTouch are assessment-only in G8. Their suites contain Swift Testing cases,
-so this XCTest-only batch parser cannot replace their runners without additional support and
-coverage. No forced migration was made.
+SurfacePlugins and XTouch are assessment-only in G8. SurfacePlugins currently has 150 XCTest
+cases and zero Swift Testing cases; the blockers to directly adopting this implementation are
+its Linux lane and this runner's macOS xcrun/bundle dependency, with no measured benefit over
+its existing short run. XTouch has a mixed Swift Testing/XCTest inventory which this parser
+cannot execute completely. No forced migration was made.
