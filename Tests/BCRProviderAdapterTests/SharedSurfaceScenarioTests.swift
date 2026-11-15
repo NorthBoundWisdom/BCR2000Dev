@@ -44,16 +44,7 @@ private final class BCRFixtureHost {
     let adapter: BCRSurfaceControlAdapter
     let capacity: Int
     var controls: BCRFixtureHost { self }
-    private var cachedDeclaration: ControlDiscovery?
-    private func declaration() throws -> ControlDiscovery {
-        if let cachedDeclaration { return cachedDeclaration }
-        let value = try adapter.discovery()
-        cachedDeclaration = value
-        return value
-    }
-
-    var expected: ControlExpected { get throws { try declaration().expected } }
-    var profile: ControlProfile { get throws { try declaration().profile } }
+    var expected: ControlExpected { get throws { try adapter.discovery().expected } }
     init(instanceID: String, epoch: String, eventCapacity: Int) throws {
         capacity = eventCapacity
         session = SurfaceSession(
@@ -86,9 +77,9 @@ private final class BCRFixtureHost {
     }
 
     func discovery() throws -> ControlDiscovery { try adapter.discovery() }
-    func snapshot(at time: Double) throws -> ControlSnapshot {
+    func snapshot(instanceID: String, at time: Double) throws -> ControlSnapshot {
         clock.time = time
-        return try adapter.execute(.snapshot(instanceID: expected.instance_id), gateway: gateway)
+        return try adapter.execute(.snapshot(instanceID: instanceID), gateway: gateway)
             .decoded(ControlSnapshot.self)
     }
 
@@ -119,25 +110,28 @@ private final class BCRFixtureHost {
             .reset(expected: current.expected, expectedSequence: current.latest_sequence),
             gateway: gateway
         )
-        cachedDeclaration = nil
     }
 }
 
 @MainActor
 private func scenarioFingerprint(_ host: BCRFixtureHost, at requested: Double,
                                  snapshot supplied: ControlSnapshot? = nil) throws
-    -> (value: JSONValue, snapshot: ControlSnapshot)
+    -> (value: JSONValue, snapshot: ControlSnapshot, expected: ControlExpected)
 {
     // An unprocessed due lease makes every public read fail; observe just before it, which is still
     // after the last write (a lease deadline is always later than the write that created it).
     var time = requested
     if let deadline = host.adapter.nextHoldDeadline, deadline <= requested { time = deadline.nextDown }
-    let snapshot = try supplied ?? host.snapshot(at: time)
+    host.clock.time = time
+    // Identity is observed on every step, even when the operation is not reset/restart. Only
+    // control lookup metadata is reused within a step; atomicity must see unexpected rotations.
+    let identity = try host.adapter.discovery().expected
+    let snapshot = try supplied ?? host.snapshot(instanceID: identity.instance_id, at: time)
     let cursor = UInt64(snapshot.latest_sequence)!
     let first = cursor > UInt64(host.capacity) ? cursor - UInt64(host.capacity) : 0
     let page = try host.events(
-        instanceID: host.expected.instance_id,
-        epoch: host.expected.epoch,
+        instanceID: identity.instance_id,
+        epoch: identity.epoch,
         afterSequence: String(first),
         limit: 1024,
         at: time
@@ -153,14 +147,14 @@ private func scenarioFingerprint(_ host: BCRFixtureHost, at requested: Double,
                                                                                "input": state.lastInput
                                                                                    .map { .number(Int($0)) } ?? .null]))
     })
-    return (.object(["expected": try .encoded(host.expected), "sequence": .string(snapshot.latest_sequence),
+    return (.object(["expected": try .encoded(identity), "sequence": .string(snapshot.latest_sequence),
                      "inputs": .object(snapshot.inputs), "feedback": try .encoded(snapshot.feedback),
                      "input_sequence": snapshot.latest_input_sequence.map(JSONValue.string) ?? .null,
                      "holds": try .encoded(snapshot.holds ?? [:]),
                      "journal": try .encoded(page.events),
                      "parameters": .object(parameters), "controls": .object(states),
                      "mock_inputs": try .encoded(host.session.mock.inputDataValues),
-                     "mock_display": try .encoded(host.session.mock.values)]), snapshot)
+                     "mock_display": try .encoded(host.session.mock.values)]), snapshot, identity)
 }
 
 @MainActor
@@ -179,6 +173,25 @@ final class SharedSurfaceScenarioTests: XCTestCase {
 
     func testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters() throws {
         try run(fixture: "surface-control-software-v1.3", steps: 97)
+    }
+
+    func testFingerprintDetectsIdentityRotationOutsideResetAndRestart() throws {
+        let host = try BCRFixtureHost(instanceID: "fixture.identity", epoch: "initial", eventCapacity: 32)
+        let before = try scenarioFingerprint(host, at: 0).value
+        // A legacy generation change can rotate the adapter during an ordinary read/input step.
+        // Bypass the fixture host's reset path so a cached declaration cannot be invalidated there.
+        host.session.inputEvents.reset(source: .mock)
+        let after = try scenarioFingerprint(host, at: 0).value
+        let beforeIdentity = try XCTUnwrap(before.value(for: "expected")?.objectValue)
+        let afterIdentity = try XCTUnwrap(after.value(for: "expected")?.objectValue)
+        XCTAssertNotEqual(beforeIdentity["epoch"], afterIdentity["epoch"])
+        XCTAssertEqual(after.value(for: "expected"), try .encoded(host.adapter.discovery().expected))
+        XCTAssertNotEqual(before, after, "Atomicity must detect an unexpected identity rotation")
+        var beforeState = try XCTUnwrap(before.objectValue)
+        var afterState = try XCTUnwrap(after.objectValue)
+        beforeState.removeValue(forKey: "expected")
+        afterState.removeValue(forKey: "expected")
+        XCTAssertEqual(beforeState, afterState, "Identity alone must be sufficient to break atomicity")
     }
 
     private func run(fixture name: String, steps expectedSteps: Int) throws {
@@ -214,11 +227,12 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 let operation = try XCTUnwrap(step.value(for: "operation")?.stringValue)
                 let expected = try XCTUnwrap(step.value(for: "expect")?.objectValue)
                 let before = observations[selected]!.value
-                let profile = try host.profile
-                let identity = try host.expected
+                let declaration = try host.discovery()
+                let profile = declaration.profile
+                let identity = declaration.expected
                 let beforeInputs = before.value(for: "inputs")?.objectValue ?? [:]
-                let beforeEpoch = identity.epoch
-                let beforeInstance = identity.instance_id
+                let beforeEpoch = observations[selected]!.expected.epoch
+                let beforeInstance = observations[selected]!.expected.instance_id
                 let countBefore = accepted[selected]!
                 var actualError: String?
                 var event: ControlEvent?
@@ -242,7 +256,10 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 do {
                     switch operation {
                     case "snapshot", "refresh_sequence",
-                         "refresh_input_sequence": readSnapshot = try host.snapshot(at: time)
+                         "refresh_input_sequence": readSnapshot = try host.snapshot(
+                            instanceID: identity.instance_id,
+                            at: time
+                        )
                     case "input", "feedback":
                         let role = try XCTUnwrap(step.value(for: "role")?.stringValue)
                         let control = try mapped(role)
@@ -327,6 +344,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                 observations[selected] = observation
                 let after = observation.value
                 let snapshot = observation.snapshot
+                let afterIdentity = observation.expected
                 if actualError == nil, !(operation == "feedback" && step.value(for: "omit_sequence") == .bool(true)) {
                     sequences[selected] = snapshot.latest_sequence
                 }
@@ -353,9 +371,9 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                     .stringValue { checks.append(event?.disposition.rawValue == disposition) }
                 if expected["atomic"] == .bool(true) { checks.append(before == after) }
                 if expected["inputs_unchanged"] == .bool(true) { checks.append(beforeInputs == snapshot.inputs) }
-                if expected["epoch_changed"] == .bool(true) { checks.append(beforeEpoch != (try host.expected).epoch) }
+                if expected["epoch_changed"] == .bool(true) { checks.append(beforeEpoch != afterIdentity.epoch) }
                 if expected["instance_changed"] ==
-                    .bool(true) { checks.append(beforeInstance != (try host.expected).instance_id) }
+                    .bool(true) { checks.append(beforeInstance != afterIdentity.instance_id) }
                 if let sequence = expected["sequence"]?
                     .stringValue { checks.append(snapshot.latest_sequence == sequence) }
                 if let count = expected["accepted_input_count"]?
@@ -414,7 +432,7 @@ final class SharedSurfaceScenarioTests: XCTestCase {
                     "sequence": .string(snapshot.latest_sequence),
                     "input_sequence": snapshot.latest_input_sequence.map(JSONValue.string) ?? .null,
                     "writer_kind": writer.map(JSONValue.string) ?? .null,
-                    "epoch_changed": .bool(beforeEpoch != (try host.expected).epoch)
+                    "epoch_changed": .bool(beforeEpoch != afterIdentity.epoch)
                 ]))
                 hosts[selected] = host
                 XCTAssertTrue(passed, "scenario \(name) step \(index) failed: \(actualError ?? "no error")")

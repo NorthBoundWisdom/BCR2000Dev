@@ -530,3 +530,19 @@ transport 仍是原有 17 项通过、2 个历史 SDK archive 缺失项 skip；�
 
 本轮没有改 Swift 生产计时、Swift 业务测试断言或测试循环常量；没有删测试、放宽断言或新增重试/预期失败/Swift skip。
 用户确认前轮 push 由其本人执行；续作仅本地提交，没有 push/tag/release、branch/worktree、stash/reset。
+
+## Review 修复 1：每步现读身份（2026-11-15）
+
+移除 BCRFixtureHost 的跨步骤 discovery 缓存。每步控件查找仅复用该步局部的 profile；
+完整 fingerprint 每次直接读取 adapter.discovery().expected，并将同一次读取用于 events 的
+instance/epoch、快照 expected、所有 after 身份比较及报告 epoch_changed。
+仍复用上一步完整观察作为下一步 before，其身份也是当时实际读取的值。
+
+新增 `testFingerprintDetectsIdentityRotationOutsideResetAndRestart`：不走 fixture reset/restart，
+直接重置 legacy input journal 的 generation，让 adapter 在普通读取时换代；验证 expected.epoch
+改变、after 身份等于实时 discovery、完整快照不同，而去掉 expected 后其余状态完全相同。
+该回归在旧实现下失败（stale_epoch），修复后通过。
+
+本修复验证：build-tests 成功；SharedSurfaceScenarioTests 5 例 0 失败；默认 batch 全套
+696 例 0 失败、8.0 s；BuildWorkflow/客户端 Python、格式、20 模块边界、命令校验及 diff 检查通过。
+没有修改依赖锁或推送任何仓库。
