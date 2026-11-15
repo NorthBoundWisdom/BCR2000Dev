@@ -158,6 +158,25 @@ final class HardwareSurfaceControlTests: XCTestCase {
         )
     }
 
+    private struct RejectedObservation: Error {}
+
+    func testJournalRejectedHardwareInputLeavesEngineUnchangedAndIsReportedAsInputFailure() throws {
+        let (session, device, _) = try fixture()
+        var failures: [SurfaceSessionEvent.Operation] = []
+        session.onEvent = { event in if case let .failed(operation, _) = event { failures.append(operation) } }
+        let control = BCRControlID.pushEncoder(group: 1, 1)
+        let before = session.engine.state(of: control)
+        session.hardwareInputPreflight = { _, _ in throw RejectedObservation() }
+        device.onMessages?([.controlChange(channel: 0, number: 8, value: 45)])
+        XCTAssertEqual(session.engine.state(of: control), before, "Rejected observation changed the engine")
+        XCTAssertEqual(failures, [.hardwareInput])
+        // Without a refusing hook the next observation commits normally.
+        session.hardwareInputPreflight = nil; session.hardwareInputCommit = nil
+        device.onMessages?([.controlChange(channel: 0, number: 8, value: 46)])
+        XCTAssertEqual(session.engine.state(of: control).value, 46)
+        XCTAssertEqual(failures, [.hardwareInput])
+    }
+
     func testRealCoreMIDIQualificationIsOptIn() async throws {
         guard ProcessInfo.processInfo.environment["BCR_E_ATTENDED_HARDWARE"] == "1" else {
             throw XCTSkip(

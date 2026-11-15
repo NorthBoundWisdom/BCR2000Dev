@@ -32,7 +32,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         }
     }
 
-    public static func profile(_ surface: SurfaceSession) -> ControlProfile {
+    public static func profile(_ surface: SurfaceSession) throws -> ControlProfile {
         let controls = surface.learnedHardwareMap.entries.compactMap { entry -> ControlDescriptor? in
             let control = entry.control
             let assignment = surface.engine.configuration.assignment(for: control)
@@ -54,7 +54,8 @@ public final class BCRHardwareSurfaceControlAdapter {
         }
         // Physical routing is part of the content pin, including unknown versus declared press modes.
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let bytes = (try? encoder.encode(surface.learnedHardwareMap)) ?? Data()
+        // A failed encoding must not publish a fingerprint of empty bytes.
+        let bytes = try encoder.encode(surface.learnedHardwareMap)
         var fingerprint: UInt64 = 14695981039346656037
         for byte in bytes { fingerprint = (fingerprint ^ UInt64(byte)) &* 1099511628211 }
         var capabilities = ["hardware", "controls.stable_ids", "controls.input_declared", "feedback.unsequenced",
@@ -75,7 +76,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         let core = try SurfaceControlSession(
             instanceID: "example.hardware",
             epoch: "discovery-only",
-            profile: profile(surface)
+            profile: try profile(surface)
         )
         return try .object(["discovery": .encoded(core.discovery()),
                             "tools": .array(SurfaceControlTools.descriptors(source: .hardware)
@@ -93,7 +94,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         core = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: UUID().uuidString,
-            profile: Self.profile(surface),
+            profile: try Self.profile(surface),
             eventCapacity: eventCapacity
         )
         try core.transitionHardware(
@@ -114,7 +115,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         try next.transitionHardware(epoch: UUID().uuidString,
                                     linkState: surface.source == .hardware && surface.connection
                                         .isConnected ? .connected : .disconnected,
-                                    profile: Self.profile(surface), at: monotonic())
+                                    profile: try Self.profile(surface), at: monotonic())
         core = next; context = surface.mappingContextRevision; generation = surface.inputEvents
             .generation; source = surface.source
         prepared = nil
@@ -188,10 +189,15 @@ public final class BCRHardwareSurfaceControlAdapter {
             guard let control = BCRLayout.allControls
                 .first(where: { BCRSurfaceControlAdapter.controlID($0) == update.control_id })
             else { throw ControlContractError("unsupported_control") }
-            let raw: UInt16 = update
-                .kind == "indicator" ?
-                (update.value.stringValue == "off" ? 0 : update.value.stringValue == "on" ? 127 : 96) :
-                UInt16(update.value.finiteNumber!)
+            // Shared validation already bounds the value; never trap the provider if it ever loosens.
+            let raw: UInt16
+            if update.kind == "indicator" {
+                raw = update.value.stringValue == "off" ? 0 : update.value.stringValue == "on" ? 127 : 96
+            } else {
+                guard let number = update.value.finiteNumber, number >= 0, number <= 127,
+                      number.rounded() == number else { throw ControlContractError("invalid_value") }
+                raw = UInt16(number)
+            }
             var next = core
             let event = try next.recordFeedback(update, origin: .remote, at: now, writerID: principals.remoteWriterID)
             try gateway.consumeWrites(1)

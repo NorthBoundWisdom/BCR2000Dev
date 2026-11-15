@@ -37,6 +37,8 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
 
     public enum Operation: Equatable, Sendable {
         case feedback, hardwareMapPersistence, configurationPersistence
+        /// A trusted hardware observation the optional contract journal refused before commit.
+        case hardwareInput
     }
 }
 
@@ -433,7 +435,9 @@ public final class SurfaceSession {
         withWriteOrigin(.external) { perform(effects) }
         let outputs = events.filter { $0.id > mark && $0.direction == .output }
         guard !outputs.isEmpty, outputs.allSatisfy({ $0.delivery == .sent }) else {
-            engine = previous
+            // Keep the engine on what the device shows: roll back only when nothing reached it.
+            if !outputs.contains(where: { $0.delivery == .sent }) { engine = previous }
+            publishChange()
             throw ProviderDomainError("delivery_failed", "Display transport did not accept output")
         }
         publishChange()
@@ -616,20 +620,24 @@ public final class SurfaceSession {
             guard inputGeneration == inputEvents.generation else { continue }
             let previousCount = control.map { engine.state(of: $0).eventCount }
             let trusted = inputSource == .hardware && source == .hardware && !engine.isFeedbackEcho(message, at: now())
-            var candidate = engine
             let effects: [SurfaceEffect]
-            do {
-                if trusted, let control { try hardwareInputPreflight?(control, message) }
-                effects = candidate.handleInput(message, at: now())
-                if trusted, let control {
+            if trusted, let control, hardwareInputPreflight != nil || hardwareInputCommit != nil {
+                // The contract journal and the engine commit together: a rejected observation
+                // changes neither (fail closed), and the failure stays visible.
+                var candidate = engine
+                do {
+                    try hardwareInputPreflight?(control, message)
+                    effects = candidate.handleInput(message, at: now())
                     try hardwareInputCommit?(control, message, candidate,
                                              previousCount != candidate.state(of: control).eventCount)
+                } catch {
+                    onEvent?(.failed(.hardwareInput, "Trusted hardware input rejected before commit: \(error)"))
+                    continue
                 }
-            } catch {
-                onEvent?(.failed(.feedback, "Trusted hardware input rejected before commit"))
-                continue
+                engine = candidate
+            } else {
+                effects = engine.handleInput(message, at: now())
             }
-            engine = candidate
             if let control, previousCount != engine.state(of: control).eventCount {
                 scheduler?.cancel(message.controlID)
                 notifyFeedbackQueue()

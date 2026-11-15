@@ -2004,6 +2004,7 @@ final class ConsoleViewModel: ObservableObject {
             case .feedback: prefix = "反馈发送失败"
             case .hardwareMapPersistence: prefix = "硬件映射保存失败"
             case .configurationPersistence: prefix = "功能配置保存失败"
+            case .hardwareInput: prefix = "实体输入被拒绝"
             }
             notice = ConsoleNotice(level: .error, message: "\(prefix)：\(message)",
                                    action: operation == .configurationPersistence ? .retryConfigurationSave : nil)

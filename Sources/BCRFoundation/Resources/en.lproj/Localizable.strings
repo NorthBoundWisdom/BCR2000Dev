@@ -200,6 +200,7 @@
 "功能分配会保留，只删除学到的 MIDI 身份。" = "Function assignments will be kept. Only learned MIDI identities will be removed.";
 "功能配置" = "Function Configuration";
 "功能配置保存失败" = "Could not save function configuration";
+"实体输入被拒绝" = "Hardware input rejected";
 "包含未知工具参数" = "Unknown tool argument";
 "协议数据错误：{0}" = "Protocol data error: {0}";
 "单位" = "Unit";

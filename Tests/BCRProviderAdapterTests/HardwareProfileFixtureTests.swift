@@ -17,7 +17,7 @@ final class HardwareProfileFixtureTests: XCTestCase {
                         "build/seed/SurfacePlugins/fixtures/surface-control-hardware-v1.4.json"
                     ))) as! [String: Any]
         let (surface, _, _) = try HardwareSurfaceControlTests().fixture(.write, feedback: true)
-        let profile = BCRHardwareSurfaceControlAdapter.profile(surface)
+        let profile = try BCRHardwareSurfaceControlAdapter.profile(surface)
         let roles = [
             "input_a": "pushEncoder.1.1",
             "button_input": "button.1.1",

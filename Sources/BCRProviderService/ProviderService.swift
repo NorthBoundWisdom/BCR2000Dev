@@ -184,6 +184,52 @@ private final class ShutdownSignal {
     }
 }
 
+private func profileStore(_ url: URL) -> ProtectedJSONFile<SurfaceConfiguration> {
+    ProtectedJSONFile(
+        store: JSONFileStore(fileURL: url),
+        title: "Configuration",
+        normalize: { try $0.migrated() },
+        version: { $0.version },
+        fallback: { .neutral() }
+    )
+}
+
+/// The runtime's configuration and learned map. Never creates state; a migration stays in memory and
+/// only an invalid file is backed up (as at runtime). Shared by the runtime and `--describe-surface`,
+/// so a published contract describes the same migrated map and data-directory configuration.
+@MainActor
+private func loadSurfaceState(_ options: Options, simulationConfiguration: SurfaceConfiguration?,
+                              base: SurfaceConfiguration) throws -> (SurfaceConfiguration, HardwareMap)
+{
+    let profileURL = options.dataDirectory?.appending(path: "surface-configuration.json")
+    let mapURL = options.dataDirectory?.appending(path: "hardware-map.json")
+    if let profileURL, FileManager.default.fileExists(atPath: profileURL.path), options.configuration != nil {
+        throw BootError(reason: "Existing profile state cannot be replaced by a seed option")
+    }
+    if let mapURL, FileManager.default.fileExists(atPath: mapURL.path), options.hardwareMap != nil {
+        throw BootError(reason: "Existing learned map cannot be replaced by a seed option")
+    }
+    var profile = simulationConfiguration ?? base
+    if let path = options.configuration ?? profileURL.flatMap({
+        FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
+    }) {
+        let read = profileStore(path).load()
+        guard !read.failed
+        else { throw BootError(reason: "Configuration validation failed; original file was preserved") }
+        profile = read.value
+    }
+    var map = HardwareMap()
+    if let path = options.hardwareMap ?? mapURL
+        .flatMap({ FileManager.default.fileExists(atPath: $0.path) ? $0 : nil })
+    {
+        let read = ProtectedJSONFile.hardware(JSONFileStore(fileURL: path)).load()
+        guard !read.failed
+        else { throw BootError(reason: "Learned map validation failed; original file was preserved") }
+        map = read.value
+    }
+    return (profile, map)
+}
+
 @main
 private struct BCRProviderService {
     static let help = """
@@ -241,19 +287,14 @@ private struct BCRProviderService {
                 catch { throw BootError(reason: "Simulation configuration: \(error.localizedDescription)") }
             } else { simulationConfiguration = nil }
             if options.describeSurface {
-                // Static description of the --simulation-profile configuration; no device, port or token.
-                let map = try options.hardwareMap.map { try JSONDecoder().decode(
-                    HardwareMap.self,
-                    from: Data(contentsOf: $0)
-                ) } ?? HardwareMap()
-                let configuration = try options.configuration.map { try JSONDecoder().decode(
-                    SurfaceConfiguration.self,
-                    from: Data(contentsOf: $0)
-                ).migrated() }
+                // Static description; no device, port or token. The same read-only loader as the
+                // runtime, so the published profile and map fingerprint match what would run.
+                let (configuration, map) = try loadSurfaceState(
+                    options, simulationConfiguration: simulationConfiguration,
+                    base: options.hardwareProfile ? .neutral() : SurfaceControlMCPModule.simulationConfiguration()
+                )
                 let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(), hardwareMap: map,
-                                             configuration: configuration ?? simulationConfiguration ??
-                                                 (options.hardwareProfile ? .neutral() : SurfaceControlMCPModule
-                                                     .simulationConfiguration()),
+                                             configuration: configuration,
                                              saveHardwareMap: { _ in }, saveConfiguration: { _ in })
                 let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
                 try FileHandle.standardOutput.write(
@@ -310,53 +351,38 @@ private struct BCRProviderService {
             }
             let profileURL = options.dataDirectory?.appending(path: "surface-configuration.json")
             let mapURL = options.dataDirectory?.appending(path: "hardware-map.json")
-            if let profileURL, FileManager.default.fileExists(atPath: profileURL.path), options.configuration != nil {
-                throw BootError(reason: "Existing profile state cannot be replaced by a seed option")
-            }
-            if let mapURL, FileManager.default.fileExists(atPath: mapURL.path), options.hardwareMap != nil {
-                throw BootError(reason: "Existing learned map cannot be replaced by a seed option")
-            }
-            func profileStore(_ url: URL) -> ProtectedJSONFile<SurfaceConfiguration> {
-                ProtectedJSONFile(
-                    store: JSONFileStore(fileURL: url),
-                    title: "Configuration",
-                    normalize: { try $0.migrated() },
-                    version: { $0.version },
-                    fallback: { .neutral() }
-                )
-            }
-            var profile = SurfaceConfiguration.neutral()
-            if options.simulationProfile { profile = SurfaceControlMCPModule.simulationConfiguration() }
-            if let simulationConfiguration { profile = simulationConfiguration }
-            if let path = options.configuration ?? profileURL {
-                let read = profileStore(path).load()
-                guard !read.failed
-                else { throw BootError(reason: "Configuration validation failed; original file was preserved")
-                }; profile = read.value
-            }
-            var map = HardwareMap()
-            if let path = options.hardwareMap ?? mapURL {
-                let read = ProtectedJSONFile.hardware(JSONFileStore(fileURL: path)).load()
-                guard !read.failed
-                else { throw BootError(reason: "Learned map validation failed; original file was preserved")
-                }; map = read.value
-            }
-            var testDevice: TestOnlyHardwareDevice?
+            let (profile, map) = try loadSurfaceState(
+                options, simulationConfiguration: simulationConfiguration,
+                base: options.simulationProfile ? SurfaceControlMCPModule.simulationConfiguration() : .neutral()
+            )
+            #if DEBUG
+                var testDevice: TestOnlyHardwareDevice?
+            #endif
+            var usesTestDouble = false
             var native: CoreMIDIService?
             let hardware: any SurfaceDevice
             if options.console && options.source == .hardware {
                 let environment = ProcessInfo.processInfo.environment
-                if environment["BCR_PROVIDER_TEST_HARDWARE"] == "1" {
-                    guard let script = environment["BCR_PROVIDER_TEST_HARDWARE_SCRIPT"],
-                          let report = environment["BCR_PROVIDER_TEST_HARDWARE_REPORT"]
-                    else {
-                        throw BootError(reason: "Test-only hardware double requires local script and report paths")
-                    }
-                    let fake = TestOnlyHardwareDevice(
-                        commands: URL(fileURLWithPath: script),
-                        report: URL(fileURLWithPath: report)
-                    )
-                    testDevice = fake; hardware = fake
+                if let flag = environment["BCR_PROVIDER_TEST_HARDWARE"] {
+                    #if DEBUG
+                        guard flag == "1", let script = environment["BCR_PROVIDER_TEST_HARDWARE_SCRIPT"],
+                              let report = environment["BCR_PROVIDER_TEST_HARDWARE_REPORT"]
+                        else {
+                            throw BootError(
+                                reason: "Test-only hardware double requires BCR_PROVIDER_TEST_HARDWARE=1 and local script/report paths"
+                            )
+                        }
+                        let fake = TestOnlyHardwareDevice(
+                            commands: URL(fileURLWithPath: script),
+                            report: URL(fileURLWithPath: report)
+                        )
+                        testDevice = fake; hardware = fake; usesTestDouble = true
+                    #else
+                        _ = flag
+                        throw BootError(
+                            reason: "The test-only hardware double exists only in Debug builds; unset BCR_PROVIDER_TEST_HARDWARE"
+                        )
+                    #endif
                 } else {
                     let driver = CoreMIDIService(); try driver.start(); native = driver; hardware = driver
                     let deadline = ProcessInfo.processInfo.systemUptime + 3
@@ -416,7 +442,7 @@ private struct BCRProviderService {
                 "event": .string("provider.ready"), "contract_version": .string("1.0"),
                 "provider_id": .string(application.providerID),
                 "url": .string("http://127.0.0.1:\(port)/mcp"), "pid": .number(Int(getpid())),
-                "test_only_hardware_double": .bool(testDevice != nil),
+                "test_only_hardware_double": .bool(usesTestDouble),
                 "console": .bool(options.console), "source": .string(options.source.rawValue),
                 "hardware_output": options.source == .hardware ? .string(options.hardwareOutput.rawValue) : .null,
                 "robot": .bool(options.robot), "chassis": .bool(options.chassis),
@@ -425,9 +451,13 @@ private struct BCRProviderService {
             ])
             print(try ready.jsonText)
             fflush(stdout)
-            testDevice?.start()
+            #if DEBUG
+                testDevice?.start()
+            #endif
             let shutdown = ShutdownSignal(); await shutdown.wait()
-            testDevice?.stop()
+            #if DEBUG
+                testDevice?.stop()
+            #endif
             server.stop(); application.stopClock()
             print("{\"event\":\"provider.stopped\"}")
         } catch {
