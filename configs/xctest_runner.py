@@ -93,6 +93,22 @@ def case_elements(output: str, expected: tuple[str, ...]) -> tuple[list[ET.Eleme
     return elements, errors
 
 
+def test_bundles(binary: Path, modules: list[str], package: str | None) -> dict[str, Path]:
+    """Per-target bundles (newer SwiftPM) or the one aggregate package bundle (older toolchains).
+
+    Class identifiers are module-qualified, so an aggregate bundle selects exactly the same classes.
+    A partial per-target layout, or neither layout, is a verification failure.
+    """
+    split = {module: binary / (module + ".xctest") for module in modules}
+    if all(path.is_dir() for path in split.values()):
+        return split
+    aggregate = binary / f"{package}PackageTests.xctest" if package else None
+    if aggregate is not None and aggregate.is_dir() and not any(path.is_dir() for path in split.values()):
+        return dict.fromkeys(modules, aggregate)
+    missing = ", ".join(module + ".xctest" for module, path in split.items() if not path.is_dir())
+    raise RuntimeError(f"Test bundle verification failed: missing {missing}")
+
+
 def _checked(command: list[str], root: Path, log: Path, deadline: float) -> str:
     result = subprocess.run(
         command, cwd=root, capture_output=True, text=True, timeout=max(0.001, deadline - time.monotonic())
@@ -115,9 +131,9 @@ def run(
     )
     executable = _checked(["xcrun", "--find", "xctest"], root, directory / "xctest-path.log", deadline)
     jobs = batches(cases, workers)
-    for module in modules:
-        if not (binary / (module + ".xctest")).is_dir():
-            raise RuntimeError(f"Test bundle verification failed: missing {module}.xctest")
+    manifest = root / "Package.swift"
+    package = re.search(r'\bPackage\(\s*name:\s*"([^"]+)"', manifest.read_text()) if manifest.is_file() else None
+    bundles = test_bundles(binary, modules, package[1] if package else None)
     plan = {
         "workers": workers,
         "cases": cases,
@@ -141,7 +157,7 @@ def run(
         with path.open("w", encoding="utf-8") as log:
             # Each owned process group includes its subprocess fixtures. A timeout kills that group.
             with subprocess.Popen(
-                [executable, "-XCTest", ",".join(batch.classes), str(binary / (batch.module + ".xctest"))],
+                [executable, "-XCTest", ",".join(batch.classes), str(bundles[batch.module])],
                 cwd=root,
                 stdout=log,
                 stderr=subprocess.STDOUT,

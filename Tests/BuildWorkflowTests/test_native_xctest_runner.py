@@ -92,7 +92,7 @@ class NativeInventoryTests(unittest.TestCase):
 
 
 class NativeExecutionTests(unittest.TestCase):
-    def execute(self, directory, *, timeout=10, **options):
+    def execute(self, directory, *, timeout=10, layout="split", **options):
         root = Path(directory)
         cases = ["First.A/testOne", "First.B/testTwo", "Last.C/testThree"]
         (root / "fixture.json").write_text(json.dumps({"cases": cases, **options}))
@@ -101,8 +101,12 @@ class NativeExecutionTests(unittest.TestCase):
             "#!" + sys.executable + "\n" + Path(__file__).with_name("fake_native_xctest.py").read_text()
         )
         executable.chmod(0o755)
-        for module in ["First", "Last"]:
-            (root / (module + ".xctest")).mkdir()
+        if layout == "split":
+            for module in ["First", "Last"]:
+                (root / (module + ".xctest")).mkdir()
+        elif layout == "aggregate":
+            (root / "Package.swift").write_text('Package(name: "Fixture", targets: [])')
+            (root / "FixturePackageTests.xctest").mkdir()
         run = root / "run"
         run.mkdir()
         with (
@@ -126,6 +130,24 @@ class NativeExecutionTests(unittest.TestCase):
             timing = json.loads((root / "run/timing.json").read_text())
             self.assertAlmostEqual(timing["case_seconds"], 0.009)
             self.assertGreater(timing["batch_process_seconds"], timing["case_seconds"])
+
+    def test_aggregate_package_bundle_of_older_toolchains_runs_every_case(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, report, code = self.execute(directory, layout="aggregate")
+            self.assertEqual(code, 0)
+            self.assertEqual(len(list(report.iter("testcase"))), 3)
+            bundles = {json.loads(line) for line in (root / "bundles.jsonl").read_text().splitlines()}
+            self.assertEqual(bundles, {str(root / "FixturePackageTests.xctest")})
+
+    def test_partial_or_missing_bundle_layout_is_a_verification_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory)
+            (binary / "First.xctest").mkdir()
+            (binary / "FixturePackageTests.xctest").mkdir()
+            with self.assertRaisesRegex(RuntimeError, "missing Last.xctest"):
+                xctest_runner.test_bundles(binary, ["First", "Last"], "Fixture")
+            with self.assertRaisesRegex(RuntimeError, "missing First.xctest, Last.xctest"):
+                xctest_runner.test_bundles(binary / "none", ["First", "Last"], None)
 
     def test_native_assertion_failure_is_preserved_even_when_process_exits_zero(self):
         with tempfile.TemporaryDirectory() as directory:
