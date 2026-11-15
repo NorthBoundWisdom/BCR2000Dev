@@ -48,3 +48,40 @@ class LayerBoundaryTests(unittest.TestCase):
                 Path(directory),
             )
         self.assertEqual(result, [])
+
+
+class ImportSyntaxBoundaryTests(unittest.TestCase):
+    def check_source(self, spelling, module="BCRMCPAdapter"):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "Sources" / module / "Bad.swift"
+            source.parent.mkdir(parents=True)
+            source.write_text(spelling + "\n")
+            return check_layers({module: target(), "BCRCoreMIDIDriver": target(), "BCRSurfaceDomain": target()}, root)
+
+    def test_indented_attributed_and_access_qualified_reverse_imports_are_rejected(self):
+        for spelling in [
+            "    import BCRCoreMIDIDriver",
+            "@preconcurrency import BCRCoreMIDIDriver",
+            "public import BCRCoreMIDIDriver",
+        ]:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(
+                    self.check_source(spelling),
+                    ["Layer import violation: Sources/BCRMCPAdapter/Bad.swift -> BCRCoreMIDIDriver"],
+                )
+
+    def test_qualified_same_layer_imports_remain_legal(self):
+        for spelling in [
+            "    import BCRSurfaceDomain",
+            "@preconcurrency import BCRSurfaceDomain",
+            "public import BCRSurfaceDomain",
+        ]:
+            with self.subTest(spelling=spelling):
+                self.assertEqual(self.check_source(spelling), [])
+
+    def test_every_runtime_role_refuses_platform_infrastructure(self):
+        self.assertEqual(
+            self.check_source("@preconcurrency import SwiftUI", "BCRExamples"),
+            ["Layer platform import violation: Sources/BCRExamples/Bad.swift -> SwiftUI"],
+        )

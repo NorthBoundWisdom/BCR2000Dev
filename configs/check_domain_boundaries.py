@@ -130,9 +130,11 @@ LAYER_DEPENDENCIES = {
     "composition": {"values", "runtime", "bridge", "device_transport", "transport", "composition"},
 }
 IMPORTS = re.compile(
-    r"^(?:@_exported\s+)?import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)",
+    r"^[ \t]*(?:(?:@\w+(?:\([^()\n]*\))?|public|package|internal|fileprivate|private)\s+)*"
+    r"import\s+(?:(?:struct|enum|class|protocol|func|var|typealias)\s+)?(\w+)",
     re.MULTILINE,
 )
+PLATFORM_IMPORTS = {"AppKit", "SwiftUI", "CoreMIDI", "Network", "Combine", "Security"}
 
 
 def target_dependencies(target):
@@ -158,6 +160,8 @@ def check_layers(targets, root=ROOT):
                 errors.append(f"Layer violation: {name} ({layer}) -> {dependency} ({LAYERS.get(dependency)})")
         for path in (root / "Sources" / name).rglob("*.swift"):
             for imported in IMPORTS.findall(path.read_text()):
+                if layer in {"runtime", "values"} and imported in PLATFORM_IMPORTS:
+                    errors.append(f"Layer platform import violation: {path.relative_to(root)} -> {imported}")
                 if imported in production and LAYERS.get(imported) not in LAYER_DEPENDENCIES[layer]:
                     errors.append(f"Layer import violation: {path.relative_to(root)} -> {imported}")
     return errors
@@ -180,13 +184,7 @@ def check():
             errors.append(f"{name} has forbidden dependencies: {sorted(dependencies - allowed)}")
         for path in (ROOT / "Sources" / name).rglob("*.swift"):
             text = path.read_text()
-            imports = set(
-                re.findall(
-                    r"^(?:@_exported\s+)?import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)",
-                    text,
-                    re.MULTILINE,
-                )
-            )
+            imports = set(IMPORTS.findall(text))
             internal = {
                 value
                 for value in imports
