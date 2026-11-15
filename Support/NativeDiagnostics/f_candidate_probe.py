@@ -9,6 +9,19 @@ import sys
 import time
 
 
+def require_complete_console_page(batch, cursor):
+    """Never infer an exact send count or skip a cursor over an unreturned tail page."""
+    if batch["generation"] != cursor["generation"] or batch["reset"] or batch["dropped"]:
+        raise ValueError("raw cursor invalid")
+    covered = cursor["after_sequence"]
+    for event in batch["events"]:
+        if type(event["sequence"]) is not int or event["sequence"] != covered + 1:
+            raise ValueError("raw event gap")
+        covered = event["sequence"]
+    if covered != batch["latest_sequence"]:
+        raise ValueError("incomplete raw page")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", type=Path, required=True)
@@ -71,8 +84,7 @@ def main():
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 batch = legacy.call("console_events", raw_cursor)
-                if batch["generation"] != baseline["generation"] or batch["reset"] or batch["dropped"]:
-                    raise ValueError("raw cursor invalid")
+                require_complete_console_page(batch, raw_cursor)
                 for event in batch["events"]:
                     payload = event["payload"]
                     if event["kind"] == "control.raw" and payload.get("midi") == {
@@ -100,7 +112,8 @@ def main():
                 raise ValueError("display became input")
             batch = legacy.call("console_events", raw_cursor)
             sent = [event for event in batch["events"] if event["kind"] == "feedback.sent"]
-            if batch["generation"] != baseline["generation"] or batch["reset"] or len(sent) != 1:
+            require_complete_console_page(batch, raw_cursor)
+            if len(sent) != 1:
                 raise ValueError("display output count differs")
             payload = sent[0]["payload"]
             if payload.get("midi") != {"kind": "controlChange", "channel": 0, "number": cc} or payload["raw_value"] != (
