@@ -299,6 +299,8 @@ python3 configs/validate_repo_commands.py .
 python3 configs/check_domain_boundaries.py
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
 python3 configs/macos_workflow.py test     # Aggregate all test packages; any failure returns a nonzero exit code
+# Audit the retained SwiftPM per-case runner:
+# BCR_TEST_EXECUTION=case python3 configs/macos_workflow.py test
 python3 configs/macos_workflow.py build
 python3 configs/macos_workflow.py smoke
 python3 configs/codex_schema.py verify     # Run generate first after updating schemas

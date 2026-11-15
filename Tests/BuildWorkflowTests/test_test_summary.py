@@ -93,7 +93,10 @@ class ParallelRunnerTests(unittest.TestCase):
             patch.object(macos_workflow, "REPO_ROOT", root),
             patch.object(macos_workflow, "ensure_dependency"),
             patch.object(macos_workflow, "REQUIRED_TEST_MODULES", required_modules),
-            patch.dict("os.environ", {"PATH": str(root) + ":/usr/bin:/bin", "BCR_TEST_WORKERS": workers}),
+            patch.dict(
+                "os.environ",
+                {"PATH": str(root) + ":/usr/bin:/bin", "BCR_TEST_WORKERS": workers, "BCR_TEST_EXECUTION": "case"},
+            ),
             contextlib.redirect_stdout(output),
         ):
             macos_workflow.main(["test"])

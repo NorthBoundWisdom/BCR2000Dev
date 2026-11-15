@@ -420,3 +420,47 @@ SwiftPM parallel xunit 没有把这个既有 skip 写成 `<skipped>`，所以其
 
 SurfacePlugins 验证：Swift 150 例、Python SDK 94 例、Pipe 10 例均通过；`configs/check_boundaries.py`
 和 `git diff --check` 通过。各仓库开工 status/fetch 完成，始终在各自 main，没有推送。
+
+## 继续优化：原生 XCTest 批量 runner（P6，2026-11-15）
+
+上文为 P0–P4 当时的记录。用户确认此前由其本人推送，并授权继续尝试，等待 owner 一并审计。
+本阶段不修改 Swift 生产代码、Swift 测试、断言、循环次数或时长常量；改进发生在测试启动层。
+
+`configs/macos_workflow.py test` 默认由 SwiftPM `test list` 构建并发现完整用例清单；
+查询当前产物目录后，通过 Xcode 原生 `xctest -XCTest` 执行同包测试类批次。
+每个类在一个批次内，按用例数量分配批次，最多使用 BCR_TEST_WORKERS 个并发进程。
+默认 8 worker 将 695 次原生启动降到 31 次；1 worker 使用 5 个包批次。
+这没有删除用例或用更少业务操作替代测试。31/5 是启动批次数，不是缩小的测试循环常量。
+
+新 runner 的完整性约束：
+
+- 发现模块必须恰好等于 manifest 中的全部测试模块，发现的用例 ID 不得重复或使用未知格式。
+- 每批实际 started/completed 的 ID 多重集必须分别与分配清单完全相等。
+- 缺失、额外或重复结果、非零进程退出、原生断言失败、整套超时均为失败；不重试。
+- 超时包含构建/发现阶段，沿用原 15 分钟总期限；原生进程及其同组 fixture 子进程在结束/超时时清理。
+- 日志、逐例 xunit、plan.json（全部发现项及批次）和 timing.json（用例/批次进程/墙钟）全部保留。
+- 仅支持原生 XCTest；未来增加 Swift Testing 时未知发现格式会明确失败，不能静默漏跑。
+- 原 `swift test --parallel --num-workers ... --xunit-output ...` 入口完整保留；
+  `BCR_TEST_EXECUTION=case python3 configs/macos_workflow.py test` 可显式运行它。
+
+原有 `test_test_summary.py` 仅在 fixture 环境明确选取 case 入口，继续验证原有逐例命令、flags、
+失败/漏模块/缺报告和超时行为；全部断言保留。新增 10 个 runner 回归测试和 1 个计时源测试。
+BuildWorkflow 总数从 113 增至 124，全部通过。真实子进程 fixture 覆盖：完整清单、native failure
+但进程 exit 0、漏 start/finish、重复/额外结果、非零退出、保留 skip、超时清理 fixture 后代。
+
+| 最终命令 | 用例 | 原生用例合计 s | 批次进程合计 s | workflow 墙钟 s | 失败 |
+|---|---:|---:|---:|---:|---:|
+| 默认 8 worker 第 1 遍 | 695 | 23.036 | 25.740 | 9.8 | 0 |
+| 默认 8 worker 第 2 遍 | 695 | 22.652 | 25.229 | 8.6 | 0 |
+| 默认 8 worker 第 3 遍 | 695 | 22.543 | 25.152 | 8.4 | 0 |
+| BCR_TEST_WORKERS=2 | 695 | 20.347 | 21.049 | 14.8 | 0 |
+| BCR_TEST_WORKERS=1 | 695 | 20.569 | 20.992 | 24.7 | 0 |
+
+默认墙钟以三遍中位数 8.6 s 对比 P0 的 23.6 s，下降 63.6%；比 P0–P4 后的 15.6 s 再下降 44.9%。
+1 worker 下连全部批次进程时间/总墙钟也小于 30 s。
+批量模式的 xunit 明确标注 `timing_source=xctest-body`，工具如实显示此计时源；没有把它标成
+SwiftPM per-case process 时间。旧逐例模式/原始直接 SwiftPM 命令仍有原来的启动成本，
+不能声称这个未改动的直接命令本身也已达到 ≤30 s。
+
+真实硬件 opt-in 仍为既有的一个 skip；新 xunit 正确保留它，没有新增 Swift skip 或隐藏硬件状态。
+原有 3 个超 1 s 实时 IO/soak 例外仍保留。

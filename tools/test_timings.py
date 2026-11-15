@@ -12,8 +12,11 @@ from pathlib import Path
 
 def summarize(paths):
     cases = []
+    sources = set()
     for path in paths:
-        for case in ET.parse(path).getroot().iter("testcase"):
+        root = ET.parse(path).getroot()
+        sources.add(root.get("timing_source", "swiftpm-xunit"))
+        for case in root.iter("testcase"):
             cases.append(
                 {
                     "class": case.get("classname", ""),
@@ -23,7 +26,9 @@ def summarize(paths):
                     "skipped": case.find("skipped") is not None,
                 }
             )
-    return aggregate(cases)
+    result = aggregate(cases)
+    result["measurement"] = next(iter(sources)) if len(sources) == 1 else "mixed-xunit"
+    return result
 
 
 def aggregate(cases):
@@ -73,7 +78,8 @@ def main():
     if bool(args.reports) == bool(args.xctest_log):
         parser.error("provide xunit reports OR --xctest-log")
     result = summarize_log(args.xctest_log) if args.xctest_log else summarize(args.reports)
-    result["measurement"] = "xctest-inprocess" if args.xctest_log else "swiftpm-xunit"
+    if args.xctest_log:
+        result["measurement"] = "xctest-inprocess"
     print(f"Measurement: {result['measurement']}")
     print(
         f"Cases: {result['count']}  Total: {result['seconds']:.3f}s  "

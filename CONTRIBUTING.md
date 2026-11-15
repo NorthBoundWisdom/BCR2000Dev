@@ -76,6 +76,15 @@ python3 configs/validate_repo_commands.py .
 git diff --check
 ```
 
+测试默认先由 SwiftPM 构建并发现原生 XCTest 清单，再按测试类分批并行启动原生进程。
+每个被发现的用例必须开始并完成恰好一次；漏跑、重复、额外结果、断言失败、崩溃或超时均失败。
+`BCR_TEST_WORKERS` 控制并发进程数，单个类留在同一进程。当前批量入口只接受 XCTest；
+未来引入 Swift Testing 时须显式扩展 runner，不能忽略未知发现项。
+
+审计时可用 `BCR_TEST_EXECUTION=case python3 configs/macos_workflow.py test` 运行保留的
+SwiftPM 逐例并行入口。两种模式均保留日志及 xunit；批量模式另外保存发现/分批清单和独立的
+用例、进程与墙钟耗时。计时源不同，不能把原生用例时间误标为 SwiftPM 逐例进程时间。
+
 改动 UI 时还需：
 
 ```bash

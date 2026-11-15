@@ -119,7 +119,7 @@ def test_workers() -> int:
     return max(1, os.cpu_count() or 1)
 
 
-def _run_tests(command: list[str | Path]) -> None:
+def _run_case_tests(command: list[str | Path]) -> None:
     """One parallel `swift test` run, streamed to a kept log and verified from its xunit reports."""
     manifest = (REPO_ROOT / "Package.swift").read_text()
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)
@@ -175,6 +175,31 @@ def _run_tests(command: list[str | Path]) -> None:
     reports = [path for path in (xunit, run / "xunit-swift-testing.xml") if path.is_file()]
     if not summarize_xunit(reports, modules, returncode):
         raise RuntimeError(f"Swift test bundle verification failed; see {log_path}")
+
+
+def _run_tests(command: list[str | Path]) -> None:
+    mode = os.environ.get("BCR_TEST_EXECUTION", "batch")
+    if mode == "case":
+        _run_case_tests(command)
+        return
+    if mode != "batch":
+        raise ValueError("BCR_TEST_EXECUTION must be batch or case")
+    from configs.xctest_runner import run
+
+    modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', (REPO_ROOT / "Package.swift").read_text())
+    if not modules or not REQUIRED_TEST_MODULES <= set(modules):
+        raise RuntimeError("Swift test bundle verification failed: required test module is missing")
+    workers = test_workers()
+    runs = REPO_ROOT / "build/test-runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    directory = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
+    started = time.monotonic()
+    xunit, code = run([str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S)
+    print(
+        f"Test log: {directory / 'swift-test.log'} ({time.monotonic() - started:.1f}s, {workers} workers)", flush=True
+    )
+    if not summarize_xunit([xunit], modules, code):
+        raise RuntimeError(f"Swift test bundle verification failed; see {directory}")
 
 
 def _architectures(architecture: str) -> tuple[str, ...]:

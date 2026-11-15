@@ -28,6 +28,17 @@ class TestTimingsTests(unittest.TestCase):
         self.assertEqual([row["class"] for row in result["classes"]], ["B", "A"])
         self.assertEqual([row["name"] for row in result["cases"]], ["other", "slow", "fast"])
 
+    def test_native_xunit_keeps_its_timing_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / "native.xml"
+            report.write_text(
+                '<testsuites timing_source="xctest-body"><testsuite>'
+                '<testcase classname="A" name="test" time="0.003"/>'
+                "</testsuite></testsuites>"
+            )
+            result = timings.summarize([report])
+            self.assertEqual(result["measurement"], "xctest-body")
+
     def test_empty_suite_has_zero_median(self):
         with tempfile.TemporaryDirectory() as directory:
             report = Path(directory) / "empty.xml"
