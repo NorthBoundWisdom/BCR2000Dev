@@ -6,12 +6,18 @@
 
     @MainActor
     final class IntegrationMIDIFixtureTests: XCTestCase {
+        func testDefaultFixtureCadenceMatchesNativeAcceptance() {
+            XCTAssertEqual(IntegrationMIDIFixture.readDelay, .milliseconds(200))
+            XCTAssertEqual(IntegrationMIDIFixture.writeDelay, .milliseconds(400))
+            XCTAssertEqual(IntegrationMIDIFixture.frameDelay, .milliseconds(20))
+        }
+
         func testLockedSameNamedFixtureHasOneVerifiedMemoryMatch() async throws {
             let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }
             let fixture = try IntegrationMIDIFixture(directory: directory, environment: [
                 "BCR_FIXTURE_PRESET_NUMBER": "1", "BCR_FIXTURE_DUPLICATE_NAMES": "1"
-            ])
+            ], time: .immediate)
             XCTAssertFalse(fixture.connection.isConnected)
             try await fixture.startWhenReady()
             let names = try await fixture.readPresetNames()
@@ -25,7 +31,7 @@
         func testReadOnlySetupAndExplicitPresetWriteStayInsideTheIsolatedFixture() async throws {
             let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: directory) }
-            let fixture = try IntegrationMIDIFixture(directory: directory)
+            let fixture = try IntegrationMIDIFixture(directory: directory, time: .immediate)
             try fixture.start()
             XCTAssertEqual(fixture.hardwareMap.entries.count, 56)
             let names = try await fixture.readPresetNames()

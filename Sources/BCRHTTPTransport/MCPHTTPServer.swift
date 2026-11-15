@@ -75,6 +75,8 @@ public final class MCPHTTPServer {
     }
 
     public private(set) var state: State = .stopped
+    public static let eventCoalescingDelay: Duration = .milliseconds(16)
+    private let eventTime: HostTime
     public let router: MCPRouter
     public var onChange: (() -> Void)?
     private var listener: NWListener?
@@ -111,8 +113,10 @@ public final class MCPHTTPServer {
         router: MCPRouter,
         providerID: String? = nil,
         eventSources: [String: MCPStreamSource] = [:],
-        eventWriter: (@MainActor (NWConnection, Data, @escaping @Sendable (NWError?) -> Void) -> Void)? = nil
+        eventWriter: (@MainActor (NWConnection, Data, @escaping @Sendable (NWError?) -> Void) -> Void)? = nil,
+        eventTime: HostTime = .live
     ) {
+        self.eventTime = eventTime
         self.router = router
         self.providerID = providerID
         sources = eventSources
@@ -376,8 +380,8 @@ public final class MCPHTTPServer {
         pendingChanges.append(batch)
         guard eventTask == nil else { return }
         let revision = generation
-        eventTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+        eventTask = Task { @MainActor [weak self, eventTime] in
+            do { try await eventTime.sleep(Self.eventCoalescingDelay) } catch { return }
             guard let self, self.generation == revision, !Task.isCancelled else { return }
             self.eventTask = nil
             guard let batch = self.pendingChanges.take() else { return }
@@ -419,8 +423,8 @@ public final class MCPHTTPServer {
         pendingSources[channel] = .object(object)
         guard sourceTasks[channel] == nil else { return }
         let expected = generation
-        sourceTasks[channel] = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+        sourceTasks[channel] = Task { @MainActor [weak self, eventTime] in
+            do { try await eventTime.sleep(Self.eventCoalescingDelay) } catch { return }
             guard let self, self.generation == expected, !Task.isCancelled else { return }
             self.sourceTasks[channel] = nil
             guard let batch = self.pendingSources.removeValue(forKey: channel) else { return }

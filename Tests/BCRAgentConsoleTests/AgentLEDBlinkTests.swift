@@ -23,7 +23,7 @@ final class AgentLEDBlinkPatternTests: XCTestCase {
 
 @MainActor
 final class AgentLEDBlinkTests: XCTestCase {
-    private func model() throws -> (ConsoleViewModel, BlinkMIDI, URL) {
+    private func model(timing: ConsoleTiming = .immediate) throws -> (ConsoleViewModel, BlinkMIDI, URL) {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
@@ -35,7 +35,7 @@ final class AgentLEDBlinkTests: XCTestCase {
             connectedDestination: "BCR2000 Port 1"
         ))
         let model = ConsoleViewModel(stores: stores, midiService: midi, initialPreset: .robotArm,
-                                     automaticallyAdvancesMock: false, timing: .immediate)
+                                     automaticallyAdvancesMock: false, timing: timing)
         model.selectSource(.hardware)
         return (model, midi, directory)
     }
@@ -74,11 +74,14 @@ final class AgentLEDBlinkTests: XCTestCase {
     }
 
     func testAttentionBlinksOnAndOffThenSteadyStateStopsTraffic() async throws {
-        let (model, midi, directory) = try model()
+        let clock = ManualHostTime()
+        let (model, midi, directory) = try model(timing: .init(work: .immediate, presentation: clock.time))
         defer { try? FileManager.default.removeItem(at: directory) }
         model.setBlinksAgentLEDs(true)
         midi.sent.removeAll()
         model.applyAgentSlots(slots(.waitingApproval, in: model), changed: AgentSlotID(1))
+        try await waitUntil { clock.pendingDeadlines.contains(0.05) }
+        clock.advance(by: 0.2)
         try await waitUntil("a full blink") { led(midi).contains(127) && led(midi).contains(0) }
         let blinking = led(midi)
         XCTAssertTrue(blinking.contains(127))
@@ -87,7 +90,8 @@ final class AgentLEDBlinkTests: XCTestCase {
         model.applyAgentSlots(slots(.running, in: model), changed: AgentSlotID(1))
         XCTAssertEqual(led(midi).last, 127)
         midi.sent.removeAll()
-        try await Task.sleep(for: .milliseconds(300))
+        clock.advance(by: 0.3)
+        try await model.waitForBackgroundWork()
         XCTAssertTrue(led(midi).isEmpty, "steady state must not keep sending")
     }
 

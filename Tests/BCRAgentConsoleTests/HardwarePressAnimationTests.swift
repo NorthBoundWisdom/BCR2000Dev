@@ -23,14 +23,17 @@ final class HardwarePressAnimationTests: XCTestCase {
         )
         try stores.hardwareMap.save(map)
         let midi = PressMIDI()
-        let model = ConsoleViewModel(stores: stores, midiService: midi, timing: .immediate)
+        let clock = ManualHostTime()
+        let model = ConsoleViewModel(stores: stores, midiService: midi,
+                                     timing: .init(work: .immediate, presentation: clock.time))
         model.selectSource(.hardware)
         midi.onMessages?([.controlChange(channel: 15, number: 0, value: 127)])
-        try await Task.sleep(for: .milliseconds(240))
+        clock.advance(by: 0.24)
         XCTAssertTrue(model.presentation(of: push).hardwarePressed)
         midi.onMessages?([.controlChange(channel: 15, number: 0, value: 0)])
         XCTAssertFalse(model.presentation(of: push).hardwarePressed)
-        try await Task.sleep(for: .milliseconds(100))
+        clock.advance(by: 0.1)
+        try await model.waitForBackgroundWork()
         XCTAssertFalse(model.presentation(of: push).hardwarePressed)
         // A very short tap still appears once, with no second depression on release.
         midi.onMessages?([
@@ -38,6 +41,8 @@ final class HardwarePressAnimationTests: XCTestCase {
             .controlChange(channel: 15, number: 0, value: 0)
         ])
         XCTAssertTrue(model.presentation(of: push).hardwarePressed)
+        try await waitUntil { clock.pendingDeadlines.contains(clock.now + 0.08) }
+        clock.advance(by: 0.08)
         try await waitUntil("the short tap to release") { !model.presentation(of: push).hardwarePressed }
     }
 
@@ -52,7 +57,9 @@ final class HardwarePressAnimationTests: XCTestCase {
                      visualizationOnly: true, pressMode: .momentary)
         try stores.hardwareMap.save(map)
         let midi = PressMIDI()
-        let model = ConsoleViewModel(stores: stores, midiService: midi, timing: .immediate)
+        let clock = ManualHostTime()
+        let model = ConsoleViewModel(stores: stores, midiService: midi,
+                                     timing: .init(work: .immediate, presentation: clock.time))
         model.selectSource(.hardware)
         midi.onMessages?([.controlChange(channel: 15, number: 0, value: 127)])
         XCTAssertTrue(model.hardwarePressedControls.contains(push))
@@ -73,7 +80,9 @@ final class HardwarePressAnimationTests: XCTestCase {
         try map.bind(pad, to: .init(kind: .controlChange, channel: 15, number: 101), visualizationOnly: true)
         try stores.hardwareMap.save(map)
         let midi = PressMIDI()
-        let model = ConsoleViewModel(stores: stores, midiService: midi, timing: .immediate)
+        let clock = ManualHostTime()
+        let model = ConsoleViewModel(stores: stores, midiService: midi,
+                                     timing: .init(work: .immediate, presentation: clock.time))
         model.selectSource(.hardware)
         midi.onMessages?([.controlChange(channel: 15, number: 100, value: 1)])
         XCTAssertTrue(model.presentation(of: .pushEncoder(group: 1, 1)).hardwarePressed)
@@ -82,6 +91,8 @@ final class HardwarePressAnimationTests: XCTestCase {
         XCTAssertTrue(model.presentation(of: pad).hardwarePressed)
         XCTAssertTrue(model.slots.allSatisfy { $0.state == .idle })
         XCTAssertTrue(midi.sent.isEmpty)
+        try await waitUntil { clock.pendingDeadlines.contains(0.18) }
+        clock.advance(by: 0.18)
         try await waitUntil("both pulses to release") {
             !model.presentation(of: push).hardwarePressed && !model.presentation(of: pad).hardwarePressed
         }

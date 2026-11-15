@@ -46,14 +46,14 @@ final class CodexApprovalGateTests: XCTestCase {
             visibleWindowSeconds: 1
         )
 
-        try? await Task.sleep(for: .seconds(2))
+        // The gate already accepts an explicit timestamp: preserve the two-second expiry proof.
 
         do {
             _ = try await gate.resolveAgain(
                 requestID: "req-exp",
                 by: slotID,
                 visibleSlotID: slotID,
-                at: .now,
+                at: now.addingTimeInterval(2),
                 decision: .approve
             )
             XCTFail("过期请求不应被通过")

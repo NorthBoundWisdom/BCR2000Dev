@@ -157,3 +157,30 @@ SurfaceControlAdapter 的注入 hold scheduler；FeedbackSettingsView 的 16 ms 
 SettingsWindow 的 2 s 设置刷新；App 的 100 ms 集成就绪轮询、120 ms 初始化 smoke 等待；
 TestOnlyHardwareDevice 的 20 ms 软件交付等待；IntegrationMIDIFixture 的启动配置延迟、
 200 ms snapshot/current/memory read、400 ms write startup、每 30 帧 20 ms。
+
+## P2 等待迁移审计
+
+无断言删除或放宽；无用例删除；循环规模均未缩小。
+
+- IntegrationMIDIFixture 新增 `time`，默认 HostTime.live，200/400/20 ms 保持；仅单元测试显式 immediate。
+  默认值由 `IntegrationMIDIFixtureTests.testDefaultFixtureCadenceMatchesNativeAcceptance` 验证。
+- ConsoleTiming.intentNow 将既有 SurfaceSession 的 Date 注入接口传到构造边界，默认 Date.now；
+  `testProductionTimingDefaultsPreserveCalibratedDurations` 同时验证默认墙钟。SurfaceAgentIntent 的 260 ms
+  去抖间隔改为在此时钟推进 0.26 s，数值与含义不变。
+- AgentLEDBlink 的稳态无流量 300 ms 改为手动推进 0.3 s；先推进 0.2 s 观察 attention 的半周期。
+- HardwarePressAnimation 的 240/100 ms 保持/无二次按下改为推进同样时间；短按 80 ms 和脉冲 180 ms
+  改为手动达到既有截止点。
+- HardwareStartup 的 30 ms 排空保护改为手动时间加 actor 交接（替身仍明确持有被取消 dump）；
+  80 ms 启动等待改为 waitUntil(!startingMIDI)。没有减少证明窗口。
+- PresetRestoreSafety 的 350 ms 重连保护改为手动推进同样时间，dump 仍由 continuation 持有。
+- LEDDisplay / DeviceDisplay / LockedPresetDisplay 中的实际 0.5/0.8 s 显示保持、120 ms 活动灯改为手动推进原时长。
+- MonotonicReceipt 的 110 ms 固定等待删除：原有 heartbeat 计数增长条件继续等待，并保留前后 tick 和所有断言。
+  0.65 s 同步阻塞的两个真实 IO 测试保留；它们证明 IO 回调在 MainActor 不可用时也记录原始时间/队列溢出。
+- CodexApprovalGate 的 2 s sleep 改为传 requestedAt + 2 s，原 1 s 过期窗口及异常类型断言不变。
+- SSE backpressure 的每轮 30 ms sleep 改为手动推进 30 ms。新增 eventTime 只注入合并等待，默认 16 ms，
+  由 `SSEStreamTests.testDefaultSSECoalescingDelayIsUnchanged` 验证；50 参数 × 5 轮和全部关闭/审计断言保留。
+
+补充：MonotonicReceipt 的 110 ms 也是 ping cadence 的条件，不能直接删掉；现将既有 adapter 和
+runtime 的 monotonic 注入点设为同一个手动时间，每次推进 0.11 s，再由原有计数条件等待 IO。
+真实堵塞 IO 的两例继续使用真实 monotonic。原生离屏 connection UI（默认 fixture 节奏）已通过
+连接 decline/read、preview、write/readback、restore、discard 确认/取消；桌面无前台抢占。

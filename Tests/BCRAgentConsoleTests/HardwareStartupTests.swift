@@ -140,7 +140,9 @@ final class HardwareStartupTests: XCTestCase {
             device.snapshot = HardwareMap.mockPreset().entries.filter { $0.control.isContinuous }.map {
                 MIDI1UMPCodec.feedback(control: $0.midi, value: 0)
             }
-            let model = ConsoleViewModel(stores: stores, midiService: device, timing: .immediate)
+            let clock = ManualHostTime()
+            let model = ConsoleViewModel(stores: stores, midiService: device,
+                                         timing: .init(work: .immediate, presentation: clock.time))
             model.selectSource(.hardware)
             try await waitUntil("the display dump to start") { device.dumpInFlight }
             model.selectSource(.mock)
@@ -148,7 +150,8 @@ final class HardwareStartupTests: XCTestCase {
             let prompt = try await waitForPrompt(model)
             let writes = device.sent.count
             model.connectHardware(prompt.id, mode: mode)
-            try await Task.sleep(for: .milliseconds(30))
+            clock.advance(by: 0.03)
+            await Task.yield()
             XCTAssertTrue(model.connectingHardware)
             XCTAssertEqual(model.source, .mock)
             XCTAssertEqual(device.snapshotReads, 0)
@@ -206,7 +209,7 @@ final class HardwareStartupTests: XCTestCase {
         let device = StartupMIDI()
         device.snapshot = [MIDI1UMPCodec.feedback(control: midi, value: 3)]
         let model = ConsoleViewModel(stores: stores, midiService: device, timing: .immediate)
-        try await Task.sleep(for: .milliseconds(80))
+        try await waitUntil("MIDI startup") { !model.startingMIDI }
         XCTAssertEqual(model.source, .mock)
         XCTAssertTrue(device.sent.isEmpty)
         try await confirmRead(model)

@@ -309,6 +309,7 @@ final class ConsoleViewModel: ObservableObject {
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
             pluginBindings: AgentBindingTranslation.bindings,
             requiresHardwareConfirmation: true,
+            now: timing.intentNow,
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
         )

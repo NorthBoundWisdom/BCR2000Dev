@@ -74,7 +74,7 @@ private final class RestoreSafetyDevice: MIDIService {
 
 @MainActor
 final class PresetRestoreSafetyTests: XCTestCase {
-    private func context(aligned: Bool = true) async throws
+    private func context(aligned: Bool = true, timing: ConsoleTiming = .immediate) async throws
         -> (ConsoleViewModel, RestoreSafetyDevice, ConsoleStores, URL)
     {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -83,7 +83,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         let fixture = try BCLFixtures.encoderPreset(name: "Safety")
         try stores.hardwareMap.save(fixture.hardwareMap)
         let device = RestoreSafetyDevice(fixture.dump)
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: timing)
         model.selectSource(.hardware)
         if aligned { try await align(model) }
         return (model, device, stores, root)
@@ -143,7 +143,9 @@ final class PresetRestoreSafetyTests: XCTestCase {
     }
 
     func testReconnectCannotRaceAnAlignmentReadThatIsStillDraining() async throws {
-        let (model, device, _, root) = try await context(aligned: false)
+        let clock = ManualHostTime()
+        let (model, device, _, root) = try await context(aligned: false,
+                                                         timing: .init(work: .immediate, presentation: clock.time))
         defer { try? FileManager.default.removeItem(at: root) }
         device.suspendsNextDump = true
         model.beginPresetAlignment()
@@ -156,9 +158,10 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.hardware))
         model.requestSource(.hardware)
         model.selectSource(.hardware)
-        // The alignment read is held open, so background work cannot settle here. Waiting past the
-        // 300 ms connection-offer delay can only miss a late offer on a slow machine, never fail.
-        try await Task.sleep(for: .milliseconds(350))
+        // The read remains explicitly held while the injected clock crosses the 300 ms offer period.
+        await Task.yield()
+        clock.advance(by: 0.35)
+        await Task.yield()
         XCTAssertEqual(model.source, .mock)
         XCTAssertNil(model.pendingHardwareConnection)
         device.suspendedDump?.resume(throwing: CancellationError()); device.suspendedDump = nil

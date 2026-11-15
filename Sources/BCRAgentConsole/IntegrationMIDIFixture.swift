@@ -7,6 +7,10 @@
     @MainActor
     final class IntegrationMIDIFixture: MIDIService {
         private(set) var connection = MIDIConnectionSnapshot()
+        static let readDelay: Duration = .milliseconds(200)
+        static let writeDelay: Duration = .milliseconds(400)
+        static let frameDelay: Duration = .milliseconds(20)
+        private let time: HostTime
         private let startupDelay: Duration
         private let presetNumber: Int
         private let duplicateNames: Bool
@@ -24,13 +28,14 @@
         private var presetWrites = 0
         private var reads = 0
 
-        init(directory: URL, environment: [String: String] = [:]) throws {
+        init(directory: URL, environment: [String: String] = [:], time: HostTime = .live) throws {
             guard let delay = Int(environment["BCR_FIXTURE_STARTUP_DELAY_MS"] ?? "0"), (0 ... 60000).contains(delay),
                   let number = Int(environment["BCR_FIXTURE_PRESET_NUMBER"] ?? "8"), (1 ... 32).contains(number),
                   ["0", "1"].contains(environment["BCR_FIXTURE_DUPLICATE_NAMES"] ?? "0")
             else {
                 throw ConfigurationFileError(reason: L10n.text("假设备启动参数无效"))
             }
+            self.time = time
             startupDelay = .milliseconds(delay)
             presetNumber = number
             duplicateNames = environment["BCR_FIXTURE_DUPLICATE_NAMES"] == "1"
@@ -72,7 +77,7 @@
         }
 
         func startWhenReady() async throws {
-            try await Task.sleep(for: startupDelay)
+            try await time.sleep(startupDelay)
             try start()
         }
 
@@ -81,7 +86,7 @@
 
         func readSnapshot(expected: Set<MIDIControlID>) async throws -> [MIDIVoiceMessage] {
             reads += 1; try record()
-            try await Task.sleep(for: .milliseconds(200))
+            try await time.sleep(Self.readDelay)
             return expected.map { MIDI1UMPCodec.feedback(control: $0, value: 40) }
         }
 
@@ -95,22 +100,22 @@
 
         func readCurrentPreset() async throws -> Data {
             reads += 1; try record()
-            try await Task.sleep(for: .milliseconds(200))
+            try await time.sleep(Self.readDelay)
             return preset
         }
 
         func readMemoryPreset(_ number: Int) async throws -> Data {
             guard let dump = memory[number] else { throw MIDIStartupError.invalidProgram }
             reads += 1; memoryReads += 1; try record()
-            try await Task.sleep(for: .milliseconds(200))
+            try await time.sleep(Self.readDelay)
             return dump
         }
 
         func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
             presetWrites += 1; try record()
-            try await Task.sleep(for: .milliseconds(400))
+            try await time.sleep(Self.writeDelay)
             for index in frames.indices {
-                if index % 30 == 0 { try await Task.sleep(for: .milliseconds(20)) }
+                if index % 30 == 0 { try await time.sleep(Self.frameDelay) }
                 progress(index + 1)
             }
             preset = Data(frames.joined())

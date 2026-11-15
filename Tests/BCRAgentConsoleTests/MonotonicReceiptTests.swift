@@ -9,6 +9,10 @@ import XCTest
 private final class ReceiptWall: @unchecked Sendable {
     private let lock = NSLock()
     private var date = Date(timeIntervalSinceReferenceDate: 10_000)
+    private var policyTime: Double?
+    init(manualMonotonic: Bool = false) { policyTime = manualMonotonic ? 0 : nil }
+    func monotonic() -> Double { lock.withLock { policyTime ?? ProcessInfo.processInfo.systemUptime } }
+    func advance(_ seconds: Double) { lock.withLock { policyTime? += seconds } }
     func read() -> Date { lock.lock(); defer { lock.unlock() }; return date }
     func jump(_ seconds: Double) { lock.lock(); defer { lock.unlock() }; date.addTimeInterval(seconds) }
 }
@@ -76,11 +80,15 @@ final class MonotonicReceiptTests: XCTestCase {
     private func adapter(_ kind: OutputTransportKind, wall: ReceiptWall,
                          capacity: Int = 64) -> any MonotonicOutputTransport
     {
-        if kind == .osc { return OSCParameterAdapter(wallClock: { wall.read() }, receiveCapacity: capacity) }
+        if kind == .osc { return OSCParameterAdapter(
+            monotonic: { wall.monotonic() },
+            wallClock: { wall.read() },
+            receiveCapacity: capacity
+        ) }
         return WebSocketParameterAdapter(
             rosbridge: kind == .rosbridge,
             receiveCapacity: capacity,
-            wallClock: { wall.read() }
+            monotonic: { wall.monotonic() }, wallClock: { wall.read() }
         )
     }
 
@@ -98,7 +106,8 @@ final class MonotonicReceiptTests: XCTestCase {
         let controller = OutputController(session: session,
                                           store: JSONFileStore(fileURL: directory.appending(path: "settings.json")),
                                           adapter: adapter,
-                                          automaticallyTicks: false, now: { wall.read() })
+                                          automaticallyTicks: false, now: { wall.read() },
+                                          runtime: try! BCRPluginRuntime(clock: { wall.monotonic() }))
         var settings = controller.settings; settings.transport = kind; settings.port = Int(port)
         controller.apply(settings)
         return (controller, session)
@@ -113,7 +122,7 @@ final class MonotonicReceiptTests: XCTestCase {
     func testProductionWebSocketAndROSBridgeStayReadyAcrossWallClockJumps() async throws {
         for kind in [OutputTransportKind.webSocket, .rosbridge] {
             let (process, port) = try await peer(kind)
-            let wall = ReceiptWall(), source = adapter(kind, wall: wall), counts = ReceiptCounts()
+            let wall = ReceiptWall(manualMonotonic: true), source = adapter(kind, wall: wall), counts = ReceiptCounts()
             let (output, session) = controller(source, kind: kind, port: port, wall: wall)
             count(source, counts)
             output.start()
@@ -123,7 +132,7 @@ final class MonotonicReceiptTests: XCTestCase {
             for jump in [3600.0, -7200.0] {
                 let previous = counts.heartbeats
                 wall.jump(jump)
-                try await Task.sleep(for: .milliseconds(110))
+                wall.advance(0.11) // Advance the original 110 ms ping cadence, independently of wall time.
                 output.tick()
                 try await wait { counts.heartbeats > previous }
                 output.tick()
@@ -136,7 +145,7 @@ final class MonotonicReceiptTests: XCTestCase {
 
     func testProductionOSCStaysReadyAcrossWallClockJumps() async throws {
         let (process, port) = try await peer(.osc)
-        let wall = ReceiptWall(), source = adapter(.osc, wall: wall), counts = ReceiptCounts()
+        let wall = ReceiptWall(manualMonotonic: true), source = adapter(.osc, wall: wall), counts = ReceiptCounts()
         let (output, session) = controller(source, kind: .osc, port: port, wall: wall)
         count(source, counts)
         output.start()
@@ -146,7 +155,7 @@ final class MonotonicReceiptTests: XCTestCase {
         for jump in [3600.0, -7200.0] {
             let previous = counts.heartbeats
             wall.jump(jump)
-            try await Task.sleep(for: .milliseconds(110))
+            wall.advance(0.11) // Advance the original 110 ms ping cadence, independently of wall time.
             output.tick()
             try await wait { counts.heartbeats > previous }
             output.tick()

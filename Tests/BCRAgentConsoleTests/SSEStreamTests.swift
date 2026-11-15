@@ -1,3 +1,4 @@
+import BCRTestSupport
 import Foundation
 import Network
 import XCTest
@@ -112,7 +113,12 @@ final class SSEStreamTests: XCTestCase {
         XCTAssertFalse(server.router.service.audit.contains { $0.method == "sse" && !$0.succeeded })
     }
 
+    func testDefaultSSECoalescingDelayIsUnchanged() {
+        XCTAssertEqual(MCPHTTPServer.eventCoalescingDelay, .milliseconds(16))
+    }
+
     func testBackpressureActuallyClosesTheClientConnection() async throws {
+        let clock = ManualHostTime()
         let parameters = (0 ..< 50).map { ParameterDefinition(
             id: ParameterID("p\($0)" + String(repeating: "x", count: 500)),
             name: "P\($0)"
@@ -120,7 +126,8 @@ final class SSEStreamTests: XCTestCase {
         let source = session(configuration: .init(name: "Slow", parameters: parameters))
         let server = MCPHTTPServer(
             router: MCPRouter(service: AgentControlService(session: source)),
-            eventWriter: { _, _, _ in /* Simulate a send which never completes. */ }
+            eventWriter: { _, _, _ in /* Simulate a send which never completes. */ },
+            eventTime: clock.time
         )
         let port = try await server.start(port: 0, token: "fixture")
         defer { server.stop() }
@@ -128,7 +135,9 @@ final class SSEStreamTests: XCTestCase {
         try await until { server.activeStreamCount == 1 }
         for value in 1 ... 5 {
             for parameter in parameters { source.setParameter(parameter.id, to: Double(value)) }
-            try await Task.sleep(for: .milliseconds(30))
+            try await waitUntil { clock.pendingCount > 0 || probe.closed }
+            clock.advance(by: 0.03)
+            await Task.yield()
         }
         try await until { probe.closed }
         XCTAssertEqual(server.activeStreamCount, 0)

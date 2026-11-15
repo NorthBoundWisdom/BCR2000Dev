@@ -19,6 +19,7 @@ final class ConsoleTimingTests: XCTestCase {
         XCTAssertEqual(BCRDisplayModel.Calibration.valueHoldSeconds, 0.8)
         XCTAssertEqual(BCRDisplayModel.Calibration.buttonHoldSeconds, 0.5)
         let defaults = ConsoleTiming()
+        XCTAssertEqual(defaults.intentNow().timeIntervalSinceNow, 0, accuracy: 0.01)
         XCTAssertEqual(defaults.work.now(), ProcessInfo.processInfo.systemUptime, accuracy: 0.01)
         XCTAssertEqual(defaults.presentation.now(), ProcessInfo.processInfo.systemUptime, accuracy: 0.01)
     }

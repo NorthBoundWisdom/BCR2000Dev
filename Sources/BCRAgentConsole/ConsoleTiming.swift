@@ -5,6 +5,7 @@ import Foundation
 /// assert duration semantics inject the same manual clock into both lanes instead.
 @MainActor
 struct ConsoleTiming {
+    var intentNow: @MainActor () -> Date = { .now }
     var work: HostTime = .live
     var presentation: HostTime = .live
     static var immediate: Self { .init(work: .immediate) }

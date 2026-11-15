@@ -162,11 +162,12 @@ final class BCRDisplayModelTests: XCTestCase {
 @MainActor
 final class LEDDisplayTests: XCTestCase {
     func testMockInputShowsItsValueThenUnknownPreset() async throws {
+        let clock = ManualHostTime()
         let model = ConsoleViewModel(
             stores: .temporary(),
             startsMIDI: false,
             initialPreset: .robotArm,
-            timing: .immediate
+            timing: .init(work: .immediate, presentation: clock.time)
         )
         let knob = BCRControlID.encoder(row: 1, 1)
         XCTAssertEqual(model.displayText, "----")
@@ -178,6 +179,7 @@ final class LEDDisplayTests: XCTestCase {
         try await waitUntil("the button state") { model.displayText == "  on" }
         model.release(.button(row: 1, 1))
         // The device never reports its preset, so nothing is guessed.
+        clock.advance(by: 0.5)
         try await waitUntil("the hold to return to an unknown preset") { model.displayText == "----" }
     }
 
@@ -286,6 +288,7 @@ final class DeviceDisplayTests: XCTestCase {
     }
 
     func testHardwareModeReadsPresetNumberAndShowValueWithoutWriting() async throws {
+        let clock = ManualHostTime()
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
@@ -300,7 +303,12 @@ final class DeviceDisplayTests: XCTestCase {
                            ".showvalue on", "$button 1", ".easypar CC 16 0 127 0 toggleoff", ".showvalue off", "$end"])
         let names = BCRPresetNames(temporary: "Redrum", memory: ["Redrum"] + (2 ... 32).map { "P\($0)" })
         let device = DisplayDevice(temporary: preset, names: names)
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
+        let model = ConsoleViewModel(
+            stores: stores,
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .init(work: .immediate, presentation: clock.time)
+        )
         model.selectSource(.hardware)
         try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "P- 1")
@@ -312,11 +320,14 @@ final class DeviceDisplayTests: XCTestCase {
         XCTAssertEqual(model.displayText, "P- 1")
         // The IN indicator flashes for any device message, then clears.
         XCTAssertTrue(model.deviceActivity)
+        try await waitUntil { clock.pendingDeadlines.contains(0.12) }
+        clock.advance(by: 0.12)
         try await waitUntil("the IN indicator to clear") { !model.deviceActivity }
         XCTAssertNil(model.deviceKeysLocked)
         // Not the connection feedback value, which would be suppressed as its echo for 180 ms.
         device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
         XCTAssertEqual(model.displayText, " 100")
+        clock.advance(by: 0.8)
         try await waitUntil("the value hold to end") { model.displayText == "P- 1" }
     }
 
@@ -374,7 +385,12 @@ final class DeviceDisplayTests: XCTestCase {
 
 @MainActor
 final class LockedPresetDisplayTests: XCTestCase {
-    private func model(cachedName: String, locked: Bool = true, cachedPreset: Int? = 1) throws
+    private func model(
+        cachedName: String,
+        locked: Bool = true,
+        cachedPreset: Int? = 1,
+        timing: ConsoleTiming = .immediate
+    ) throws
         -> (ConsoleViewModel, DisplayDevice, URL)
     {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
@@ -401,7 +417,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         let device = DisplayDevice(temporary: preset, names: .init(temporary: "Redrum",
                                                                    memory: ["Redrum"] + (2 ... 7)
                                                                        .map { "P\($0)" } + ["Redrum"]))
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: timing)
         return (model, device, directory)
     }
 
@@ -413,7 +429,11 @@ final class LockedPresetDisplayTests: XCTestCase {
     }
 
     func testFreshLockedReadCannotTrustAnAmbiguousCandidateCache() async throws {
-        let (model, device, directory) = try model(cachedName: "Redrum")
+        let clock = ManualHostTime()
+        let (model, device, directory) = try model(
+            cachedName: "Redrum",
+            timing: .init(work: .immediate, presentation: clock.time)
+        )
         defer { try? FileManager.default.removeItem(at: directory) }
         try await readLockedPreset(model)
         XCTAssertEqual(model.deviceKeysLocked, true)
@@ -426,6 +446,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         model.dismissPresetAlignment()
         device.onMessages?([.controlChange(channel: 0, number: 8, value: 100)])
         XCTAssertEqual(model.displayText, " 100")
+        clock.advance(by: 0.8)
         try await waitUntil("the value hold to end") { model.displayText == "----" }
     }
 

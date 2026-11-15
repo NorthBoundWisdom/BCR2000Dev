@@ -1,4 +1,5 @@
 import BCRAgentCore
+import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -18,7 +19,11 @@ final class SurfaceAgentIntentTests: XCTestCase {
             return CodexSessionCoordinator(transport: process, modelCatalogStore: CodexModelCatalogStore(
                 fileURL: stores.configuration.fileURL.deletingLastPathComponent().appending(path: "catalog.json")
             ))
-        }, mockClock: { self.mockTime }, automaticallyAdvancesMock: false, timing: .immediate)
+        }, mockClock: { self.mockTime }, automaticallyAdvancesMock: false,
+        timing: .init(
+            intentNow: { Date(timeIntervalSinceReferenceDate: self.mockTime) },
+            work: .immediate
+        ))
     }
 
     private func advance(_ model: ConsoleViewModel, to time: Double) throws {
@@ -67,7 +72,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
         model.press(.button(row: 1, 1))
         try await wait(model, state: .running)
         model.release(.button(row: 1, 1))
-        try await Task.sleep(for: .milliseconds(260))
+        mockTime += 0.26 // Preserve the release/debounce interval using the injected session timestamp.
         model.press(.button(row: 1, 1))
         try await wait(model, state: .interrupted)
         XCTAssertEqual(model.codex.phase, .ready)
