@@ -86,6 +86,7 @@ final class OutputController: ObservableObject {
     private var lastPing: Double?
     private var task: Task<Void, Never>?
     private var isStopping = false
+    private let time: HostTime
     private let automaticallyTicks: Bool
     private let now: @MainActor () -> Date
 
@@ -95,8 +96,10 @@ final class OutputController: ObservableObject {
         adapter: any OutputTransport = OutputTransportRouter(),
         automaticallyTicks: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
-        runtime: BCRPluginRuntime? = nil
+        runtime: BCRPluginRuntime? = nil,
+        time: HostTime = .live
     ) {
+        self.time = time
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
         let productionClock = (adapter as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true
         do { self.runtime = try runtime ?? BCRPluginRuntime(clock: {
@@ -205,11 +208,11 @@ final class OutputController: ObservableObject {
             try adapter.select(settings.transport)
             try adapter.start(host: settings.host, port: UInt16(settings.port))
             task?.cancel()
-            if automaticallyTicks { task = Task { @MainActor [weak self] in
+            if automaticallyTicks { task = Task { @MainActor [weak self, time] in
                 while !Task.isCancelled {
                     guard self != nil else { return }
                     self?.tick()
-                    do { try await Task.sleep(for: .milliseconds(20)) } catch { return }
+                    do { try await time.sleep(ConsoleTiming.outputTick) } catch { return }
                 }
             } }
         } catch { stop(failure: error.localizedDescription) }

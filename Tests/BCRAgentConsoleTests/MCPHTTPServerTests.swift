@@ -221,7 +221,7 @@ final class MCPHTTPServerTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(JSONValue.object(original))
         try data.write(to: stores.configuration.fileURL)
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, timing: .immediate)
         XCTAssertEqual(model.configuration.version, SurfaceConfiguration.currentVersion)
         XCTAssertFalse(model.configuration.parameter("arm.enabled")!.agentWritable)
         XCTAssertTrue(model.persistenceNotice?.text.contains(L10n.language == .chinese ? "迁移" : "migrated") == true)

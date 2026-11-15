@@ -38,7 +38,7 @@ final class LanguagePreferencesTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = LanguageSettings(defaults: defaults, preferredLanguages: { ["zh-Hans"] })
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm,
-                                     automaticallyAdvancesMock: false)
+                                     automaticallyAdvancesMock: false, timing: .immediate)
         model.setParameter("arm.j1", to: 37)
         let configuration = model.configuration, epoch = model.provider.runtime.epoch
         let values = model.engine.parameterValues

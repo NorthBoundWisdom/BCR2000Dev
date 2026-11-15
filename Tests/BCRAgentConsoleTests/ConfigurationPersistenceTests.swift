@@ -22,7 +22,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let stores = stores(directory)
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, timing: .immediate)
         try FileManager.default.createDirectory(at: stores.configuration.fileURL, withIntermediateDirectories: false)
         var candidate = model.configuration
         try candidate.addPage(.init(id: "p", name: "Page", assignments: []))
@@ -97,7 +97,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         old.version = 1
         let data = try JSONEncoder().encode(old)
         try data.write(to: store.fileURL)
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertEqual(model.persistenceNotice?.action, .saveMigration)
         XCTAssertEqual(try Data(contentsOf: store.fileURL), data)
         model.performNoticeAction(.saveMigration)
@@ -106,7 +106,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
             .filter { $0.lastPathComponent.contains(".backup.") }
         XCTAssertTrue(try backups.contains { try Data(contentsOf: $0) == data })
         // The next launch reads the current version: no notice.
-        let reopened = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let reopened = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertNil(reopened.persistenceNotice)
         XCTAssertEqual(reopened.configuration.version, SurfaceConfiguration.currentVersion)
     }
@@ -114,7 +114,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
     func testOnlyPlainInfoNoticesDismissThemselves() async throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertGreaterThan(ConsoleViewModel.infoNoticeSeconds, 3)
         model.selectSource(.hardware) // warning: no device
         XCTAssertEqual(model.notice?.level, .warning)
@@ -126,7 +126,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
     func testInvalidImportDoesNotReplaceConfigurationParametersOrMapping() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         model.setParameter("general.1", to: 42)
         XCTAssertEqual(model.engine.value(of: "general.1"), 42)
         let before = model.configuration
@@ -148,7 +148,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let blocked = directory.appending(path: "not-a-directory")
         try Data("file".utf8).write(to: blocked)
-        let model = ConsoleViewModel(stores: stores(blocked), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(blocked), startsMIDI: false, timing: .immediate)
         let before = model.configuration
         var candidate = before
         candidate.name = "New"
@@ -160,7 +160,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
     func testValidImportExportsOnlyVersionedConfigurationAndKeepsHardwareMap() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         let map = model.engine.hardwareMap
         var imported = SurfaceConfiguration.robotArmDemo()
         imported.name = "Imported"
@@ -209,7 +209,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
         let blocked = directory.appending(path: "parent")
         try Data("file".utf8).write(to: blocked)
         let storage = stores(blocked)
-        let model = ConsoleViewModel(stores: storage, startsMIDI: false)
+        let model = ConsoleViewModel(stores: storage, startsMIDI: false, timing: .immediate)
         model.loadPreset(.robotArm)
         XCTAssertEqual(model.notice?.action, .retryConfigurationSave)
         try FileManager.default.removeItem(at: blocked)
@@ -222,7 +222,7 @@ final class ConfigurationPersistenceTests: XCTestCase {
     func testClampedDefinitionSaveCanBeAdoptedAsCleanDraft() throws {
         let directory = try directory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         let id = try XCTUnwrap(model.createParameter())
         let initial = ParameterDefinition(id: id, name: "Test", defaultValue: 55)
         _ = model.updateParameter(initial)

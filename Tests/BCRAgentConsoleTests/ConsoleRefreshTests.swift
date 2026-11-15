@@ -28,7 +28,7 @@ final class ConsoleRefreshTests: XCTestCase {
         try stores.hardwareMap.save(map)
         let midi = RefreshMIDI()
         let model = ConsoleViewModel(stores: stores, startsMIDI: false, midiService: midi,
-                                     automaticallyAdvancesMock: false)
+                                     automaticallyAdvancesMock: false, timing: .immediate)
         // Session initialization installs the spy input callback without starting MIDI or the Mock clock.
         XCTAssertNotNil(midi.onMessages)
         model.selectSource(.hardware)

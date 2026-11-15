@@ -162,7 +162,12 @@ final class BCRDisplayModelTests: XCTestCase {
 @MainActor
 final class LEDDisplayTests: XCTestCase {
     func testMockInputShowsItsValueThenUnknownPreset() async throws {
-        let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm)
+        let model = ConsoleViewModel(
+            stores: .temporary(),
+            startsMIDI: false,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         let knob = BCRControlID.encoder(row: 1, 1)
         XCTAssertEqual(model.displayText, "----")
         model.turn(knob, by: 5)
@@ -177,7 +182,12 @@ final class LEDDisplayTests: XCTestCase {
     }
 
     func testSourceChangeClearsDisplayedValue() async throws {
-        let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm)
+        let model = ConsoleViewModel(
+            stores: .temporary(),
+            startsMIDI: false,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         model.turn(.encoder(row: 1, 1), by: 5)
         try await waitUntil("the turned value") { model.displayText != "----" }
         model.selectSource(.hardware)
@@ -262,7 +272,12 @@ final class DeviceDisplayTests: XCTestCase {
 
     func testDeviceTransferLinesStepThePanelMarquee() throws {
         let device = DisplayDevice(temporary: dump(["$rev R1", "$end"]), names: .init(temporary: "", memory: []))
-        let model = ConsoleViewModel(stores: .temporary(), midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(
+            stores: .temporary(),
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         let observer = try XCTUnwrap(device.transferLines)
         let start = model.displayMarquee.marquee
         observer(.read); observer(.read); observer(.write)
@@ -285,7 +300,7 @@ final class DeviceDisplayTests: XCTestCase {
                            ".showvalue on", "$button 1", ".easypar CC 16 0 127 0 toggleoff", ".showvalue off", "$end"])
         let names = BCRPresetNames(temporary: "Redrum", memory: ["Redrum"] + (2 ... 32).map { "P\($0)" })
         let device = DisplayDevice(temporary: preset, names: names)
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         model.selectSource(.hardware)
         try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "P- 1")
@@ -313,7 +328,7 @@ final class DeviceDisplayTests: XCTestCase {
         let preset = dump(["$rev R1", "$preset", ".name 'Edited'", "$end"])
         let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Edited",
                                                                             memory: (1 ... 32).map { "P\($0)" }))
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         model.selectSource(.hardware)
         try await model.waitForBackgroundWork()
         XCTAssertEqual(model.displayText, "----")
@@ -338,7 +353,7 @@ final class DeviceDisplayTests: XCTestCase {
         let device = DisplayDevice(temporary: preset, names: BCRPresetNames(temporary: "Redrum", memory: memory))
         device.memory = [1: preset, 8: other]
         device.holdsDumps = true
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         model.selectSource(.hardware)
         // While the device dumps (its display animating), the panel shows busy too.
         try await waitUntil("the display to show busy during the dump") { model.displayBusy }
@@ -386,7 +401,7 @@ final class LockedPresetDisplayTests: XCTestCase {
         let device = DisplayDevice(temporary: preset, names: .init(temporary: "Redrum",
                                                                    memory: ["Redrum"] + (2 ... 7)
                                                                        .map { "P\($0)" } + ["Redrum"]))
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         return (model, device, directory)
     }
 
@@ -533,7 +548,12 @@ final class LockedPresetDisplayTests: XCTestCase {
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
         let sameCopy = DisplayDevice(temporary: device.temporary, names: device.names)
-        let restarted = ConsoleViewModel(stores: stores, midiService: sameCopy, initialPreset: .robotArm)
+        let restarted = ConsoleViewModel(
+            stores: stores,
+            midiService: sameCopy,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         restarted.selectSource(.hardware)
         try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .preset(1))
@@ -545,7 +565,12 @@ final class LockedPresetDisplayTests: XCTestCase {
             "$encoder 1", ".easypar CC 1 9 0 127 absolute", ".showvalue on", "$end"
         ])
         let otherCopy = DisplayDevice(temporary: edited, names: device.names)
-        let other = ConsoleViewModel(stores: stores, midiService: otherCopy, initialPreset: .robotArm)
+        let other = ConsoleViewModel(
+            stores: stores,
+            midiService: otherCopy,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         other.selectSource(.hardware)
         try await other.waitForBackgroundWork()
         XCTAssertEqual(other.displayContent, .unknown)
@@ -565,7 +590,12 @@ final class LockedPresetDisplayTests: XCTestCase {
             "$rev R1", "$preset", ".name 'Redrum'", ".egroups 4", ".lock off",
             "$encoder 1", ".easypar CC 1 8 0 127 absolute", ".showvalue on", ".mode 1dot", "$end"
         ])
-        let reverted = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let reverted = ConsoleViewModel(
+            stores: stores,
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         _ = model
         // Mock mode draws the mock map; the persisted hardware map is what hardware mode uses.
         XCTAssertEqual(try stores.hardwareMap.load()?.ringMode(for: .pushEncoder(group: 1, 1)), .pan)
@@ -595,7 +625,12 @@ final class LockedPresetDisplayTests: XCTestCase {
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
         let recalledEight = DisplayDevice(temporary: eight, names: device.names)
         recalledEight.memory = device.memory
-        let restarted = ConsoleViewModel(stores: stores, midiService: recalledEight, initialPreset: .robotArm)
+        let restarted = ConsoleViewModel(
+            stores: stores,
+            midiService: recalledEight,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         restarted.selectSource(.hardware)
         try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .unknown)
@@ -637,7 +672,7 @@ final class LockedPresetDisplayTests: XCTestCase {
                                      "$encoder 1", ".easypar CC 1 8 0 127 absolute", ".mode 1dot", "$end"])
         let device = DisplayDevice(temporary: dump, names: .init(temporary: "Ring", memory: ["Ring"]))
         device.supportsSnapshotReadback = true
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         return (model, device, stores, directory)
     }
 

@@ -22,7 +22,7 @@ final class HardwareButtonFunctionTests: XCTestCase {
         try stores.hardwareMap.save(map)
         let midi = ButtonFunctionMIDI()
         let model = ConsoleViewModel(stores: stores, midiService: midi, initialPreset: .robotArm,
-                                     automaticallyAdvancesMock: false)
+                                     automaticallyAdvancesMock: false, timing: .immediate)
         model.selectSource(.hardware)
         return (model, midi, stores, directory)
     }

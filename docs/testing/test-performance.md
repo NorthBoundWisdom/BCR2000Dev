@@ -124,3 +124,36 @@ SwiftPM parallel xunit 按单例子进程计时，包含每次 XCTest 装载成�
 | BCRAgentConsoleTests.MIDISysExAssemblerTests | 1 | 0.061 | 0.061 |
 | BCRAgentConsoleTests.PresetNumberEvidenceTests | 1 | 0.061 | 0.061 |
 | BCRAgentCoreTests.ParameterChangeAccumulatorTests | 1 | 0.059 | 0.059 |
+
+## P1 时间依赖与默认值
+
+`HostTime` 将单调时间读取和可取消 sleep 一起注入；`ConsoleTiming` 分开有限后台工作和呈现时钟。
+`.immediate` 只立即完成后台工作，周期任务不会忙循环。需要证明时长的测试使用 `ManualHostTime`。
+生产构造器无需改动。`ConsoleTimingTests.testProductionTimingDefaultsPreserveCalibratedDurations`
+逐项验证如下旧常量（也验证两个默认时钟读取系统 uptime）：
+
+| 调用点（函数） | 默认时长/时间源 | 用途 |
+|---|---|---|
+| ConsoleViewModel session.onChange | 16 ms | 合并界面刷新 |
+| noteDeviceActivity | 120 ms | MIDI 活动灯 |
+| showDeviceInput / displayContent | uptime；值 0.8 s，按钮 0.5 s | 显示保持 |
+| scheduleNoticeDismissal | 6 s | 信息提示消失 |
+| offerHardwareConnection | 300 ms | 连接稳定期 |
+| buttonActivity release | 最少 80 ms（减去已按住时长） | 短按可见 |
+| buttonActivity counter | 180 ms | 计数脉冲按压 |
+| showAgentState / updateBlinkTimer | uptime / 50 ms | Agent 闪灯 |
+| OutputController.start | 20 ms | 输出门 tick |
+| WebSocketParameterAdapter.stop | 200 ms | 优雅关闭超时 |
+
+新增 `testConnectionOfferWaitsForTheFullStablePeriod` 验证 299 ms 时不提示、300 ms 时提示；
+`testManualSleeperPreservesDeadlineAndCancellation` 验证手动截止点和取消传播。
+
+其余真实计时（本阶段保持原样）：ConsoleViewModel.waitForBackgroundWork 的真实 10 s 防挂死期限；
+BCRMockAgentHost 的 25 ms 驱动；ProviderApplication/ProviderService 的 20 ms 驱动；
+MCPHTTPServer 的 5 s 请求/握手期限、10 s SSE 心跳和 16 ms 合并；
+CodexProcessSupervisor 的 20/10 ms 退出轮询、5 ms 读取轮询和配置化重连退避，CodexRPCClient 的请求期限；
+CoreMIDIService 的 100 ms 发现/读取轮询、2 s 预设读取期限；
+SurfaceControlAdapter 的注入 hold scheduler；FeedbackSettingsView 的 16 ms 刷新；
+SettingsWindow 的 2 s 设置刷新；App 的 100 ms 集成就绪轮询、120 ms 初始化 smoke 等待；
+TestOnlyHardwareDevice 的 20 ms 软件交付等待；IntegrationMIDIFixture 的启动配置延迟、
+200 ms snapshot/current/memory read、400 ms write startup、每 30 帧 20 ms。

@@ -23,7 +23,7 @@ import BCRAgentCore
             let supplied = try await context.credentials.loadOrCreate()
             XCTAssertEqual(supplied, token)
             let model = ConsoleViewModel(stores: context.stores, startsMIDI: false,
-                                         mcpCredentials: context.credentials, integrationTest: true)
+                                         mcpCredentials: context.credentials, integrationTest: true, timing: .immediate)
             XCTAssertTrue(model.mcp.integrationTest)
             XCTAssertTrue(model.notice?.text.contains(L10n.language == .chinese ? "隔离" : "Isolated") == true)
         }

@@ -45,7 +45,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let midi = EndpointFakeMIDI(), output = EndpointFakeOutput()
         let model = ConsoleViewModel(stores: stores(directory), midiService: midi, outputTransport: output,
-                                     initialPreset: .robotArm)
+                                     initialPreset: .robotArm, timing: .immediate)
         model.setParameter("arm.j1", to: 45)
         model.output.start()
         defer { model.output.stop() }
@@ -67,7 +67,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         let midi = EndpointFakeMIDI()
         midi.connection.sourceEndpoints = [.init(id: 7, name: "BCR2000")]
         midi.connection.destinationEndpoints = [.init(id: 9, name: "BCR2000")]
-        let model = ConsoleViewModel(stores: stores(directory), midiService: midi)
+        let model = ConsoleViewModel(stores: stores(directory), midiService: midi, timing: .immediate)
         try await waitUntil { !model.startingMIDI && model.connection.sourceEndpoints.count == 1 }
         model.mcp.service.permissions.deviceControl = true
         let result = model.mcp.service.call("set_midi_endpoints", arguments: .object([
@@ -90,7 +90,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         midi.connection.sourceEndpoints = [.init(id: 7, name: "BCR2000")]
         midi.connection.destinationEndpoints = [.init(id: 9, name: "BCR2000")]
         let model = ConsoleViewModel(stores: stores(directory), midiService: midi, outputTransport: output,
-                                     initialPreset: .robotArm)
+                                     initialPreset: .robotArm, timing: .immediate)
         try await waitUntil { !model.startingMIDI && model.connection.sourceEndpoints.count == 1 }
         model.mcp.service.permissions.deviceControl = true
         let arguments: JSONValue = .object(["sourceID": .number(7), "destinationID": .number(9)])
@@ -117,7 +117,12 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         let midi = EndpointFakeMIDI()
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, midiService: midi)
+        let model = ConsoleViewModel(
+            stores: stores(directory),
+            startsMIDI: false,
+            midiService: midi,
+            timing: .immediate
+        )
         model.mcp.service.permissions.deviceControl = true
         XCTAssertTrue(model.mcp.service.call("set_midi_endpoints", arguments: .object([
             "sourceID": .null, "destinationID": .null
@@ -133,7 +138,7 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         let original = Data("{invalid".utf8)
         try original.write(to: url)
         let midi = EndpointFakeMIDI()
-        let model = ConsoleViewModel(stores: stores(directory), midiService: midi)
+        let model = ConsoleViewModel(stores: stores(directory), midiService: midi, timing: .immediate)
         XCTAssertEqual(midi.starts, 0)
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertEqual(try Data(contentsOf: url), original)
@@ -148,7 +153,12 @@ final class MIDIEndpointSettingsTests: XCTestCase {
         let midi = EndpointFakeMIDI()
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, midiService: midi)
+        let model = ConsoleViewModel(
+            stores: stores(directory),
+            startsMIDI: false,
+            midiService: midi,
+            timing: .immediate
+        )
         model.applyEndpointSelection(.init(destinationID: 3))
         XCTAssertEqual(midi.starts, 0)
         XCTAssertTrue(midi.choices.isEmpty)

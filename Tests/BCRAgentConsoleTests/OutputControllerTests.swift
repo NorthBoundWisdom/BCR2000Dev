@@ -360,7 +360,7 @@ final class OutputControllerTests: XCTestCase {
     func testGUICompositionInjectsTheSameOwnerIntoAgentSimulatorsAndOutput() throws {
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false,
                                      providerConfiguration: .init(robot: true, chassis: true, clock: .manual),
-                                     mockClock: { 0 }, automaticallyAdvancesMock: false)
+                                     mockClock: { 0 }, automaticallyAdvancesMock: false, timing: .immediate)
         model.setBlinksAgentLEDs(false) // Steady levels; blinking is covered in AgentLEDBlinkTests.
         XCTAssertTrue(try XCTUnwrap(model.mockAgents).runtime === model.provider.runtime)
         XCTAssertTrue(model.output.runtime === model.provider.runtime)

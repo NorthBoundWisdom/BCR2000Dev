@@ -18,7 +18,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
             return CodexSessionCoordinator(transport: process, modelCatalogStore: CodexModelCatalogStore(
                 fileURL: stores.configuration.fileURL.deletingLastPathComponent().appending(path: "catalog.json")
             ))
-        }, mockClock: { self.mockTime }, automaticallyAdvancesMock: false)
+        }, mockClock: { self.mockTime }, automaticallyAdvancesMock: false, timing: .immediate)
     }
 
     private func advance(_ model: ConsoleViewModel, to time: Double) throws {
@@ -127,7 +127,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
 
     func testFailedPluginInitializationRejectsActionsVisiblyAndFailsMCPCommand() throws {
         let model = ConsoleViewModel(stores: .temporary(), startsMIDI: false,
-                                     mockClock: { .nan }, automaticallyAdvancesMock: false)
+                                     mockClock: { .nan }, automaticallyAdvancesMock: false, timing: .immediate)
         XCTAssertNil(model.mockAgents)
         XCTAssertNotNil(model.notice)
         model.performPrimaryAction(AgentSlotID(1))

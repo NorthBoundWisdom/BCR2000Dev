@@ -17,7 +17,12 @@ final class HardwareConnectionStatusTests: XCTestCase {
             connection: .init(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1"),
             notifyOnStart: true
         )
-        let model = ConsoleViewModel(stores: stores, midiService: midi, automaticallyAdvancesMock: false)
+        let model = ConsoleViewModel(
+            stores: stores,
+            midiService: midi,
+            automaticallyAdvancesMock: false,
+            timing: .immediate
+        )
         model.mcp.service.permissions.parameterWrite = true
         model.mcp.service.permissions.deviceControl = true
         return (model, midi, directory)

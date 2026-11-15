@@ -93,6 +93,7 @@ struct HardwareConnectionPrompt: Identifiable {
 
 @MainActor
 final class ConsoleViewModel: ObservableObject {
+    private let timing: ConsoleTiming
     private let midi: any MIDIService
     private let endpointStore: JSONFileStore<MIDIEndpointSelection>
     let canConfigureMIDI: Bool
@@ -237,8 +238,10 @@ final class ConsoleViewModel: ObservableObject {
          codexFactory: (@MainActor () async throws -> CodexSessionCoordinator)? = nil,
          providerConfiguration: ProviderConfiguration = .init(),
          mockClock: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
-         automaticallyAdvancesMock: Bool = true)
+         automaticallyAdvancesMock: Bool = true,
+         timing: ConsoleTiming = .init())
     {
+        self.timing = timing
         if integrationTest { IntegrationStartupLog.write("model.init.begin") }
         defer { if integrationTest { IntegrationStartupLog.write("model.init.ready") } }
         provider = ProviderApplication(configuration: providerConfiguration, monotonic: mockClock)
@@ -398,8 +401,8 @@ final class ConsoleViewModel: ObservableObject {
             guard let self else { return }
             self.validateConnectionWork()
             guard self.uiPublishTask == nil else { return }
-            self.uiPublishTask = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: .milliseconds(16)) } catch { return }
+            self.uiPublishTask = Task { @MainActor [weak self, timing] in
+                do { try await timing.work.sleep(ConsoleTiming.frame) } catch { return }
                 guard let self else { return }
                 if self.followsTouch, let control = self.pendingTouchedControl {
                     if self.selectedControl != control { self.selectedControl = control }
@@ -574,7 +577,7 @@ final class ConsoleViewModel: ObservableObject {
 
     /// Text of the 4-digit LED display, as the device would show it right now.
     var displayContent: BCRDisplayModel.Content {
-        display.content(at: ProcessInfo.processInfo.systemUptime)
+        display.content(at: timing.presentation.now())
     }
 
     var displayText: String { BCRDisplayModel.text(for: displayContent) }
@@ -605,8 +608,8 @@ final class ConsoleViewModel: ObservableObject {
     private func noteDeviceActivity() {
         activityTask?.cancel()
         deviceActivity = true
-        activityTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+        activityTask = Task { @MainActor [weak self, timing] in
+            do { try await timing.presentation.sleep(ConsoleTiming.activity) } catch { return }
             self?.objectWillChange.send()
             self?.deviceActivity = false
         }
@@ -618,7 +621,7 @@ final class ConsoleViewModel: ObservableObject {
     private func showDeviceInput(_ control: BCRControlID, rawValue: UInt16, pressed: Bool?) {
         // The mock's preset shows every value; the device follows its own `.showvalue` settings.
         let shows = source == .mock || (displayProfile?.showsValue(control) ?? true)
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = timing.presentation.now()
         if control.isContinuous {
             display.encoderMoved(rawValue: Int(rawValue), showsValue: shows, at: now)
         } else {
@@ -626,10 +629,10 @@ final class ConsoleViewModel: ObservableObject {
         }
         guard shows else { return }
         displayRevertTask?.cancel()
-        displayRevertTask = Task { @MainActor [weak self] in
+        displayRevertTask = Task { @MainActor [weak self, timing] in
             // Values and button states are held for different times; wait for whichever is shown.
             let remaining = (self?.display.transient?.until ?? now) - now
-            do { try await Task.sleep(for: .seconds(max(0, remaining))) } catch { return }
+            do { try await timing.presentation.sleep(.seconds(max(0, remaining))) } catch { return }
             self?.objectWillChange.send()
             self?.displayRevertTask = nil
         }
@@ -1106,8 +1109,8 @@ final class ConsoleViewModel: ObservableObject {
         guard let current = notice, current.level == .info, current.action == nil else { return }
         if startingMIDI, current == ConsoleNotice(level: .info,
                                                   message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。") { return }
-        noticeDismissTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(Self.infoNoticeSeconds)) } catch { return }
+        noticeDismissTask = Task { @MainActor [weak self, timing] in
+            do { try await timing.presentation.sleep(ConsoleTiming.notice) } catch { return }
             guard let self, self.notice == current else { return }
             self.notice = nil
         }
@@ -1799,8 +1802,8 @@ final class ConsoleViewModel: ObservableObject {
         declinedHardwareConnectionRoute = nil
         let route = connection
         notice = ConsoleNotice(level: .info, message: "检测到硬件，等待连接稳定…")
-        connectionOfferTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+        connectionOfferTask = Task { @MainActor [weak self, timing] in
+            do { try await timing.work.sleep(ConsoleTiming.connection) } catch { return }
             guard let self else { return }
             defer { self.connectionOfferTask = nil }
             guard self.source == .mock, self.connection.isConnected,
@@ -1966,11 +1969,14 @@ final class ConsoleViewModel: ObservableObject {
             pressTasks[control] = nil
             if pressed == false {
                 guard hardwarePressedControls.contains(control) else { return }
-                let remaining = max(0, 0.08 - (ProcessInfo.processInfo.systemUptime - (pressStarted[control] ?? 0)))
+                let remaining = max(
+                    0,
+                    ConsoleTiming.minimumPressSeconds - (timing.presentation.now() - (pressStarted[control] ?? 0))
+                )
                 pressStarted[control] = nil
                 if remaining == 0 { hardwarePressedControls.remove(control); return }
-                pressTasks[control] = Task { @MainActor [weak self] in
-                    do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+                pressTasks[control] = Task { @MainActor [weak self, timing] in
+                    do { try await timing.presentation.sleep(.seconds(remaining)) } catch { return }
                     self?.hardwarePressedControls.remove(control)
                     self?.pressTasks[control] = nil
                 }
@@ -1978,11 +1984,11 @@ final class ConsoleViewModel: ObservableObject {
             }
             hardwarePressedControls.insert(control)
             if pressed == true {
-                pressStarted[control] = ProcessInfo.processInfo.systemUptime
+                pressStarted[control] = timing.presentation.now()
                 return
             }
-            pressTasks[control] = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
+            pressTasks[control] = Task { @MainActor [weak self, timing] in
+                do { try await timing.presentation.sleep(ConsoleTiming.pulse) } catch { return }
                 self?.hardwarePressedControls.remove(control)
                 self?.pressTasks[control] = nil
             }
@@ -2036,7 +2042,7 @@ final class ConsoleViewModel: ObservableObject {
             updateBlinkTimer()
             return
         }
-        refreshBlink(slot.id, at: ProcessInfo.processInfo.systemUptime)
+        refreshBlink(slot.id, at: timing.presentation.now())
         updateBlinkTimer()
     }
 
@@ -2056,11 +2062,11 @@ final class ConsoleViewModel: ObservableObject {
         }
         guard blinking else { blinkTask?.cancel(); blinkTask = nil; return }
         guard blinkTask == nil else { return }
-        blinkTask = Task { @MainActor [weak self] in
+        blinkTask = Task { @MainActor [weak self, timing] in
             while !Task.isCancelled {
-                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                do { try await timing.presentation.sleep(ConsoleTiming.blink) } catch { return }
                 guard let self else { return }
-                let now = ProcessInfo.processInfo.systemUptime
+                let now = timing.presentation.now()
                 for id in self.agentSemantics.keys { self.refreshBlink(id, at: now) }
             }
         }

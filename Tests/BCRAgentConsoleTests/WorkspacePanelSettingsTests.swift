@@ -53,11 +53,11 @@ final class WorkspacePanelSettingsTests: XCTestCase {
     func testChoicePersistsAcrossLaunches() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let first = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let first = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertEqual(first.workspacePanels, WorkspacePanelSettings())
         XCTAssertTrue(first.setWorkspacePanel(.arm, enabled: true))
 
-        let second = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let second = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertTrue(second.workspacePanels.isEnabled(.arm))
         XCTAssertFalse(second.workspacePanels.isEnabled(.output))
         XCTAssertNil(second.notice)
@@ -70,7 +70,7 @@ final class WorkspacePanelSettingsTests: XCTestCase {
         let file = directory.appending(path: "workspace-panels.json")
         try Data(#"{"version":1,"enabled":["hologram"]}"#.utf8).write(to: file)
 
-        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores(directory), startsMIDI: false, timing: .immediate)
         XCTAssertEqual(model.workspacePanels, WorkspacePanelSettings())
         XCTAssertEqual(model.notice?.level, .error)
         XCTAssertTrue(model.notice?.text
@@ -94,7 +94,7 @@ final class ConfigurationPresetTests: XCTestCase {
     func testFreshInstallOpensNeutralStarterAndExampleIsLoadedExplicitly() throws {
         let stores = stores()
         defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, timing: .immediate)
         XCTAssertEqual(model.configuration, .starter())
         XCTAssertNil(model.configuration.parameter("arm.j1"))
         // Without a toggle parameter, output refuses to start and says why.
@@ -116,12 +116,12 @@ final class ConfigurationPresetTests: XCTestCase {
     func testSavedConfigurationWinsOverTheInitialPreset() throws {
         let stores = stores()
         defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
-        let first = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm)
+        let first = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm, timing: .immediate)
         XCTAssertEqual(first.configuration, .robotArmDemo())
         first.createParameter()
         let saved = first.configuration
 
-        let second = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let second = ConsoleViewModel(stores: stores, startsMIDI: false, timing: .immediate)
         XCTAssertEqual(second.configuration, saved)
     }
 }

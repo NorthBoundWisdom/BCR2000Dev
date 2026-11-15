@@ -38,7 +38,7 @@ final class MIDIInitializationTests: XCTestCase {
     func testPendingSystemStartupDoesNotHoldTheConsoleAndDoesNotRestartOnPortSelection() async throws {
         let device = PendingStartupMIDI()
         let model = ConsoleViewModel(stores: .temporary(), midiService: device,
-                                     initialPreset: .robotArm, automaticallyAdvancesMock: false)
+                                     initialPreset: .robotArm, automaticallyAdvancesMock: false, timing: .immediate)
         XCTAssertTrue(model.startingMIDI)
         // Begun synchronously during init, before the window's first layout frees the main actor.
         XCTAssertEqual(device.begunStartups, 1)
@@ -58,7 +58,12 @@ final class MIDIInitializationTests: XCTestCase {
 
     func testAsyncStartupFailureIsVisibleAndLeavesMockUsable() async throws {
         let device = PendingStartupMIDI()
-        let model = ConsoleViewModel(stores: .temporary(), midiService: device, automaticallyAdvancesMock: false)
+        let model = ConsoleViewModel(
+            stores: .temporary(),
+            midiService: device,
+            automaticallyAdvancesMock: false,
+            timing: .immediate
+        )
         try await waitUntil { device.startup != nil }
         device.startup?.resume(throwing: MIDIStartupError.noReply); device.startup = nil
         try await waitUntil { !model.startingMIDI }

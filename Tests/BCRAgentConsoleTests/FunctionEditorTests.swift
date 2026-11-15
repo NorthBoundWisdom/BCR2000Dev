@@ -10,7 +10,7 @@ final class FunctionEditorTests: XCTestCase {
     func testCycleTextValidationKeepsExistingAssignmentOnBadInput() throws {
         let stores = ConsoleStores.temporary()
         defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm, timing: .immediate)
         let control = BCRControlID.userButton(1)
         let before = model.configuration
         model.setCycleValues("0, not-a-number", parameter: "arm.j1", for: control)
@@ -29,7 +29,7 @@ final class FunctionEditorTests: XCTestCase {
     func testBulkModelReportsStalePreviewAndCurrentValuesSurviveSuccess() throws {
         let stores = ConsoleStores.temporary()
         defer { try? FileManager.default.removeItem(at: stores.configuration.fileURL.deletingLastPathComponent()) }
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, initialPreset: .robotArm, timing: .immediate)
         let plan = try XCTUnwrap(model.bulkAssignmentPlan(
             section: .encoder,
             row: 1,

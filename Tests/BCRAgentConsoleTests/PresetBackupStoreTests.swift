@@ -141,7 +141,7 @@ final class PresetBackupStoreTests: XCTestCase {
                                        history: [point])
         }
         try store.save(point)
-        let model = ConsoleViewModel(stores: stores, startsMIDI: false)
+        let model = ConsoleViewModel(stores: stores, startsMIDI: false, timing: .immediate)
         let saved = try XCTUnwrap(store.load())
         XCTAssertEqual(saved, model.presetRestorePoint)
         XCTAssertEqual(saved.history?.map(\.backupFile), ["4.syx", "5.syx", "6.syx", "7.syx"])

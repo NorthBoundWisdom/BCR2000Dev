@@ -83,7 +83,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         let fixture = try BCLFixtures.encoderPreset(name: "Safety")
         try stores.hardwareMap.save(fixture.hardwareMap)
         let device = RestoreSafetyDevice(fixture.dump)
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         model.selectSource(.hardware)
         if aligned { try await align(model) }
         return (model, device, stores, root)
@@ -416,7 +416,12 @@ final class PresetRestoreSafetyTests: XCTestCase {
         model.dismissPresetAlignment()
 
         // 2026-11-14 on hardware: after an app restart the restore wrote the original back but showed ----.
-        let restarted = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let restarted = ConsoleViewModel(
+            stores: stores,
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         restarted.selectSource(.hardware)
         try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayText, "P- 1")
@@ -453,7 +458,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
         try await align(model)
         let restartedDevice = RestoreSafetyDevice(device.preset)
         restartedDevice.memory = device.memory
-        let restarted = ConsoleViewModel(stores: stores, midiService: restartedDevice)
+        let restarted = ConsoleViewModel(stores: stores, midiService: restartedDevice, timing: .immediate)
         restarted.selectSource(.hardware)
         try await restarted.waitForBackgroundWork()
         XCTAssertEqual(restarted.displayContent, .unknown)
@@ -484,7 +489,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
                                         acknowledgedLines: 0, history: [previous])
         let store = JSONFileStore<PresetRestorePoint>(fileURL: root.appending(path: "preset-alignment-restore.json"))
         try store.save(broken)
-        let reopened = ConsoleViewModel(stores: stores, midiService: device)
+        let reopened = ConsoleViewModel(stores: stores, midiService: device, timing: .immediate)
         reopened.selectSource(.hardware)
         XCTAssertFalse(reopened.canRestorePreset)
         XCTAssertTrue(reopened.canDiscardPresetRestore)
@@ -535,7 +540,12 @@ final class PresetRestoreSafetyTests: XCTestCase {
                 hardwareMap: original.hardwareMap,
                 createdAt: original.createdAt
             ))
-        let reopened = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let reopened = ConsoleViewModel(
+            stores: stores,
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         reopened.selectSource(.hardware)
         let count = device.batches.count
         XCTAssertNotNil(reopened.presetRestorePoint)

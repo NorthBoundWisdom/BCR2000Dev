@@ -18,6 +18,7 @@ final class WebSocketParameterAdapter: MonotonicOutputTransport {
     private let wallClock: @Sendable () -> Date
     private var producer: Task<Void, Never>?
     private var incoming: AsyncThrowingStream<OutputReceivedBytes, any Error>.Continuation?
+    private let time: HostTime
     private let rosbridge: Bool
     private let queueLimit: Int
     private let receiveCapacity: Int
@@ -33,8 +34,10 @@ final class WebSocketParameterAdapter: MonotonicOutputTransport {
     init(rosbridge: Bool = false, queueLimit: Int = 64, receiveCapacity: Int = 64,
          writeMessage: (@MainActor (URLSessionWebSocketTask, String) async throws -> Void)? = nil,
          monotonic: @escaping @Sendable () -> Double = { ProcessInfo.processInfo.systemUptime },
-         wallClock: @escaping @Sendable () -> Date = { .now })
+         wallClock: @escaping @Sendable () -> Date = { .now },
+         time: HostTime = .live)
     {
+        self.time = time
         self.monotonic = monotonic; self.wallClock = wallClock
         self.rosbridge = rosbridge
         self.queueLimit = queueLimit; self.receiveCapacity = receiveCapacity
@@ -241,10 +244,10 @@ final class WebSocketParameterAdapter: MonotonicOutputTransport {
             session?.invalidateAndCancel()
             return
         }
-        let rosbridge = rosbridge
+        let rosbridge = rosbridge, time = time
         Task {
             let timeout = Task {
-                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                do { try await time.sleep(ConsoleTiming.webSocketPoll) } catch { return }
                 socket.cancel(with: .goingAway, reason: nil)
                 session?.invalidateAndCancel()
             }

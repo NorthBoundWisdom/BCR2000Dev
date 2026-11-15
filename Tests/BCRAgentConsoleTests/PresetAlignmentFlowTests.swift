@@ -42,7 +42,7 @@ final class PresetAlignmentFlowTests: XCTestCase {
         try stores.hardwareMap.save(fixture.hardwareMap)
         let device = PresetDevice(preset: fixture.dump)
         device.failAfter = failAfter
-        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let model = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm, timing: .immediate)
         model.selectSource(.hardware)
         return (model, device, directory)
     }
@@ -107,7 +107,12 @@ final class PresetAlignmentFlowTests: XCTestCase {
         // A new app instance on the same profile still knows what to restore.
         let stores = ConsoleStores(hardwareMap: JSONFileStore(fileURL: directory.appending(path: "map.json")),
                                    configuration: JSONFileStore(fileURL: directory.appending(path: "config.json")))
-        let reopened = ConsoleViewModel(stores: stores, midiService: device, initialPreset: .robotArm)
+        let reopened = ConsoleViewModel(
+            stores: stores,
+            midiService: device,
+            initialPreset: .robotArm,
+            timing: .immediate
+        )
         reopened.selectSource(.hardware)
         XCTAssertTrue(reopened.canRestorePreset)
         reopened.restorePresetBeforeAlignment()

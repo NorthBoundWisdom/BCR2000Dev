@@ -35,7 +35,7 @@ final class AgentLEDBlinkTests: XCTestCase {
             connectedDestination: "BCR2000 Port 1"
         ))
         let model = ConsoleViewModel(stores: stores, midiService: midi, initialPreset: .robotArm,
-                                     automaticallyAdvancesMock: false)
+                                     automaticallyAdvancesMock: false, timing: .immediate)
         model.selectSource(.hardware)
         return (model, midi, directory)
     }
@@ -68,6 +68,7 @@ final class AgentLEDBlinkTests: XCTestCase {
             )),
             initialPreset: .robotArm,
             automaticallyAdvancesMock: false
+            , timing: .immediate
         )
         XCTAssertFalse(reopened.blinksAgentLEDs)
     }
