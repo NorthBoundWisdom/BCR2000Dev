@@ -17,11 +17,21 @@ from pathlib import Path
 import secrets
 import selectors
 import socket
+import socketserver
 import subprocess
 import sys
 import threading
 import time
 from urllib.parse import urlsplit
+
+
+class _LoopbackHTTPServer(ThreadingHTTPServer):
+    """HTTPServer.server_bind resolves its host with socket.getfqdn(), a reverse DNS lookup that
+    stalls for about 35 s on hosted macOS runners. The name is only used in logs; keep the IP."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 # Read-only historical delivery inputs. Missing archives are explicit CI skips; altered archives fail.
@@ -766,8 +776,7 @@ def main():
                 self.wfile.write(body)
                 connection.close()
 
-        steps = {"start": time.monotonic()}
-        proxy = ThreadingHTTPServer(("127.0.0.1", 0), DropReply)
+        proxy = _LoopbackHTTPServer(("127.0.0.1", 0), DropReply)
         thread = threading.Thread(target=proxy.serve_forever, daemon=True)
         thread.start()
         try:
@@ -777,25 +786,13 @@ def main():
                 "transport.b",
                 protocol="2026-07-28",
             )
-            steps["proxy_ready"] = time.monotonic()
             client.discover()
-            steps["discover"] = time.monotonic()
             rejected(lambda: client.input("pushEncoder.1.1", "scalar", 127), "transport_unknown")
-            steps["dropped_input"] = time.monotonic()
             # A later read reconciles the known accepted result; it never resends the request.
             snapshot = replacement.client.snapshot()
-            steps["reconcile"] = time.monotonic()
             assert snapshot["inputs"]["pushEncoder.1.1"] == 127 and snapshot["latest_sequence"] == "1"
             assert counts["input"] == 1
-            marks = list(steps.items())
-            step_s = {name: round(at - marks[index][1], 3) for index, (name, at) in enumerate(marks[1:])}
-            print("  lost_response steps:", json.dumps(step_s), flush=True)
-            passed(
-                "lost_response_after_acceptance_is_unknown_and_never_replayed",
-                provider_writes=1,
-                proxy_requests=1,
-                step_s=step_s,
-            )
+            passed("lost_response_after_acceptance_is_unknown_and_never_replayed", provider_writes=1, proxy_requests=1)
         finally:
             proxy.shutdown()
             proxy.server_close()

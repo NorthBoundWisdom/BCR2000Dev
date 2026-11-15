@@ -6,6 +6,16 @@ import unittest
 from unittest.mock import patch
 
 from bcr_provider import Client, ProviderError
+import socketserver
+
+
+class _LoopbackHTTPServer(ThreadingHTTPServer):
+    """HTTPServer.server_bind resolves its host with socket.getfqdn(), a reverse DNS lookup that
+    stalls for about 35 s on hosted macOS runners. The name is only used in logs; keep the IP."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 
 TOKEN = "f" * 64
@@ -58,7 +68,7 @@ class ClientTests(unittest.TestCase):
     def setUp(self):
         Handler.mode = "success"
         Handler.requests = 0
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = _LoopbackHTTPServer(("127.0.0.1", 0), Handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_port}/mcp"
