@@ -445,11 +445,12 @@ SwiftPM parallel xunit 没有把这个既有 skip 写成 `<skipped>`，所以其
 - 超时包含构建/发现阶段，沿用原 15 分钟总期限；原生进程及其同组 fixture 子进程在结束/超时时清理。
 - 日志、逐例 xunit、plan.json（全部发现项及批次）和 timing.json（用例/批次进程/墙钟）全部保留。
 - 仅支持原生 XCTest；未来增加 Swift Testing 时未知发现格式会明确失败，不能静默漏跑。
-- 原 `swift test --parallel --num-workers ... --xunit-output ...` 入口完整保留；
-  `BCR_TEST_EXECUTION=case python3 configs/macos_workflow.py test` 可显式运行它。
+- 初版曾保留 `swift test --parallel --num-workers ... --xunit-output ...` 供对照；
+  G8已移除该逐例实现，`BCR_TEST_EXECUTION=case`现在明确拒绝，只保留native batch路径。
 
-原有 `test_test_summary.py` 仅在 fixture 环境明确选取 case 入口，继续验证原有逐例命令、flags、
-失败/漏模块/缺报告和超时行为；全部断言保留。新增 10 个 runner 回归测试和 1 个计时源测试。
+初版 `test_test_summary.py` 曾在fixture中选case入口；G8将其5个用途迁到同一native执行路径，
+逐例CLI特定flags断言改为等强的worker/批次plan/完整case库存断言，失败、漏结果、模块和超时
+诊断覆盖继续保留，具体对应见batch-runner-convergence.md。初版另增10个runner回归测试和1个计时源测试。
 BuildWorkflow 总数从 113 增至 124，全部通过。真实子进程 fixture 覆盖：完整清单、native failure
 但进程 exit 0、漏 start/finish、重复/额外结果、非零退出、保留 skip、超时清理 fixture 后代。
 

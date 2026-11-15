@@ -25,6 +25,8 @@ for identifier in options["cases"] + options.get("extra", []):
         continue
     if identifier != options.get("omit_start"):
         print(f"Test Case '-[{owner} {method}]' started.", flush=True)
+    if identifier == options.get("hang_case"):
+        time.sleep(3600)
     if identifier == options.get("omit_finish"):
         continue
     status = options.get("status", "passed")

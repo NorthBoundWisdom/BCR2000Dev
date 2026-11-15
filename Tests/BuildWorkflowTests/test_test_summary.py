@@ -73,13 +73,23 @@ class XunitSummaryTests(unittest.TestCase):
 
 
 class ParallelRunnerTests(unittest.TestCase):
-    def fake_swift(self, root, cases, **options):
-        executable = root / "swift"
-        executable.write_text(
-            "#!" + sys.executable + "\n" + Path(__file__).with_name("fake_test_runner.py").read_text()
-        )
-        executable.chmod(0o755)
-        (root / "fake-runner.json").write_text(json.dumps({"cases": cases, **options}))
+    def fake_swift(self, root, cases, modules, **options):
+        fixture = Path(__file__).with_name("fake_test_runner.py").read_text()
+        for name in ("swift", "xcrun"):
+            executable = root / name
+            executable.write_text("#!" + sys.executable + "\n" + fixture)
+            executable.chmod(0o755)
+        native = root / "native-xctest"
+        native.write_text("#!" + sys.executable + "\n" + Path(__file__).with_name("fake_native_xctest.py").read_text())
+        native.chmod(0o755)
+        for name in modules:
+            (root / (name + ".xctest")).mkdir()
+        translated = dict(options)
+        if translated.pop("fail_module", None):
+            translated["status"] = "failed"
+        if translated.pop("omit_report", False):
+            translated["omit_finish"] = cases[0]
+        (root / "fixture.json").write_text(json.dumps({"cases": cases, **translated}))
 
     def run_fake_modules(self, root, modules, cases, *, required_modules=frozenset(), workers="3", **options):
         (root / "Package.swift").write_text(
@@ -87,7 +97,7 @@ class ParallelRunnerTests(unittest.TestCase):
             + ",".join('.testTarget(name: "' + name + '")' for name in modules)
             + "])"
         )
-        self.fake_swift(root, cases, **options)
+        self.fake_swift(root, cases, modules, **options)
         output = io.StringIO()
         with (
             patch.object(macos_workflow, "REPO_ROOT", root),
@@ -95,33 +105,37 @@ class ParallelRunnerTests(unittest.TestCase):
             patch.object(macos_workflow, "REQUIRED_TEST_MODULES", required_modules),
             patch.dict(
                 "os.environ",
-                {"PATH": str(root) + ":/usr/bin:/bin", "BCR_TEST_WORKERS": workers, "BCR_TEST_EXECUTION": "case"},
+                {"PATH": str(root) + ":/usr/bin:/bin", "BCR_TEST_WORKERS": workers, "BCR_TEST_EXECUTION": "batch"},
             ),
             contextlib.redirect_stdout(output),
         ):
             macos_workflow.main(["test"])
         return output.getvalue()
 
-    def test_runner_invokes_one_parallel_swift_test_with_an_xunit_report(self):
+    def test_runner_uses_one_discovery_and_bounded_native_batches_with_xunit(self):
         cases = ["First.Sample/testOne", "First.Sample/testTwo", "Last.Sample/testThree"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = self.run_fake_modules(root, ["First", "Last"], cases)
             calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][calls[0].index("--num-workers") + 1], "3")
-            self.assertIn("--parallel", calls[0])
+            self.assertEqual(len([row for row in calls if row[0:2] == ["swift", "test"] and row[-1] == "list"]), 1)
+            plan = json.loads(next((root / "build/test-runs").glob("run-*/plan.json")).read_text())
+            self.assertEqual(plan["workers"], 3)
+            self.assertCountEqual(plan["cases"], cases)
+            self.assertLessEqual(len(plan["batches"]), 6)
+            native_calls = [json.loads(row) for row in (root / "calls.jsonl").read_text().splitlines()]
+            self.assertEqual(len(native_calls), len(plan["batches"]))
             self.assertIn("Total: 3 tests, 0 failures; PASS", output)
             self.assertTrue(list((root / "build/test-runs").glob("run-*/swift-test.log")))
 
-    def test_failure_nonzero_exit_missing_report_and_missing_module_fail_the_run(self):
+    def test_failure_nonzero_exit_missing_native_results_and_missing_module_fail_the_run(self):
         cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
         for options in [{"fail_module": "First"}, {"exit_code": 7}, {"omit_report": True}]:
             with self.subTest(options=options), tempfile.TemporaryDirectory() as directory:
                 with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
                     self.run_fake_modules(Path(directory), ["First", "Last"], cases, **options)
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
+            with self.assertRaisesRegex(RuntimeError, "Discovered modules differ"):
                 self.run_fake_modules(Path(directory), ["First", "Last"], cases[:1])
 
     def test_required_module_missing_from_the_manifest_is_fatal(self):
@@ -135,16 +149,20 @@ class ParallelRunnerTests(unittest.TestCase):
                     required_modules=macos_workflow.REQUIRED_TEST_MODULES,
                 )
 
-    def test_a_hung_test_is_killed_and_named_among_the_last_started(self):
+    def test_a_hung_native_batch_is_killed_and_missing_case_is_named(self):
         cases = ["First.Sample/testOne", "First.Sample/testHangs"]
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(macos_workflow, "TEST_TIMEOUT_S", 1),
         ):
-            with self.assertRaisesRegex(RuntimeError, r"exceeded 1s; last started: .*First.Sample/testHangs"):
+            with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
                 self.run_fake_modules(
                     Path(directory), ["First"], cases, hang_case="First.Sample/testHangs", workers="1"
                 )
+            run = next((Path(directory) / "build/test-runs").glob("run-*"))
+            self.assertIn("First.Sample/testHangs", (run / "xunit.xml").read_text())
+            self.assertIn("exceeded suite timeout 1s", (run / "xunit.xml").read_text())
+            self.assertIn("testHangs", (run / "swift-test.log").read_text())
 
     def test_invalid_worker_override_is_rejected(self):
         with patch.dict("os.environ", {"BCR_TEST_WORKERS": "0"}), self.assertRaises(ValueError):

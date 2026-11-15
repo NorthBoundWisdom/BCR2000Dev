@@ -15,7 +15,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from xml.etree import ElementTree
 
@@ -119,71 +118,10 @@ def test_workers() -> int:
     return max(1, os.cpu_count() or 1)
 
 
-def _run_case_tests(command: list[str | Path]) -> None:
-    """One parallel `swift test` run, streamed to a kept log and verified from its xunit reports."""
-    manifest = (REPO_ROOT / "Package.swift").read_text()
-    modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', manifest)
-    if not modules or not REQUIRED_TEST_MODULES <= set(modules):
-        raise RuntimeError("Swift test bundle verification failed: required test module is missing")
-    runs = REPO_ROOT / "build/test-runs"
-    runs.mkdir(parents=True, exist_ok=True)
-    run = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
-    log_path, xunit = run / "swift-test.log", run / "xunit.xml"
-    workers = test_workers()
-    command = [str(part) for part in command] + [
-        "--parallel",
-        "--num-workers",
-        str(workers),
-        "--xunit-output",
-        str(xunit),
-    ]
-    print(">>", " ".join(command), flush=True)
-    started_cases: list[str] = []
-    timed_out = threading.Event()
-    started = time.monotonic()
-    with (
-        log_path.open("w") as log,
-        subprocess.Popen(
-            command, cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-        ) as process,
-    ):
-
-        def expire() -> None:
-            timed_out.set()
-            process.kill()
-
-        watchdog = threading.Timer(TEST_TIMEOUT_S, expire)
-        watchdog.start()
-        try:
-            for line in process.stdout:
-                print(line, end="", flush=True)
-                log.write(line)
-                if case := re.match(r"\[\d+/\d+\] Testing (\S+)", line):
-                    started_cases.append(case[1])
-            returncode = process.wait()
-        finally:
-            watchdog.cancel()
-    elapsed = time.monotonic() - started
-    print(f"Test log: {log_path} ({elapsed:.1f}s, {workers} workers)", flush=True)
-    if timed_out.is_set():
-        # Parallel output reports starts only; the hung case is among the last ones started.
-        suspects = ", ".join(started_cases[-workers:]) or "unknown"
-        raise RuntimeError(
-            f"Swift test bundle verification failed: exceeded {TEST_TIMEOUT_S}s; last started: {suspects}"
-        )
-    # Swift Testing writes its own report next to the XCTest one when it has tests.
-    reports = [path for path in (xunit, run / "xunit-swift-testing.xml") if path.is_file()]
-    if not summarize_xunit(reports, modules, returncode):
-        raise RuntimeError(f"Swift test bundle verification failed; see {log_path}")
-
-
 def _run_tests(command: list[str | Path]) -> None:
     mode = os.environ.get("BCR_TEST_EXECUTION", "batch")
-    if mode == "case":
-        _run_case_tests(command)
-        return
     if mode != "batch":
-        raise ValueError("BCR_TEST_EXECUTION must be batch or case")
+        raise ValueError("BCR_TEST_EXECUTION must be batch; the legacy case runner was removed")
     from configs.xctest_runner import run
 
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', (REPO_ROOT / "Package.swift").read_text())

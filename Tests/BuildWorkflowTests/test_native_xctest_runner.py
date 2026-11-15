@@ -70,25 +70,23 @@ class NativeInventoryTests(unittest.TestCase):
                 patch.object(macos_workflow, "REQUIRED_TEST_MODULES", frozenset()),
                 patch.object(macos_workflow, "test_workers", return_value=2),
                 patch.object(xctest_runner, "run", return_value=(report, 0)) as run,
-                patch.object(macos_workflow, "_run_case_tests") as legacy,
                 contextlib.redirect_stdout(io.StringIO()) as output,
             ):
                 macos_workflow._run_tests(["swift", "test"])
             run.assert_called_once()
             self.assertEqual(run.call_args.args[1], ["First", "Last"])
             self.assertEqual(run.call_args.args[-2], 2)
-            legacy.assert_not_called()
+            self.assertFalse(hasattr(macos_workflow, "_run_case_tests"))
             self.assertIn("Total: 2 tests, 0 failures; PASS", output.getvalue())
 
-    def test_legacy_backend_remains_explicit_and_invalid_modes_fail(self):
-        with (
-            patch.dict(os.environ, {"BCR_TEST_EXECUTION": "case"}),
-            patch.object(macos_workflow, "_run_case_tests") as run,
-        ):
-            macos_workflow._run_tests(["swift", "test"])
-            run.assert_called_once_with(["swift", "test"])
-        with patch.dict(os.environ, {"BCR_TEST_EXECUTION": "unknown"}), self.assertRaises(ValueError):
-            macos_workflow._run_tests(["swift", "test"])
+    def test_removed_case_backend_and_invalid_modes_fail(self):
+        for mode in ("case", "unknown"):
+            with (
+                self.subTest(mode=mode),
+                patch.dict(os.environ, {"BCR_TEST_EXECUTION": mode}),
+                self.assertRaises(ValueError),
+            ):
+                macos_workflow._run_tests(["swift", "test"])
 
 
 class NativeExecutionTests(unittest.TestCase):
