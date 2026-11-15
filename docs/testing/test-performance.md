@@ -1,5 +1,10 @@
 # 测试耗时优化记录
 
+> 续作更新：新默认 runner 的 8 worker 墙钟中位数 8.6 s（原始基线 23.6 s），
+> 1 worker 墙钟 24.7 s、原生用例合计 20.569 s；完整 695 例在 3×默认、2、1 worker 均为 0 失败。
+> 下方 P0–P4 及“未完成”是当时的历史结论，后续结果见 P6/P5；原直接 SwiftPM 逐例命令保留对照。
+> 上一轮 SurfacePlugins“150 例全部通过”的漏检已在本轮发现并更正，详见末尾审计更正。
+
 ## P0 基线
 
 测量命令：`swift test --build-path build/swiftpm --parallel --num-workers 1 --xunit-output build/timings/xunit.xml`。
@@ -418,7 +423,7 @@ SwiftPM parallel xunit 没有把这个既有 skip 写成 `<skipped>`，所以其
 - SurfacePlugins P3 `bd61126225885a12bc162063309292ec5d404945` — `perf: reuse immutable robot chassis and output tool descriptors`
 - XTouch：无提交、无工作区改动。
 
-SurfacePlugins 验证：Swift 150 例、Python SDK 94 例、Pipe 10 例均通过；`configs/check_boundaries.py`
+上一轮报告曾写“SurfacePlugins Swift 150 例、Python SDK 94 例、Pipe 10 例均通过”；其中 Swift 项有漏检，见末尾更正。`configs/check_boundaries.py`
 和 `git diff --check` 通过。各仓库开工 status/fetch 完成，始终在各自 main，没有推送。
 
 ## 继续优化：原生 XCTest 批量 runner（P6，2026-11-15）
@@ -464,3 +469,64 @@ SwiftPM per-case process 时间。旧逐例模式/原始直接 SwiftPM 命令仍
 
 真实硬件 opt-in 仍为既有的一个 skip；新 xunit 正确保留它，没有新增 Swift skip 或隐藏硬件状态。
 原有 3 个超 1 s 实时 IO/soak 例外仍保留。
+
+## P5 次要仓库测量与处理
+
+### SurfacePlugins：明确的测试替身关闭热点已修复
+
+`python3 -B -m cProfile -o build/timings/python-before.prof -m unittest discover -s clients/python/tests`
+测得 94 例 12.983 s。其中 22 次 `socketserver.shutdown` 累计 11.553 s，等待原 0.5 s poll。
+这是测试专用 `surface_control_testing` 的 HTTP fixture，不是 runtime SDK，也不代表实体硬件。
+
+`b7d9d41` 保留 `serve_forever(poll_interval=0.5)` 默认值和原 service_actions cadence，
+通过本地 socketpair 唤醒 selector，再等待真实 server-finished Event；没有降低轮询间隔或等待常量。
+HTTP handler、工具/权限/状态断言、SDK API 及消息保持。新增三例：
+
+- `test_default_service_poll_interval_remains_half_a_second`：默认仍为 0.5 s。
+- `test_shutdown_wakes_an_already_waiting_selector_without_polling_time`：刻意把 poll 扩大到 60 s，
+  观察进入 select 后发出 close，验证由 readiness 退出；2 s 只是防挂死 deadline。
+  失败时的 socket 清理不会改变已记录的失败结果。
+- `test_close_joins_the_server_and_a_fresh_host_can_restart`：两轮 start/close 验证 join、重启和幂等关闭。
+
+97 例连续三遍 0 失败：1.254 / 1.255 / 1.253 s；Pipe 10 例 0 失败，边界/diff 检查通过。
+host 依赖锁未再升级；本轮 test-only Python 优化独立提交到 SurfacePlugins main。
+
+### XTouch：已测量，不改
+
+测量 revision `6b87473`，工作区保持干净，没有提交。
+
+- `swift test --jobs 2`：第一次含重新编译 55.50 s（Build 44.91 s），缓存后命令墙钟 10.07 s（Build 0.62 s）。
+  四个包各 4/173/127/23 例通过；实际测试包耗时约 0.043/4.656/1.942/0.017 s。
+- `python3 -B -m cProfile -o build/timings/python-integration-before.prof -m unittest discover -s Tests/SimulatorIntegration`：
+  48 例 27.064 s，0 失败，既有 attended hardware 1 项 skip；运行的 hardware-service 用本地 fake 或 device-access-disabled。
+- 最慢项是 9.111 s 的三轮 slow-drip lease expiry 和 3.017 s 的总读取 deadline/recovery：
+  它们明确断言实际 reader 跨过 hold deadline 并被自己的约 3 s 总预算切断。没有通过缩小期限或合并三轮来省时。
+- 其他固定等待分别服务于实际进程时钟过期、write-budget window 与 reconnect backoff；
+  没有发现类似 SurfacePlugins 那种无业务意义的统一关闭轮询热点。
+- 本阶段不为次要仓库扩展跨进程测试时钟协议或改测试覆盖性质；真实 MIDI/attended 测试未运行。
+
+## 审计更正与续作提交
+
+上一轮 `bd61126` 新增的 `ImmutableDescriptorTests` 用 `ParameterOutputPlugin(limits: [])` 构造 fixture，
+但空 limits 本来就非法，导致测试在进入描述符断言前抛错。上一轮报告把该套件写成 150 例全部通过不准确：
+原日志实际是 149 例通过、1 例 fixture setup 失败。本轮完整复核发现并明确记录，没有以重跑掩盖它。
+
+`617d08b` 把 fixture 改为一个合法 axis（0...1，maximumChange/maximumVelocity 均 1），
+代码注释说明为何需要合法 gate；原全部断言、两实例和 start/stop 操作不变。
+随后全量 Swift 命令 exit 0，逐例核实 150 个 completed 结果均为 passed。
+BCR 的 695 例始终通过；依赖包的测试目标不会被 host 的 `swift test` 自动运行，因此单独验证不能省略。
+
+新增本地提交：
+
+- BCR `c691bf3` — `perf(test): batch native XCTest processes with exact case accounting`
+- SurfacePlugins `617d08b` — `test: use valid output limits in descriptor lifecycle fixture`
+- SurfacePlugins `b7d9d41` — `perf(test): wake loopback fixtures on shutdown without shortening timers`
+- XTouch：无提交。
+
+续作最终检查：BCR 124 个 workflow Python 用例、6 个客户端 Python 用例、20 个模块边界、
+格式/命令校验/diff、MCP 双协议离屏验收和 Provider 打包/transport 检查均通过。
+transport 仍是原有 17 项通过、2 个历史 SDK archive 缺失项 skip；实机 opt-in 未运行。
+旧逐例入口显式运行也得到 695 例、0 失败（16.8 s，8 worker），证明该对照入口仍完整可用。
+
+本轮没有改 Swift 生产计时、Swift 业务测试断言或测试循环常量；没有删测试、放宽断言或新增重试/预期失败/Swift skip。
+用户确认前轮 push 由其本人执行；续作仅本地提交，没有 push/tag/release、branch/worktree、stash/reset。
