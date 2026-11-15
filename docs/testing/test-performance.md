@@ -184,3 +184,22 @@ TestOnlyHardwareDevice 的 20 ms 软件交付等待；IntegrationMIDIFixture 的
 runtime 的 monotonic 注入点设为同一个手动时间，每次推进 0.11 s，再由原有计数条件等待 IO。
 真实堵塞 IO 的两例继续使用真实 monotonic。原生离屏 connection UI（默认 fixture 节奏）已通过
 连接 decline/read、preview、write/readback、restore、discard 确认/取消；桌面无前台抢占。
+
+## P3 计算热点
+
+`sample`（1 ms 采样、1 s）保存在 ignored `build/timings/{provider,output}.sample.txt`。
+Provider 栈主要落在 RemoteRegistry.validateReplacement 反复生成不可变工具 Schema、
+ProviderEventJournal.append 构造 ISO8601 formatter；Output 10000 tick 栈也命中这两处。
+
+- SurfacePlugins 的 Robot/Chassis/Output binding 缓存不可变工具描述，replacement 的完整相等校验继续执行；
+  不缓存运行状态，不改变工具名、Schema 或错误。`ImmutableDescriptorTests.testDescriptorsDoNotCaptureInstanceOrLifecycleState`
+  验证跨实例/生命周期声明一致，错 instance 路由仍拒绝。
+- BCR journal 在 MainActor 内复用默认 ISO8601 formatter。新测试
+  `ConsoleContractTests.testJournalRetainsDefaultUTCFormatAndFreshTimestampForEachAppend` 验证 UTC 字符串、
+  每次最新墙钟、单调时间和 sequence。没有关闭 Provider 1.0 SSE 或跳过 idle 状态更新。
+- ProviderContractSchema 原先每次 definition/tool 都重读并解码完整资源；现缓存进程内不可变资源和 JSON。
+  `testCachedProviderContractMatchesPublishedResource` 对照发布的原始文件验证内容。
+- SharedSurfaceScenarioTests 缓存不变档案/身份，在 reset 后失效。每个 host 保存上一步完整观察作为下一步
+  before；每步一次 after 完整 fingerprint，并复用 snapshot 操作的结果。完整原子性比较（journal、全部
+  108 个控件、参数、Mock 输入/显示等）、fixture 驱动及全部 checks/XCTAssert 均保留。
+- 2000 idle ticks 和 10000 ready telemetry ticks 保持原规模、时长/sequence/trace/事件保持断言全部不变。

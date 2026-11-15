@@ -7,6 +7,8 @@ public final class ProviderEventJournal {
     public private(set) var sequence = 0
     public private(set) var dropped = 0
     public private(set) var source: ProviderSource
+    // Main-actor confined; default formatter options and timezone remain unchanged.
+    private let timestampFormatter = ISO8601DateFormatter()
     private let capacity: Int
     private var events: [JSONValue] = []
     private var observers: [UUID: @MainActor (JSONValue) -> Void] = [:]
@@ -33,7 +35,7 @@ public final class ProviderEventJournal {
             "schema_version": .number(1), "generation": .string(generation), "sequence": .number(sequence),
             "source": .string((source ?? self.source).rawValue), "kind": .string(kind),
             "observed_monotonic_s": .double(monotonic()),
-            "observed_at": .string(ISO8601DateFormatter().string(from: utc())), "payload": payload
+            "observed_at": .string(timestampFormatter.string(from: utc())), "payload": payload
         ])
         events.append(event)
         if events.count > capacity { events.removeFirst(events.count - capacity); dropped += 1 }

@@ -165,3 +165,28 @@ final class ConsoleContractTests: XCTestCase {
         XCTAssertFalse(events.contains { $0.objectValue?["kind"] == .string("control.input") })
     }
 }
+
+extension ConsoleContractTests {
+    func testCachedProviderContractMatchesPublishedResource() throws {
+        let url = try XCTUnwrap(ProviderResources.bundle.url(forResource: "provider.schema", withExtension: "json"))
+        let published = try Data(contentsOf: url)
+        XCTAssertEqual(ProviderContractSchema.data, published)
+        XCTAssertEqual(ProviderContractSchema.document, try JSONDecoder().decode(JSONValue.self, from: published))
+        XCTAssertEqual(ProviderContractSchema.definition("robotSnapshot"),
+                       ProviderContractSchema.document.objectValue?["$defs"]?.objectValue?["robotSnapshot"])
+    }
+
+    func testJournalRetainsDefaultUTCFormatAndFreshTimestampForEachAppend() throws {
+        final class Clock { var date = Date(timeIntervalSince1970: 0); var time = 1.0 }
+        let clock = Clock()
+        let journal = ProviderEventJournal(source: .mock, monotonic: { clock.time }, utc: { clock.date })
+        journal.append(kind: "first", payload: .number(1))
+        clock.date = Date(timeIntervalSince1970: 946684800); clock.time = 2
+        journal.append(kind: "second", payload: .number(2))
+        let entries = try XCTUnwrap(journal.snapshot().objectValue?["events"]?.arrayValue)
+        XCTAssertEqual(entries.map { $0.objectValue?["observed_at"] },
+                       [.string("1970-01-01T00:00:00Z"), .string("2000-01-01T00:00:00Z")])
+        XCTAssertEqual(entries.map { $0.objectValue?["observed_monotonic_s"] }, [.double(1), .double(2)])
+        XCTAssertEqual(entries.map { $0.objectValue?["sequence"] }, [.number(1), .number(2)])
+    }
+}
