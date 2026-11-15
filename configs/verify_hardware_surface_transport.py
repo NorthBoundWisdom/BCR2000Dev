@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Run the real provider process against a test-only device double. Never opens CoreMIDI."""
+"""Run the real provider process against a test-only device double. Never opens CoreMIDI.
+
+The double exists only in Debug builds: pass a Debug provider binary.
+"""
 
 from __future__ import annotations
 import argparse
@@ -13,6 +16,10 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# Every check below is an assert; refuse to run where they would be stripped.
+if not __debug__:
+    raise SystemExit("Run without -O: these checks rely on assert")
 
 
 def run(binary, output, sdk):

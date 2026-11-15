@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Real provider/fake-device candidate checks. No real MIDI, installation, or implicit application."""
+"""Real provider/fake-device candidate checks. No real MIDI, installation, or implicit application.
+
+The test-only device double exists only in Debug builds: pass a Debug `--binary`.
+"""
 
 from __future__ import annotations
 
@@ -17,6 +20,10 @@ import threading
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Every check below is an assert; refuse to run where they would be stripped.
+if not __debug__:
+    raise SystemExit("Run without -O: these checks rely on assert")
+
 
 def run(binary, profile_tool, source_map, request, output, sdk, diagnostics=False):
     sys.dont_write_bytecode = True
@@ -31,7 +38,8 @@ def run(binary, profile_tool, source_map, request, output, sdk, diagnostics=Fals
         capture_output=True,
         text=True,
     )
-    assert staged.returncode == 0, "Candidate staging failed"
+    # Fails closed for pulse/unknown buttons or roles absent from this map; show the tool's code.
+    assert staged.returncode == 0, "Candidate staging refused: " + (staged.stdout.strip() or "no report")
     manifest = json.loads(staged.stdout)
     assert manifest["ready"] is False and manifest["software_ready"] is True and manifest["hardware_qualified"] is False
     assert manifest["source_map_sha256"] == hashlib.sha256(before).hexdigest()
@@ -52,7 +60,8 @@ def run(binary, profile_tool, source_map, request, output, sdk, diagnostics=Fals
         capture_output=True,
         text=True,
     )
-    assert original.returncode == 3 and json.loads(original.stdout)["ready"] is False
+    # The source map may or may not already be ready; only the candidate must be (checked below).
+    assert original.returncode in (0, 3) and json.loads(original.stdout)["ready"] is (original.returncode == 0)
     offline = subprocess.run(
         [
             str(profile_tool),

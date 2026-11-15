@@ -6,9 +6,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / "build/e"
+# The tracked field tool every step runs; the plan is refused when it is missing.
+FIELD = ROOT / "tools/e_attended_field.py"
+FIELD_COMMAND = "python3 tools/e_attended_field.py"
 
 
 def main():
+    if not FIELD.is_file():
+        raise SystemExit(f"Field tool missing: {FIELD.relative_to(ROOT)}; the plan would not be executable")
     details = [
         (
             "A1",
@@ -98,7 +103,7 @@ def main():
                 id="E-B" + identifier,
                 sends_to_device=sends,
                 moves_motors="none",
-                command=f"python3 build/e/bcr/field.py {command}",
+                command=f"{FIELD_COMMAND} {command}",
                 say_before=say,
                 confirm_before="可以，人在现场、手已离开设备" if sends else None,
                 user_action=action,
@@ -111,10 +116,26 @@ def main():
     steps.insert(
         0,
         dict(
+            id="E-B00",
+            sends_to_device=False,
+            moves_motors="none",
+            command=f"{FIELD_COMMAND} prepare-map",
+            say_before="先复制学习映射到隔离目录；只读原文件，不打开MIDI。",
+            confirm_before=None,
+            user_action=None,
+            ask=None,
+            expected_answer=None,
+            auto_check="copy=build/e/bcr/hardware-map.json；original_user_mapping_modified=false；已有副本不覆盖",
+            on_fail="原映射不存在或无效：停止，不生成替代映射",
+        ),
+    )
+    steps.insert(
+        1,
+        dict(
             id="E-B0",
             sends_to_device=False,
             moves_motors="none",
-            command="python3 build/e/bcr/field.py role-readiness",
+            command=f"{FIELD_COMMAND} role-readiness",
             say_before="先只读检查四角色；不打开MIDI，不改学习映射。",
             confirm_before=None,
             user_action=None,

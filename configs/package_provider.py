@@ -25,7 +25,8 @@ def run(*args):
     return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True).strip()
 
 
-# Surface control 1.3 deliverables have exactly one source: the locked shared package.
+# Surface control deliverables (simulation contract 1.3, optional hardware 1.4, SDK 1.4.0) have
+# exactly one source: the locked shared package.
 SURFACE_CONTRACT = "1.3"
 SURFACE_SDK = "1.4.0"
 # Same root-level names as the other host's delivery, so one consumer loader fits both.
@@ -189,7 +190,11 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             cwd=output,
         )
         if staged_candidate.returncode != 0:
-            raise ValueError("Independent candidate staging failed without changing source files")
+            # Fail closed: the example roles must exist as momentary buttons/absolute axes in this map.
+            raise ValueError(
+                "Independent candidate staging failed without changing source files: "
+                + (staged_candidate.stdout.decode(errors="replace").strip() or "no report")
+            )
         checked_candidate = subprocess.run(
             [str(output / "BCRProfileTool"), "--verify-hardware-candidate", str(candidate)],
             capture_output=True,
@@ -319,6 +324,8 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
                 "mapping_revision": example_discovery["expected"]["mapping_revision"],
             },
         },
+        # The optional hardware profile ships a copy of the operator's learned map; share accordingly.
+        "contains_learned_hardware_map": hardware_discovery is not None,
         "hardware_candidates": (
             [
                 {
