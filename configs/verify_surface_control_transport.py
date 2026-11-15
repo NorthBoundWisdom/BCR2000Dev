@@ -234,6 +234,22 @@ def main():
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
     assert manifest["surface_control_contract"] == "1.3" and manifest["surface_control_sdk"] == "1.4.0"
+    # E-pre bytes are a fixed external golden, not a self-consistent newly generated manifest.
+    golden = {
+        "surface-control-software-v1.json": "e7d1fe278026778fd1c148f8d1fcfa334cbac6a3202ec01bf52594c205d80f18",
+        "surface-control-software-v1.1.json": "e94698d0ff44125648cf541498ee88219e590ff65a7829100a31fe6f31248aec",
+        "surface-control-software-v1.2.json": "0109293e0aceff6c57d0dee271511ad2a2fc1f3f87e552b34466f93c1c0dcf34",
+        "surface-control-software-v1.3.json": "fd153591d8f4815357068b36141e9dc418f2f67f787367e3f75e945283eabb85",
+    }
+    for name, wanted in golden.items():
+        assert hashlib.sha256((artifact / name).read_bytes()).hexdigest() == wanted, "Frozen fixture changed: " + name
+    described = subprocess.check_output([str(artifact / "BCRProviderService"), "--describe-surface"], cwd=args.output)
+    description_digest = hashlib.sha256(described).hexdigest()
+    assert description_digest == "f1045e601baa94787c759acc0c08e6c9b3fa293d1c0fa5de1af8e6a71e4e2681", (
+        "E-pre simulation description changed"
+    )
+    assert (artifact / "control-contract.json").read_bytes() == described
+    print("PASS E-pre raw description and four frozen fixture SHA-256 goldens", flush=True)
     sdk = artifact / "surface-control-sdk-1.4.0.zip"
     sys.path.insert(0, str(sdk))
     import surface_control
