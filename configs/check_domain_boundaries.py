@@ -101,11 +101,73 @@ PURE = {
 }
 
 
+# These are architectural roles, independent of the exact per-module allowlists above.
+# MIDI currently combines device decoding and the native transport in one target; that
+# outer target may consume the runtime but cannot be imported by the runtime or bridges.
+LAYERS = {
+    "BCRFoundation": "values",
+    **{name: "runtime" for name in PURE - {"BCRFoundation"}},
+    "BCRExamples": "runtime",
+    "BCRPluginHost": "bridge",
+    "BCRConfigurationAdapter": "bridge",
+    "BCRPersistenceAdapter": "bridge",
+    "BCRMCPAdapter": "bridge",
+    "BCRProviderMCPAdapter": "bridge",
+    "BCRCoreMIDIDriver": "device_transport",
+    "BCRHTTPTransport": "transport",
+    "BCRCodexAdapter": "transport",
+    "BCRAgentCore": "composition",  # existing compatibility export only
+    "BCRAgentConsole": "composition",
+    "BCRProviderService": "composition",
+    "BCRProfileTool": "composition",
+}
+LAYER_DEPENDENCIES = {
+    "values": {"values"},
+    "runtime": {"values", "runtime"},
+    "bridge": {"values", "runtime", "bridge"},
+    "device_transport": {"values", "runtime"},
+    "transport": {"values", "runtime", "bridge"},
+    "composition": {"values", "runtime", "bridge", "device_transport", "transport", "composition"},
+}
+IMPORTS = re.compile(
+    r"^(?:@_exported\s+)?import (?:(?:struct|enum|class|protocol|func|var|typealias) )?(\w+)",
+    re.MULTILINE,
+)
+
+
+def target_dependencies(target):
+    return {
+        entry.get("byName", entry.get("target", entry.get("product", [""])))[0]
+        for entry in target.get("dependencies", [])
+    }
+
+
+def check_layers(targets, root=ROOT):
+    """Pure checker entry point: tests can supply a temporary source tree and manifest."""
+    errors = []
+    production = {
+        name: target for name, target in targets.items() if target.get("type") != "test" and name != "BCRTestSupport"
+    }
+    for name, target in production.items():
+        if name not in LAYERS:
+            errors.append("Unclassified production module: " + name)
+            continue
+        layer = LAYERS[name]
+        for dependency in target_dependencies(target):
+            if dependency in production and LAYERS.get(dependency) not in LAYER_DEPENDENCIES[layer]:
+                errors.append(f"Layer violation: {name} ({layer}) -> {dependency} ({LAYERS.get(dependency)})")
+        for path in (root / "Sources" / name).rglob("*.swift"):
+            for imported in IMPORTS.findall(path.read_text()):
+                if imported in production and LAYERS.get(imported) not in LAYER_DEPENDENCIES[layer]:
+                    errors.append(f"Layer import violation: {path.relative_to(root)} -> {imported}")
+    return errors
+
+
 def check():
     ensure_dependency(ROOT, environ=load_build_environment(ROOT))
     package = json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=ROOT, text=True))
     targets = {target["name"]: target for target in package["targets"]}
-    errors = []
+    errors = check_layers(targets)
     for name, allowed in ALLOWED.items():
         if name not in targets:
             errors.append("Missing module: " + name)
@@ -116,7 +178,7 @@ def check():
         }
         if not dependencies <= allowed:
             errors.append(f"{name} has forbidden dependencies: {sorted(dependencies - allowed)}")
-        for path in (ROOT / "Sources" / name).glob("*.swift"):
+        for path in (ROOT / "Sources" / name).rglob("*.swift"):
             text = path.read_text()
             imports = set(
                 re.findall(
@@ -170,4 +232,6 @@ if __name__ == "__main__":
     errors = check()
     if errors:
         raise SystemExit("\n".join(errors))
-    print(f"Verified {len(ALLOWED)} module boundaries, pure domains and business-neutral provider sources")
+    print(
+        f"Verified {len(ALLOWED)} module allowlists and {len(LAYERS)} classified layer boundaries, pure domains and business-neutral provider sources"
+    )
