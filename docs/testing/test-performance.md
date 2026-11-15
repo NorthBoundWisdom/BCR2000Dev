@@ -546,3 +546,34 @@ instance/epoch、快照 expected、所有 after 身份比较及报告 epoch_chan
 本修复验证：build-tests 成功；SharedSurfaceScenarioTests 5 例 0 失败；默认 batch 全套
 696 例 0 失败、8.0 s；BuildWorkflow/客户端 Python、格式、20 模块边界、命令校验及 diff 检查通过。
 没有修改依赖锁或推送任何仓库。
+
+## Review 修复 2：排空连接确认计时器后做负向检查（2026-11-15）
+
+`testReconnectCannotRaceAnAlignmentReadThatIsStillDraining` 现在将 work/presentation 都接到
+同一 ManualHostTime。若有连接 offer 任务，先等它注册原 300 ms 的 work sleep，再推进 0.35 s。
+随后等待所有 pendingDeadlines 晚于当前时间，并通过现有 get_status 的 confirmation 状态确认
+被跟踪的 offer 任务已结束或已发布 prompt，最后才断言 source 为 mock、prompt 为 nil。
+这是必要的：advance 会先删除到期 waiter 再恢复 continuation，单查 deadline 或 Task.yield 不足以证明任务已处理。
+解除 dump 挂起之后的正向确认也显式推进同一时钟的 300 ms，原断言全部保留。
+
+自检：临时仅移除 offerHardwareConnection guard 中的 `presetSourceSwitchBlocked`，运行目标单例。
+结果为 1 例、1 个失败，恰好是 `XCTAssertNil(pendingHardwareConnection)`（出现了错误的连接确认）；
+不是超时、编译错误或无关用例失败。之后逐字恢复 ConsoleViewModel 原文件，确认其 git diff 为空，
+再构建并执行以下最终验证。没有把临时生产修改提交或推送。
+
+| 要求的验证 | 最终结果 |
+|---|---|
+| `swift build --build-path build/swiftpm --build-tests` | exit 0；Build complete 3.87 s |
+| `swift test --build-path build/swiftpm --filter "SharedSurfaceScenarioTests\|PresetRestoreSafetyTests"` | 5 + 37 = 42 例，0 失败 |
+| `python3 configs/macos_workflow.py test` 默认 batch 第 1 遍 | 696 例，0 失败；墙钟 8.4 s |
+| 同命令第 2 遍 | 696 例，0 失败；墙钟 7.6 s |
+| `BCR_TEST_WORKERS=1 python3 configs/macos_workflow.py test` | 696 例，0 失败；墙钟 24.4 s |
+| `python3 -m unittest discover -s Tests/BuildWorkflowTests` | 124 例，0 失败 |
+| `python3 configs/format_repo.py --all --check` | exit 0 |
+| `python3 configs/check_domain_boundaries.py` | 20 个模块边界通过 |
+| `git diff --check` | exit 0 |
+
+额外客户端 Python 6 例及仓库命令校验通过。全套新增的 1 例来自修复 1 的身份回归，
+既有实机 opt-in 仍为 1 个 skip，未新增 skip/重试，也未连接实机。
+两项各一个本地 Conventional Commit；不修改依赖锁、不推送任何仓库，依赖先行的推送顺序由 review 窗口负责。
+原始日志与最终各遍 xunit 路径保存在 ignored `build/timings/review-fixes/`。

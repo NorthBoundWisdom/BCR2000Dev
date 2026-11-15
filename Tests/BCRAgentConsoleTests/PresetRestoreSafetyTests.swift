@@ -145,7 +145,7 @@ final class PresetRestoreSafetyTests: XCTestCase {
     func testReconnectCannotRaceAnAlignmentReadThatIsStillDraining() async throws {
         let clock = ManualHostTime()
         let (model, device, _, root) = try await context(aligned: false,
-                                                         timing: .init(work: .immediate, presentation: clock.time))
+                                                         timing: .init(work: clock.time, presentation: clock.time))
         defer { try? FileManager.default.removeItem(at: root) }
         device.suspendsNextDump = true
         model.beginPresetAlignment()
@@ -158,16 +158,36 @@ final class PresetRestoreSafetyTests: XCTestCase {
         XCTAssertThrowsError(try model.mcp.service.onSelectSource?(.hardware))
         model.requestSource(.hardware)
         model.selectSource(.hardware)
-        // The read remains explicitly held while the injected clock crosses the 300 ms offer period.
-        await Task.yield()
+        func connectionOfferIsRunning() throws -> Bool {
+            let status = model.mcp.service.call("get_status")
+            XCTAssertFalse(status.isError)
+            let confirmation = try XCTUnwrap(status.value.objectValue?["hardwareConnection"]?
+                .objectValue?["confirmation"]?.stringValue)
+            // Pending includes the tracked offer task until it finishes, even after its sleep has
+            // been removed from the manual clock. A published prompt is asserted separately below.
+            return confirmation == "pending" && model.pendingHardwareConnection == nil
+        }
+        // If a regression starts an offer, first let it register its 300 ms work-clock sleep.
+        // With the guard intact there is no offer to register. Both timer lanes share this clock.
+        try await waitUntil("an offer to register its stabilization timer, if started") {
+            try !connectionOfferIsRunning() || clock.pendingDeadlines.contains(clock.now + 0.3)
+        }
         clock.advance(by: 0.35)
-        await Task.yield()
+        // Drain due timers AND the tracked offer continuation before the negative assertion.
+        // advance removes due waiters before resuming tasks, so the deadline check alone is insufficient.
+        try await waitUntil("due timers and the connection offer to finish while the dump is held") {
+            try clock.pendingDeadlines.allSatisfy { $0 > clock.now } && !connectionOfferIsRunning()
+        }
         XCTAssertEqual(model.source, .mock)
         XCTAssertNil(model.pendingHardwareConnection)
         device.suspendedDump?.resume(throwing: CancellationError()); device.suspendedDump = nil
         try await settle(model, failed)
         model.dismissPresetAlignment()
         model.requestSource(.hardware)
+        try await waitUntil("the unblocked connection offer to register") {
+            clock.pendingDeadlines.contains(clock.now + 0.3)
+        }
+        clock.advance(by: 0.3)
         try await waitUntil { model.pendingHardwareConnection != nil }
         XCTAssertNotNil(model.pendingHardwareConnection)
         XCTAssertTrue(device.batches.isEmpty)
