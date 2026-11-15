@@ -120,7 +120,15 @@ public actor CodexProcessSupervisor {
     private var stderrLineLimit = 128
     private var maxLineLength = 32_768
 
-    public init(maxQueuedLines: Int = 128, maxLineLength: Int = 32_768) {
+    private let restartSleep: @Sendable (Duration) async throws -> Void
+    private var terminationHandlers = 0
+    /// Awaitable through actor reads in transport tests; includes the restart decision after pipe drain.
+    var hasPendingTermination: Bool { terminationHandlers > 0 }
+
+    public init(maxQueuedLines: Int = 128, maxLineLength: Int = 32_768,
+                restartSleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) })
+    {
+        self.restartSleep = restartSleep
         self.stdoutLineLimit = max(1, maxQueuedLines)
         self.stderrLineLimit = max(1, maxQueuedLines)
         self.maxLineLength = max(1, maxLineLength)
@@ -409,6 +417,8 @@ public actor CodexProcessSupervisor {
     }
 
     private func didTerminate(_ process: Process, generation: Int) async {
+        terminationHandlers += 1
+        defer { terminationHandlers -= 1 }
         guard generation == currentGeneration else {
             return
         }
@@ -481,7 +491,7 @@ public actor CodexProcessSupervisor {
             let cap = max(0, config.autoRestartMaxDelayMs)
             delayMs = delayMs >= cap / 2 ? cap : delayMs * 2
         }
-        try? await Task.sleep(for: .milliseconds(delayMs))
+        try? await restartSleep(.milliseconds(delayMs))
 
         guard !isStopping && !isClosed, generation == currentGeneration else {
             return

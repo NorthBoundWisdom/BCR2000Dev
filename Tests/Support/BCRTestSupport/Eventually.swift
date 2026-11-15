@@ -32,3 +32,18 @@ public final class SendableCounter: @unchecked Sendable {
     public func increment() { lock.withLock { count += 1 } }
     public var value: Int { lock.withLock { count } }
 }
+
+/// Actor-isolated state variant; uses the same generous deadline and state-driven completion.
+public func waitUntilAsync(
+    _ description: String = "condition",
+    timeout: Duration = .seconds(10),
+    _ condition: @Sendable () async throws -> Bool
+) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while try await !condition() {
+        guard ContinuousClock.now < deadline else {
+            throw WaitTimeout(description: "Timed out after \(timeout) waiting for \(description)")
+        }
+        try await Task.sleep(for: .milliseconds(2))
+    }
+}

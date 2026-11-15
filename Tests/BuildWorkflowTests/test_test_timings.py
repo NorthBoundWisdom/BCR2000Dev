@@ -33,3 +33,20 @@ class TestTimingsTests(unittest.TestCase):
             report = Path(directory) / "empty.xml"
             report.write_text("<testsuite/>")
             self.assertEqual(timings.summarize([report])["median"], 0)
+
+
+class NativeTimingTests(unittest.TestCase):
+    def test_native_durations_are_separate_from_process_duration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "test.log"
+            log.write_text(
+                "Test Case '-[Module.Fast testOK]' passed (0.003 seconds).\n"
+                "Test Case '-[Module.Fast testHardware]' skipped (0.001 seconds).\n"
+                "Test Case '-[Module.Slow testError]' failed (0.250 seconds).\n"
+            )
+            result = timings.summarize_log(log)
+        self.assertEqual(result["count"], 3)
+        self.assertEqual(result["failures"], 1)
+        self.assertEqual(result["skipped"], 1)
+        self.assertAlmostEqual(result["seconds"], 0.254)
+        self.assertEqual(result["median"], 0.003)

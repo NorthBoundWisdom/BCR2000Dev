@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import statistics
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -22,6 +23,10 @@ def summarize(paths):
                     "skipped": case.find("skipped") is not None,
                 }
             )
+    return aggregate(cases)
+
+
+def aggregate(cases):
     groups = defaultdict(list)
     for case in cases:
         groups[case["class"]].append(case["seconds"])
@@ -40,13 +45,36 @@ def summarize(paths):
     }
 
 
+def summarize_log(path):
+    """XCTest's own per-case durations, excluding SwiftPM per-process startup overhead."""
+    pattern = re.compile(r"Test Case '-\[([^ ]+) ([^]]+)\]' (passed|failed|skipped) \(([\d.]+) seconds\)")
+    cases = [
+        {
+            "class": group,
+            "name": name,
+            "seconds": float(seconds),
+            "failed": status == "failed",
+            "skipped": status == "skipped",
+        }
+        for group, name, status, seconds in pattern.findall(path.read_text(encoding="utf-8"))
+    ]
+    if not cases:
+        raise ValueError("No completed XCTest cases in log")
+    return aggregate(cases)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("reports", type=Path, nargs="+")
+    parser.add_argument("reports", type=Path, nargs="*")
+    parser.add_argument("--xctest-log", type=Path, help="read native XCTest durations instead of SwiftPM xunit")
     parser.add_argument("--json", type=Path, help="also write the complete summary as JSON")
     parser.add_argument("--limit", type=int, default=0, help="rows per table; 0 means all")
     args = parser.parse_args()
-    result = summarize(args.reports)
+    if bool(args.reports) == bool(args.xctest_log):
+        parser.error("provide xunit reports OR --xctest-log")
+    result = summarize_log(args.xctest_log) if args.xctest_log else summarize(args.reports)
+    result["measurement"] = "xctest-inprocess" if args.xctest_log else "swiftpm-xunit"
+    print(f"Measurement: {result['measurement']}")
     print(
         f"Cases: {result['count']}  Total: {result['seconds']:.3f}s  "
         f"Median: {result['median']:.3f}s  Failures: {result['failures']}  Skipped: {result['skipped']}"

@@ -1,4 +1,5 @@
 import BCRAgentCore
+import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -158,7 +159,9 @@ final class CodexAgentControllerTests: XCTestCase {
               ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         controller.prompt = "delayed_hold"
         controller.start(AgentSlotID(1))
-        try await Task.sleep(for: .milliseconds(30))
+        try await waitUntilAsync("the queued turn request") {
+            await controller.runtimePhase(of: AgentSlotID(1)) == .activeThread
+        }
         XCTAssertEqual(controller.slots[0].state, .queued)
         controller.interrupt(AgentSlotID(1))
         try await waitFor(controller, phase: .interrupted)
@@ -179,7 +182,7 @@ final class CodexAgentControllerTests: XCTestCase {
         controller.start(AgentSlotID(1))
         controller.interrupt(AgentSlotID(1))
         try await waitFor(controller, phase: .interrupted)
-        try await Task.sleep(for: .milliseconds(20))
+        await controller.waitForBackgroundWork()
         controller.start(AgentSlotID(1))
         try await waitFor(controller, phase: .running)
         XCTAssertNil(controller.error)

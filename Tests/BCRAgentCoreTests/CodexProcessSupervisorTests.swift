@@ -8,6 +8,13 @@ import XCTest
 
 @MainActor
 final class CodexProcessSupervisorTests: XCTestCase {
+    func testProductionProcessTimeoutDefaultsAreUnchanged() {
+        let config = CodexProcessSupervisorConfig()
+        XCTAssertEqual(config.stopTimeoutMs, 2_000)
+        XCTAssertEqual(config.autoRestartInitialDelayMs, 250)
+        XCTAssertEqual(config.autoRestartMaxDelayMs, 3_000)
+    }
+
     func testUnstartedReaderReturnsEOFAndWritesFail() async throws {
         let supervisor = CodexProcessSupervisor()
         let line = try await supervisor.readLine()
@@ -136,21 +143,26 @@ final class CodexProcessSupervisorTests: XCTestCase {
     func testFinalLineFromImmediatelyExitingProcessIsDelivered() async throws {
         let supervisor = CodexProcessSupervisor()
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "printf 'final\\n'"])
-        try await Task.sleep(for: .milliseconds(80))
+        try await waitUntilAsync("the immediate child exit") { await !supervisor.isRunning() }
         let line = try await supervisor.readLine()
         XCTAssertEqual(line, "final")
         await supervisor.stop()
     }
 
+    @MainActor
     func testNormalExitDoesNotRestart() async throws {
-        let supervisor = CodexProcessSupervisor()
+        let clock = ManualHostTime()
+        let supervisor = CodexProcessSupervisor(restartSleep: { try await clock.time.sleep($0) })
         let events = ExitEvents()
         await supervisor.setEventHandlers(onExit: { event in Task { await events.append(event) } })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "exit 0"], autoRestartLimit: 2)
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await events.count == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
-        // Give a wrongly scheduled restart time to show up.
-        try await Task.sleep(for: .milliseconds(150))
+        // A normal exit must settle without ever scheduling backoff. The same 150 ms
+        // no-restart window now advances manually, and pending sleep is checked explicitly.
+        clock.advance(by: 0.15)
+        try await waitUntilAsync("normal termination decision") { await !supervisor.hasPendingTermination }
+        XCTAssertEqual(clock.pendingCount, 0)
         let recorded = await events.values
         XCTAssertEqual(recorded.map(\.reason), [.exited(code: 0)])
         await supervisor.stop()
@@ -172,8 +184,10 @@ final class CodexProcessSupervisorTests: XCTestCase {
         XCTAssertFalse(running)
     }
 
+    @MainActor
     func testStoppingDuringBackoffPreventsRestart() async throws {
-        let supervisor = CodexProcessSupervisor()
+        let clock = ManualHostTime()
+        let supervisor = CodexProcessSupervisor(restartSleep: { try await clock.time.sleep($0) })
         let events = ExitEvents()
         await supervisor.setEventHandlers(onExit: { event in Task { await events.append(event) } })
         try await supervisor.start(executablePath: "/bin/sh", arguments: ["-c", "exit 7"],
@@ -181,8 +195,14 @@ final class CodexProcessSupervisorTests: XCTestCase {
         // Stop once the first exit is recorded, well inside the 2 s backoff even on a loaded machine.
         let deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while await events.count == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitUntil { clock.pendingCount == 1 }
         await supervisor.stop()
-        try await Task.sleep(for: .milliseconds(250))
+        clock.advance(by: 0.25)
+        let duringWindow = await events.count
+        XCTAssertEqual(duringWindow, 1)
+        // Cross the entire original 2 s backoff too; a late restart must remain cancelled.
+        clock.advance(by: 1.75)
+        try await waitUntilAsync("cancelled restart decision") { await !supervisor.hasPendingTermination }
         let count = await events.count
         XCTAssertEqual(count, 1)
     }

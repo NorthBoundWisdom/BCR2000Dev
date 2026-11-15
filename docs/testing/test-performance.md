@@ -203,3 +203,20 @@ ProviderEventJournal.append 构造 ISO8601 formatter；Output 10000 tick 栈也�
   before；每步一次 after 完整 fingerprint，并复用 snapshot 操作的结果。完整原子性比较（journal、全部
   108 个控件、参数、Mock 输入/显示等）、fixture 驱动及全部 checks/XCTAssert 均保留。
 - 2000 idle ticks 和 10000 ready telemetry ticks 保持原规模、时长/sequence/trace/事件保持断言全部不变。
+
+## P4 子进程与 IO
+
+ProviderModule/SharedRuntimeMCP 未见固定 sleep、子进程或超时消耗；慢在反复读取 Provider 合同。
+P3 缓存后，进程内分别由 4.175/2.074 s 变为 0.404/0.077 s（后者以最终表为准）。
+Codex 包含真实 Python/sh 启动、管道 EOF 排空、退出轮询和退避。保持真实 IO 与原 stop/kill 期限。
+
+- CodexProcessSupervisor 的 restartSleep 默认仍是 Task.sleep(configured backoff)，测试可手动推进。
+  `testProductionProcessTimeoutDefaultsAreUnchanged` 验证原 2000/250/3000 ms 配置默认值。
+- normal-exit 原 150 ms 无重启窗口手动推进，原事件数组断言保留，并新增“无待决 backoff”断言。
+- stop-during-backoff 原 250 ms 无重启窗口手动推进，同时额外跨过完整 2 s backoff；等待 termination
+  handler（含 restart decision）完成后再断言。没有缩短 backoff，也没有减少重启次数。
+- final-line 原 80 ms 等待换成 waitUntilAsync(!isRunning)，仍证明退出后的尾行不会丢失。
+- Controller 的 20 ms 清理等待换成等待实际 start/interrupt/approval task 完成；30 ms queued 等待换成
+  等待 coordinator 的 activeThread 状态（线程已建立、turn 回复仍在途）。保留所有状态/错误/另一槽位断言。
+- 原有 2/5/10/20 ms 状态轮询不是固定完成假设；真实 EOF/进程退出/网络输入到达后立即返回。
+  真实分片 UTF-8 的 shell 50 ms 与 delayed_hold 的 Python 200 ms 保留，继续覆盖实际跨读取/在途 RPC。

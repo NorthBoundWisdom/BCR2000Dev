@@ -160,6 +160,17 @@ final class CodexAgentController: ObservableObject {
         await session?.stop()
     }
 
+    func runtimePhase(of id: AgentSlotID) async -> CodexTurnPhase? {
+        await coordinator?.snapshot().states[id]?.phase
+    }
+
+    /// Await task cleanup as well as published state, so a subsequent start cannot race its guard.
+    func waitForBackgroundWork() async {
+        for task in Array(tasks.values) + Array(interruptTasks.values) + Array(approvalTasks.values) {
+            await task.value
+        }
+    }
+
     func perform(_ id: AgentSlotID) {
         guard backend == .codex, let slot = slots.first(where: { $0.id == id }) else { return }
         if slot.state == .waitingApproval { requestApprovalReview(for: id) }
