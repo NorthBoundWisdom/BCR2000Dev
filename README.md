@@ -297,7 +297,7 @@ python3 configs/macos_workflow.py package --architecture universal     # Apple S
 Artifacts are written to `build/package/`. See the [packaging guide](docs/PACKAGING.md) for Developer ID signing and notarization.
 
 **CI**: main / PR and version-tag builds use ad-hoc signing without certificates, Apple credentials, or GitHub Secrets.
-Pushing a tag such as `v1.2.3` creates a GitHub Release only after tests and ARM / Intel package validation pass; manual runs build without publishing.
+Pushing a tag such as `v1.2.3` creates a GitHub Release only after tests, ARM package startup and universal-slice validation pass; manual runs build without publishing.
 These packages are not notarized by Apple. See [tag releases](docs/TAG_RELEASE_SETUP.md).
 
 **DriverKit USB fix**: a complete installer with the fix requires Apple developer certificates and the appropriate entitlements/profiles. Personal use can rely on

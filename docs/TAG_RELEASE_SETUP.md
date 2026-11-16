@@ -18,7 +18,7 @@
 2. 运行 Swift/Python 测试与两版隔离原生 MCP 验收。
 3. 常规编译 ARM/Intel 通用主程序，固定使用 ad-hoc 签名。
 4. 生成 ZIP/DMG、构建记录和校验和。
-5. 在新的 ARM/Intel runner 解包/挂载并验证原生启动。
+5. 在新的 ARM runner 解包/挂载并验证 GUI/headless 原生启动；Intel 切片仅核对包内结构。
 6. 校验源码 commit、版本、架构与 SHA-256。
 7. 从已验证的资产清单创建该 tag 的 GitHub Release，说明明确标注 ad-hoc、未公证。
 

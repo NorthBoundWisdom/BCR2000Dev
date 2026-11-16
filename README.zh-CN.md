@@ -291,7 +291,7 @@ python3 configs/macos_workflow.py package --architecture universal     # Apple S
 产物位于 `build/package/`。Developer ID 签名与公证见 [打包指南](docs/PACKAGING.md)。
 
 **CI**：main / PR 与版本 tag 都使用无需证书的 ad-hoc 构建，不读取 Apple 凭据或 GitHub Secrets。
-推送 `v1.2.3` 这类 tag 后，测试与 ARM / Intel 包验证通过才创建 GitHub Release；手动触发只构建不发布。
+推送 `v1.2.3` 这类 tag 后，测试、ARM 包启动与 Universal 切片验证通过才创建 GitHub Release；手动触发只构建不发布。
 这些包未经 Apple 公证。见 [Tag 发布](docs/TAG_RELEASE_SETUP.md)。
 
 **DriverKit USB 修复**：含修复的完整安装包需要 Apple 开发者证书与对应授权/profile。自用可用付费账号开发签署，

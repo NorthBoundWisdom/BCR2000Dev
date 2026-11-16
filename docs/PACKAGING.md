@@ -171,3 +171,5 @@ Package 默认 DMG + ZIP，保留原 `release-zip` ID，并新增 Developer ID �
 `.build.json` 的共用字段与 X-Touch 对齐：`schema_version`、`asset`、`sha256`、`version`、`build`、`commit`（完整源提交）、`dirty`、`architecture`、`architectures`（切片数组）、`minimum_macos`、`swift`、`surface_plugins_revision`、`signature`、`notarized`。BCR 的可选 `driverkit` 记录保留。最终 bundle 的源提交、干净状态、插件锁、版本与架构必须与 sidecar 匹配；Release 汇总还检查精确源提交、当前锁与校验和。`native` 标签不随验证机器改变已记录的实际切片。
 
 手动触发 `release.yml` 只构建和验证，不发布；发布任务仍要求显式推送版本标签。本轮不创建标签或 Release。无界面 Provider 的交付布局和 `package_provider.py` 不在此改动范围。
+
+按用户当前要求，最终安装包启动验收仅使用 ARM `macos-15` runner，不配置 Intel runner。Universal 包继续包含 `arm64` 与 `x86_64` 切片并核对结构；Intel 切片不在本流程中进行原生启动验收。稀疏 checkout 显式包括 `Support/NativeDiagnostics`，用于现有安装包校验器的间接导入。

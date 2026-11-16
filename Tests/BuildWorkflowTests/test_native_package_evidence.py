@@ -154,6 +154,19 @@ class NativePackageEvidenceTests(unittest.TestCase):
             with patch.object(workflow.platform, "machine", return_value="x86_64"):
                 self.assertEqual(workflow.validate_package_record(asset)["architectures"], ["arm64"])
 
+    def test_arm_package_runner_includes_runtime_diagnostics_without_an_intel_runner(self):
+        source = (workflow.REPO_ROOT / ".github/workflows/release.yml").read_text()
+        smoke = source.split("  package-smoke:", 1)[1].split("  verify:", 1)[0]
+        self.assertIn("runs-on: macos-15", smoke)
+        self.assertNotIn("matrix:", smoke)
+        self.assertNotIn("macos-15-intel", source)
+        self.assertNotIn("macos-26-intel", source)
+        sparse = smoke.split("sparse-checkout: |", 1)[1].split("      - uses:", 1)[0]
+        self.assertIn("Support/NativeDiagnostics", sparse)
+        self.assertTrue((workflow.REPO_ROOT / "Support/NativeDiagnostics/diagnostic_io.py").is_file())
+        self.assertIn("'check-package'", smoke)
+        self.assertNotIn("continue-on-error", smoke)
+
     def test_manual_release_dispatch_cannot_publish(self):
         source = (workflow.REPO_ROOT / ".github/workflows/release.yml").read_text()
         self.assertIn("if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')", source)

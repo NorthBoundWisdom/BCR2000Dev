@@ -72,6 +72,7 @@ git diff --check
 - Packaging uses `configs/macos_workflow.py`: signed `.app`, ZIP/DMG, checksums and build records.
   Developer ID packaging must require successful notarization, stapling and Gatekeeper checks.
 - Keep credentials in Keychain/local environment. CI defaults to ad-hoc signing, tests final
-  universal packages on ARM and Intel runners, and publishes only explicitly pushed version tags.
+  universal packages on ARM runners with both architecture slices structurally verified,
+  and publishes only explicitly pushed version tags.
 - See `docs/PACKAGING.md` for local and CI release commands. Do not push version tags or publish
   releases unless asked.

@@ -57,11 +57,7 @@ jobs:
           compression-level: 0
   package-smoke:
     needs: package
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, macos-15-intel]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,6 +66,7 @@ jobs:
           sparse-checkout: |
             configs
             tools
+            Support/NativeDiagnostics
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.13'
