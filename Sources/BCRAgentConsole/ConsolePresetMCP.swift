@@ -12,7 +12,16 @@ import Foundation
 
 /// MCP access to the same alignment flow as the window. Commands start the flow and return at once;
 /// callers poll `get_preset_alignment` until `busy` is false. The window shows the same state.
-extension ConsoleDeviceWork {
+@MainActor
+struct ConsolePresetMCP {
+    let preset: ConsolePresetWork
+    let recovery: ConsoleRecoveryWork
+    private var presetAlignment: PresetAlignmentState? { preset.presetAlignment }
+    private var canAlignPreset: Bool { preset.canAlignPreset }
+    private var presetRestorePoint: PresetRestorePoint? { recovery.presetRestorePoint }
+    private var canRestorePreset: Bool { recovery.canRestorePreset }
+    private var restoreUnavailableReason: String? { recovery.restoreUnavailableReason }
+
     func handlePresetAlignment(_ command: PresetAlignmentCommand) throws -> JSONValue {
         switch command {
         case .status:
@@ -21,7 +30,7 @@ extension ConsoleDeviceWork {
             guard canAlignPreset else {
                 throw MCPToolFailure(L10n.text("请先在实体模式下连接 BCR2000，并停止学习。"))
             }
-            beginPresetAlignment(options: options)
+            preset.beginPresetAlignment(options: options)
         case .apply:
             guard let state = presetAlignment, state.phase == .preview else {
                 throw MCPToolFailure(L10n.text("没有待确认的预设对齐预览，请先读取预览。"))
@@ -29,19 +38,19 @@ extension ConsoleDeviceWork {
             guard let plan = state.plan, !plan.isEmpty else {
                 throw MCPToolFailure(L10n.text("预览没有需要写入的变更。"))
             }
-            applyPresetAlignment()
+            preset.applyPresetAlignment()
             // Every precondition failure leaves the preview in place and only posts a notice.
             guard presetAlignment?.phase != .preview else {
                 throw MCPToolFailure(L10n.text("请重新读取并确认设备预设预览。"))
             }
         case .restore:
             if let reason = restoreUnavailableReason { throw MCPToolFailure(reason) }
-            restorePresetBeforeAlignment()
+            recovery.restorePresetBeforeAlignment()
         case .dismiss:
             guard presetAlignment?.phase.isBusy != true else {
                 throw MCPToolFailure(L10n.text("预设操作进行中，完成后才能关闭。"))
             }
-            dismissPresetAlignment()
+            preset.dismissPresetAlignment()
         }
         return try presetAlignmentStatus()
     }

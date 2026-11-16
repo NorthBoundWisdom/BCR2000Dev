@@ -1,32 +1,50 @@
-# Console ownership after G-2
+# Console ownership after H-5
 
-The window observes `ConsoleViewModel` and sends intents through its stable methods. The model composes a `ConsoleDeviceWork`, forwards its observations synchronously with a weak Combine subscription, and exposes computed projections. It stores no second parameter value, plugin, connection phase, or preset transaction.
+`ConsoleViewModel` keeps its existing API and synchronously forwards to `ConsoleDeviceWork`. Work composes the existing runtime and the owners below, forwards observations with weak Combine subscriptions, exposes computed projections and synchronous intent delegates, and dispatches each session event once. It has no device transaction state or retained device Task handle.
 
-| Owner | State and work |
+| Owner | Actual state and work |
 | --- | --- |
-| Existing `SurfaceSession`, `ProviderApplication` and `BCRPluginRuntime` | Canonical surface values, provider/plugin state and runtime epoch/clock. These existing owners remain authoritative; no new runtime bag duplicates them. |
-| `ConsoleDeviceWork` | MIDI endpoint selection, connection offers/nonces/routes, startup and snapshot tasks, display/preset reads and evidence, alignment/restore/backup transactions, controller composition and MCP intent closures. Agent LED blinking stays here because it can produce device effects. |
-| `ConsolePresentationState` | Selected control and follow-touch/group, notices and notice dismissal, workspace visibility preferences, display/transfers/transient timers, press/activity presentation and the coalesced frame task. It cannot authorize or send a device effect. |
-| `ConsoleViewModel` | Composition, computed observations and intent forwarding for existing views/callers. |
+| Existing `SurfaceSession`, `ProviderApplication`, `BCRPluginRuntime` | The only canonical surface values, provider/plugin state and runtime epoch/clock. |
+| `ConsoleConnectionWork` | Endpoint selection/repair; MIDI initialization, offer and connection Tasks; prompts, declined route, startup nonce/route, observed hardware group and starting/connecting flags. |
+| `ConsolePresetWork` | Display read Task/nonce, display profile/name/number evidence, pending number confirmation; alignment Task/nonce/route, dump, preview route/map/configuration, options and the one alignment phase. |
+| `ConsoleRecoveryWork` | Restore Task/nonce/route and pending confirmation context; read-only preflight, explicit confirmation, write/readback and restore orchestration. Uses `ConsolePresetReadPort` for the existing read/evidence path; it does not implement another one. |
+| `ConsoleRecoveryStore` | The existing bounded restore history, durable restore-point file, protected backups, digest/content validation and map archive directory. Preset and recovery share this store. |
+| `ConsoleButtonFeedbackWork` | Agent LED semantic/level cache, blink preference and the one blink Task; the original Agent intents and the same Mock host/backend references. |
+| `ConsolePresentationState` | Existing UI selection, notices, visible panels, display, press/activity/transient timers and coalesced frame. No device output authorization. |
+| `ConsoleSurfaceIntents` | Mechanical surface/configuration/file-panel intents and the pre-existing migration markers, using the same session/files/presentation. No tasks, scheduler or second business value. |
 
-`ConsoleDeviceWork+Agents` and `ConsoleDeviceWork+PresetAlignmentMCP` retain the old method bodies under the actual work owner. This is an initial separation of responsibilities, not a claim that all device work is already subdivided into smaller services. Preset/display reads stay with the same transaction owner to preserve cancellation and drain ordering.
+`ConsoleDeviceContext` is immutable references, not a state owner. `ConsolePresetOperationGate` has only the existing BCL exclusivity ID/route: no Task, phase, business value, retry or timeout. Preset holds recovery weakly; recovery holds only the preset read port; connection uses task/read ports. Closures from preset/recovery back to connection and every observation/host callback are weak. No deinit behavior or automatic cancellation/output was added.
 
-Connection confirmation keeps its synchronous fast path when there is no previous task. When old BCL work exists, cancellation does not pretend it has drained: the writer still awaits it. Existing route, startup ID and operation ID checks prevent old callbacks from committing or clearing newer work. Session change callbacks invalidate connection work synchronously before scheduling the same 16 ms presentation frame. The background-work helper observes the actual owned task handles, including that frame; it does not create replacement handles.
+Connection takes the **actual** old display, alignment and restore handles. It cancels the old display read and awaits all three before reading or writing. When all three are nil, confirmed write remains synchronous and creates no Task. The facade's background-work list concatenates the actual owner handles and the existing presentation frame; blink, display hold and notice timers remain excluded. Old task completion checks its owning nonce before clearing its handle; the shared gate is cleared only for the same operation ID. Session changes invalidate preset, recovery and connection work synchronously before the same 16 ms frame scheduling. All clocks, sleeps, errors, permissions, transfer animation and send APIs remain the original ones.
 
-Presentation forwards changes through Work and then ViewModel using weak synchronous subscriptions. The split adds no scheduling boundary or deinitialization cancellation. Presentation sleeps still use the original injected presentation clock; device work retains its original work clock. Notice duration, minimum press duration, activity duration and display token rules are unchanged.
+## Complete method migration map
 
-## Verification and test mapping
+Names below refer to the pre-H-5 `ConsoleDeviceWork` methods; public facade methods retain their signatures and only delegate. No existing test was moved, renamed, removed or weakened.
 
-All pre-existing tests and assertion bodies are unchanged in G-2. Existing connection confirmation, preset transaction, display/number evidence, LED, provider/MCP and feedback suites run through the ViewModel delegates into the new owners. The native suite grows from 709 to 716 methods solely through `ConsoleOwnerTests.swift`:
+| Destination | Original methods |
+| --- | --- |
+| `ConsoleConnectionWork` | `startMIDIWithoutBlockingWindow`, `applyEndpointSelection`, `commitEndpointSelection`, `selectSource`, `invalidateDisplayNumber`, `validateConnectionWork`, `offerHardwareConnection`, `requestSource`, `declineHardwareConnection`, `connectHardware` |
+| `ConsolePresetWork` | `acceptDisplayNames`, `invalidateDisplayNumber`, `refreshDisplayFromDevice`, `rememberPresetNumber`, `resolveDisplayNumber`, `tryResolveDisplayNumber`, `updateDisplayProfile`, `syncRingModes`, `requestPresetNumberConfirmation`, `selectDisplayPresetNumber`, `confirmDisplayPresetNumber`, `cancelPresetNumberConfirmation`, `beginPresetWork`, `finishPresetWork`, `requirePresetRoute`, `presetNames`, `beginPresetAlignment`, `setAlignmentOptions`, `recomputeAlignment`, `installVerifiedMap`, `applyPresetAlignment`, `dismissPresetAlignment`, `validateConnectionWork`, `setDisplayPreset` |
+| `ConsoleRecoveryWork` | `restorePresetBeforeAlignment`, `confirmPresetRestoreReplacingLearning`, `cancelPresetRestore`, `performPresetRestore`, `discardPresetRestore`, `revealPresetBackups`, `skipsFinderWhenOffscreen`, `validateConnectionWork` |
+| `ConsoleRecoveryStore` | `restoreDump`, `matchesRestoreContext`, `saveRestorePoint`, `saveBackup` |
+| `ConsoleButtonFeedbackWork` | `slot`, `applyAgentSlots`, `setBlinksAgentLEDs`, `showAgentState`, `refreshBlink`, `updateBlinkTimer`, `showSurfaceApprovalNotice`, `performPrimaryAction`, `performSurfaceAgentAction`, `start`, `interrupt`, `approve`, `decline`, `requireMockHost` |
+| `ConsoleSurfaceIntents` | `selectGroup`, `turn`, `press`, `release`, `touch`, `setParameter`, `resetGroup`, `createParameter`, `updateParameter`, `removeParameter`, `loadPreset`, `setAssignment`, `setCycleValues`, `bulkAssignmentPlan`, `applyBulkAssignment`, `beginLearning`, `parameterFractionDigits`, `setMockNRPN`, `stopLearning`, `unbind`, `setHardwareButtonFunctions`, `resetHardwareMap`, `clearMonitor`, `clearNotice`, `saveMigration`, `clearPersistenceNotice`, `performNoticeAction`, `selectPage`, `updatePrograms`, `readConfiguration`, `installConfiguration`, `presentConfigurationPanel`, `chooseConfigurationImport`, `exportConfiguration`, `chooseConfigurationExport` |
 
-- `ConsoleDeviceWorkOwnerTests.testDirectOwnerRejectsOldRoutePromptAndPreservesSynchronousWriteFastPath`: directly constructs Work, rejects an obsolete route nonce with zero output, and checks confirmed write synchronously sends the one original CC.
-- `testDirectOwnerPreservesUserEditWhileSnapshotIsHeld`: directly constructs Work, holds a fake snapshot reply, changes the canonical value, and proves the stale read does not overwrite it or send feedback.
-- `testDirectOwnerDrainsCancelledDisplayAndOldTaskCannotClearNewConnection`: holds a fake BCL read, replaces a cancelled connection task, compares actual task identities, proves zero premature sends, then releases the drain and checks the newer connection completes.
-- `ConsolePresentationOwnerTests.testIndependentStateCoalescesOneFrameAndKeepsActualTaskIdentity`: directly constructs presentation state, coalesces a burst into the same handle, checks the exact frame boundary and follows the latest control/group.
-- `testIndependentNoticeExactBoundaryStickyErrorsAndAction`: checks the six-second boundary and sticky error/action notices using injected time.
-- `testIndependentPressAndActivityUseOriginalDurationBoundaries`: checks the original 80 ms minimum press and 120 ms activity boundaries using injected time.
-- `testIndependentTransferTokensCanFinishInReverseOrder`: checks the real display transfer tokens without ViewModel/device construction.
+The original `beginPresetWork`/`finishPresetWork` exclusivity logic is split into the thin shared gate and each owner's actual handle/nonce cleanup. The original `validateConnectionWork` cancellation checks follow each moved Task; the facade calls all three before publishing. Common `withDisplayTransfer`/`report` use the same presentation/session through `ConsoleDeviceOwner` defaults. `handlePresetAlignment` and its status projection move from the old Work extension into `ConsolePresetMCP`; Work has a synchronous delegate. `ConsoleButtonFeedbackWork+Agents` is the original Agent extension under its real owner. The remaining facade read projections (`displayValue`, `slot`, display content) read the same owners; `handleSessionEvent` remains the single event dispatcher. Presentation-only helpers keep forwarding to presentation.
 
-G-6's Provider 1.0, hardware 1.4, GUI connection/reconnection and six synchronous reentrancy recordings remain fixed. G-2 captures compare byte-for-byte against the original raw G-6 recordings (including journal order and writer origin), while checked-in fixture hashes remain unchanged. The fixture JSON has repository formatting, so raw captures are compared to raw captures rather than to the formatted fixture file.
+## Tests and original golden recordings
 
-Local evidence is under `build/g/g2/`: `owner-tests.log`, `final-swift.log`, `golden-capture.log`, `golden-proof.json`, `workflow.log`, `clients-corrected.log`, `boundaries.log` and `commands.log`. No physical device is used. CI results and exact commits are recorded in the workspace handoff.
+The original seven G-2 methods in `ConsoleOwnerTests.swift` are byte-for-byte unchanged (SHA-256 `c5b8f47bce113f35f0af6556f7f4cbaef78de65343ea9f583d7c6228b46bbe9f`). Every prior test/assertion body and every golden fixture stays unchanged. `ConsoleDeviceComponentTests.swift` adds these eight methods, with no ViewModel, Work, MCP server or Provider construction:
+
+- `testIndependentConnectionRejectsOldPromptAndKeepsWriteSynchronous`
+- `testIndependentConnectionDrainsAllThreeActualTransactionHandles`
+- `testIndependentConnectionAwaitsActualCancelledDisplayHandle`
+- `testIndependentPresetCancelledOldReadCannotClearReplacementHandle`
+- `testIndependentAlignmentOwnsTaskAndPersistsVerifiedRecoveryContext`
+- `testIndependentRestoreRejectsChangedConfirmationContextWithoutWrites`
+- `testIndependentRestoreRouteLossCancelsActualTaskAndRetainsRecoveryPoint`
+- `testIndependentLEDClockKeepsActualTimerAndSteadyStateStopsTraffic`
+
+These use a fake MIDI service, real SurfaceSession APIs and injected time. They cover direct owner construction, old prompt rejection, synchronous write, waiting for all three real transaction handles, cancellation/drain identity, old display nonce completion, alignment recovery evidence, changed restore context rejection, route-loss cancellation and exact LED timing/no steady traffic. The connection task ports additionally accept fake transaction handles so their drain behavior can be tested independently of the other owners.
+
+H-5 evidence is under `build/h/h5/`: `before/full.log`, `before/python-full.log`, final native/Python/check logs, component logs and `after/capture.log`. The three `after/{provider,gui,reentrant}.json` raw recordings compare byte-for-byte with `before/original-{provider-before,gui-before,nested-e615}.json`; they also match the original G-6 raw captures. Formatting of checked-in fixture JSON is not substituted for raw-byte comparison. No physical device was used.
