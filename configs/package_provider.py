@@ -21,6 +21,7 @@ from configs.display_targets import generate as generate_display_targets  # noqa
 from configs.check_handoff_addresses import render as render_handoff_addresses  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 from configs.control_surface_kit_dependency import ensure_dependency as ensure_kit_dependency  # noqa: E402
+from configs.surface_sdk_metadata import create as sdk_metadata, METADATA_NAME  # noqa: E402
 from configs.surface_delivery_index import publish  # noqa: E402
 
 
@@ -28,10 +29,10 @@ def run(*args):
     return subprocess.check_output(list(map(str, args)), cwd=ROOT, text=True).strip()
 
 
-# Surface control deliverables (simulation contract 1.3, optional hardware 1.4, SDK 1.4.0) have
+# Surface control deliverables (simulation contract 1.3, optional hardware 1.4, SDK 1.5.0) have
 # exactly one source: the locked shared package.
 SURFACE_CONTRACT = "1.3"
-SURFACE_SDK = "1.4.0"
+SURFACE_SDK = "1.5.0"
 # Same root-level names as the other host's delivery, so one consumer loader fits both.
 SURFACE_FILES = {
     "control-tools.json": "docs/surface-control-tools.json",
@@ -39,6 +40,11 @@ SURFACE_FILES = {
     "hardware-control-examples.json": "docs/surface-control-hardware-examples.json",
     "surface-control-diagnostics.md": "docs/surface-control-diagnostics.md",
     "surface-control-diagnostic-capture.schema.json": "docs/surface-control-diagnostic-capture.schema.json",
+    "surface-control-diagnostic-capture-v1.5.schema.json": "docs/surface-control-diagnostic-capture-v1.5.schema.json",
+    "surface-control-input-retention-tools.json": "docs/surface-control-input-retention-tools.json",
+    "surface-control-input-retention-examples.json": "docs/surface-control-input-retention-examples.json",
+    "surface-control-input-retention-hardware-tools.json": "docs/surface-control-input-retention-hardware-tools.json",
+    "surface-control-input-retention-hardware-examples.json": "docs/surface-control-input-retention-hardware-examples.json",
     "surface-control-hardware-v1.4.json": "fixtures/surface-control-hardware-v1.4.json",
     "surface-control-hardware-independent-v1.4.json": "fixtures/surface-control-hardware-independent-v1.4.json",
     "surface-control-scenario.schema.json": "docs/surface-control-scenario.schema.json",
@@ -135,6 +141,10 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             archive.writestr(info, path.read_bytes())
+    metadata = sdk_metadata(
+        output, SURFACE_SDK, json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"]
+    )
+    (output / METADATA_NAME).write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     # Test doubles are a separate, unmistakably test-only asset, never a runtime SDK member.
     testing_sdk = output / f"TEST-ONLY-surface-control-testing-{SURFACE_SDK}.zip"
     test_support_sources = sorted(
@@ -318,7 +328,14 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         else:
             shutil.copy2(ROOT / "docs" / name, output / name)
     subprocess.run(
-        [sys.executable, str(ROOT / "configs/prepare_f_candidate_attended.py"), "--output", str(output / "attended")],
+        [
+            sys.executable,
+            str(ROOT / "configs/prepare_f_candidate_attended.py"),
+            "--sdk-manifest",
+            str(output / METADATA_NAME),
+            "--output",
+            str(output / "attended"),
+        ],
         check=True,
         cwd=ROOT,
     )
@@ -356,8 +373,8 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             "remote": run("git", "-C", str(kit), "remote", "get-url", "origin"),
             "revision": run("git", "-C", str(kit), "rev-parse", "HEAD"),
             "managed_clean": not bool(run("git", "-C", str(kit), "status", "--porcelain")),
-            "adoption": "neutral-contracts-and-conformance",
-            "runtime_lifecycle_binding_scheduling_owner": "native-host",
+            "adoption": "binding-context-connection-and-ordered-resource-runtime",
+            "runtime_lifecycle_binding_scheduling_owner": "kit-context-connection-resource-identity; native-device-policy-and-scheduler",
         },
         "source_dirty": dirty,
         "source_origin_main": run("git", "rev-parse", "origin/main"),

@@ -327,6 +327,14 @@ def run(binary, output, sdk, scoped_clients=False):
                     host.stdout.close()
                     if report.exists() and lifecycle_mark is not None:
                         assert len(json.loads(report.read_text())["sent"]) == lifecycle_mark, "Exit sent feedback"
+    import surface_control
+
+    if surface_control.__version__ == "1.5.0":
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from configs.verify_surface_input_retention import verify_hardware
+
+        cases.extend(verify_hardware(binary, output / "input-retention"))
     result = {
         "passed": True,
         "scope": "real-process-loopback-with-test-only-device",

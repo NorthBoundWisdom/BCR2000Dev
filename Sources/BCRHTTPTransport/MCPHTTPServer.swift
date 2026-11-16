@@ -377,7 +377,13 @@ public final class MCPHTTPServer {
         var writerID: String?
         var visibleTools: Set<String>?
         if !owner {
-            let reads: Set<String> = ["surface_control_discover", "surface_control_snapshot", "surface_control_events"]
+            var reads: Set<String> = ["surface_control_discover", "surface_control_snapshot", "surface_control_events"]
+            // Registration is immutable process configuration. This optional read is visible only
+            // when the current session explicitly enabled retention and registered it read-only.
+            if router.service.toolDefinitions.contains(where: {
+                $0.objectValue?["name"] == .string("surface_control_input_events") &&
+                    $0.objectValue?["annotations"]?.objectValue?["readOnlyHint"] == .bool(true)
+            }) { reads.insert("surface_control_input_events") }
             let writes: Set<String> = isOperator ? ["surface_control_input", "surface_control_renew"] :
                 ["surface_control_feedback"]
             guard let body = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],

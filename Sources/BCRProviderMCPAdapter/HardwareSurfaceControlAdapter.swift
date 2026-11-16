@@ -36,7 +36,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         }
     }
 
-    public static func profile(_ surface: SurfaceSession) throws -> ControlProfile {
+    public static func profile(_ surface: SurfaceSession, inputEventCapacity: Int? = nil) throws -> ControlProfile {
         let controls = surface.learnedHardwareMap.entries.compactMap { entry -> ControlDescriptor? in
             let control = entry.control
             let assignment = surface.engine.configuration.assignment(for: control)
@@ -73,17 +73,22 @@ public final class BCRHardwareSurfaceControlAdapter {
         {
             capabilities.append("feedback." + kind.rawValue)
         }
-        return ControlProfile(id: "bcr2000.hardware", version: "1.4", controls: controls, capabilities: capabilities)
+        if inputEventCapacity != nil { capabilities.append("events.input_retention") }
+        return ControlProfile(id: "bcr2000.hardware", version: inputEventCapacity == nil ? "1.4" : "1.5",
+                              controls: controls, capabilities: capabilities)
     }
 
-    public static func publishedContract(surface: SurfaceSession) throws -> JSONValue {
+    public static func publishedContract(surface: SurfaceSession, inputEventCapacity: Int? = nil) throws -> JSONValue {
         let core = try SurfaceControlSession(
             instanceID: "example.hardware",
             epoch: "discovery-only",
-            profile: try profile(surface)
+            profile: try profile(surface, inputEventCapacity: inputEventCapacity),
+            inputEventCapacity: inputEventCapacity
         )
         return try .object(["discovery": .encoded(core.discovery()),
-                            "tools": .array(SurfaceControlTools.descriptors(source: .hardware)
+                            "tools": .array((SurfaceControlTools
+                                    .descriptors(source: .hardware) + (inputEventCapacity == nil ? [] :
+                                        SurfaceControlInputEventsTools.descriptors(source: .hardware)))
                                 .map { try .encoded($0) }),
                             "excluded_controls": .array(exclusions(surface).map(JSONValue.string)),
                             "hardware_group": .string("unknown")])
@@ -91,6 +96,7 @@ public final class BCRHardwareSurfaceControlAdapter {
 
     public init(surface: SurfaceSession, instanceID: String, permissions: BCRSurfaceControlAdapter.Permissions,
                 principals: SurfaceControlPrincipals = .init(), eventCapacity: Int = 1024,
+                inputEventCapacity: Int? = nil,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
@@ -100,8 +106,8 @@ public final class BCRHardwareSurfaceControlAdapter {
         core = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: epochFactory(),
-            profile: try Self.profile(surface),
-            eventCapacity: eventCapacity
+            profile: try Self.profile(surface, inputEventCapacity: inputEventCapacity),
+            eventCapacity: eventCapacity, inputEventCapacity: inputEventCapacity
         )
         try core.transitionHardware(
             epoch: epochFactory(),
@@ -121,7 +127,8 @@ public final class BCRHardwareSurfaceControlAdapter {
         try next.transitionHardware(epoch: epochFactory(),
                                     linkState: surface.source == .hardware && surface.connection
                                         .isConnected ? .connected : .disconnected,
-                                    profile: try Self.profile(surface), at: monotonic())
+                                    profile: try Self.profile(surface, inputEventCapacity: core.inputEventCapacity),
+                                    at: monotonic())
         core = next; context = surface.mappingContextRevision; generation = surface.inputEvents
             .generation; source = surface.source
         prepared = nil
@@ -161,6 +168,14 @@ public final class BCRHardwareSurfaceControlAdapter {
                                          reason: accepted ? nil : "engine_ignored",
                                          at: now, writerID: principals.interfaceWriterID)
         core = next
+    }
+
+    /// A read of retained genuine hardware facts; never an input-injection path or a write budget.
+    public func execute(_ request: ControlInputEventsRequest, gateway _: MCPApplicationGateway) throws -> JSONValue {
+        try refresh()
+        return try .encoded(core.inputEvents(expected: request.expected,
+                                             afterInputSequence: request.after_input_sequence,
+                                             limit: request.limit, at: monotonic()))
     }
 
     public func execute(_ request: ControlToolRequest, gateway: MCPApplicationGateway) throws -> JSONValue {

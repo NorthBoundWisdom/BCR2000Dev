@@ -53,7 +53,7 @@ ready = json.loads(process.stdout.readline())
 # The process owner retains credentials["owner"]. No auto-retry or command replay is added.
 ```
 
-Using runtime SDK 1.4.0, the two clients then receive the same URL/instance and their individual in-memory
+Using runtime SDK 1.5.0, the two clients then receive the same URL/instance and their individual in-memory
 credential. Operator uses `Client.input` / `renew`; display uses `Client.feedback`. The event `writer_id`
 values distinguish them. This requires no change to contracts 1.3/1.4 or SDK wire semantics.
 Real-process proof: `configs/verify_surface_clients_transport.py`, both MCP protocol versions; concurrent
@@ -118,3 +118,7 @@ Real-process evidence: `configs/verify_multiple_display_clients.py` covers simul
 hardware double, both writer/quota isolation and shared-target order, old 512 and new 2048 boundaries,
 maximum eight displays and malformed records. The frozen owner catalogue and legacy aggregate tests
 continue to run separately without changed assertions.
+
+When the process explicitly sets `--surface-input-event-capacity`, operator and display scopes each gain only the
+read-only `surface_control_input_events` tool. The whitelist follows actual session registration; the default role
+catalogues remain unchanged. No owner, parameter, input or reset permission is added to a display credential.

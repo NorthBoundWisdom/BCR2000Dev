@@ -1,0 +1,19 @@
+{
+  "source_revision": "12ba0edbc1f2c46eea5311f9b8f982d563c55b75",
+  "source_remote": "https://github.com/NorthBoundWisdom/SurfacePlugins.git",
+  "sdk_version": "1.4.0",
+  "zip_sha256": "c277eb0a78c2dc165aac7ab0384c00853376bf119df5906f65d8e724c6a9423e",
+  "members_sha256": {
+    "surface_conformance/__init__.py": "45ef28782765e4801c3d59adb75c9fc9f2da7a0dfac40e23357a7f0674d44e1b",
+    "surface_conformance/__main__.py": "f76a633e1cde28b81fca816fba6e2a99fd0e638e0c95e90ed1246971cc121920",
+    "surface_control/__init__.py": "13ef593f197a9036b6012e2796d213e1061605f211d2759c8bde3dd93d8dfc80",
+    "surface_control_diagnostics/README.md": "a66efa6a12cc900a40aa7c448c6cf60424e77c2f5e4fa684c86df870c3abeaa2",
+    "surface_control_diagnostics/__init__.py": "c69c7be4a58a76a1f0811104f4ce2cdab8be1d6b3c7776a52dcb6515cfc73a60",
+    "surface_control_diagnostics/__main__.py": "a989bfbd20824f2d4594e5f45106c6450634e1a02e6c4c4ddb5900cdb30cf304",
+    "surface_panel_demo/__init__.py": "e5230f7f7b5aacb5910a07dffba43d466112b1f81c6b78cb1c35b9dae0ca5449",
+    "surface_panel_demo/__main__.py": "fe40999b4b2f5989e25ca40a04ec197325c7568a78013d540a4330c9145c8989",
+    "surface_panel_demo/mappings/bcr.json": "9be9e75fcd8148fe516a64a97856c283f1db70b16ac76cd84afd82356bc5a1a6",
+    "surface_panel_demo/mappings/compact.json": "36deb679c8572a07c1236a8fc12e2f30c1033d0f5d4229354b80c95af1ac9628",
+    "surface_panel_demo/reference_actual.json": "4035c548f4287a17b1516a53682bc760fc37468f68cb13756d134dd32d64f1a6"
+  }
+}

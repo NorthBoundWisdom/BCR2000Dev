@@ -92,7 +92,7 @@ public final class BCRSurfaceControlAdapter {
     public private(set) var diagnosticCount = 0
 
     public init(surface: SurfaceSession, instanceID: String, permissions: Permissions = .init(),
-                eventCapacity: Int = 1024,
+                eventCapacity: Int = 1024, inputEventCapacity: Int? = nil,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
                 holdScheduler: @escaping HoldScheduler = BCRSurfaceControlAdapter.defaultHoldScheduler,
@@ -110,8 +110,8 @@ public final class BCRSurfaceControlAdapter {
             SurfaceControlSession(
                 instanceID: instanceID,
                 epoch: epochFactory(),
-                profile: Self.profile(surface, writeLimits: writeLimits),
-                eventCapacity: eventCapacity, writeLimits: writeLimits
+                profile: Self.profile(surface, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity),
+                eventCapacity: eventCapacity, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity
             ),
             surface: surface,
             at: monotonic()
@@ -138,15 +138,19 @@ public final class BCRSurfaceControlAdapter {
     /// instance is always pinned through `surface_control_discover`. Opens no device.
     public static func publishedContract(surface: SurfaceSession, instanceID: String = "example.simulation",
                                          epoch: String = "discovery-only",
-                                         writeLimits: ControlWriteLimits? = nil) throws -> JSONValue
+                                         writeLimits: ControlWriteLimits? = nil,
+                                         inputEventCapacity: Int? = nil) throws -> JSONValue
     {
         let session = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: epoch,
-            profile: profile(surface, writeLimits: writeLimits), writeLimits: writeLimits
+            profile: profile(surface, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity),
+            writeLimits: writeLimits, inputEventCapacity: inputEventCapacity
         )
         return try .object(["discovery": .encoded(session.discovery()),
-                            "tools": .array(SurfaceControlTools.descriptors.map { try .encoded($0) })])
+                            "tools": .array((SurfaceControlTools.descriptors + (inputEventCapacity == nil ? [] :
+                                    SurfaceControlInputEventsTools.descriptors(source: .simulation)))
+                                .map { try .encoded($0) })])
     }
 
     /// Host error codes pass through unchanged; only unknown errors become `invalid_argument`.
@@ -154,7 +158,9 @@ public final class BCRSurfaceControlAdapter {
         (error as? ControlContractError)?.code ?? (error as? ProviderDomainError)?.code ?? "invalid_argument"
     }
 
-    private static func profile(_ surface: SurfaceSession, writeLimits: ControlWriteLimits? = nil) -> ControlProfile {
+    private static func profile(_ surface: SurfaceSession, writeLimits: ControlWriteLimits? = nil,
+                                inputEventCapacity: Int? = nil) -> ControlProfile
+    {
         let controls = BCRLayout.allControls.map { control -> ControlDescriptor in
             let assignment = surface.engine.configuration.assignment(for: control)
             let relative = control.isContinuous && assignment?.encoderMode != nil && assignment?
@@ -188,6 +194,7 @@ public final class BCRSurfaceControlAdapter {
         var capabilities = ["simulation", "controls.stable_ids", "feedback.unsequenced", "controls.input_declared",
                             "input.independent_sequence", "events.writer_id"]
         if writeLimits != nil { capabilities.append("writes.independent_limits") }
+        if inputEventCapacity != nil { capabilities.append("events.input_retention") }
         let inputs = Set(controls.map(\.input_kind))
         for kind in [ControlInputKind.absolute, .relative, .button] where inputs.contains(kind) {
             capabilities.append("input." + kind.rawValue)
@@ -199,7 +206,12 @@ public final class BCRSurfaceControlAdapter {
         }
         capabilities += ["x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
                          "x.bcr.indicator_blink_static"]
-        return ControlProfile(id: "bcr2000.mock", version: "1.3", controls: controls, capabilities: capabilities)
+        return ControlProfile(
+            id: "bcr2000.mock",
+            version: inputEventCapacity == nil ? "1.3" : "1.5",
+            controls: controls,
+            capabilities: capabilities
+        )
     }
 
     private static func seeded(_ session: SurfaceControlSession, surface: SurfaceSession,
@@ -242,7 +254,7 @@ public final class BCRSurfaceControlAdapter {
             expected: next.expected,
             expectedSequence: next.discovery().latest_sequence,
             epoch: epochFactory(),
-            profile: Self.profile(surface, writeLimits: writeLimits),
+            profile: Self.profile(surface, writeLimits: writeLimits, inputEventCapacity: core.inputEventCapacity),
             at: now
         )
         if surface.source == .mock {
@@ -458,6 +470,16 @@ public final class BCRSurfaceControlAdapter {
             rescheduleHoldTimer()
             return try .encoded(event)
         } catch { failClosed("input_record_failed", error: error); throw error }
+    }
+
+    /// Separate read API: registration/parser are opt-in; no input/feedback/renew/admin budget is consumed.
+    public func execute(_ request: ControlInputEventsRequest, gateway _: MCPApplicationGateway) throws -> JSONValue {
+        try refresh()
+        if automaticHoldExpiry, !handlingRemote, surface.source == .mock { try processHoldExpiries() }
+        try requireMock()
+        return try .encoded(core.inputEvents(expected: request.expected,
+                                             afterInputSequence: request.after_input_sequence,
+                                             limit: request.limit, at: monotonic()))
     }
 
     public func execute(_ request: ControlToolRequest, gateway: MCPApplicationGateway) throws -> JSONValue {

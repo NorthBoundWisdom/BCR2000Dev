@@ -41,6 +41,7 @@ private struct Options {
     var permissions = MCPPermissions()
     var surfacePrincipalFile: URL?
     var surfaceWriteLimits: BCRSurfaceControlAdapter.WriteLimits?
+    var surfaceInputEventCapacity: Int?
     var aggregateWriteLimitSpecified = false
     var displayWriteLimit: Int?
     static func parse(_ arguments: [String]) throws -> Options {
@@ -110,6 +111,13 @@ private struct Options {
                 guard result.displayWriteLimit == nil, let limit = Int(try value()), (1 ... 1000).contains(limit)
                 else { throw BootError(reason: "Invalid or repeated display write limit") }
                 result.displayWriteLimit = limit
+            case "--surface-input-event-capacity":
+                guard result.surfaceInputEventCapacity == nil, let capacity = Int(try value()),
+                      (1 ... 65536).contains(capacity)
+                else {
+                    throw BootError(reason: "Invalid or repeated surface input event capacity")
+                }
+                result.surfaceInputEventCapacity = capacity
             case "--write-limit":
                 result.aggregateWriteLimitSpecified = true
                 guard let limit = Int(try value()),
@@ -174,6 +182,13 @@ private struct Options {
             .reset) ||
             (result.console && (result.source == .mock || result.hardwareProfile))
         else { throw BootError(reason: "Surface permissions require a Mock console or explicit hardware profile") }
+        guard result.surfaceInputEventCapacity == nil ||
+            (result.console && (result.usesSimulationConfiguration || result.hardwareProfile))
+        else {
+            throw BootError(
+                reason: "Surface input event capacity requires an explicit simulation configuration/profile or hardware profile"
+            )
+        }
         return result
     }
 }
@@ -273,6 +288,7 @@ private struct BCRProviderService {
                                   Display requires BOTH --hardware-output write and --allow-surface-feedback
     --describe-surface            Print the selected profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
+    --surface-input-event-capacity N  Explicit independent input history (1...65536); selected profile opts into 1.5
     --surface-client-tokens-stdin  Private owner/operator/display JSON pipe; optional displays array adds up to seven displays
     --display-write-limit N       Explicit independent display requests/s, 1...1000; absent keeps old aggregate budget
     --surface-principal-file PATH Explicit private host-issued principal record; default memory only
@@ -318,9 +334,14 @@ private struct BCRProviderService {
                 try FileHandle.standardOutput.write(
                     encoder
                         .encode(options.hardwareProfile ? BCRHardwareSurfaceControlAdapter
-                            .publishedContract(surface: session) : BCRSurfaceControlAdapter.publishedContract(
+                            .publishedContract(
                                 surface: session,
-                                writeLimits: options.surfaceWriteLimits
+                                inputEventCapacity: options.surfaceInputEventCapacity
+                            ) :
+                            BCRSurfaceControlAdapter.publishedContract(
+                                surface: session,
+                                writeLimits: options.surfaceWriteLimits,
+                                inputEventCapacity: options.surfaceInputEventCapacity
                             )) + Data("\n".utf8)
                 )
                 return
@@ -468,7 +489,8 @@ private struct BCRProviderService {
                                           enableHardwareSurface: options.hardwareProfile,
                                           surfaceInstanceID: options.surfaceInstanceID,
                                           surfacePermissions: options.surfacePermissions, surfacePrincipals: principals,
-                                          surfaceWriteLimits: options.surfaceWriteLimits)
+                                          surfaceWriteLimits: options.surfaceWriteLimits,
+                                          surfaceInputEventCapacity: options.surfaceInputEventCapacity)
             try ProviderMCPModule.installShared(on: gateway, application: application)
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),

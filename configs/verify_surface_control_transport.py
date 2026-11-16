@@ -24,6 +24,10 @@ import threading
 import time
 from urllib.parse import urlsplit
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 
 class _LoopbackHTTPServer(ThreadingHTTPServer):
     """HTTPServer.server_bind resolves its host with socket.getfqdn(), a reverse DNS lookup that
@@ -233,7 +237,10 @@ def main():
         assert not Path(name).is_absolute() and ".." not in Path(name).parts
         assert path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(artifact)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == wanted
-    assert manifest["surface_control_contract"] == "1.3" and manifest["surface_control_sdk"] == "1.4.0"
+    from configs.surface_sdk_metadata import verify_manifest as verify_sdk_manifest
+
+    assert manifest["surface_control_contract"] == "1.3"
+    sdk, sdk_version = verify_sdk_manifest(artifact, manifest)
     # E-pre bytes are a fixed external golden, not a self-consistent newly generated manifest.
     golden = {
         "surface-control-software-v1.json": "e7d1fe278026778fd1c148f8d1fcfa334cbac6a3202ec01bf52594c205d80f18",
@@ -250,13 +257,12 @@ def main():
     )
     assert (artifact / "control-contract.json").read_bytes() == described
     print("PASS E-pre raw description and four frozen fixture SHA-256 goldens", flush=True)
-    sdk = artifact / "surface-control-sdk-1.4.0.zip"
     sys.path.insert(0, str(sdk))
     import surface_control
     from surface_control import Client, CommandCursor, SurfaceError
 
     # The delivered SDK is the locked shared package source, byte for byte.
-    assert surface_control.__version__ == "1.4.0" and surface_control.__file__.startswith(str(sdk) + "/")
+    assert surface_control.__version__ == sdk_version and surface_control.__file__.startswith(str(sdk) + "/")
 
     cases = []
     hosts = []
@@ -823,6 +829,13 @@ def main():
         rejected(stale_cursor.poll, "input_stale")
         rejected(stale_cursor.poll, "recovery_required")
         passed("stale_input_does_not_get_a_new_deadline")
+        if sdk_version == "1.5.0":
+            from configs.verify_surface_input_retention import verify_simulation
+
+            retention_cases = verify_simulation(
+                (artifact / "BCRProviderService").resolve(), args.output / "input-retention"
+            )
+            passed("explicit_input_retention_15_process_routes", cases=retention_cases)
         report = {
             "passed": True,
             "scope": "real_process_and_loopback",

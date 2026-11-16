@@ -86,7 +86,7 @@ success does not mean the device displayed the value. Reprepare after generation
 For explicit hardware surface 1.4, add `--hardware-profile --surface-instance-id operator-bcr`.
 Keep the learned `--hardware-map` required above. Read-only input observation uses default
 `observe` and no display permission. For displays add BOTH `--hardware-output write` and
-`--allow-surface-feedback`. SDK 1.4.0 must explicitly accept hardware; ordinary simulation
+`--allow-surface-feedback`. SDK 1.5.0 must explicitly accept hardware; ordinary simulation
 continues to advertise 1.3. This does not grant physical qualification.
 
 Before preparing a physical four-role consumer, run the delivered `BCRProfileTool
@@ -106,7 +106,7 @@ checks every present frozen descriptor and rejects unregistered or incorrectly g
 For separate simulation operator and display clients see `SURFACE_CLIENTS.md`. The optional
 `--surface-client-tokens-stdin` receives **owner, operator, display** credentials through one dedicated
 private JSON pipe; no token belongs in argv, reports or a delivery. The default single-token mode is unchanged.
-The runtime SDK excludes test doubles; `TEST-ONLY-surface-control-testing-1.4.0.zip` is a separate test asset.
+The runtime SDK excludes test doubles; `TEST-ONLY-surface-control-testing-1.5.0.zip` is a separate test asset.
 
 Hardware source/profile, button edges, current preset and actual lights still require attended validation.
 A local candidate package and a successful fake-device test do not confer that qualification.
@@ -125,7 +125,7 @@ The process owner supplies the three-role JSON through an anonymous stdin pipe; 
 in argv/files. Pass only the display credential through a separate anonymous FD to the SDK example:
 
 ```sh
-PYTHONPATH=<delivery>/surface-control-sdk-1.4.0.zip python3 -B -m surface_panel_demo \
+PYTHONPATH=<delivery>/surface-control-sdk-1.5.0.zip python3 -B -m surface_panel_demo \
   --url <owned-ready-url> --instance-id PANEL --token-fd <DISPLAY_FD> --mapping bcr --hz 1 --duration 15
 ```
 
@@ -145,3 +145,21 @@ Debug-only maintainers can omit `--simulation-only` to include the explicit fake
 If the artifact has no hardware map, the checker creates a clearly TEST-ONLY map/candidate under its
 new output directory using the offline profile tool, never changing the artifact, preset or qualification.
 All rehearsals use only owned loopback processes, never a physical endpoint.
+
+## Optional independent input history
+
+`--surface-input-event-capacity N` (1...65536) requires an explicit simulation profile/configuration or hardware
+profile. Only that session advertises contract/profile 1.5 and `events.input_retention`, with the additional read-only
+`surface_control_input_events` tool. Reads consume no input, feedback, renew or admin budget. Feedback can still evict
+the old global event FIFO; the independent input history retains accepted, ignored and expiry records until its own
+bounded capacity is exceeded. Consumers explicitly choose SDK `InputEventCursor`; the default cursor stays unchanged.
+
+Without this option, discovery and the seven tool definitions remain simulation 1.3 / hardware 1.4. Hardware 1.5
+still rejects remote input/renew/reset; explicit display still needs both write policy and display permission.
+The runtime ZIP is SDK 1.5.0 and includes neither test doubles nor the historical SDK1.4 fixture. Both diagnostic
+capture schemas and the opt-in retention examples are shipped. The private `surface-sdk-metadata.json` pins the
+actual ZIP version/hash/shared revision and is itself pinned by the final artifact manifest.
+
+Current generated field instructions are under `attended/` and reference the validated SDK metadata. The preserved
+F documents and prior delivery directories describe their original frozen context; they do not gain qualification
+or change SDK references merely because a newer artifact was built.
