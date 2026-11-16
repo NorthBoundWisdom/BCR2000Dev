@@ -51,6 +51,18 @@ public enum SurfaceEffect: Equatable, Sendable {
 public struct SurfaceEngine: Sendable {
     /// Display-only observations are independent of command parameters and actual telemetry.
     private var displayFeedback: [BCRControlID: UInt16] = [:]
+    private var displayOwners: [BCRControlID: UInt64] = [:]
+    private var nextDisplayOwner: UInt64 = 0
+
+    struct DisplayUndo: Sendable {
+        let control: BCRControlID
+        let previousValue: UInt16?
+        let previousOwner: UInt64?
+        let previousState: SurfaceControlState?
+        let plannedState: SurfaceControlState?
+        let owner: UInt64
+    }
+
     public private(set) var hardwareMap: HardwareMap
     public private(set) var configuration: SurfaceConfiguration
     public private(set) var parameterValues: [ParameterID: Double]
@@ -333,13 +345,38 @@ public struct SurfaceEngine: Sendable {
     {
         guard let midi = hardwareMap.midi(for: control), rawValue <= (midi.kind == .nrpn ? 16383 : 127)
         else { throw ProviderDomainError("invalid_argument", "Display feedback exceeds the mapped encoding") }
+        nextDisplayOwner &+= 1
+        displayOwners[control] = nextDisplayOwner
         displayFeedback[control] = rawValue
         return feedback(to: [control], at: now)
+    }
+
+    mutating func beginDisplayFeedback(_ control: BCRControlID, rawValue: UInt16, at now: Date) throws
+        -> (effects: [SurfaceEffect], undo: DisplayUndo)
+    {
+        let value = displayFeedback[control], owner = displayOwners[control], state = controls[control]
+        let effects = try setDisplayFeedback(control, rawValue: rawValue, at: now)
+        return (effects, .init(control: control, previousValue: value, previousOwner: owner,
+                               previousState: state, plannedState: controls[control], owner: nextDisplayOwner))
+    }
+
+    /// Revert only this request's still-owned projection. Never restore transport evidence or authority.
+    mutating func undoDisplayFeedback(_ undo: DisplayUndo, restorePrevious: Bool) {
+        guard displayOwners[undo.control] == undo.owner else { return }
+        if restorePrevious {
+            displayFeedback[undo.control] = undo.previousValue
+            displayOwners[undo.control] = undo.previousOwner
+            if controls[undo.control] == undo.plannedState { controls[undo.control] = undo.previousState }
+        } else {
+            displayFeedback[undo.control] = nil
+            displayOwners[undo.control] = nil
+        }
     }
 
     public mutating func clearDisplayFeedback(at now: Date) -> [SurfaceEffect] {
         let targets = Array(displayFeedback.keys).sorted()
         displayFeedback.removeAll()
+        displayOwners.removeAll()
         for control in targets where configuration.assignment(for: control) == nil {
             record(control, value: 0, direction: .output)
         }
@@ -522,6 +559,7 @@ public struct SurfaceEngine: Sendable {
 
     public mutating func replaceHardwareMap(_ map: HardwareMap) {
         displayFeedback.removeAll()
+        displayOwners.removeAll()
         hardwareMap = map
         incrementRemainders.removeAll()
         absoluteInputs.removeAll()

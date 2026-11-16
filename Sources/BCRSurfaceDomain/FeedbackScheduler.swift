@@ -70,6 +70,21 @@ final class FeedbackPlanner {
     }
 }
 
+/// Invocation-local receipt. Nested operations never inherit or overwrite this collector.
+@MainActor
+final class FeedbackReceipt {
+    var deliveries: [FeedbackDelivery?] = []
+    var completionError: (any Error)?
+    let accepted: (@MainActor () throws -> Void)?
+    init(accepted: (@MainActor () throws -> Void)? = nil) { self.accepted = accepted }
+    func record(_ delivery: FeedbackDelivery?) {
+        deliveries.append(delivery)
+        if delivery == .sent {
+            do { try accepted?() } catch { completionError = error }
+        }
+    }
+}
+
 enum FeedbackDispatch: Equatable, Sendable { case enqueue, send }
 
 public struct ScheduledFeedback: Equatable, Sendable {

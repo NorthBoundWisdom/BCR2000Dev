@@ -40,3 +40,33 @@ to the new endpoint. CoreMIDI additionally validates the expected transport gene
 queue. GUI and headless Provider use this same session/driver route.
 
 These are software tests with fake devices, not physical qualification. No device connection is needed.
+
+## Synchronous display transaction receipts and reentrancy
+
+An explicit hardware display request uses an invocation-local receipt, passed only along that request's
+planned sends. Nested requests own different receipts; ordinary nested feedback cannot fill the caller's
+receipt. The bounded monitor ring remains diagnostic and never decides whether a request completed.
+
+`device.send` returning successfully establishes transport acceptance. The canonical contract completion
+hook runs at that point, before monitor, legacy journal or presentation callbacks. A hardware input committed
+during `send` is already canonical and remains intact; a nested feedback completed from a later monitor
+callback appends after the outer receipt. No whole contract candidate is kept across IO and assigned back.
+CAS and writer budget checks remain at admission, once. Completion appends to the current same-epoch core
+with the already-consumed CAS removed and a current trusted monotonic timestamp.
+
+A later successful same-control/kind feedback invoked from inside an earlier `send` supersedes the older
+completion. A per-property operation ordinal tracks ordering only, not values or a second authority. The
+older transport acceptance remains visible, but the older transaction returns `delivery_failed` rather than
+appending an accepted value over the newer one. An unsuccessful newer request does not suppress an older
+successful completion. For monitor-triggered nesting, the outer receipt commits first, both accepted events
+remain ordered, and the newer projection wins.
+
+Failed display planning reverts only its still-owned display overlay and, when untouched, its own generated
+control projection. Each overlay mutation has an ownership revision, including repeated equal values.
+Rollback never restores an engine snapshot, parameter/configuration state, echo cache or input references.
+Across source/route/binding changes, an old request can only revoke its own still-owned overlay; it cannot
+restore an old-context overlay or overwrite a newer operation's projection. No compensating packet is sent.
+
+If IO was accepted but the epoch changed or the transaction could not be canonically completed, the existing
+`delivery_failed` code reports incomplete transaction completion. Output may already have happened. This is
+not `stale`, does not promise non-execution, adds no remote field/tool/schema and causes no automatic resend.

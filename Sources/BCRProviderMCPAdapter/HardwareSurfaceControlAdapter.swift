@@ -18,6 +18,9 @@ public final class BCRHardwareSurfaceControlAdapter {
     private var generation: String
     private var source: DeviceSource
     private var prepared: (ControlHardwareInput, Double)?
+    private struct FeedbackProperty: Hashable { let control: String; let kind: String }
+    private var feedbackOrdinal: UInt64 = 0
+    private var completedFeedbackOrdinals: [FeedbackProperty: UInt64] = [:]
     public private(set) var diagnostics: [String] = []
 
     public static func exclusions(_ surface: SurfaceSession) -> [String] {
@@ -122,6 +125,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         core = next; context = surface.mappingContextRevision; generation = surface.inputEvents
             .generation; source = surface.source
         prepared = nil
+        completedFeedbackOrdinals.removeAll()
     }
 
     private func preflight(_ control: BCRControlID, _ message: MIDIVoiceMessage) throws {
@@ -209,16 +213,30 @@ public final class BCRHardwareSurfaceControlAdapter {
                       number.rounded() == number else { throw ControlContractError("invalid_value") }
                 raw = UInt16(number)
             }
-            var next = core
-            let event = try next.recordFeedback(
-                update,
-                origin: .remote,
-                at: now,
-                writerID: (gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID)
-            )
+            let writer = gateway.authenticatedSurfaceWriterID ?? principals.remoteWriterID
+            let admitted = core.expected
             try gateway.consumeWrites(1)
-            try surface.setHardwareDisplayFeedback(control, rawValue: raw)
-            core = next
+            feedbackOrdinal &+= 1
+            let ordinal = feedbackOrdinal
+            let property = FeedbackProperty(control: update.control_id, kind: update.kind)
+            var completedEvent: ControlEvent?
+            try surface.setHardwareDisplayFeedback(control, rawValue: raw) {
+                try self.refresh()
+                guard self.core.expected == admitted,
+                      self.completedFeedbackOrdinals[property].map({ $0 <= ordinal }) ?? true
+                else { throw ControlContractError("delivery_failed") }
+                // CAS was consumed at admission before IO. Reentrant input/feedback facts remain canonical.
+                let completion = ControlFeedback(expected: admitted, controlID: update.control_id,
+                                                 kind: update.kind, value: update.value)
+                completedEvent = try self.core.recordFeedback(
+                    completion,
+                    origin: .remote,
+                    at: self.monotonic(),
+                    writerID: writer
+                )
+                self.completedFeedbackOrdinals[property] = ordinal
+            }
+            guard let event = completedEvent else { throw ControlContractError("delivery_failed") }
             return try .encoded(event)
         }
     }

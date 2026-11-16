@@ -812,28 +812,51 @@ public final class SurfaceSession {
     }
 
     /// Explicit display-only request through the existing effect/transmit exit. No input or parameter write.
-    public func setHardwareDisplayFeedback(_ control: BCRControlID, rawValue: UInt16) throws {
+    public func setHardwareDisplayFeedback(_ control: BCRControlID, rawValue: UInt16,
+                                           accepted: (@MainActor () throws -> Void)? = nil) throws
+    {
         guard source == .hardware, hardwareOutput == .write, connection.isConnected,
               !diagnosticReadbackActive, let midi = engine.hardwareMap.midi(for: control),
               !engine.hardwareMap.isVisualizationOnly(control), midi.kind != .nrpn, rawValue <= 127
         else { throw ProviderDomainError("permission_denied", "Hardware display output is not permitted") }
-        let previous = engine
-        var candidate = engine
-        let effects = try candidate.setDisplayFeedback(control, rawValue: rawValue, at: now())
-        guard !effects.isEmpty else { throw ProviderDomainError("unsupported_feedback", "No display route") }
-        let mark = nextEventID
-        engine = candidate
-        let plan = FeedbackBatchPlan(effects: effects, origin: .external, timing: .synchronous)
+        let originalSource = source, originalGeneration = inputEvents.generation
+        let originalMapping = mappingContextRevision
+        let originalEndpoint = endpointSource(source: source, direction: .output)
+        func sameScope() -> Bool {
+            source == originalSource && inputEvents.generation == originalGeneration &&
+                mappingContextRevision == originalMapping &&
+                endpointSource(source: source, direction: .output) == originalEndpoint
+        }
+        let update = try engine.beginDisplayFeedback(control, rawValue: rawValue, at: now())
+        guard !update.effects.isEmpty else {
+            engine.undoDisplayFeedback(update.undo, restorePrevious: sameScope())
+            throw ProviderDomainError("unsupported_feedback", "No display route")
+        }
+        let receipt = FeedbackReceipt(accepted: accepted)
+        let plan = FeedbackBatchPlan(effects: update.effects, origin: .external, timing: .synchronous)
         try feedbackPlanner.withBatch(plan) {
-            withWriteOrigin(plan.origin) { perform(plan.effects) }
-            let outputs = events.filter { $0.id > mark && $0.direction == .output }
-            guard !outputs.isEmpty, outputs.allSatisfy({ $0.delivery == .sent }) else {
-                // Keep the engine on what the device shows: roll back only when nothing reached it.
-                if !outputs.contains(where: { $0.delivery == .sent }) { engine = previous }
+            withWriteOrigin(plan.origin) { perform(plan.effects, receipt: receipt) }
+            let fullyAccepted = !receipt.deliveries.isEmpty && receipt.deliveries.allSatisfy { $0 == .sent }
+            guard fullyAccepted, receipt.completionError == nil, sameScope() else {
+                if !receipt.deliveries.contains(where: { $0 == .sent }) {
+                    engine.undoDisplayFeedback(update.undo, restorePrevious: sameScope())
+                } else if !sameScope() {
+                    engine.undoDisplayFeedback(update.undo, restorePrevious: false)
+                }
                 publishChange()
-                throw ProviderDomainError("delivery_failed", "Display transport did not accept output")
+                throw ProviderDomainError(
+                    "delivery_failed",
+                    "Display transaction did not complete; output may have occurred"
+                )
             }
             publishChange()
+            guard sameScope() else {
+                engine.undoDisplayFeedback(update.undo, restorePrevious: false)
+                throw ProviderDomainError(
+                    "delivery_failed",
+                    "Display transaction did not complete; output may have occurred"
+                )
+            }
         }
     }
 
@@ -1133,7 +1156,7 @@ public final class SurfaceSession {
         perform(effects)
     }
 
-    private func perform(_ effects: [SurfaceEffect], timing: FeedbackTiming? = nil) {
+    private func perform(_ effects: [SurfaceEffect], timing: FeedbackTiming? = nil, receipt: FeedbackReceipt? = nil) {
         for effect in effects {
             switch effect {
             case .pageChanged:
@@ -1150,7 +1173,7 @@ public final class SurfaceSession {
                 mockDevice.configureModes(engine.configuration)
                 persistConfiguration()
                 onEvent?(.pageChanged)
-            case let .send(message): transmit(message, timing: timing)
+            case let .send(message): transmit(message, timing: timing, receipt: receipt)
             case let .triggerAgent(slot): onTriggerAgent?(slot)
             case let .triggerAction(action): onTriggerAction?(action)
             case let .learned(control, midi):
@@ -1163,11 +1186,12 @@ public final class SurfaceSession {
         }
     }
 
-    private func transmit(_ message: MIDIVoiceMessage, timing: FeedbackTiming? = nil) {
+    private func transmit(_ message: MIDIVoiceMessage, timing: FeedbackTiming? = nil, receipt: FeedbackReceipt? = nil) {
         let plan = feedbackPlanner.message(message, origin: writeOrigin, requestedTiming: timing)
         if source == .hardware, hardwareOutput == .observe {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed)
+            receipt?.record(.suppressed)
             return
         }
         let canCoalesce = source == .hardware && feedbackPolicy.enabled && connection.connectedDestination != nil
@@ -1180,15 +1204,17 @@ public final class SurfaceSession {
                                    generation: inputEvents.generation,
                                    mappingGeneration: mappingContextRevision
                                ))
+            receipt?.record(nil)
             notifyFeedbackQueue()
         case .send:
-            _ = withWriteOrigin(plan.origin) { transmitNow(plan.message) }
+            _ = withWriteOrigin(plan.origin) { transmitNow(plan.message, receipt: receipt) }
         }
     }
 
     @discardableResult
     private func transmitNow(_ message: MIDIVoiceMessage, expectedEndpoint: MIDIEndpointSource? = nil,
-                             expectedMappingRevision: UInt64? = nil) -> FeedbackDelivery
+                             expectedMappingRevision: UInt64? = nil,
+                             receipt: FeedbackReceipt? = nil) -> FeedbackDelivery
     {
         let sendSource = source
         let sendControl = engine.hardwareMap.control(for: message.controlID)
@@ -1204,6 +1230,7 @@ public final class SurfaceSession {
         if let expectedEndpoint, expectedEndpoint != endpoint {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed, endpoint: expectedEndpoint, context: eventContext)
+            receipt?.record(.suppressed)
             return .suppressed
         }
         if let context = parameterWriteContext,
@@ -1212,9 +1239,12 @@ public final class SurfaceSession {
         {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed, endpoint: endpoint, context: eventContext)
+            receipt?.record(.suppressed)
             return .suppressed
         }
-        if let expectedMappingRevision, expectedMappingRevision != mappingContextRevision { return .suppressed }
+        if let expectedMappingRevision, expectedMappingRevision != mappingContextRevision {
+            receipt?.record(.suppressed); return .suppressed
+        }
         let delivery: FeedbackDelivery
         if device.connection.connectedDestination == nil {
             droppedFeedbackCount += 1
@@ -1244,6 +1274,8 @@ public final class SurfaceSession {
                 delivery = .failed
             }
         }
+        // Linearize canonical acknowledgement before monitor/journal/UI callbacks can reenter.
+        receipt?.record(delivery)
         log(.output, message, source: sendSource, control: sendControl,
             ignored: false, delivery: delivery, endpoint: endpoint, context: eventContext, writeCause: sendOrigin)
         return delivery
