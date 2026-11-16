@@ -109,27 +109,51 @@ jobs:
           key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
           restore-keys: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
-      - run: python3 configs/check_domain_boundaries.py
-      - name: Compile native targets and tests
+      - name: Restore the matching audit helper binaries
+        id: audit-cache
+        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            build/tools/desktop_audit
+            build/tools/desktop_focus_host
+          key: native-audit-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
+      - name: Compile native targets, tests and original audit helpers concurrently
         id: compile
-        run: swift build --build-path build/swiftpm --build-tests
+        run: python3 configs/ci_native_compile.py
       - name: Save compiled native cache even if later tests fail
-        if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
+        if: always() && steps.compile.outputs.native_build_succeeded == 'true' && github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
           key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+      - name: Save original audit helpers before any GUI runs
+        if: always() && steps.compile.outputs.audit_helpers_succeeded == 'true' && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            build/tools/desktop_audit
+            build/tools/desktop_focus_host
+          key: native-audit-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
+      - name: Validate boundaries using the same compiled manifest scratch
+        id: boundaries
+        if: ${{ !cancelled() && steps.compile.outputs.native_build_succeeded == 'true' }}
+        run: python3 configs/check_domain_boundaries.py
       # setup_local_project.py also builds SurfacePlugins on its own; the test build compiles it anyway.
       - run: python3 configs/validate_repo_commands.py .
       - run: python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check
       - run: python3 configs/check_accessibility.py
       - run: python3 -m compileall -q configs
-      - name: Run all Python workflows and native suites independently
-        run: python3 configs/ci_parallel_checks.py tests
+      - name: Run all Python workflows and precompiled native suites independently
+        if: ${{ !cancelled() && steps.compile.outputs.native_build_succeeded == 'true' && steps.compile.outputs.audit_helpers_succeeded == 'true' && steps.boundaries.outcome == 'success' }}
+        run: python3 configs/ci_parallel_checks.py tests --native-precompiled
       - run: python3 configs/macos_workflow.py build --distribution ad-hoc
       - run: python3 configs/macos_workflow.py smoke
       - run: python3 tools/mcp_integration.py
       - run: git diff --check
+      - name: Confirm native and isolated MCP products exited
+        if: ${{ !cancelled() }}
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/native-processes-exited.json
       - name: Preserve test and MCP acceptance logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -145,29 +169,72 @@ jobs:
             build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error
-      # This phase still runs after a failed native suite, as the former independent job did.
-      - name: Confirm native products exited before delivery
-        id: delivery-isolation
-        if: ${{ !cancelled() }}
-        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/processes-exited.json
-      - name: Package the already compiled provider and profile products
+      - name: Report whole-run wall time and enforce 300s budget
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESTORED_BUILD_KEY: ${{ steps.build-cache.outputs.cache-matched-key }}
+        run: python3 configs/ci_job_budget.py --cache-key "$RESTORED_BUILD_KEY"
+  delivery:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: every tracked file gets its last commit time (below).
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      # SwiftPM rebuilds any input whose mtime changed. Commit times keep a restored build incremental:
+      # files untouched since the cached build look unchanged, changed files rebuild.
+      - run: python3 configs/restore_git_mtimes.py
+      - name: Identify the Swift toolchain for the build cache
+        run: python3 -c "import hashlib, subprocess; v = subprocess.run(['swift', '--version'], capture_output=True); print('SWIFT_ID=' + hashlib.sha256(v.stdout + v.stderr).hexdigest()[:16])" >> "$GITHUB_ENV"
+      - name: Cache the locked SurfacePlugins checkout
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/seed
+          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
+      - name: Restore the latest SwiftPM build
+        id: build-cache
+        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/swiftpm
+          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
+            delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
+      - run: python3 configs/surface_plugins_dependency.py ensure
+      - name: Compile provider and offline profile products
+        id: compile
+        run: |
+          swift build --build-path build/swiftpm --product BCRProviderService
+          swift build --build-path build/swiftpm --product BCRProfileTool
+      - name: Save compiled delivery products before acceptance
+        if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/swiftpm
+          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+      - name: Validate delivery boundaries before running products
+        id: boundaries
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' }}
+        run: python3 configs/check_domain_boundaries.py
+      - name: Package the independently compiled provider products
         id: package-provider
-        if: ${{ !cancelled() && steps.compile.outcome == 'success' && steps.delivery-isolation.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' && steps.boundaries.outcome == 'success' }}
         run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug --skip-build
-      - name: Check packaged display targets
-        id: display-targets
-        if: ${{ !cancelled() && steps.package-provider.outcome == 'success' }}
-        run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
+      - run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
+      - name: Confirm delivery preparation products exited
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/delivery-processes-exited.json
       - name: Serial real-clock transport acceptance
-        id: delivery-transports
-        if: ${{ !cancelled() && steps.display-targets.outcome == 'success' }}
         run: python3 configs/ci_parallel_checks.py transports
       - name: Isolated display budget latency and cadence acceptance
-        id: delivery-budget
-        if: ${{ !cancelled() && steps.delivery-transports.outcome == 'success' }}
         run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - name: Isolated real-time synthetic status demo acceptance
-        if: ${{ !cancelled() && steps.delivery-budget.outcome == 'success' }}
         run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
       - name: Preserve delivery acceptance and timing evidence
         if: always()

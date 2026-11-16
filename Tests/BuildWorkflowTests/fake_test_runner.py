@@ -10,7 +10,7 @@ with (root / "fake-calls.jsonl").open("a") as calls:
     calls.write(json.dumps([Path(__file__).name, *arguments]) + "\n")
 if Path(__file__).name == "xcrun" and arguments == ["--find", "xctest"]:
     print(root / "native-xctest")
-elif arguments[0] == "test" and arguments[-1] == "list":
+elif arguments[0] == "test" and (arguments[-1] == "list" or arguments[-2:] == ["list", "--skip-build"]):
     print("\n".join(json.loads((root / "fixture.json").read_text())["cases"]))
 elif arguments[0] == "build" and arguments[-1] == "--show-bin-path":
     print(root)

@@ -120,12 +120,20 @@ def _checked(command: list[str], root: Path, log: Path, deadline: float) -> str:
 
 
 def run(
-    command: list[str], modules: list[str], root: Path, directory: Path, workers: int, timeout: float
+    command: list[str],
+    modules: list[str],
+    root: Path,
+    directory: Path,
+    workers: int,
+    timeout: float,
+    *,
+    precompiled: bool = False,
 ) -> tuple[Path, int]:
     """Build/list once, run each selected class exactly once, then emit native per-case xunit."""
     started = time.monotonic()
     deadline = started + timeout
-    cases = inventory(_checked(command + ["list"], root, directory / "discovery.log", deadline), modules)
+    discovery = command + ["list"] + (["--skip-build"] if precompiled else [])
+    cases = inventory(_checked(discovery, root, directory / "discovery.log", deadline), modules)
     binary = Path(
         _checked([command[0], "build", *command[2:], "--show-bin-path"], root, directory / "binary-path.log", deadline)
     )

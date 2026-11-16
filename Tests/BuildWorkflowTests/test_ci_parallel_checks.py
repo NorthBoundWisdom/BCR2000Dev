@@ -68,40 +68,36 @@ class IndependentCIChecksTests(unittest.TestCase):
         self.assertNotIn("verify_display_budget.py", source)
         self.assertNotIn("verify_status_panel_demo.py", source)
         workflow = (root / ".github/workflows/ci.yml").read_text()
-        native, delivery = workflow.split("      - name: Confirm native products exited before delivery\n")
+        native, delivery = workflow.split("  delivery:\n")
         self.assertNotIn("ci_parallel_checks.py transports", native)
         self.assertIn("Isolated display budget latency", delivery)
         self.assertIn("Isolated real-time synthetic status", delivery)
         self.assertNotIn("needs:", workflow)
-        self.assertNotIn("  delivery:\n", workflow)
-        self.assertEqual(workflow.count("runs-on: macos-26"), 1)
+        self.assertEqual(workflow.count("runs-on: macos-26"), 2)
         self.assertLess(native.index("ci_parallel_checks.py tests"), native.index("tools/mcp_integration.py"))
         self.assertIn("assert_ci_processes_exited.py", delivery)
-        self.assertLess(delivery.index("assert_ci_processes_exited.py"), delivery.index("package_provider.py"))
+        self.assertLess(delivery.index("package_provider.py"), delivery.index("assert_ci_processes_exited.py"))
+        self.assertLess(
+            delivery.index("assert_ci_processes_exited.py"), delivery.index("ci_parallel_checks.py transports")
+        )
         self.assertLess(delivery.index("ci_parallel_checks.py transports"), delivery.index("verify_display_budget.py"))
         self.assertLess(delivery.index("verify_display_budget.py"), delivery.index("verify_status_panel_demo.py"))
-        self.assertIn("steps.delivery-isolation.outcome == 'success'", delivery)
-        self.assertIn("steps.package-provider.outcome == 'success'", delivery)
-        self.assertIn(
-            "if: ${{ !cancelled() && steps.compile.outcome == 'success' && steps.delivery-isolation.outcome == 'success' }}",
-            delivery,
-        )
-        package_condition = delivery.split("id: package-provider\n", 1)[1].split("run:", 1)[0]
-        self.assertNotIn("steps.tests", package_condition)
-        self.assertNotIn("success()", package_condition)
-        self.assertIn("steps.delivery-transports.outcome == 'success'", delivery)
-        self.assertIn("steps.delivery-budget.outcome == 'success'", delivery)
-        self.assertIn("if: ${{ !cancelled() }}", delivery)
+        condition = delivery.split("id: package-provider\n", 1)[1].split("run:", 1)[0]
+        self.assertIn("steps.compile.outcome == 'success'", condition)
+        self.assertIn("steps.boundaries.outcome == 'success'", condition)
+        self.assertNotIn("steps.tests", condition)
+        self.assertNotIn("success()", condition)
 
     def test_merged_macos_phase_keeps_every_original_check_and_acceptance_command_once(self):
+        # Same native/delivery command inventory, now split across independent VMs.
         workflow = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
-        native = workflow.split("  checks:\n")[1]
+        macos = workflow.split("  checks:\n")[1]
         commands = [
             "python3 configs/validate_repo_commands.py .",
             "python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check",
             "python3 configs/check_accessibility.py",
             "python3 -m compileall -q configs",
-            "python3 configs/ci_parallel_checks.py tests",
+            "python3 configs/ci_parallel_checks.py tests --native-precompiled",
             "python3 configs/macos_workflow.py build --distribution ad-hoc",
             "python3 configs/macos_workflow.py smoke",
             "python3 tools/mcp_integration.py",
@@ -114,8 +110,8 @@ class IndependentCIChecksTests(unittest.TestCase):
         ]
         for command in commands:
             with self.subTest(command=command):
-                self.assertEqual(native.count("run: " + command + "\n"), 1)
-        self.assertIn("name: test-logs-${{ github.run_id }}", native)
-        self.assertIn("name: delivery-checks-${{ github.run_id }}", native)
-        self.assertEqual(native.count("Report whole-run wall time and enforce 300s budget"), 1)
-        self.assertLess(native.index("verify_status_panel_demo.py"), native.index("Report whole-run wall time"))
+                self.assertEqual(macos.count("run: " + command + "\n"), 1)
+        self.assertIn("name: test-logs-${{ github.run_id }}", macos)
+        self.assertIn("name: delivery-checks-${{ github.run_id }}", macos)
+        self.assertEqual(macos.count("Report whole-run wall time and enforce 300s budget"), 2)
+        self.assertLess(macos.index("verify_status_panel_demo.py"), macos.rindex("Report whole-run wall time"))

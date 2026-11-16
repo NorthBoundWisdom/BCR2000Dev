@@ -118,7 +118,7 @@ def test_workers() -> int:
     return max(1, os.cpu_count() or 1)
 
 
-def _run_tests(command: list[str | Path]) -> None:
+def _run_tests(command: list[str | Path], *, precompiled: bool = False) -> None:
     mode = os.environ.get("BCR_TEST_EXECUTION", "batch")
     if mode != "batch":
         raise ValueError("BCR_TEST_EXECUTION must be batch; the legacy case runner was removed")
@@ -132,7 +132,10 @@ def _run_tests(command: list[str | Path]) -> None:
     runs.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
     started = time.monotonic()
-    xunit, code = run([str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S)
+    options = {"precompiled": True} if precompiled else {}
+    xunit, code = run(
+        [str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S, **options
+    )
     print(
         f"Test log: {directory / 'swift-test.log'} ({time.monotonic() - started:.1f}s, {workers} workers)", flush=True
     )
@@ -720,6 +723,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "test", "run", "package", "smoke", "check-package"))
     parser.add_argument("--configuration", choices=("debug", "release"), default="debug")
+    parser.add_argument(
+        "--precompiled-tests",
+        action="store_true",
+        help="CI only after this workspace's successful --build-tests; discovery still runs and every native case is reconciled.",
+    )
     parser.add_argument("--architecture", choices=("native", "arm64", "x86_64", "universal"), default="native")
     parser.add_argument(
         "--distribution",
@@ -748,7 +756,10 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("This workflow requires macOS and Xcode's Swift 6 toolchain.")
         if args.action == "test":
             ensure_dependency(REPO_ROOT)
-            _run_tests(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT])
+            if args.precompiled_tests:
+                _run_tests(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT], precompiled=True)
+            else:
+                _run_tests(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT])
         elif args.action == "package":
             package(
                 args.architecture,

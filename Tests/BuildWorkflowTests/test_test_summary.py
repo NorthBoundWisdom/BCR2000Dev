@@ -95,7 +95,9 @@ class ParallelRunnerTests(unittest.TestCase):
             translated["omit_finish"] = cases[0]
         (root / "fixture.json").write_text(json.dumps({"cases": cases, **translated}))
 
-    def run_fake_modules(self, root, modules, cases, *, required_modules=frozenset(), workers="3", **options):
+    def run_fake_modules(
+        self, root, modules, cases, *, required_modules=frozenset(), workers="3", precompiled=False, **options
+    ):
         (root / "Package.swift").write_text(
             'Package(name: "Fixture", targets: ['
             + ",".join('.testTarget(name: "' + name + '")' for name in modules)
@@ -113,7 +115,7 @@ class ParallelRunnerTests(unittest.TestCase):
             ),
             contextlib.redirect_stdout(output),
         ):
-            macos_workflow.main(["test"])
+            macos_workflow.main(["test"] + (["--precompiled-tests"] if precompiled else []))
         return output.getvalue()
 
     def test_runner_uses_one_discovery_and_bounded_native_batches_with_xunit(self):
@@ -131,6 +133,25 @@ class ParallelRunnerTests(unittest.TestCase):
             self.assertEqual(len(native_calls), len(plan["batches"]))
             self.assertIn("Total: 3 tests, 0 failures; PASS", output)
             self.assertTrue(list((root / "build/test-runs").glob("run-*/swift-test.log")))
+
+    def test_precompiled_discovery_still_reconciles_every_native_case_once(self):
+        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = self.run_fake_modules(root, ["First", "Last"], cases, precompiled=True)
+            calls = [json.loads(line) for line in (root / "fake-calls.jsonl").read_text().splitlines()]
+            discovered = [row for row in calls if row[:2] == ["swift", "test"] and "list" in row]
+            self.assertEqual(len(discovered), 1)
+            self.assertEqual(discovered[0][-2:], ["list", "--skip-build"])
+            plan = json.loads(next((root / "build/test-runs").glob("run-*/plan.json")).read_text())
+            self.assertCountEqual(plan["cases"], cases)
+            self.assertIn("Total: 2 tests, 0 failures; PASS", output)
+
+    def test_precompiled_discovery_still_fails_on_missing_native_completion(self):
+        cases = ["First.Sample/testOne", "Last.Sample/testTwo"]
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
+                self.run_fake_modules(Path(directory), ["First", "Last"], cases, precompiled=True, omit_report=True)
 
     def test_failure_nonzero_exit_missing_native_results_and_missing_module_fail_the_run(self):
         cases = ["First.Sample/testOne", "Last.Sample/testTwo"]

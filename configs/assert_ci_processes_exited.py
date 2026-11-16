@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 
 PRODUCTS = frozenset({"BCRAgentConsole", "BCRProviderService", "BCRProfileTool", "xctest"})
 
 
-def live_products(process_table: str) -> list[dict[str, object]]:
+def live_products(process_table: str, *, owned_root: Path | None = None) -> list[dict[str, object]]:
     found = []
     for line in process_table.splitlines():
         if not line.strip():
@@ -21,7 +22,14 @@ def live_products(process_table: str) -> list[dict[str, object]]:
             raise ValueError("Cannot validate native process exit: malformed PID/comm data")
         pid, command = int(fields[0]), fields[1]
         name = Path(command).name
-        if name in PRODUCTS or name.endswith(".xctest"):
+        owned_build = owned_root / "build" if owned_root is not None else None
+        mcp_test = re.fullmatch(r"BCRTest-[0-9a-f]{8}", name) is not None and (
+            owned_build is not None and Path(command).is_relative_to(owned_build / "mcp-integration")
+        )
+        audit_helper = name in {"desktop_audit", "desktop_focus_host"} and (
+            owned_build is not None and Path(command).is_relative_to(owned_build / "tools")
+        )
+        if name in PRODUCTS or name.endswith(".xctest") or mcp_test or audit_helper:
             found.append({"pid": pid, "executable": command})
     if not process_table.strip():
         raise ValueError("Cannot validate native process exit: empty process inventory")
@@ -35,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         # comm contains the executable name only. Never read or log process arguments/credentials.
         result = subprocess.run(["ps", "-axo", "pid=,comm="], capture_output=True, text=True, check=True)
-        products = live_products(result.stdout)
+        products = live_products(result.stdout, owned_root=Path(__file__).resolve().parents[1])
         record = {"native_products_exited": not products, "live_products": products}
     except (OSError, subprocess.CalledProcessError, ValueError):
         record = {"native_products_exited": False, "error": "cannot_verify_native_process_exit"}

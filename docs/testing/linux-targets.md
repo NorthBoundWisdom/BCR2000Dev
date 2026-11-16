@@ -86,40 +86,43 @@ The first hosted failures were corrected without skipping or relaxing assertions
 
 The Python workflow suite's remote 45-second time was traced to a loopback HTTP fixture's reverse DNS: one case took 36.028 seconds. Binding that literal-loopback fixture without getfqdn reduced it to 0.618 seconds and all per-case times to 10.595 seconds, retaining every request and credential-redaction assertion.
 
-## J native runner consolidation
+## J cold critical path and hosted runner structure
 
-The current workflow requests one Linux runner and one macOS runner. The native checks and delivery
-acceptances now execute in sequence on that same macOS runner, using one checkout, one dependency/cache
-restore and one `swift build --build-tests`. The provider/profile package uses `--skip-build` to reuse those
-compiled products. Each platform still saves its successful compile before running tests. No native,
-portable, catalogue, transport, display-budget, status-demo, GUI or MCP check is removed.
+The current workflow uses one Linux job and two independent `macos-26` Arm64 jobs, native checks and delivery,
+with no `needs` dependency. GitHub's [official image table](https://github.com/actions/runner-images/blob/main/README.md)
+records that label as a standard Arm64 image. Deployment remains macOS 14; this hosted environment change
+establishes no runtime qualification on a physical macOS 14 machine.
 
-After native/Python suites, GUI startup and MCP acceptance return, a read-only `ps` PID/`comm` check must prove
-that product/XCTest processes exited. It never reads arguments, kills a process or retries a failed check.
-Only then can packaging and the original serial transport acceptances run, followed separately by display
-budget acceptance and the synthetic status demo. The delivery phase still attempts to run after a failed
-native suite, as the former independent delivery job did, provided the unique compile succeeded, no native product remains alive and packaging succeeds. A failed
-compile can never package restored-cache binaries under the new source commit. Both artifact groups and every subprocess outcome/log remain available.
+The first macOS-15 J runs exhausted the whole-run budget while waiting for a runner. The first macOS-26 run
+43847535095 started within four seconds, but its cold native/MCP preparation followed by serial delivery
+still took 405 seconds. It passed every functional check and failed the budget. Neither queue nor cold cache
+is exempt, and these failed runs are never rerun or replaced by a claimed warm-cache qualification.
 
-The Linux and merged macOS live budget gates still start at the whole run's creation time, including queue,
-setup and cache time, with the same 300-second limit for cold and warm builds. Final `created_at` to
-`updated_at` verification remains mandatory. Consolidation reduces independent runner requests and duplicate
-preparation; it does not establish that a future hosted queue will be short enough. The failed J-0 run
-43841996950 is retained and never rerun. Its native functional checks succeeded but its live whole-run wall
-was 476.3 seconds, including a 305-second macOS runner wait; that run did not satisfy the budget.
+Native compilation now overlaps the two existing DesktopAudit helper compilations, reusing the original
+`tools/native_ui.py` compiler recipe and source checks. Both branches must finish successfully before tests
+or GUI/MCP execution. Per-branch results/logs remain visible; each successful branch can save its own cache
+even if its sibling fails. Helper cache identity includes image, toolchain, both Swift sources, the original
+Python recipe and the precompile entry point. `cold_build=true` skips helper and project-binary restores.
 
+The domain checker runs after compilation but before products, using `swift package --scratch-path` in the
+same build directory. This avoids a second default `.build` cold manifest/SDK initialization. On the explicit
+CI precompiled path, XCTest discovery uses `list --skip-build`; the complete real inventory and exactly-once
+native start/completion reconciliation remain mandatory. Ordinary CLI tests still build by default. Python
+workflows and native suites keep their independent outcomes/logs.
 
-## J hosted image capacity follow-up
+Delivery restores only same-image/toolchain historical compiled outputs, prefers the full native cache, and
+builds only ProviderService/ProfileTool. It saves in its own namespace, without overwriting the full native
+cache or waiting for this run's native job. Its original four transport commands remain serial, followed by
+separate display-budget and status-demo steps. Compile and boundary success are required before packaging;
+restored stale binaries cannot be labeled with the new source commit after a failed compile.
 
-The single native job now requests the standard Arm64 `macos-26` image. Both J macOS-15 attempts exhausted
-the whole-run budget while waiting for a native runner; they remain failed evidence and are never rerun.
-The X-Touch host independently completed its exact J-0 SHA on macos-26 within 265 seconds. GitHub's
-[official image table](https://github.com/actions/runner-images/blob/main/README.md) lists both labels as
-standard Arm64 images; the label change selects another hosted image pool, without a larger-runner option.
+Both jobs use a read-only PID/comm exit check before completion/timed acceptance. It recognizes the original
+products, XCTest, exact owned `BCRTest-<8 lowercase hex>` MCP executables and the two owned audit helpers. It
+never reads arguments, kills a process or retries; similarly named or other-workspace processes are not
+matched as isolated MCP/audit helpers. All original acceptance arguments, audit thresholds, fixtures and
+assertions remain in force.
 
-Native binary cache keys and restore prefixes include `macos-26` as well as the Swift toolchain identity,
-so SDK-specific outputs cannot restore from the old image namespace. Git-object seed caches remain portable.
-All commands, assertions, the 300-second creation-to-completion rule and deployment target macOS 14 stay
-unchanged. This verifies builds and checks on the new SDK against the existing minimum target; it does not
-establish runtime qualification on an actual macOS 14 machine. A new exact-SHA hosted run must still prove
-the whole-run budget. An external queue exceeding it remains a failure, with no further blind label tuning.
+All three jobs retain the same whole-run creation-to-live-check 300-second gates, including queue/setup/cache
+and cold builds; final exact-SHA `created_at` to `updated_at` verification remains mandatory. This is the
+last concentrated J CI structural correction. If its measured cold critical path still exceeds the budget,
+record that failure rather than tuning labels, dropping checks or treating a later warm result as a cold pass.

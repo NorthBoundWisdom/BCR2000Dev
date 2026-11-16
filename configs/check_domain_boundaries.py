@@ -163,7 +163,19 @@ def check_layers(targets, root=ROOT):
 
 def check():
     ensure_dependency(ROOT, environ=load_build_environment(ROOT))
-    package = json.loads(subprocess.check_output(["swift", "package", "dump-package"], cwd=ROOT, text=True))
+    package = json.loads(
+        subprocess.check_output(
+            [
+                "swift",
+                "package",
+                "--scratch-path",
+                str(ROOT / "build" / ("swiftpm-linux" if sys.platform == "linux" else "swiftpm")),
+                "dump-package",
+            ],
+            cwd=ROOT,
+            text=True,
+        )
+    )
     targets = {target["name"]: target for target in package["targets"]}
     errors = check_layers(targets)
     for name, allowed in ALLOWED.items():

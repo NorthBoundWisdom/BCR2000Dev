@@ -49,12 +49,19 @@ def execute(specs, directory, runner=subprocess.run, clock=time.perf_counter, wo
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("group", choices=["tests", "transports"])
+    parser.add_argument("--native-precompiled", action="store_true")
     args = parser.parse_args()
+    if args.native_precompiled and args.group != "tests":
+        parser.error("Precompiled discovery applies only to the native test group")
     py = sys.executable
     if args.group == "tests":
         specs = [
             ("python-workflows", [py, "configs/run_python_workflow_tests.py"]),
-            ("native-suites", [py, "configs/macos_workflow.py", "test"]),
+            (
+                "native-suites",
+                [py, "configs/macos_workflow.py", "test"]
+                + (["--precompiled-tests"] if args.native_precompiled else []),
+            ),
         ]
     else:
         binary = "build/ci-surface-provider/BCRProviderService"

@@ -23,6 +23,18 @@ class CIProcessExitTests(unittest.TestCase):
         self.assertEqual([row["pid"] for row in live_products(table)], [102, 103, 104, 105, 106])
         self.assertEqual(live_products("101 /usr/bin/python3\n107 /usr/sbin/WindowServer\n"), [])
 
+    def test_exact_owned_mcp_names_and_audit_helpers_are_detected_without_broad_prefix_match(self):
+        table = """21 /owned/build/mcp-integration/case-1/Integration.app/Contents/MacOS/BCRTest-deadbeef
+22 /owned/build/tools/desktop_audit
+23 /owned/build/tools/desktop_focus_host
+24 /other/build/mcp-integration/case-1/BCRTest-deadbeef
+25 /owned/build/mcp-integration/case-1/BCRTest-deadbeef1
+26 /owned/build/mcp-integration/case-1/BCRTest-not-hex
+27 /owned/build/mcp-integration/case-1/Other-BCRTest-deadbeef
+28 /other/build/tools/desktop_audit
+"""
+        self.assertEqual([row["pid"] for row in live_products(table, owned_root=Path("/owned"))], [21, 22, 23])
+
     def test_spaces_in_executable_path_do_not_hide_native_product(self):
         self.assertEqual(
             live_products("11 /owned build/BCRProviderService\n"),
