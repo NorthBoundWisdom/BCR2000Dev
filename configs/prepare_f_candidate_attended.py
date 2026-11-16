@@ -104,6 +104,16 @@ def plan():
             "松手、button.1.2、link断开三次独立失效关闭；新epoch旧输入不重放；不自动重新武装",
         ),
     ]
+    rows.append(
+        (
+            "status-panel-demo",
+            True,
+            "PYTHONPATH=<delivery>/surface-control-sdk-1.4.0.zip python3 -B -m surface_panel_demo --url <owned-ready-url> --instance-id <owned-instance> --token-fd <DISPLAY_FD> --mapping bcr --source hardware --hz 1 --duration 15",
+            "仅准备：先核精确候选与write+显示权限；人在现场手离开设备，本地选择组1；只授display匿名FD，不切组、不写输入。",
+            "组1已选好，允许15秒合成灯环演示及自动归静止吗？",
+            "六关节+底盘速度转向在组1八环、phase在常驻encoder.1.1、fresh在候选button.1.1；退出/中断/失鲜时fresh先off，所有已写目标归rest，cleanup_failed=0；input_sequence不变；不授实机资格",
+        )
+    )
     return {
         "schema_version": 1,
         "scope": "PREPARE_ONLY; physical steps require new attended authorization",

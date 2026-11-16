@@ -53,6 +53,7 @@ SURFACE_FILES = {
     "versioning.md": "docs/versioning.md",
     "CHANGELOG.md": "CHANGELOG.md",
     "release-checklist.md": "docs/release-checklist.md",
+    "status-panel-demo.md": "docs/status-panel-demo.md",
 }
 SURFACE_ARTIFACT = "surface-control-simulator"
 SURFACE_MANIFEST = "surface-control-manifest.json"
@@ -115,9 +116,9 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     sdk_sources = sorted(
         path
-        for name in ("surface_control", "surface_conformance", "surface_control_diagnostics")
+        for name in ("surface_control", "surface_conformance", "surface_control_diagnostics", "surface_panel_demo")
         for path in (shared / "clients/python" / name).rglob("*")
-        if path.is_file() and path.suffix in (".py", ".md")
+        if path.is_file() and path.suffix in (".py", ".md", ".json")
     )
     if not any(path.parent.name == "surface_conformance" for path in sdk_sources):
         raise ValueError("Locked shared package has no conformance checker")

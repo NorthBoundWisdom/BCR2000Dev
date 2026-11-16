@@ -51,6 +51,7 @@ jobs:
       - run: python3 configs/verify_hardware_surface_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-hardware-roles --scoped-clients
       - run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - run: python3 configs/verify_multiple_display_clients.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-multiple-displays
+      - run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
       - run: git diff --check
       - name: Save the SwiftPM build for the next push
         if: success() && github.event_name == 'push'

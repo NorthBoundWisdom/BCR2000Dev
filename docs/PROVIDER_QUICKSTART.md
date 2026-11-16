@@ -110,3 +110,38 @@ The runtime SDK excludes test doubles; `TEST-ONLY-surface-control-testing-1.4.0.
 
 Hardware source/profile, button edges, current preset and actual lights still require attended validation.
 A local candidate package and a successful fake-device test do not confer that qualification.
+
+## Synthetic status-panel demo (H)
+
+Use an owned headless simulation host with feedback permission, an explicit display quota if desired,
+and the private role provisioning described in `SURFACE_CLIENTS.md`:
+
+```sh
+BCRProviderService --port 0 --simulation-profile --surface-instance-id PANEL \
+  --allow-surface-feedback --surface-client-tokens-stdin --display-write-limit 300
+```
+
+The process owner supplies the three-role JSON through an anonymous stdin pipe; never place credentials
+in argv/files. Pass only the display credential through a separate anonymous FD to the SDK example:
+
+```sh
+PYTHONPATH=<delivery>/surface-control-sdk-1.4.0.zip python3 -B -m surface_panel_demo \
+  --url <owned-ready-url> --instance-id PANEL --token-fd <DISPLAY_FD> --mapping bcr --hz 1 --duration 15
+```
+
+`status-panel-demo.md` documents synthetic actual recording, cleanup and source-stale/signal behavior.
+`H_STATUS_PANEL_ATTENDED.md` prepares the hardware stage without executing it or promoting a candidate.
+The default BCR hardware profile is intentionally refused because it has no extinguishable button target;
+existing 1dot/12dot ring zero is a lit resting position. The default GUI does not expose this optional
+control-contract endpoint; its existing actual VM/ControlPresentation render path is tested separately.
+
+For a release artifact, the bundled no-device CLI rehearsal is:
+
+```sh
+python3 diagnostics/verify_status_panel_demo.py --artifact . --output <fresh-owned-directory> --simulation-only
+```
+
+Debug-only maintainers can omit `--simulation-only` to include the explicit fake-device candidate modes.
+If the artifact has no hardware map, the checker creates a clearly TEST-ONLY map/candidate under its
+new output directory using the offline profile tool, never changing the artifact, preset or qualification.
+All rehearsals use only owned loopback processes, never a physical endpoint.

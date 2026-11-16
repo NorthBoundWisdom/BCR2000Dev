@@ -30,8 +30,42 @@ their declared resting styles under a separately authorized display action; stop
 
 ## State-panel demo stage
 
-Prepared H-3 commands and exact software rehearsal evidence will be added with the demo integration.
-The default learned map has visualization-only buttons, so it cannot provide a fully extinguishable
-freshness lamp. A zero value on the default 1dot/12dot rings is a resting position with a lit dot, not off.
-Use the existing explicit candidate only if its declared button indicator is selected and all existing
-gates pass; the candidate remains unqualified pending joint attendance and is never promoted by this plan.
+This is a prepared stage only. H rehearses it with simulation and a Debug fake device, never a physical endpoint.
+
+1. Verify this exact package/candidate manifest using `BCRProfileTool --verify-hardware-candidate <candidate-directory>`;
+   keep `hardware_qualified=false`. Confirm the current device preset and learned map manually without changing them.
+   The default map has visualization-only buttons and is refused by the demo before any write. Its 1dot/12dot
+   rings still have a lit dot at zero, so they cannot substitute for an extinguishable freshness lamp.
+2. Ask the operator to select encoder group 1 **locally** and verify the visible controls: six joints on the first
+   six top rings, chassis speed and steering on the remaining two, synthetic phase on fixed lower `encoder.1.1`,
+   freshness on the candidate `button.1.1`. The program never sends a group/preset/mode change.
+3. With fresh confirmation for this sending stage, start an owned headless host using the existing explicit
+   candidate map/configuration, `--source hardware --hardware-profile --hardware-output write --allow-surface-feedback
+   --display-write-limit 300 --surface-client-tokens-stdin`. Supply roles through a private anonymous JSON pipe;
+   retain owner/operator separately and give only a display credential to the demo's separate anonymous FD.
+   Start/reconnect/stop of this host must send zero. No real chassis or actuator is connected.
+4. The person must be beside the device and answer: “Group 1 is selected; may this synthetic 15-second display
+   demo run and return to rest?” After that confirmation run the packaged CLI (FD is a descriptor number):
+
+   ```sh
+   PYTHONPATH=<delivery>/surface-control-sdk-1.4.0.zip python3 -B -m surface_panel_demo \
+     --url <owned-ready-url> --instance-id <owned-instance> --token-fd <DISPLAY_FD> \
+     --mapping bcr --source hardware --hz 1 --duration 15
+   ```
+
+5. Ask what the person actually sees: eight top rings follow synthetic arm/chassis actuals; the fixed phase ring
+   changes; freshness is on while publication is current. On duration expiry or one explicit SIGINT, freshness
+   goes dark first and attempted numeric targets return to their mapped resting positions. A resting numeric
+   dot is not an off lamp. Record the person's observation separately from transport acceptance.
+6. With another fresh confirmation, rehearse source loss using `--source-stops-after 2 --max-age 1 --hz 5 --duration 10`.
+   After the publication age expires, freshness must go dark and the other attempted targets return to rest;
+   report `source_stale`/exit 1 with `cleanup_failed=0` as the expected stale outcome. No input, renew or reset
+   is called, input_sequence stays unchanged, and no automatic reconnect/rediscovery/replay occurs.
+
+A failed or unknown cleanup is reported as nonzero; USB removal/SIGKILL cannot guarantee physical darkness.
+Stop on any discrepancy, record raw evidence and do not retry or promote the candidate. The source is synthetic,
+not Pipe or live hardware telemetry. `status-panel-demo.md` is the shared tool reference.
+
+The default GUI does not register the optional control-contract tools, so this CLI connects to the headless host.
+The actual GUI VM/panel render path is tested separately on the same unique session; this does not claim a direct
+CLI endpoint in the default GUI. Do not add GUI tools or bypass its local hardware synchronization confirmation.

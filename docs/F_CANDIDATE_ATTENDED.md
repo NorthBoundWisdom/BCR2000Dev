@@ -105,3 +105,11 @@ A new host/package revision must carry the approved default selection and docume
 `hardware-control-contract.json`, recompute `mapping_revision`/profile content and new epoch, regenerate
 manifest/file hashes/INDEX entry, and let Pipe independently update its exact manifest/profile/mapping/
 configuration pins and stage evidence. That is a later authorized task, not an F promotion.
+
+## H prepared status-panel display stage
+
+After the existing explicit candidate/readiness checks, use the H-only stage in
+`H_STATUS_PANEL_ATTENDED.md`. It projects synthetic reference actuals and never controls a chassis,
+robot or input action. Group 1 is selected locally; phase uses a fixed lower encoder, and the candidate
+button is the freshness indicator. This plan does not promote the candidate or change the F frozen package.
+The machine plan includes a prepared `F-B-status-panel-demo` stage; H runs only its simulation/fake rehearsal.
