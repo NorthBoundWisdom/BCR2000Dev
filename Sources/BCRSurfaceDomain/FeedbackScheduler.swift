@@ -1,5 +1,6 @@
 import BCRFoundation
 import Foundation
+import SurfaceBindingContext
 
 public struct FeedbackPolicy: Codable, Equatable, Sendable {
     public var enabled: Bool
@@ -100,16 +101,28 @@ public struct ScheduledFeedback: Equatable, Sendable {
 public struct FeedbackScheduler: Sendable {
     public let policy: FeedbackPolicy
     private var pending: [MIDIControlID: ScheduledFeedback] = [:]
-    private var order: [MIDIControlID] = []
+    private var kernelIndex = ContextResourceIndex<MIDIControlID, BCRFeedbackQueueScope>()
+    private let kernelTraceID = UUID().uuidString
     private var tokens: Double
     private var lastRefill: Date?
     private var retryAfter: Date?
-    public var count: Int { pending.count }
-    public var pendingItems: [ScheduledFeedback] { order.compactMap { pending[$0] } }
+    public var count: Int { kernelIndex.count }
+    public var pendingItems: [ScheduledFeedback] { kernelIndex.orderedIDs.compactMap { pending[$0] } }
     public init(policy: FeedbackPolicy) throws {
         try policy.validate()
         self.policy = policy
         tokens = Double(policy.burst)
+        if SurfaceKernelTrace.enabled { traceIndex("index.init", input: [:]) }
+    }
+
+    private func traceIndex(_ operation: String, input: [String: Any], removed: [MIDIControlID] = []) {
+        SurfaceKernelTrace.record(
+            operation, owner: kernelTraceID, input: input,
+            actual: ["ids": kernelIndex.orderedIDs.map(BCRKernelProjection.midiValue), "count": kernelIndex.count,
+                     "scopes": kernelIndex.orderedIDs
+                         .map { BCRKernelProjection.queueScopeValue(kernelIndex.scope(for: $0)!) },
+                     "removed": removed.map(BCRKernelProjection.midiValue)]
+        )
     }
 
     /// Shared routing decision for normal and acknowledged display plans. A synchronous
@@ -122,7 +135,6 @@ public struct FeedbackScheduler: Sendable {
                                  endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil,
                                  source: DeviceSource? = nil, context: SurfaceEventContext? = nil)
     {
-        if pending[message.controlID] == nil { order.append(message.controlID) }
         pending[message.controlID] = ScheduledFeedback(
             message: message,
             origin: origin,
@@ -131,11 +143,20 @@ public struct FeedbackScheduler: Sendable {
             source: source,
             context: context
         )
+        let scope = BCRFeedbackQueueScope(pending[message.controlID]!)
+        kernelIndex.upsert(message.controlID, scope: scope)
+        if SurfaceKernelTrace.enabled {
+            traceIndex("index.upsert", input: ["id": BCRKernelProjection.midiValue(message.controlID),
+                                               "scope": BCRKernelProjection.queueScopeValue(scope)])
+        }
     }
 
     public mutating func cancel(_ control: MIDIControlID) {
+        let removed = kernelIndex.remove(control) ? [control] : []
         pending[control] = nil
-        order.removeAll { $0 == control }
+        if SurfaceKernelTrace.enabled {
+            traceIndex("index.remove", input: ["id": BCRKernelProjection.midiValue(control)], removed: removed)
+        }
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
@@ -145,17 +166,23 @@ public struct FeedbackScheduler: Sendable {
         }
         lastRefill = now
         if let retryAfter, now < retryAfter { return [] }
-        let amount = min(Int(tokens), order.count)
+        let amount = min(Int(tokens), kernelIndex.count)
+        let removed = try! kernelIndex.removeFirst(amount)
         var result: [ScheduledFeedback] = []
-        for id in order.prefix(amount) { if let value = pending.removeValue(forKey: id) { result.append(value) } }
-        order.removeFirst(amount)
+        for id in removed { if let value = pending.removeValue(forKey: id) { result.append(value) } }
         tokens -= Double(result.count)
+        if SurfaceKernelTrace.enabled {
+            traceIndex("index.removeFirst", input: ["amount": amount, "at": now.timeIntervalSinceReferenceDate],
+                       removed: removed)
+        }
         return result
     }
 
     public mutating func noteFailure(at now: Date) { retryAfter = now.addingTimeInterval(policy.errorCooldown) }
     public mutating func clear() {
-        pending.removeAll(); order.removeAll(); lastRefill = nil; retryAfter = nil; tokens = Double(policy.burst)
+        let removed = kernelIndex.removeAll()
+        pending.removeAll(); lastRefill = nil; retryAfter = nil; tokens = Double(policy.burst)
+        if SurfaceKernelTrace.enabled { traceIndex("index.removeAll", input: [:], removed: removed) }
     }
 }
 

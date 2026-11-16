@@ -1,5 +1,6 @@
 import BCRFoundation
 import Foundation
+import SurfaceBindingContext
 
 public enum ParameterKind: String, Codable, Sendable, CaseIterable {
     /// A ranged value, e.g. a joint angle.
@@ -321,11 +322,38 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     public var version: Int
     public var name: String
     public private(set) var parameters: [ParameterDefinition]
-    private var baseAssignments: [ControlAssignment]
-    public private(set) var pages: [AssignmentPage]
+    private var baseAssignments: [ControlAssignment] {
+        didSet { rebuildBindingLookup() }
+    }
+
+    public private(set) var pages: [AssignmentPage] {
+        didSet { rebuildBindingLookup() }
+    }
+
     public private(set) var macros: [SurfaceMacro]
     public internal(set) var scenes: [ParameterScene]?
-    public private(set) var activePageID: String?
+    public private(set) var activePageID: String? {
+        didSet { rebuildBindingLookup() }
+    }
+
+    // Immutable derived references only. Parameter/action payloads remain solely
+    // in the active native assignment array; value copies own their own index.
+    private var kernelBindingLookup: BindingContext
+    private(set) var kernelBindingIndexBuildCount: UInt64 = 1
+
+    private mutating func rebuildBindingLookup() {
+        kernelBindingLookup = BCRKernelProjection.bindings(assignments)
+        kernelBindingIndexBuildCount &+= 1
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        // Preserve the original stored-value equality. Derived cache/cost history
+        // is neither configuration authority nor durable/functional state.
+        lhs.version == rhs.version && lhs.name == rhs.name && lhs.parameters == rhs.parameters &&
+            lhs.baseAssignments == rhs.baseAssignments && lhs.pages == rhs.pages && lhs.macros == rhs.macros &&
+            lhs.scenes == rhs.scenes && lhs.activePageID == rhs.activePageID
+    }
+
     public var allAssignmentSets: [[ControlAssignment]] { [baseAssignments] + pages.map(\.assignments) }
     public private(set) var assignments: [ControlAssignment] {
         get { activePageID.flatMap { id in pages.first { $0.id == id }?.assignments } ?? baseAssignments }
@@ -347,11 +375,15 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         self.version = version
         self.name = name
         self.parameters = parameters
-        self.baseAssignments = assignments.sorted { $0.control < $1.control }
+        let orderedAssignments = assignments.sorted { $0.control < $1.control }
+        self.baseAssignments = orderedAssignments
         self.pages = pages
         self.macros = macros
         self.scenes = scenes
         self.activePageID = activePageID
+        let activeAssignments = activePageID
+            .flatMap { id in pages.first { $0.id == id }?.assignments } ?? orderedAssignments
+        self.kernelBindingLookup = BCRKernelProjection.bindings(activeAssignments)
     }
 
     private enum CodingKeys: String,
@@ -461,8 +493,26 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         parameters.first { $0.id == id }
     }
 
+    func kernelAssignmentIndex(for control: BCRControlID) -> Int? {
+        BCRKernelProjection.bindingReference(control, in: kernelBindingLookup).flatMap(Int.init)
+    }
+
     public func assignment(for control: BCRControlID) -> ControlAssignment? {
-        assignments.first { $0.control == control }
+        let reference = kernelAssignmentIndex(for: control)
+        let result = reference.map { assignments[$0] }
+        if SurfaceKernelTrace.enabled {
+            SurfaceKernelTrace.record(
+                "binding.lookup", input: ["control": BCRKernelProjection.controlValue(control),
+                                          "ordered_controls": assignments
+                                              .map { BCRKernelProjection.controlValue($0.control) },
+                                          "ordered_assignments": assignments.map { String(reflecting: $0) },
+                                          "entries": kernelBindingLookup.controlEntries.map { String(reflecting: $0) },
+                                          "cache_build_count": kernelBindingIndexBuildCount],
+                actual: ["reference": reference.map { $0 as Any } ?? NSNull(),
+                         "result": result.map { String(reflecting: $0) as Any } ?? NSNull()]
+            )
+        }
+        return result
     }
 
     public func controls(targeting target: ControlTarget) -> [BCRControlID] {

@@ -102,7 +102,9 @@ let package = Package(
         ]),
         .target(name: "BCRSurfaceDomain", dependencies: [
             "BCRFoundation", .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
-            .product(name: "SurfaceDeviceContracts", package: "ControlSurfaceKit")
+            .product(name: "SurfaceDeviceContracts", package: "ControlSurfaceKit"),
+            .product(name: "SurfaceBindingContext", package: "ControlSurfaceKit"),
+            .product(name: "SurfaceConnectionState", package: "ControlSurfaceKit")
         ]),
 
         .target(name: "BCRExamples", dependencies: [

@@ -85,6 +85,14 @@ public struct SurfaceEngine: Sendable {
     private var absoluteInputs: [BCRControlID: AbsoluteInput] = [:]
     private var lastTrigger: [BCRControlID: Date] = [:]
 
+    /// Exact native cache identities for extraction evidence; no cache policy moves here.
+    var transportEvidenceIDsForTrace: [String: [String]] {
+        ["recent_feedback": recentFeedback.keys.map { "\($0.kind.rawValue):\($0.channel):\($0.number)" }.sorted(),
+         "absolute_inputs": absoluteInputs.keys.map(BCRNeutralSurfaceProjection.logicalTargetID).sorted(),
+         "increment_remainders": incrementRemainders.keys.map(BCRNeutralSurfaceProjection.logicalTargetID).sorted(),
+         "last_trigger": lastTrigger.keys.map(BCRNeutralSurfaceProjection.logicalTargetID).sorted()]
+    }
+
     public init(hardwareMap: HardwareMap, configuration: SurfaceConfiguration,
                 pluginBindings: SurfacePluginBindings = .init())
     {

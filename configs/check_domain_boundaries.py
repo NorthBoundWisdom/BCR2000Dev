@@ -92,7 +92,13 @@ ALLOWED = {
         "BCRProviderMCPAdapter",
         "BCRSurfaceDomain",
     },
-    "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts", "SurfaceDeviceContracts"},
+    "BCRSurfaceDomain": {
+        "BCRFoundation",
+        "SurfacePluginContracts",
+        "SurfaceDeviceContracts",
+        "SurfaceBindingContext",
+        "SurfaceConnectionState",
+    },
 }
 PURE = {"BCRProviderApplication", "BCRFoundation", "BCRSurfaceDomain", "BCRPluginRuntime"}
 
