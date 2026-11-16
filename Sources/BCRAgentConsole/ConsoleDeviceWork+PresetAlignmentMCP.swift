@@ -12,7 +12,7 @@ import Foundation
 
 /// MCP access to the same alignment flow as the window. Commands start the flow and return at once;
 /// callers poll `get_preset_alignment` until `busy` is false. The window shows the same state.
-extension ConsoleViewModel {
+extension ConsoleDeviceWork {
     func handlePresetAlignment(_ command: PresetAlignmentCommand) throws -> JSONValue {
         switch command {
         case .status:

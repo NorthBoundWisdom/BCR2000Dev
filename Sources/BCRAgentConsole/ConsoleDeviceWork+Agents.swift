@@ -13,7 +13,7 @@ import enum SurfacePluginContracts.InputOrigin
 
 /// The host drives the shared Mock plugin independently of window redraws.
 /// Codex process management and the device-origin approval boundary stay here.
-extension ConsoleViewModel {
+extension ConsoleDeviceWork {
     func performPrimaryAction(_ slotID: AgentSlotID) {
         if codex.backend == .codex { codex.perform(slotID); return }
         do { try requireMockHost().invoke(slotID, origin: .interface) } catch { report(error) }
