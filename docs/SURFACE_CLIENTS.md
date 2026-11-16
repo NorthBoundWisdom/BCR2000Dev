@@ -18,8 +18,9 @@ The old single-token startup behavior remains unchanged.
 | operator | surface discover/snapshot/events, input/renew | new host-issued opaque process-local ID |
 | display | surface discover/snapshot/events, feedback | different host-issued opaque process-local ID |
 
-Secondary credentials cannot reset, call legacy parameter tools, open SSE, delete sessions, or enumerate the
-full tool catalogue. MCP initialize/ping/initialized handshakes remain available for the two supported
+Secondary `tools/list` returns exactly the role scope in the table (operator: five control tools; display:
+four), with the same descriptions and schemas as the owner catalogue. Owner discovery is unchanged.
+Secondary credentials cannot reset, call legacy parameter tools, open SSE, or delete sessions. MCP initialize/ping/initialized handshakes remain available for the two supported
 protocol versions. Tool-level startup permissions still apply; credentials grant no missing capability.
 Hardware operator input and renew remain `permission_denied` / `unsupported_hold`; secondary scope cannot
 turn hardware into simulation. The hardware display still needs `write` plus `--allow-surface-feedback`.

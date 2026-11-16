@@ -74,6 +74,25 @@ def main():
                 for client in clients.values():
                     client.discover()
                 operator, display, owner = (clients[role] for role in ("operator", "display", "owner"))
+                owner_catalogue = owner.rpc("tools/list", {})["tools"]
+                reads = {"surface_control_discover", "surface_control_snapshot", "surface_control_events"}
+                permitted = {
+                    "operator": reads | {"surface_control_input", "surface_control_renew"},
+                    "display": reads | {"surface_control_feedback"},
+                }
+                for role, names in permitted.items():
+                    actual = clients[role].rpc("tools/list", {})["tools"]
+                    assert {tool["name"] for tool in actual} == names, role + " catalogue scope differs"
+                    assert actual == [tool for tool in owner_catalogue if tool["name"] in names]
+                    assert owner.rpc("tools/list", {})["tools"] == owner_catalogue
+                    cases.append(
+                        {
+                            "name": role + "_role_filtered_catalogue_" + protocol,
+                            "passed": True,
+                            "tool_names": sorted(names),
+                            "owner_unchanged": True,
+                        }
+                    )
                 first = operator.input("pushEncoder.1.1", "scalar", 45)
                 feedback = display.feedback("button.1.1", "indicator", "on")
                 owner.refresh_input_sequence()

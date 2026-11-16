@@ -222,6 +222,24 @@ def run(binary, output, sdk, scoped_clients=False):
                         )
                         operator.discover(versions=("1.4",))
                         display.discover(versions=("1.4",))
+                        owner_catalogue = client.rpc("tools/list", {})["tools"]
+                        reads = {"surface_control_discover", "surface_control_snapshot", "surface_control_events"}
+                        for role, scoped, names in (
+                            ("operator", operator, reads | {"surface_control_input", "surface_control_renew"}),
+                            ("display", display, reads | {"surface_control_feedback"}),
+                        ):
+                            actual = scoped.rpc("tools/list", {})["tools"]
+                            assert {tool["name"] for tool in actual} == names
+                            assert actual == [tool for tool in owner_catalogue if tool["name"] in names]
+                            assert client.rpc("tools/list", {})["tools"] == owner_catalogue
+                            cases.append(
+                                {
+                                    "name": name + "_" + role + "_hardware_catalogue",
+                                    "passed": True,
+                                    "tool_names": sorted(names),
+                                    "owner_unchanged": True,
+                                }
+                            )
                         remote_input = {
                             "expected": operator.expected,
                             "expected_input_sequence": "4",

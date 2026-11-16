@@ -355,6 +355,7 @@ public final class MCPHTTPServer {
             send(id, reply: MCPReply(status: 406)); return
         }
         var writerID: String?
+        var visibleTools: Set<String>?
         if !owner {
             let reads: Set<String> = ["surface_control_discover", "surface_control_snapshot", "surface_control_events"]
             let writes: Set<String> = isOperator ? ["surface_control_input", "surface_control_renew"] :
@@ -365,7 +366,8 @@ public final class MCPHTTPServer {
                 reject(id, status: 403, detail: "Surface client scope denied")
                 return
             }
-            let handshake: Set<String> = ["initialize", "ping", "notifications/initialized"]
+            visibleTools = reads.union(writes)
+            let handshake: Set<String> = ["initialize", "ping", "notifications/initialized", "tools/list"]
             if !handshake.contains(method) {
                 guard method == "tools/call", let parameters = body["params"] as? [String: Any],
                       let name = parameters["name"] as? String, reads.union(writes).contains(name)
@@ -377,7 +379,7 @@ public final class MCPHTTPServer {
             writerID = isOperator ? surfaceClients?.operatorWriterID : surfaceClients?.displayWriterID
         }
         let reply = router.service.withAuthenticatedSurfaceWriterID(writerID) {
-            router.handle(request.body, headers: request.headers)
+            router.handle(request.body, headers: request.headers, visibleTools: visibleTools)
         }
         send(id, reply: reply)
         onChange?()

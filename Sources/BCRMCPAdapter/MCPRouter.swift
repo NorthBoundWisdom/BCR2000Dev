@@ -72,7 +72,7 @@ public final class MCPRouter {
         return true
     }
 
-    public func handle(_ data: Data, headers: [String: String]) -> MCPReply {
+    public func handle(_ data: Data, headers: [String: String], visibleTools: Set<String>? = nil) -> MCPReply {
         let message: JSONValue
         do { message = try JSONDecoder().decode(JSONValue.self, from: data) }
         catch { return rpcError(-32700, "Parse error", id: .null, status: 400) }
@@ -177,7 +177,12 @@ public final class MCPRouter {
                 "instructions": .string("Local BCR parameters; writes obey permissions, agentWritable and rate limits.")
             ])
         case "ping": result = .object([:])
-        case "tools/list": result = .object(["tools": .array(service.toolDefinitions)])
+        case "tools/list":
+            let definitions = service.toolDefinitions.filter { definition in
+                guard let visibleTools else { return true }
+                return definition.value(for: "name")?.stringValue.map(visibleTools.contains) ?? false
+            }
+            result = .object(["tools": .array(definitions)])
         case "tools/call":
             guard let name = params["name"]?.stringValue, name.utf8.count <= 128 else {
                 return rpcError(-32602, "Tool name is required", id: id)

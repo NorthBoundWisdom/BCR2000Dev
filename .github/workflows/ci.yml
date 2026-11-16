@@ -45,6 +45,8 @@ jobs:
       - run: python3 tools/mcp_integration.py
       - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
       - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
+      - run: python3 configs/verify_surface_clients_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-client-roles
+      - run: python3 configs/verify_hardware_surface_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-hardware-roles --scoped-clients
       - run: git diff --check
       - name: Save the SwiftPM build for the next push
         if: success() && github.event_name == 'push'
