@@ -122,7 +122,7 @@ final class SSEStreamTests: XCTestCase {
     }
 
     func testBackpressureActuallyClosesTheClientConnection() async throws {
-        let clock = ManualHostTime()
+        let clock = ManualHostTime(recordTransitions: true)
         let parameters = (0 ..< 50).map { ParameterDefinition(
             id: ParameterID("p\($0)" + String(repeating: "x", count: 500)),
             name: "P\($0)"
@@ -137,15 +137,91 @@ final class SSEStreamTests: XCTestCase {
         defer { server.stop() }
         let probe = SSEProbe(port: port)
         try await until { server.activeStreamCount == 1 }
+        var marks: [[String: Any]] = []
+        var bodyCompleted = false
+        // Diagnostics inspect a VALUE COPY of the real buffer. No server state or scheduling is changed.
+        func queuedDelta() -> (bytes: Int, values: [Double]) {
+            guard let streams = Mirror(reflecting: server).children.first(where: { $0.label == "eventStreams" })?.value
+            else { return (-1, []) }
+            var bytes = 0
+            var values: [Double] = []
+            for item in Mirror(reflecting: streams).children {
+                guard let stream = Mirror(reflecting: item.value).children.first(where: { $0.label == "value" })?.value,
+                      let raw = Mirror(reflecting: stream).children.first(where: { $0.label == "buffer" })?.value,
+                      var buffer = raw as? SSEOutboundBuffer else { continue }
+                bytes += buffer.deltaBytes
+                buffer.complete() // Release the in-flight snapshot in this local copy only.
+                while let data = buffer.next() {
+                    if let line = String(data: data, encoding: .utf8)?.split(separator: "\n")
+                        .first(where: { $0.hasPrefix("data: ") }),
+                       let packet = try? JSONDecoder().decode(JSONValue.self, from: Data(line.dropFirst(6).utf8)),
+                       let value = packet.objectValue?["params"]?.objectValue?["values"]?
+                           .objectValue?[parameters[0].id.rawValue]?.finiteNumber
+                    {
+                        values.append(value)
+                    }
+                    buffer.complete()
+                }
+            }
+            return (bytes, values)
+        }
+        func note(_ phase: String) {
+            let queued = queuedDelta()
+            marks.append([
+                "phase": phase,
+                "virtual_time": clock.now,
+                "real_uptime": ProcessInfo.processInfo.systemUptime,
+                "pending": clock.pendingCount,
+                "completed": clock.completedSleepCount,
+                "deadlines": clock.pendingDeadlines,
+                "closed": probe.closed,
+                "streams": server.activeStreamCount,
+                "first_value": source.engine.value(of: parameters[0].id) ?? -1,
+                "queued_delta_bytes": queued.bytes,
+                "queued_delta_values": queued.values
+            ])
+        }
+        defer {
+            note("test_exit")
+            if !bodyCompleted || (testRun?.failureCount ?? 0) > 0 || ProcessInfo.processInfo
+                .environment["BCR_SSE_TRACE"] != nil,
+               let clockData = try? JSONEncoder().encode(clock.transitions),
+               let clockRows = try? JSONSerialization.jsonObject(with: clockData),
+               let rows = clockRows as? [[String: Any]]
+            {
+                // Keep records small and avoid buffered stdout interleaving with native XCTest summaries.
+                for (kind, records) in [("clock", rows), ("mark", marks)] {
+                    for value in records {
+                        if let data = try? JSONSerialization.data(
+                               withJSONObject: ["kind": kind, "value": value],
+                               options: [.sortedKeys]
+                           ),
+                           let text = String(data: data, encoding: .utf8)
+                        {
+                            try? FileHandle.standardError.write(contentsOf: Data(("SSE_TRACE " + text + "\n").utf8))
+                        }
+                    }
+                }
+            }
+        }
         for value in 1 ... 5 {
+            note("batch_\(value)_start")
             for parameter in parameters { source.setParameter(parameter.id, to: Double(value)) }
+            note("batch_\(value)_published")
             try await waitUntil { clock.pendingCount > 0 || probe.closed }
+            note("batch_\(value)_sleeper_ready")
+            let completedBeforeAdvance = clock.completedSleepCount
             clock.advance(by: 0.03)
-            await Task.yield()
+            note("batch_\(value)_advanced")
+            // Successful return from the injected MainActor sleeper continues through the
+            // same actor's non-suspending flush before this predicate can observe completion.
+            try await waitUntil { clock.completedSleepCount > completedBeforeAdvance || probe.closed }
+            note("batch_\(value)_after_flush")
         }
         try await until { probe.closed }
         XCTAssertEqual(server.activeStreamCount, 0)
         XCTAssertTrue(server.router.service.audit.contains { $0.method == "sse" && !$0.succeeded })
+        bodyCompleted = true
     }
 
     func testObserverIsRemovedWhenServerIsReleased() async throws {

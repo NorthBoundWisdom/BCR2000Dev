@@ -40,13 +40,16 @@ final class ConsoleTimingTests: XCTestCase {
         clock.advance(by: 0.299)
         XCTAssertFalse(completed)
         clock.advance(by: 0.001)
+        XCTAssertEqual(clock.completedSleepCount, 0, "Waking a continuation is not completing its caller")
         try await task.value
         XCTAssertTrue(completed)
+        XCTAssertEqual(clock.completedSleepCount, 1)
         let cancelled = Task { try await clock.time.sleep(.seconds(6)) }
         try await waitUntil { clock.pendingCount == 1 }
         cancelled.cancel()
         do { try await cancelled.value; XCTFail("Cancellation must throw") } catch is CancellationError {}
         XCTAssertEqual(clock.pendingCount, 0)
+        XCTAssertEqual(clock.completedSleepCount, 1, "Cancellation must not count as successful sleep completion")
     }
 
     func testConnectionOfferWaitsForTheFullStablePeriod() async throws {
