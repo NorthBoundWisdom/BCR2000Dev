@@ -464,11 +464,6 @@ final class ConsoleDeviceWork: ObservableObject {
         slots.first { $0.id == id }
     }
 
-    // MARK: Workspace panels
-
-    /// Shows or hides a specialist panel and remembers the choice. Returns false when it was not saved.
-    @discardableResult
-
     // MARK: Device source
 
     func applyEndpointSelection(_ selection: MIDIEndpointSelection) {
@@ -1940,6 +1935,7 @@ final class ConsoleDeviceWork: ObservableObject {
         notice = ConsoleNotice(level: .error, message: "\(error: error)")
     }
 
+    /// Shows or hides a specialist panel and remembers the choice. Returns false when it was not saved.
     func setWorkspacePanel(_ panel: WorkspaceTab, enabled: Bool) -> Bool { presentation.setWorkspacePanel(
         panel,
         enabled: enabled

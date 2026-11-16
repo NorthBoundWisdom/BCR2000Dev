@@ -719,7 +719,7 @@ public final class SurfaceSession {
             scheduler?.enqueue(plan.message, origin: plan.origin)
             notifyFeedbackQueue()
         case .send:
-            withWriteOrigin(plan.origin) { transmitNow(plan.message) }
+            _ = withWriteOrigin(plan.origin) { transmitNow(plan.message) }
         }
     }
 
