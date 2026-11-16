@@ -29,10 +29,12 @@ public struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
                 normalize: @escaping @Sendable (Value) throws -> Value,
                 version: @escaping @Sendable (Value) -> Int,
                 fallback: @escaping @Sendable () -> Value,
-                writeBackup: @escaping @Sendable (Data, URL) throws -> Void = { try $0.write(
-                    to: $1,
-                    options: .withoutOverwriting
-                ) })
+                writeBackup: @escaping @Sendable (Data, URL) throws -> Void = { data, url in
+                    let file = try CaptureEvidenceFile(url: url)
+                    defer { try? file.close() }
+                    try file.write(data)
+                    try file.synchronize()
+                })
     {
         self.store = store
         self.title = title
@@ -47,12 +49,19 @@ public struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
     public func load() -> ProtectedFileRead<Value> {
         do {
             guard let data = try existingData() else { return .init(value: fallback(), message: nil, failed: false) }
+            try LocalDataFile.rejectFutureVersion(in: data, supported: version(fallback()))
             let original = try SurfaceConfigurationCodec.decode(Value.self, from: data)
             let value = try normalize(original)
             let message = version(original) != version(value)
                 ? L10n.text("\(title)已从 v\(version(original)) 迁移到 v\(version(value))；原文件尚未改写。")
                 : nil
             return .init(value: value, message: message, failed: false)
+        } catch LocalDataFileError.newerVersion(let version) {
+            return .init(
+                value: fallback(),
+                message: LocalDataFileError.newerVersion(version).localizedDescription,
+                failed: true
+            )
         } catch {
             let failure = error.localizedDescription
             do {
@@ -83,7 +92,9 @@ public struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
         let data = try encoder.encode(normalized)
         guard data.count <= Self.maximumBytes
         else { throw ConfigurationFileError(reason: L10n.text("\(title)超过 4 MiB 上限，未覆盖原文件")) }
-        if let original = try existingData() {
+        let original = try existingData()
+        if let original {
+            try LocalDataFile.rejectFutureVersion(in: original, supported: version(normalized))
             var needsProtection = false
             do {
                 let decoded = try SurfaceConfigurationCodec.decode(Value.self, from: original)
@@ -92,31 +103,18 @@ public struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
             } catch { needsProtection = true }
             if needsProtection { _ = try backupExisting(kind: "backup") }
         }
-        try store.writeEncoded(data)
+        try store.writeEncoded(data, expectedOriginal: original, requireUnchanged: true)
     }
 
     private func existingData() throws -> Data? {
-        guard FileManager.default.fileExists(atPath: store.fileURL.path) else { return nil }
-        let data = try Data(contentsOf: store.fileURL, options: .mappedIfSafe)
-        guard data.count <= Self.maximumBytes
-        else { throw ConfigurationFileError(reason: L10n.text("\(title)原文件超过 4 MiB，保留原文件并拒绝覆盖")) }
-        return data
+        try store.readEncoded()
     }
 
     @discardableResult
     private func backupExisting(kind: String) throws -> URL? {
         guard let data = try existingData() else { return nil }
-        let digest = ContentDigest.sha256(data)
-        let url = store.fileURL.appendingPathExtension("\(kind).\(digest).json")
-        if FileManager.default.fileExists(atPath: url.path) {
-            guard try Data(contentsOf: url) == data
-            else { throw ConfigurationFileError(reason: L10n.text("备份冲突，未覆盖原文件")) }
-        } else {
-            try writeBackup(data, url)
-        }
-        guard try Data(contentsOf: url) == data
-        else { throw ConfigurationFileError(reason: L10n.text("备份校验失败，未覆盖原文件")) }
-        return url
+        return try LocalDataFile.contentBackup(data, original: store.fileURL, kind: kind,
+                                               maximumBytes: Self.maximumBytes, write: writeBackup)
     }
 }
 

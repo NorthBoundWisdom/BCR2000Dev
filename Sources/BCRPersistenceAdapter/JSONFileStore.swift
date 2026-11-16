@@ -24,10 +24,21 @@ public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
 
     /// Returns nil when the file does not exist yet; decoding failures are thrown.
     public func load() throws -> Value? {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return nil
-        }
-        return try SurfaceConfigurationCodec.decode(Value.self, from: Data(contentsOf: fileURL))
+        guard let data = try readEncoded() else { return nil }
+        if let supportedVersion { try LocalDataFile.rejectFutureVersion(in: data, supported: supportedVersion) }
+        return try SurfaceConfigurationCodec.decode(Value.self, from: data)
+    }
+
+    private var supportedVersion: Int? {
+        if Value.self == SurfaceConfiguration.self { return SurfaceConfiguration.currentVersion }
+        if Value.self == HardwareMap.self { return HardwareMap.currentVersion }
+        return nil
+    }
+
+    public static var maximumBytes: Int { 4 * 1_024 * 1_024 }
+
+    public func readEncoded() throws -> Data? {
+        try LocalDataFile.read(fileURL, maximumBytes: Self.maximumBytes)
     }
 
     public func save(_ value: Value) throws {
@@ -37,10 +48,19 @@ public struct JSONFileStore<Value: Codable & Sendable>: Sendable {
     }
 
     public func writeEncoded(_ data: Data) throws {
-        try FileManager.default.createDirectory(
-            at: fileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try data.write(to: fileURL, options: .atomic)
+        try writeEncoded(data, expectedOriginal: nil, requireUnchanged: false)
+    }
+
+    public func writeEncoded(_ data: Data, expectedOriginal: Data?, requireUnchanged: Bool) throws {
+        if let supportedVersion { try LocalDataFile.rejectFutureVersion(in: data, supported: supportedVersion) }
+        try LocalDataFile.replace(data, at: fileURL, maximumBytes: Self.maximumBytes) { original in
+            if requireUnchanged, original != expectedOriginal { throw LocalDataFileError.changedFile }
+            if let original,
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let supported = object["version"] as? Int
+            {
+                try LocalDataFile.rejectFutureVersion(in: original, supported: supported)
+            }
+        }
     }
 }

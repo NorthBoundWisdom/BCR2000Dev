@@ -2,11 +2,6 @@ import BCRFoundation
 import BCRSurfaceDomain
 import Dispatch
 import Foundation
-#if canImport(Darwin)
-    import Darwin
-#else
-    import Glibc
-#endif
 
 public protocol CaptureEvidenceSink: AnyObject, Sendable {
     func write(_ data: Data) throws
@@ -18,12 +13,7 @@ public protocol CaptureEvidenceSink: AnyObject, Sendable {
 public final class CaptureEvidenceFile: CaptureEvidenceSink, @unchecked Sendable {
     private let handle: FileHandle
     public init(url: URL) throws {
-        guard url.isFileURL else { throw CocoaError(.fileWriteUnsupportedScheme) }
-        let descriptor = url.withUnsafeFileSystemRepresentation {
-            open($0!, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode_t(S_IRUSR | S_IWUSR))
-        }
-        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        handle = try LocalDataFile.createExclusive(url)
     }
 
     public func write(_ data: Data) throws { try handle.write(contentsOf: data) }

@@ -1067,3 +1067,8 @@
 "未知参数组：{0}" = "Unknown parameter group: {0}";
 "录制来自其他设备（{0}），不能在 BCR2000 中重播" = "Capture belongs to another device ({0}); replay on BCR2000 is refused";
 "录制设备：{0}" = "Capture device: {0}";
+"本地数据必须是普通文件" = "Local data must be a regular file";
+"本地数据文件拒绝符号链接" = "Local data files refuse symbolic links";
+"本地数据文件超过大小上限" = "Local data file exceeds the size limit";
+"原文件已更改，未覆盖" = "The original file changed and was not replaced";
+"文件版本 v{0} 高于当前支持版本，原文件已保留" = "File version v{0} is newer than supported; the original was preserved";

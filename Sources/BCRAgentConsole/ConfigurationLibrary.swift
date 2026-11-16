@@ -48,19 +48,36 @@ final class ConfigurationLibrary: ObservableObject {
     init(url: URL) {
         store = JSONFileStore(fileURL: url)
         do {
-            if FileManager.default.fileExists(atPath: url.path),
-               try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0 > 4 * 1024 * 1024
-            {
-                throw CocoaError(.fileReadTooLarge)
-            }
-            let loaded = try store.load() ?? []
-            guard Set(loaded.map(\.id)).count == loaded.count,
-                  Set(loaded.map(\.name)).count == loaded.count else { throw CocoaError(.coderReadCorrupt) }
-            for entry in loaded { try entry.configuration.validate() }
-            entries = loaded
+            entries = try readValidated().entries
         } catch {
             writable = false
             self.error = error.localizedDescription
+        }
+    }
+
+    private func readValidated() throws -> (entries: [SavedConfiguration], data: Data?) {
+        guard let data = try store.readEncoded() else { return ([], nil) }
+        do {
+            // Check each configuration envelope before decoding future action/field shapes.
+            if let objects = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                for object in objects {
+                    if let configuration = object["configuration"] as? [String: Any] {
+                        try LocalDataFile.rejectFutureVersion(in: JSONSerialization.data(withJSONObject: configuration),
+                                                              supported: SurfaceConfiguration.currentVersion)
+                    }
+                }
+            }
+            let loaded = try SurfaceConfigurationCodec.decode([SavedConfiguration].self, from: data)
+            guard Set(loaded.map(\.id)).count == loaded.count,
+                  Set(loaded.map(\.name)).count == loaded.count else { throw CocoaError(.coderReadCorrupt) }
+            for entry in loaded { try entry.configuration.validate() }
+            return (loaded, data)
+        } catch LocalDataFileError.newerVersion(let version) {
+            throw LocalDataFileError.newerVersion(version)
+        } catch {
+            _ = try LocalDataFile.contentBackup(data, original: store.fileURL, kind: "invalid",
+                                                maximumBytes: JSONFileStore<[SavedConfiguration]>.maximumBytes)
+            throw error
         }
     }
 
@@ -84,7 +101,8 @@ final class ConfigurationLibrary: ObservableObject {
         do {
             let data = try JSONEncoder().encode(candidate)
             guard data.count <= 4 * 1024 * 1024 else { throw CocoaError(.fileWriteOutOfSpace) }
-            try store.writeEncoded(data)
+            let original = try readValidated().data
+            try store.writeEncoded(data, expectedOriginal: original, requireUnchanged: true)
             entries = candidate
             error = nil
             return true
