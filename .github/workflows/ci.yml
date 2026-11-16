@@ -145,61 +145,29 @@ jobs:
             build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error
-      - name: Report whole-run wall time and enforce 300s budget
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RESTORED_BUILD_KEY: ${{ steps.build-cache.outputs.cache-matched-key }}
-        run: python3 configs/ci_job_budget.py --cache-key "$RESTORED_BUILD_KEY"
-  delivery:
-    runs-on: macos-15
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          # Full history: every tracked file gets its last commit time (below).
-          fetch-depth: 0
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.13'
-      # SwiftPM rebuilds any input whose mtime changed. Commit times keep a restored build incremental:
-      # files untouched since the cached build look unchanged, changed files rebuild.
-      - run: python3 configs/restore_git_mtimes.py
-      - name: Identify the Swift toolchain for the build cache
-        run: python3 -c "import hashlib, subprocess; v = subprocess.run(['swift', '--version'], capture_output=True); print('SWIFT_ID=' + hashlib.sha256(v.stdout + v.stderr).hexdigest()[:16])" >> "$GITHUB_ENV"
-      - name: Cache the locked SurfacePlugins checkout
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
-      - name: Restore the latest SwiftPM build
-        id: build-cache
-        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/swiftpm
-          key: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
-          restore-keys: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}-
-      - run: python3 configs/surface_plugins_dependency.py ensure
-      - name: Compile provider and offline profile products
-        id: compile
-        run: |
-          swift build --build-path build/swiftpm --product BCRProviderService
-          swift build --build-path build/swiftpm --product BCRProfileTool
-      - name: Save compiled delivery products before acceptance
-        if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/swiftpm
-          key: delivery-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
-      - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
-      - run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
+      # This phase still runs after a failed native suite, as the former independent job did.
+      - name: Confirm native products exited before delivery
+        id: delivery-isolation
+        if: ${{ !cancelled() }}
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/processes-exited.json
+      - name: Package the already compiled provider and profile products
+        id: package-provider
+        if: ${{ !cancelled() && steps.compile.outcome == 'success' && steps.delivery-isolation.outcome == 'success' }}
+        run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug --skip-build
+      - name: Check packaged display targets
+        id: display-targets
+        if: ${{ !cancelled() && steps.package-provider.outcome == 'success' }}
+        run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
       - name: Serial real-clock transport acceptance
+        id: delivery-transports
+        if: ${{ !cancelled() && steps.display-targets.outcome == 'success' }}
         run: python3 configs/ci_parallel_checks.py transports
       - name: Isolated display budget latency and cadence acceptance
+        id: delivery-budget
+        if: ${{ !cancelled() && steps.delivery-transports.outcome == 'success' }}
         run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - name: Isolated real-time synthetic status demo acceptance
+        if: ${{ !cancelled() && steps.delivery-budget.outcome == 'success' }}
         run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
       - name: Preserve delivery acceptance and timing evidence
         if: always()

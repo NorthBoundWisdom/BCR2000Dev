@@ -85,3 +85,25 @@ Linux actually discovered and reconciled **481 tests, zero failures and zero ski
 The first hosted failures were corrected without skipping or relaxing assertions: static asynchronous XCTWaiter avoids transferring a non-Sendable XCTestCase; fixture construction uses a static factory compatible with corelibs; 199 actor-isolated synchronous test entry points in 41 files became async to avoid corelibs discovery casts; the localization waiter and MainActor clock box preserve the original assertions. Successful compilation now saves caches before discovery/tests, avoiding bootstrap starvation after a discovery failure.
 
 The Python workflow suite's remote 45-second time was traced to a loopback HTTP fixture's reverse DNS: one case took 36.028 seconds. Binding that literal-loopback fixture without getfqdn reduced it to 0.618 seconds and all per-case times to 10.595 seconds, retaining every request and credential-redaction assertion.
+
+## J native runner consolidation
+
+The current workflow requests one Linux runner and one macOS runner. The native checks and delivery
+acceptances now execute in sequence on that same macOS runner, using one checkout, one dependency/cache
+restore and one `swift build --build-tests`. The provider/profile package uses `--skip-build` to reuse those
+compiled products. Each platform still saves its successful compile before running tests. No native,
+portable, catalogue, transport, display-budget, status-demo, GUI or MCP check is removed.
+
+After native/Python suites, GUI startup and MCP acceptance return, a read-only `ps` PID/`comm` check must prove
+that product/XCTest processes exited. It never reads arguments, kills a process or retries a failed check.
+Only then can packaging and the original serial transport acceptances run, followed separately by display
+budget acceptance and the synthetic status demo. The delivery phase still attempts to run after a failed
+native suite, as the former independent delivery job did, provided the unique compile succeeded, no native product remains alive and packaging succeeds. A failed
+compile can never package restored-cache binaries under the new source commit. Both artifact groups and every subprocess outcome/log remain available.
+
+The Linux and merged macOS live budget gates still start at the whole run's creation time, including queue,
+setup and cache time, with the same 300-second limit for cold and warm builds. Final `created_at` to
+`updated_at` verification remains mandatory. Consolidation reduces independent runner requests and duplicate
+preparation; it does not establish that a future hosted queue will be short enough. The failed J-0 run
+43841996950 is retained and never rerun. Its native functional checks succeeded but its live whole-run wall
+was 476.3 seconds, including a 305-second macOS runner wait; that run did not satisfy the budget.

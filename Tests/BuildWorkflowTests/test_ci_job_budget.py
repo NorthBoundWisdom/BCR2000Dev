@@ -69,17 +69,28 @@ class CIJobBudgetTests(unittest.TestCase):
 
     def test_both_jobs_save_after_compile_before_tests_independently_of_test_success(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
-        self.assertEqual(text.count("timeout-minutes: 20"), 3)
-        self.assertEqual(text.count("steps.compile.outcome == 'success'"), 3)
-        self.assertEqual(text.count("Report whole-run wall time and enforce 300s budget"), 3)
+        self.assertEqual(text.count("timeout-minutes: 20"), 2)
+        self.assertEqual(
+            text.count("if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'"), 2
+        )
+        self.assertEqual(text.count("Report whole-run wall time and enforce 300s budget"), 2)
         linux, native = text.split("  checks:\n")
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("Save compiled native"), native.index("ci_parallel_checks.py tests"))
+        self.assertLess(linux.index("Compile portable"), linux.index("Save compiled portable"))
+        self.assertLess(native.index("Compile native"), native.index("Save compiled native"))
+        self.assertEqual(linux.count("steps.compile.outcome == 'success'"), 1)
+        self.assertEqual(
+            native.count("if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'"), 1
+        )
+        self.assertNotIn("--product BCRProviderService", native)
+        self.assertNotIn("--product BCRProfileTool", native)
+        self.assertIn("--configuration debug --skip-build", native)
 
     def test_compilation_does_not_execute_discovery_and_cold_measurement_only_skips_restore(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
         self.assertEqual(text.count("--build-tests"), 2)
         self.assertNotIn("id: compile\n        run: swift test", text)
         self.assertIn("list --skip-build", text)
-        self.assertEqual(text.count("inputs.cold_build != true"), 3)
+        self.assertEqual(text.count("inputs.cold_build != true"), 2)
         self.assertIn("Run and reconcile every portable XCTest once", text)
