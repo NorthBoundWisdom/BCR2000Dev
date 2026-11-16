@@ -9,7 +9,7 @@ import Foundation
 import XCTest
 
 final class PersistenceValidationTests: XCTestCase {
-    func testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer() throws {
+    func testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer() async throws {
         for value in [0, 9, -1] {
             XCTAssertThrowsError(try JSONDecoder().decode(
                 AgentSlotID.self,
@@ -21,7 +21,7 @@ final class PersistenceValidationTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(AgentSlotID.self, from: Data("{\"rawValue\":8}".utf8)), AgentSlotID(8))
     }
 
-    func testMIDIDecoderRejectsInvalidChannelsAndNumbers() throws {
+    func testMIDIDecoderRejectsInvalidChannelsAndNumbers() async throws {
         for (channel, number) in [(16, 1), (0, 128), (-1, 1), (0, -1)] {
             let json = "{\"kind\":\"controlChange\",\"channel\":\(channel),\"number\":\(number)}"
             XCTAssertThrowsError(try JSONDecoder().decode(MIDIControlID.self, from: Data(json.utf8))) {
@@ -30,7 +30,7 @@ final class PersistenceValidationTests: XCTestCase {
         }
     }
 
-    func testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted() throws {
+    func testNullNonOptionalDefinitionFieldsAreNotSilentlyDefaulted() async throws {
         let definition = try JSONValue.encoded(ParameterDefinition(id: "x", name: "X")).objectValue!
         for field in ["group", "unit", "minimum", "maximum", "defaultValue", "kind", "agentWritable"] {
             var raw = definition
@@ -45,7 +45,7 @@ final class PersistenceValidationTests: XCTestCase {
         catch { XCTFail("Unexpected error: \(error)"); return [] }
     }
 
-    func testWholeConfigurationReportsMultipleConcreteIssues() {
+    func testWholeConfigurationReportsMultipleConcreteIssues() async {
         let parameter = ParameterDefinition(id: "j", name: "Joint")
         let control = BCRControlID.encoder(row: 1, 1)
         let configuration = SurfaceConfiguration(
@@ -65,7 +65,7 @@ final class PersistenceValidationTests: XCTestCase {
         }
     }
 
-    func testEveryInvalidParameterRuleIsRejected() {
+    func testEveryInvalidParameterRuleIsRejected() async {
         let invalid: [ParameterDefinition] = [
             .init(id: "", name: "Name"),
             .init(id: "x", name: "\n"),
@@ -83,14 +83,14 @@ final class PersistenceValidationTests: XCTestCase {
         }
     }
 
-    func testLargeFiniteRangeHasFiniteMidpoint() throws {
+    func testLargeFiniteRangeHasFiniteMidpoint() async throws {
         let definition = ParameterDefinition(id: "x", name: "Large", minimum: 1e308, maximum: 1.5e308)
         try definition.validate()
         XCTAssertTrue(definition.midpoint.isFinite)
         XCTAssertEqual(definition.normalized(definition.midpoint), 0.5, accuracy: 1e-12)
     }
 
-    func testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic() {
+    func testUnknownResetGroupIsRejectedAndAssignmentFailureIsAtomic() async {
         var configuration = SurfaceConfiguration(name: "Test")
         let original = configuration
         XCTAssertThrowsError(try configuration.assign(ControlAssignment(
@@ -103,7 +103,7 @@ final class PersistenceValidationTests: XCTestCase {
         ])).contains(.unknownGroup))
     }
 
-    func testDecodedDuplicateParametersAndInvalidAgentSlotsAreRejected() throws {
+    func testDecodedDuplicateParametersAndInvalidAgentSlotsAreRejected() async throws {
         let parameter = ParameterDefinition(id: "x", name: "X")
         let duplicates = SurfaceConfiguration(name: "Test", parameters: [parameter, parameter])
         XCTAssertThrowsError(try JSONValue.encoded(duplicates).decoded(SurfaceConfiguration.self))
@@ -119,7 +119,7 @@ final class PersistenceValidationTests: XCTestCase {
         }
     }
 
-    func testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes() throws {
+    func testHardwareMapValidationRejectsDuplicateBindingsAndEncoderNotes() async throws {
         let a = BCRControlID.encoder(row: 1, 1), b = BCRControlID.encoder(row: 1, 2)
         let cc = MIDIControlID(kind: .controlChange, channel: 0, number: 1)
         for map in [
@@ -134,7 +134,7 @@ final class PersistenceValidationTests: XCTestCase {
         try HardwareMap.mockPreset().validate()
     }
 
-    func testRemovingLastGroupParameterClearsDanglingResetAction() throws {
+    func testRemovingLastGroupParameterClearsDanglingResetAction() async throws {
         var configuration = SurfaceConfiguration(name: "Test", parameters: [
             ParameterDefinition(id: "x", name: "X", group: "group")
         ], assignments: [.init(control: .userButton(1), target: .resetGroup("group"))])

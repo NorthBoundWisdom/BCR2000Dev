@@ -13,7 +13,7 @@ final class SimulationConfigurationTests: XCTestCase {
             .deletingLastPathComponent().appending(path: "examples/simulation/chassis-controls.json")
     }
 
-    func testStrictFieldAllowlistsMatchCompleteCodableEncoding() throws {
+    func testStrictFieldAllowlistsMatchCompleteCodableEncoding() async throws {
         let parameter = ParameterDefinition(id: "drift", name: "Drift", group: "Group", unit: "unit",
                                             minimum: 0, maximum: 127, defaultValue: 64, kind: .continuous,
                                             agentWritable: true, externallyProtected: false, step: 1)
@@ -48,7 +48,7 @@ final class SimulationConfigurationTests: XCTestCase {
         XCTAssertEqual(try SimulationSurfaceConfiguration.decode(data), configuration)
     }
 
-    func testExampleProducesUsableInputsAndOnlyMomentaryHold() throws {
+    func testExampleProducesUsableInputsAndOnlyMomentaryHold() async throws {
         let configuration = try SimulationSurfaceConfiguration.decode(Data(contentsOf: example))
         let surface = SurfaceSession(hardwareDevice: MockSurfaceDevice(), configuration: configuration,
                                      saveHardwareMap: { _ in XCTFail("must not save hardware map") },
@@ -84,7 +84,7 @@ final class SimulationConfigurationTests: XCTestCase {
         }
     }
 
-    func testStrictConfigurationRejectsUnknownFieldsInvalidBindingsAndProtectedParameters() throws {
+    func testStrictConfigurationRejectsUnknownFieldsInvalidBindingsAndProtectedParameters() async throws {
         let base = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: example)) as? [String: Any])
         let mutations: [(inout [String: Any]) -> Void] = [
             { $0["unexpected"] = true },
@@ -128,7 +128,7 @@ final class SimulationConfigurationTests: XCTestCase {
         }
     }
 
-    func testInputDeclarationsMatchEveryControlAndProtectionRule() throws {
+    func testInputDeclarationsMatchEveryControlAndProtectionRule() async throws {
         let surface = SurfaceSession(
             hardwareDevice: MockSurfaceDevice(),
             configuration: SurfaceControlMCPModule.simulationConfiguration(),
@@ -170,7 +170,7 @@ final class SimulationConfigurationTests: XCTestCase {
         }
     }
 
-    func testChangingOutputEnableParameterRotatesPublishedInputPolicy() throws {
+    func testChangingOutputEnableParameterRotatesPublishedInputPolicy() async throws {
         let surface = SurfaceSession(
             hardwareDevice: MockSurfaceDevice(),
             configuration: SurfaceControlMCPModule.simulationConfiguration(),
@@ -210,7 +210,7 @@ final class SimulationConfigurationTests: XCTestCase {
         XCTAssertEqual(try input(moved.expected).objectValue?["disposition"], .string("accepted"))
     }
 
-    func testLegacySimulationMappingRemainsPinned() throws {
+    func testLegacySimulationMappingRemainsPinned() async throws {
         let surface = SurfaceSession(
             hardwareDevice: MockSurfaceDevice(),
             configuration: SurfaceControlMCPModule.simulationConfiguration(),

@@ -35,7 +35,7 @@ final class ParameterSceneTests: XCTestCase {
         )
     }
 
-    func testSceneMetadataIsSilentAndOverwriteMustBeConfirmed() throws {
+    func testSceneMetadataIsSilentAndOverwriteMustBeConfirmed() async throws {
         let device = SceneDevice(), s = session(device)
         s.selectSource(.hardware)
         s.setParameter("x", to: 20)
@@ -59,7 +59,7 @@ final class ParameterSceneTests: XCTestCase {
         XCTAssertEqual(device.messages.count, count)
     }
 
-    func testSceneRecallIsOneUndoableBatchAndRefreshesRings() throws {
+    func testSceneRecallIsOneUndoableBatchAndRefreshesRings() async throws {
         let device = SceneDevice(), s = session(device)
         s.selectSource(.hardware)
         s.withParameterHistory { s.setParameter("x", to: 30); s.setParameter("y", to: 60) }
@@ -75,7 +75,7 @@ final class ParameterSceneTests: XCTestCase {
         XCTAssertEqual(s.engine.value(of: "x"), 30); XCTAssertEqual(s.engine.value(of: "y"), 60)
     }
 
-    func testDeletedParametersRemainInEvidenceAndRecallReportsThem() throws {
+    func testDeletedParametersRemainInEvidenceAndRecallReportsThem() async throws {
         let s = session()
         s.setParameter("x", to: 45); s.setParameter("y", to: 80)
         try s.captureScene(id: "s", name: "Scene")
@@ -88,7 +88,7 @@ final class ParameterSceneTests: XCTestCase {
         try s.engine.configuration.validate()
     }
 
-    func testOldProfileStaysReadableAndSceneJSONRoundTripsThroughStore() throws {
+    func testOldProfileStaysReadableAndSceneJSONRoundTripsThroughStore() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         var legacy = configuration(); legacy.version = 7
@@ -109,7 +109,7 @@ final class ParameterSceneTests: XCTestCase {
         XCTAssertNotNil(scenes[0]["values"] as? [String: Double])
     }
 
-    func testInvalidScenesAreRejectedIncludingDuplicateNamesAndNonFiniteValues() throws {
+    func testInvalidScenesAreRejectedIncludingDuplicateNamesAndNonFiniteValues() async throws {
         for scene in [ParameterScene(id: "", name: "S", values: [:]),
                       ParameterScene(id: "s", name: " ", values: [:]),
                       ParameterScene(id: "s", name: "S", values: ["x": .infinity]),
@@ -126,7 +126,7 @@ final class ParameterSceneTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(ParameterScene.self, from: bad))
     }
 
-    func testRecallCannotChangeProtectedValuesAndIsAtomic() throws {
+    func testRecallCannotChangeProtectedValuesAndIsAtomic() async throws {
         let s = session()
         s.withParameterHistory { s.setParameter("x", to: 20); s.setParameter("y", to: 40) }
         try s.captureScene(id: "s", name: "Scene")

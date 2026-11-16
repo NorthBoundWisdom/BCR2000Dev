@@ -45,7 +45,7 @@ final class HardwareSurfaceControlTests: XCTestCase {
         return result.value
     }
 
-    func testRecordedFVCC8And19HardwareOriginsUnknownAndGeneration() throws {
+    func testRecordedFVCC8And19HardwareOriginsUnknownAndGeneration() async throws {
         let (session, device, gateway) = try fixture()
         let d = call(gateway, "discover").objectValue!
         XCTAssertEqual(d["source"], .string("hardware")); XCTAssertEqual(d["contract_version"], .string("1.4"))
@@ -100,7 +100,7 @@ final class HardwareSurfaceControlTests: XCTestCase {
         XCTAssertTrue(device.sent.isEmpty)
     }
 
-    func testFeedbackFourCombinationsAndEchoNeverBecomesHardwareInput() throws {
+    func testFeedbackFourCombinationsAndEchoNeverBecomesHardwareInput() async throws {
         for policy in [HardwareOutputPolicy.observe, .write] {
             for allowed in [false, true] {
                 let (session, device, gateway) = try fixture(policy, feedback: allowed)
@@ -134,7 +134,7 @@ final class HardwareSurfaceControlTests: XCTestCase {
         }
     }
 
-    func testThreeRemoteWritesAreAtomicFixedRejections() throws {
+    func testThreeRemoteWritesAreAtomicFixedRejections() async throws {
         let (_, _, gateway) = try fixture()
         let expected = call(gateway, "discover").objectValue!["expected"]!
         for (name, arguments, code) in [
@@ -167,7 +167,7 @@ final class HardwareSurfaceControlTests: XCTestCase {
 
     private struct RejectedObservation: Error {}
 
-    func testJournalRejectedHardwareInputLeavesEngineUnchangedAndIsReportedAsInputFailure() throws {
+    func testJournalRejectedHardwareInputLeavesEngineUnchangedAndIsReportedAsInputFailure() async throws {
         let (session, device, _) = try fixture()
         var failures: [SurfaceSessionEvent.Operation] = []
         session.onEvent = { event in if case let .failed(operation, _) = event { failures.append(operation) } }

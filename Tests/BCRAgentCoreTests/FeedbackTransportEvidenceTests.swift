@@ -29,7 +29,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
     }
 
     // K round T15: failed transport must not invent evidence that a message was sent.
-    func testT15FailedTransportDoesNotBecomeFeedbackEchoEvidence() {
+    func testT15FailedTransportDoesNotBecomeFeedbackEchoEvidence() async {
         let (session, device) = fixture()
         device.failsSend = true
         session.setParameter("p1", to: 80)
@@ -40,7 +40,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
         XCTAssertTrue(session.events.contains { $0.direction == .output && $0.delivery == .failed })
     }
 
-    func testDisconnectedFeedbackDoesNotBecomeEchoEvidence() {
+    func testDisconnectedFeedbackDoesNotBecomeEchoEvidence() async {
         let (session, device) = fixture(connected: false)
         session.setParameter("p1", to: 80)
         XCTAssertTrue(device.sent.isEmpty)
@@ -48,7 +48,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
         XCTAssertTrue(session.events.contains { $0.direction == .output && $0.delivery == .disconnected })
     }
 
-    func testObserveSuppressionDoesNotBecomeEchoEvidence() {
+    func testObserveSuppressionDoesNotBecomeEchoEvidence() async {
         let (session, device) = fixture(policy: .observe)
         session.setParameter("p1", to: 80)
         XCTAssertTrue(device.sent.isEmpty)
@@ -57,7 +57,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
         XCTAssertEqual(session.engine.state(of: .encoder(row: 1, 1)).lastInput, 80)
     }
 
-    func testSuccessfulFeedbackRetainsTheSameEchoWindowAndControl() {
+    func testSuccessfulFeedbackRetainsTheSameEchoWindowAndControl() async {
         let (session, device) = fixture()
         session.setParameter("p1", to: 80)
         XCTAssertEqual(device.sent, [echo])
@@ -69,7 +69,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
         XCTAssertNil(session.engine.state(of: .encoder(row: 1, 1)).lastInput)
     }
 
-    func testScheduledEvidenceWaitsForActualDeliveryAndDropsCancelledValues() throws {
+    func testScheduledEvidenceWaitsForActualDeliveryAndDropsCancelledValues() async throws {
         let (session, device) = fixture()
         try session.configureFeedback(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
         session.flushFeedback()
@@ -86,7 +86,7 @@ final class FeedbackTransportEvidenceTests: XCTestCase {
         XCTAssertTrue(session.engine.isFeedbackEcho(echo, at: instant))
     }
 
-    func testScheduledFailureDoesNotBecomeEchoEvidence() throws {
+    func testScheduledFailureDoesNotBecomeEchoEvidence() async throws {
         let (session, device) = fixture()
         try session.configureFeedback(.init(enabled: true, messagesPerSecond: 1000, burst: 128))
         session.flushFeedback()

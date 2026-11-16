@@ -3,8 +3,14 @@ import Foundation
 import XCTest
 
 @MainActor
+private final class DisplayBudgetClock {
+    var wall = Date(timeIntervalSinceReferenceDate: 100)
+    var monotonic = 10.0
+}
+
+@MainActor
 final class DisplayWriteBudgetTests: XCTestCase {
-    func testDisplayWritersAndOwnerHaveIndependentBudgetsOnlyWhenExplicitlySelected() throws {
+    func testDisplayWritersAndOwnerHaveIndependentBudgetsOnlyWhenExplicitlySelected() async throws {
         let gateway = MCPApplicationGateway(permissions: .init(writesPerSecond: 1))
         try gateway.withAuthenticatedSurfaceWriterID("display-a", displayWriteLimit: 1) {
             try gateway.consumeWrites(1)
@@ -19,7 +25,7 @@ final class DisplayWriteBudgetTests: XCTestCase {
         XCTAssertFalse(gateway.hasIndependentDisplayBudget)
     }
 
-    func testAbsentFlagRetainsSharedAggregateAcrossWriters() throws {
+    func testAbsentFlagRetainsSharedAggregateAcrossWriters() async throws {
         let gateway = MCPApplicationGateway(permissions: .init(writesPerSecond: 1))
         try gateway.withAuthenticatedSurfaceWriterID("display-a") { try gateway.consumeWrites(1) }
         try gateway.withAuthenticatedSurfaceWriterID("display-b") {
@@ -28,7 +34,7 @@ final class DisplayWriteBudgetTests: XCTestCase {
         XCTAssertThrowsError(try gateway.consumeWrites(1))
     }
 
-    func testOneSecondWindowBoundaryAndExplicitLifecycleClear() throws {
+    func testOneSecondWindowBoundaryAndExplicitLifecycleClear() async throws {
         var time = 100.0
         let gateway = MCPApplicationGateway(displayMonotonic: { time })
         try gateway.withAuthenticatedSurfaceWriterID("display-a", displayWriteLimit: 1) {
@@ -43,7 +49,7 @@ final class DisplayWriteBudgetTests: XCTestCase {
         }
     }
 
-    func testNestedAndThrowingAuthenticationRestoresWriterAndBudgetContext() throws {
+    func testNestedAndThrowingAuthenticationRestoresWriterAndBudgetContext() async throws {
         enum Expected: Error { case failure }
         let gateway = MCPApplicationGateway(permissions: .init(writesPerSecond: 1))
         try gateway.withAuthenticatedSurfaceWriterID("display-a", displayWriteLimit: 1) {
@@ -60,26 +66,25 @@ final class DisplayWriteBudgetTests: XCTestCase {
         try gateway.consumeWrites(1)
     }
 
-    func testWallClockJumpsDoNotAffectDisplayAndMonotonicRollbackFailsClosed() throws {
-        var wall = Date(timeIntervalSinceReferenceDate: 100)
-        var monotonic = 10.0
-        let gateway = MCPApplicationGateway(now: { wall }, displayMonotonic: { monotonic })
+    func testWallClockJumpsDoNotAffectDisplayAndMonotonicRollbackFailsClosed() async throws {
+        let clock = DisplayBudgetClock()
+        let gateway = MCPApplicationGateway(now: { clock.wall }, displayMonotonic: { clock.monotonic })
         try gateway.withAuthenticatedSurfaceWriterID("display-a", displayWriteLimit: 1) {
             try gateway.consumeWrites(1)
             for changedWall in [200_000.0, -200_000.0] {
-                wall = Date(timeIntervalSinceReferenceDate: changedWall)
+                clock.wall = Date(timeIntervalSinceReferenceDate: changedWall)
                 XCTAssertThrowsError(try gateway.consumeWrites(1))
             }
         }
         for invalid in [9.0, Double.nan, Double.infinity] {
-            monotonic = invalid
+            clock.monotonic = invalid
             try gateway.withAuthenticatedSurfaceWriterID("display-b", displayWriteLimit: 1) {
                 XCTAssertThrowsError(try gateway.consumeWrites(1)) { error in
                     XCTAssertEqual(error as? MCPApplicationGateway.DisplayClockFailure, .invalidTime)
                 }
             }
         }
-        monotonic = 10
+        clock.monotonic = 10
         try gateway.withAuthenticatedSurfaceWriterID("display-b", displayWriteLimit: 1) {
             try gateway.consumeWrites(1)
             XCTAssertThrowsError(try gateway.consumeWrites(1))

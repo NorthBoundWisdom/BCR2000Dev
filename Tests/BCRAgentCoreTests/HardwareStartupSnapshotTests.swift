@@ -33,7 +33,7 @@ final class HardwareStartupSnapshotTests: XCTestCase {
         ])
     }
 
-    func testStartupAdoptsAbsoluteValuesAndSendsOnlyButtonLEDsWithoutActionsOrTouch() throws {
+    func testStartupAdoptsAbsoluteValuesAndSendsOnlyButtonLEDsWithoutActionsOrTouch() async throws {
         let (session, device, snapshot) = try fixture()
         var actions = 0, touches = 0
         session.onTriggerAgent = { _ in actions += 1 }
@@ -51,7 +51,7 @@ final class HardwareStartupSnapshotTests: XCTestCase {
         XCTAssertEqual(touches, 0)
     }
 
-    func testIncompleteAndConflictingSnapshotsAreAtomic() throws {
+    func testIncompleteAndConflictingSnapshotsAreAtomic() async throws {
         for conflicting in [false, true] {
             let (session, device, snapshot) = try fixture()
             let before = session.engine.parameterValues

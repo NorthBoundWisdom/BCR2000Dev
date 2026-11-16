@@ -9,7 +9,7 @@ import XCTest
 
 @MainActor
 final class ProviderModuleTests: XCTestCase {
-    func testLegacyUnicodeParameterDoesNotImplicitlyEnableSurfaceContract() throws {
+    func testLegacyUnicodeParameterDoesNotImplicitlyEnableSurfaceContract() async throws {
         let configuration = SurfaceConfiguration(name: "Legacy", parameters: [
             .init(id: "joint/轴", name: "Joint", minimum: 0, maximum: 127)
         ], assignments: [.init(control: .pushEncoder(group: 1, 1), target: .parameter("joint/轴"))])
@@ -49,7 +49,7 @@ final class ProviderModuleTests: XCTestCase {
         return result.value
     }
 
-    func testOptionalModulesHaveNoSyntheticFallbackOrAgentRuntime() throws {
+    func testOptionalModulesHaveNoSyntheticFallbackOrAgentRuntime() async throws {
         let (gateway, application) = try context(console: false, configuration: .init())
         let names = gateway.toolDefinitions.compactMap { $0.objectValue?["name"]?.stringValue }
         XCTAssertFalse(names.contains("robot_state"))
@@ -64,7 +64,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertEqual(caps.objectValue?["console"]?.objectValue?["enabled"], .bool(false))
     }
 
-    func testAgentAndConsolePermissionCannotEnableRobotOrChassis() throws {
+    func testAgentAndConsolePermissionCannotEnableRobotOrChassis() async throws {
         let (gateway, app) = try context(permissions: MCPPermissions(agentControl: true, deviceControl: true))
         let robot = try app.robotState()
         let denied = gateway.call("robot_command", arguments: .object([
@@ -80,7 +80,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertNil(try app.chassisState().actual)
     }
 
-    func testStrictSchemasRejectExtraFieldsBeforeStateMutation() throws {
+    func testStrictSchemasRejectExtraFieldsBeforeStateMutation() async throws {
         let (gateway, app) = try context(permissions: .init(robotControl: true))
         let generation = try app.robotState().metadata.generation
         let bad = gateway.call("robot_command", arguments: .object([
@@ -93,7 +93,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertEqual(try app.robotState().metadata.generation, generation)
     }
 
-    func testModuleRegistrationRejectsCollisionsAtomically() throws {
+    func testModuleRegistrationRejectsCollisionsAtomically() async throws {
         let (gateway, _) = try context()
         let before = gateway.toolDefinitions
         let tool = JSONValue.object(["name": .string("provider_state"), "inputSchema": .object([:])])
@@ -101,7 +101,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertEqual(gateway.toolDefinitions, before)
     }
 
-    func testSyntheticConsoleInputCannotWriteProtectedValueOrPretendHardware() throws {
+    func testSyntheticConsoleInputCannotWriteProtectedValueOrPretendHardware() async throws {
         let (gateway, _) = try context(permissions: .init(configurationWrite: true, deviceControl: true))
         let session = gateway.session
         try session.addParameter(.init(
@@ -138,7 +138,7 @@ final class ProviderModuleTests: XCTestCase {
             })
     }
 
-    func testLegacyMockInputRequiresBothPermissionsAndCannotSelectHardware() throws {
+    func testLegacyMockInputRequiresBothPermissionsAndCannotSelectHardware() async throws {
         let (gateway, _) = try context(permissions: .init(parameterWrite: false, deviceControl: true))
         let control = BCRControlID.pushEncoder(group: 1, 1)
         let args: JSONValue = .object([
@@ -169,7 +169,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertTrue(gateway.call("console_mock_input", arguments: forged).isError)
     }
 
-    func testLegacyMockInputCannotInvokeActionOrReadonlyParameter() throws {
+    func testLegacyMockInputCannotInvokeActionOrReadonlyParameter() async throws {
         let (gateway, _) = try context(permissions: .init(deviceControl: true))
         let control = BCRControlID.button(row: 1, 1)
         var actionCount = 0
@@ -190,7 +190,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertEqual(gateway.session.engine.value(of: "readonly"), 0)
     }
 
-    func testLegacyProviderInstancesKeepInputsAndEpochsIsolated() throws {
+    func testLegacyProviderInstancesKeepInputsAndEpochsIsolated() async throws {
         let (first, _) = try context(permissions: .init(deviceControl: true))
         let (second, _) = try context(permissions: .init(deviceControl: true))
         let secondGeneration = second.session.inputEvents.generation
@@ -207,7 +207,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertEqual(second.session.inputEvents.snapshot(), secondSnapshot)
     }
 
-    func testManualTimeAndDeviceResetDoNotMutateConsoleOrAnotherDevice() throws {
+    func testManualTimeAndDeviceResetDoNotMutateConsoleOrAnotherDevice() async throws {
         let (gateway, app) = try context(permissions: .init(
             robotControl: true,
             chassisControl: true,
@@ -262,7 +262,7 @@ final class ProviderModuleTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(stopped.actual).pose_m_rad[0], 0)
     }
 
-    func testRevokingOneDomainInvalidatesItsControlWithoutResettingPeer() throws {
+    func testRevokingOneDomainInvalidatesItsControlWithoutResettingPeer() async throws {
         let (gateway, app) = try context(permissions: .init(
             robotControl: true,
             chassisControl: true,

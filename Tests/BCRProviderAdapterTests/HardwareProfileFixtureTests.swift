@@ -8,7 +8,7 @@ import SurfaceControlContracts
 
 @MainActor
 final class HardwareProfileFixtureTests: XCTestCase {
-    func testSharedHardwareFixtureAgainstHostProfileWithExplicitMissingRoleCoverage() throws {
+    func testSharedHardwareFixtureAgainstHostProfileWithExplicitMissingRoleCoverage() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let document = try JSONSerialization

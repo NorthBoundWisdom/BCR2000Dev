@@ -10,7 +10,7 @@ final class HostSimulationBoundaryTests: XCTestCase {
         .init(configuration: .init(robot: true, clock: .manual), monotonic: { 0 })
     }
 
-    func testHostUUIDTokensRemainOpaqueAndGenerationFailurePrecedesTokenFailure() throws {
+    func testHostUUIDTokensRemainOpaqueAndGenerationFailurePrecedesTokenFailure() async throws {
         let app = fixture()
         let initialGeneration = try app.robotState().metadata.generation
         let initialized = try app.executeRobot(
@@ -45,7 +45,7 @@ final class HostSimulationBoundaryTests: XCTestCase {
         XCTAssertTrue(try app.robotState().metadata.enabled)
     }
 
-    func testPermissionAndStoppedChecksKeepOriginalOrderBeforeGenerationAndValueErrors() throws {
+    func testPermissionAndStoppedChecksKeepOriginalOrderBeforeGenerationAndValueErrors() async throws {
         let app = fixture()
         _ = try app.runtime.handle(ProviderApplication.robotInstanceID, input: .stop)
         let noWrite = ProviderAccess(write: false, robot: true, chassis: true, simulation: true)

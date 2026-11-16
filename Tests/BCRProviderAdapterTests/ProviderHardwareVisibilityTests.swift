@@ -20,7 +20,7 @@ final class ProviderHardwareVisibilityTests: XCTestCase {
         func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
     }
 
-    func testProviderWritesReportDeliveryThroughExistingConsoleJournal() throws {
+    func testProviderWritesReportDeliveryThroughExistingConsoleJournal() async throws {
         for policy in [HardwareOutputPolicy.observe, .write] {
             let device = Device()
             let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),

@@ -66,7 +66,7 @@ final class HardwareOutputPolicyTests: XCTestCase {
         [176, 81, 11], [176, 82, 22], [176, 83, 33], [176, 81, 99]
     ]
 
-    func testWriteAndUnspecifiedSessionPolicyMatchOriginalByteSequence() throws {
+    func testWriteAndUnspecifiedSessionPolicyMatchOriginalByteSequence() async throws {
         for explicit in [false, true] {
             let device = OutputRecordingDevice()
             let session: SurfaceSession
@@ -86,7 +86,7 @@ final class HardwareOutputPolicyTests: XCTestCase {
         }
     }
 
-    func testHeadlessLifecycleDoesNotReplayNonemptyBindingsOrDisplayState() throws {
+    func testHeadlessLifecycleDoesNotReplayNonemptyBindingsOrDisplayState() async throws {
         let device = OutputRecordingDevice()
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),
                                      configuration: Self.configuration(), hardwareOutput: .write,
@@ -117,7 +117,7 @@ final class HardwareOutputPolicyTests: XCTestCase {
         XCTAssertEqual(device.sent.count, 2)
     }
 
-    func testObserveSuppressesAllFeedbackButContinuesAcceptingHardwareInput() throws {
+    func testObserveSuppressesAllFeedbackButContinuesAcceptingHardwareInput() async throws {
         let device = OutputRecordingDevice()
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),
                                      configuration: Self.configuration(), hardwareOutput: .observe,

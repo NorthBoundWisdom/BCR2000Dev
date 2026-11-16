@@ -159,23 +159,23 @@ private func scenarioFingerprint(_ host: BCRFixtureHost, at requested: Double,
 
 @MainActor
 final class SharedSurfaceScenarioTests: XCTestCase {
-    func testSharedVersionedFixtureDrivesRealBCRMockAndSession() throws {
+    func testSharedVersionedFixtureDrivesRealBCRMockAndSession() async throws {
         try run(fixture: "surface-control-software-v1", steps: 40)
     }
 
-    func testSharedContract11FixtureDrivesHoldRenewAndAdvance() throws {
+    func testSharedContract11FixtureDrivesHoldRenewAndAdvance() async throws {
         try run(fixture: "surface-control-software-v1.1", steps: 65)
     }
 
-    func testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations() throws {
+    func testSharedContract12FixtureDrivesUnsequencedFeedbackHoldsAndDeclarations() async throws {
         try run(fixture: "surface-control-software-v1.2", steps: 83)
     }
 
-    func testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters() throws {
+    func testSharedContract13FixtureDrivesIndependentCASAndTrustedWriters() async throws {
         try run(fixture: "surface-control-software-v1.3", steps: 97)
     }
 
-    func testFingerprintDetectsIdentityRotationOutsideResetAndRestart() throws {
+    func testFingerprintDetectsIdentityRotationOutsideResetAndRestart() async throws {
         let host = try BCRFixtureHost(instanceID: "fixture.identity", epoch: "initial", eventCapacity: 32)
         let before = try scenarioFingerprint(host, at: 0).value
         // A legacy generation change can rotate the adapter during an ordinary read/input step.

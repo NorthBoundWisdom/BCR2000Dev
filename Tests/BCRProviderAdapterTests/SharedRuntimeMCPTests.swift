@@ -43,7 +43,7 @@ final class SharedRuntimeMCPTests: XCTestCase {
         return result.value
     }
 
-    func testNewRemoteAndOldTypedCommandsMutateOneValueAndKeepRawAndLegacyEnvelopesSeparate() throws {
+    func testNewRemoteAndOldTypedCommandsMutateOneValueAndKeepRawAndLegacyEnvelopesSeparate() async throws {
         let clock = Clock()
         let (application, service) = try host(clock: clock)
         let generation = try application.robotState().metadata.generation
@@ -113,7 +113,7 @@ final class SharedRuntimeMCPTests: XCTestCase {
         XCTAssertNotNil(trace.objectValue?["samples"]?.arrayValue)
     }
 
-    func testSimulationAdministrationAndClockModeCannotBeBypassedByNewTools() throws {
+    func testSimulationAdministrationAndClockModeCannotBeBypassedByNewTools() async throws {
         let clock = Clock()
         let (application, service) = try host(clock: clock, simulation: false)
         for (kind, id, generation) in [
@@ -153,7 +153,7 @@ final class SharedRuntimeMCPTests: XCTestCase {
         XCTAssertEqual(denied.value.objectValue?["code"], .string("permissionDenied"))
     }
 
-    func testOutputEnableCannotForgeAuthorityAndSharedReadsDoNotAppendEvents() throws {
+    func testOutputEnableCannotForgeAuthorityAndSharedReadsDoNotAppendEvents() async throws {
         let clock = Clock()
         let (application, service) = try host(clock: clock)
         try application.runtime.install([OutputRemoteBinding(
@@ -203,7 +203,7 @@ final class SharedRuntimeMCPTests: XCTestCase {
         XCTAssertEqual(read.value.objectValue?["requested_enabled"], .bool(false))
     }
 
-    func testUnknownAndMissingRoutesMatchSharedErrorsWithoutMutatingJournal() throws {
+    func testUnknownAndMissingRoutesMatchSharedErrorsWithoutMutatingJournal() async throws {
         let clock = Clock()
         let (application, service) = try host(clock: clock)
         var reference = try RemoteRegistry(epoch: "reference")
@@ -239,7 +239,7 @@ final class SharedRuntimeMCPTests: XCTestCase {
         XCTAssertEqual(before, after)
     }
 
-    func testRegressedAndNonfiniteClockFaultsRemainVisibleAndDoNotCrashOrAcceptOrdinaryWrites() throws {
+    func testRegressedAndNonfiniteClockFaultsRemainVisibleAndDoNotCrashOrAcceptOrdinaryWrites() async throws {
         let clock = Clock()
         let (application, _) = try host(clock: clock, manual: false)
         let access = ProviderAccess(write: true, robot: true, chassis: true, simulation: true)

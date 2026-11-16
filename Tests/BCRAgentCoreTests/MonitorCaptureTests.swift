@@ -55,7 +55,7 @@ final class MonitorCaptureTests: XCTestCase {
             .map { try XCTUnwrap(JSONDecoder().decode(JSONValue.self, from: Data($0)).objectValue) }
     }
 
-    func testSHA256StandardVectors() {
+    func testSHA256StandardVectors() async {
         XCTAssertEqual(ContentDigest.sha256(Data()), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
         XCTAssertEqual(
             ContentDigest.sha256(Data("abc".utf8)),
@@ -155,7 +155,7 @@ final class MonitorCaptureTests: XCTestCase {
         XCTAssertEqual(nrpn.fields["rawMIDI1Bytes"]?.arrayValue?.count, 12)
     }
 
-    func testExclusiveEvidenceNeverOverwritesExistingFileOrSymlink() throws {
+    func testExclusiveEvidenceNeverOverwritesExistingFileOrSymlink() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }

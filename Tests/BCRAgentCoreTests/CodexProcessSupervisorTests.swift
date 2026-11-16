@@ -11,7 +11,7 @@ import XCTest
 
 @MainActor
 final class CodexProcessSupervisorTests: XCTestCase {
-    func testProductionProcessTimeoutDefaultsAreUnchanged() {
+    func testProductionProcessTimeoutDefaultsAreUnchanged() async {
         let config = CodexProcessSupervisorConfig()
         XCTAssertEqual(config.stopTimeoutMs, 2_000)
         XCTAssertEqual(config.autoRestartInitialDelayMs, 250)

@@ -23,7 +23,7 @@ final class ButtonPreviewTests: XCTestCase {
         BCLFixtures.dump(lines)
     }
 
-    func testLearnsButtonIdentitiesForPreviewWithoutAssigningOrExecutingActions() throws {
+    func testLearnsButtonIdentitiesForPreviewWithoutAssigningOrExecutingActions() async throws {
         let lines = ["$rev R1", "$preset", ".egroups 4", "$button 1", ".easypar CC 16 100 127 0 toggleoff",
                      "$button 33", ".easypar CC 16 101 127 0 increment 1", "$button 49",
                      ".easypar NOTE 16 60 127 0 toggleoff",
@@ -44,7 +44,7 @@ final class ButtonPreviewTests: XCTestCase {
         XCTAssertEqual(decoded, plan.hardwareMap)
     }
 
-    func testExistingFunctionalBindingRemainsFunctionalAndConflictingIdentityIsRejected() throws {
+    func testExistingFunctionalBindingRemainsFunctionalAndConflictingIdentityIsRejected() async throws {
         let lines = ["$rev R1", "$preset", ".egroups 4", "$button 33", ".easypar CC 16 101 127 0 increment 1", "$end"]
         var map = HardwareMap()
         try map.bind(.button(row: 1, 1), to: .init(kind: .controlChange, channel: 15, number: 101))
@@ -59,7 +59,7 @@ final class ButtonPreviewTests: XCTestCase {
         ))
     }
 
-    func testSharedEncoderIdentityIsReportedInsteadOfGuessingButtonActivity() throws {
+    func testSharedEncoderIdentityIsReportedInsteadOfGuessingButtonActivity() async throws {
         var map = HardwareMap()
         try map.bind(.encoder(row: 3, 6), to: .init(kind: .controlChange, channel: 0, number: 102))
         let lines = ["$rev R1", "$preset", ".egroups 4", "$button 6", ".easypar CC 1 102 127 0 increment 1", "$end"]
@@ -68,7 +68,7 @@ final class ButtonPreviewTests: XCTestCase {
         XCTAssertEqual(plan.hardwareMap.entries, map.entries)
     }
 
-    func testReleaseMatchingRecentFeedbackIsStillReported() throws {
+    func testReleaseMatchingRecentFeedbackIsStillReported() async throws {
         var map = HardwareMap()
         let button = BCRControlID.button(row: 1, 1)
         try map.bind(button, to: .init(kind: .controlChange, channel: 0, number: 90), pressMode: .momentary)
@@ -85,7 +85,7 @@ final class ButtonPreviewTests: XCTestCase {
         XCTAssertTrue(events.contains(.buttonActivity(button, pressed: false)))
     }
 
-    func testPreviewKeepsSoftwareIndicatorStateWithoutHardwareFeedback() throws {
+    func testPreviewKeepsSoftwareIndicatorStateWithoutHardwareFeedback() async throws {
         var map = HardwareMap()
         let button = BCRControlID.button(row: 2, 1)
         try map.bind(button, to: .init(kind: .controlChange, channel: 15, number: 90), visualizationOnly: true)

@@ -10,7 +10,7 @@ import Observation
 import XCTest
 
 final class LocalizationTests: XCTestCase {
-    func testExplicitLanguageLookupAcceptsSwiftPMLowercaseDirectory() throws {
+    func testExplicitLanguageLookupAcceptsSwiftPMLowercaseDirectory() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".bundle")
         defer { try? FileManager.default.removeItem(at: root) }
         let catalog = root.appending(path: "zh-hans.lproj")
@@ -21,7 +21,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(localized.localizedString(forKey: "probe", value: nil, table: nil), "中文")
     }
 
-    func testSystemPreferenceOrderAndFallback() {
+    func testSystemPreferenceOrderAndFallback() async {
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN", "en"]), .chinese)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW"]), .traditionalChinese)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["ZH_HK"]), .traditionalChinese)
@@ -38,7 +38,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(AppLanguage.chinese.resolved(preferredLanguages: ["en"]), .chinese)
     }
 
-    func testTraditionalLookupAcceptsSwiftPMLowercaseDirectory() throws {
+    func testTraditionalLookupAcceptsSwiftPMLowercaseDirectory() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".bundle")
         defer { try? FileManager.default.removeItem(at: root) }
         let catalog = root.appending(path: "zh-hant.lproj")
@@ -49,7 +49,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(localized.localizedString(forKey: "probe", value: nil, table: nil), "繁體中文")
     }
 
-    func testTranslationAndInterpolationDoNotTranslateUserContent() {
+    func testTranslationAndInterpolationDoNotTranslateUserContent() async {
         XCTAssertEqual(L10n.text("参数", language: .english), "Parameters")
         XCTAssertEqual(L10n.text("参数", language: .chinese), "参数")
         XCTAssertEqual(L10n.text("参数", language: .traditionalChinese), "參數")
@@ -60,7 +60,7 @@ final class LocalizationTests: XCTestCase {
     }
 
     @MainActor
-    func testRuntimeLanguageInvalidatesTrackedTextWithoutRecreatingTheReader() {
+    func testRuntimeLanguageInvalidatesTrackedTextWithoutRecreatingTheReader() async {
         let original = L10n.language
         defer { L10n.setLanguage(original) }
         L10n.setLanguage(.chinese)
@@ -68,13 +68,14 @@ final class LocalizationTests: XCTestCase {
         let text = withObservationTracking { L10n.text("参数") } onChange: { changed.fulfill() }
         XCTAssertEqual(text, "参数")
         L10n.setLanguage(.english)
-        XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 1), .completed)
+        let result = await XCTWaiter.fulfillment(of: [changed], timeout: 1)
+        XCTAssertEqual(result, .completed)
         XCTAssertEqual(L10n.text("参数"), "Parameters")
         XCTAssertEqual(L10n.text("参数", language: .chinese), "参数")
         XCTAssertEqual(L10n.text("参数", language: .traditionalChinese), "參數")
     }
 
-    func testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders() throws {
+    func testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders() async throws {
         func catalog(_ language: AppLanguage) throws -> [String: String] {
             let url = try XCTUnwrap(L10n.localizedBundle(language).url(
                 forResource: "Localizable",
@@ -105,7 +106,7 @@ final class LocalizationTests: XCTestCase {
         }
     }
 
-    func testSavedNamesAndGroupBindingsRemainVerbatim() throws {
+    func testSavedNamesAndGroupBindingsRemainVerbatim() async throws {
         let original = SurfaceConfiguration(
             name: "我的配置 Custom",
             parameters: [.init(id: "custom.1", name: "自定义名称 My Name", group: "原分组", minimum: 0, maximum: 1)],
@@ -118,7 +119,7 @@ final class LocalizationTests: XCTestCase {
 }
 
 extension LocalizationTests {
-    func testNestedMessagesLocalizeWithoutTranslatingVerbatimArguments() {
+    func testNestedMessagesLocalizeWithoutTranslatingVerbatimArguments() async {
         let custom = "用户 {0} custom"
         let inner: LocalizedMessage = "参数“\(custom)”已更新。"
         let outer: LocalizedMessage = "\(inner)"
@@ -129,7 +130,7 @@ extension LocalizationTests {
 
 extension LocalizationTests {
     @MainActor
-    func testRetainedPresetParserCauseKeepsItsMessageKey() throws {
+    func testRetainedPresetParserCauseKeepsItsMessageKey() async throws {
         let original = L10n.language
         defer { L10n.setLanguage(original) }
         L10n.setLanguage(.chinese)

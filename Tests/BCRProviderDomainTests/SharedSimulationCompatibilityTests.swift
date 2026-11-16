@@ -16,7 +16,7 @@ final class SharedSimulationCompatibilityTests: XCTestCase {
         .init(configuration: .init(robot: true, chassis: true, clock: .manual), monotonic: { 0 })
     }
 
-    func testHostUsesSharedStateAndOpaqueHostTokensWithInstanceIsolation() throws {
+    func testHostUsesSharedStateAndOpaqueHostTokensWithInstanceIsolation() async throws {
         let first = application(), second = application()
         XCTAssertNotEqual(try first.robotState().metadata.generation, try second.robotState().metadata.generation)
         for app in [first, second] {
@@ -44,7 +44,7 @@ final class SharedSimulationCompatibilityTests: XCTestCase {
         XCTAssertTrue(try second.robotState().stopped)
     }
 
-    func testLegacyErrorCodeAndExactMessagesArePreservedAtApplicationBoundary() throws {
+    func testLegacyErrorCodeAndExactMessagesArePreservedAtApplicationBoundary() async throws {
         let app = application()
         XCTAssertThrowsError(try app.executeRobot(
             .acquire(try app.robotState().metadata.generation, "x", 1),
@@ -70,7 +70,7 @@ final class SharedSimulationCompatibilityTests: XCTestCase {
         }
     }
 
-    func testCustomLegacyModelFieldsDecodeDirectlyToSharedTypedModel() throws {
+    func testCustomLegacyModelFieldsDecodeDirectlyToSharedTypedModel() async throws {
         let data = Data("""
         {"id":"custom","wheelbase_m":2,"track_m":0.8,"wheel_radius_m":0.2,
          "maximum_speed_m_s":0.7,"maximum_acceleration_m_s2":0.4,
@@ -84,7 +84,7 @@ final class SharedSimulationCompatibilityTests: XCTestCase {
         XCTAssertEqual(try JSONValue.encoded(model), try JSONValue.encoded(chassis.model))
     }
 
-    func testSharedLifecycleStopBlocksHostWritesAndAdvanceFinishesBraking() throws {
+    func testSharedLifecycleStopBlocksHostWritesAndAdvanceFinishesBraking() async throws {
         let app = application()
         XCTAssertTrue(try app.runtime.binding(ProviderApplication.robotInstanceID, as: RobotRemoteBinding.self).plugin
             .acceptsWrites)

@@ -43,7 +43,7 @@ private final class HistoryClock { var value = 100.0 }
 
 @MainActor
 final class ParameterHistoryTests: XCTestCase {
-    func testDragCoalescesByInjectedTimeAndNewWritesInvalidateRedo() throws {
+    func testDragCoalescesByInjectedTimeAndNewWritesInvalidateRedo() async throws {
         let f = HistoryFixture(), s = f.session
         s.setParameter("x", to: 10)
         f.clock.value += 0.1; s.setParameter("x", to: 20)
@@ -64,7 +64,7 @@ final class ParameterHistoryTests: XCTestCase {
         XCTAssertEqual(s.engine.value(of: "x"), 30)
     }
 
-    func testWindowInputSourceAndNoOpBoundaries() throws {
+    func testWindowInputSourceAndNoOpBoundaries() async throws {
         let f = HistoryFixture(), s = f.session
         s.setParameter("x", to: 10)
         f.clock.value += 1; s.setParameter("x", to: 20)
@@ -77,7 +77,7 @@ final class ParameterHistoryTests: XCTestCase {
         XCTAssertFalse(s.canUndo)
     }
 
-    func testHardwareInputCoalescesAndUndoUsesNormalFeedback() throws {
+    func testHardwareInputCoalescesAndUndoUsesNormalFeedback() async throws {
         let f = HistoryFixture(), s = f.session
         s.selectSource(.hardware)
         let wire = try XCTUnwrap(s.engine.hardwareMap.midi(for: .pushEncoder(group: 1, 1)))
@@ -92,7 +92,7 @@ final class ParameterHistoryTests: XCTestCase {
         XCTAssertEqual(f.device.sent.last, wire.message(value: 20))
     }
 
-    func testGroupResetAndMCPBatchAreSingleSteps() throws {
+    func testGroupResetAndMCPBatchAreSingleSteps() async throws {
         let f = HistoryFixture(), s = f.session
         s.withParameterHistory { s.setParameter("x", to: 30); s.setParameter("y", to: 40) }
         s.resetGroup("G")
@@ -113,7 +113,7 @@ final class ParameterHistoryTests: XCTestCase {
         XCTAssertEqual(s.engine.value(of: "y"), 80)
     }
 
-    func testHistoryRestorationRechecksProtectionAtomicallyAndRetainsEntryOnFailure() throws {
+    func testHistoryRestorationRechecksProtectionAtomicallyAndRetainsEntryOnFailure() async throws {
         for protection in 0 ... 2 {
             let f = HistoryFixture(), s = f.session
             s.withParameterHistory { s.setParameter("x", to: 30); s.setParameter("y", to: 40) }
@@ -130,7 +130,7 @@ final class ParameterHistoryTests: XCTestCase {
         }
     }
 
-    func testDefinitionsAssignmentsAndMappingsDoNotEnterHistoryAndContextReplacementClearsIt() throws {
+    func testDefinitionsAssignmentsAndMappingsDoNotEnterHistoryAndContextReplacementClearsIt() async throws {
         let f = HistoryFixture(), s = f.session
         var definition = try XCTUnwrap(s.engine.configuration.parameter("x"))
         definition.name = "renamed"
@@ -145,7 +145,7 @@ final class ParameterHistoryTests: XCTestCase {
         XCTAssertFalse(s.canUndo); XCTAssertFalse(s.canRedo)
     }
 
-    func testMacroFromMockAndHardwareRestoresAllValuesAsOneStep() throws {
+    func testMacroFromMockAndHardwareRestoresAllValuesAsOneStep() async throws {
         for hardware in [false, true] {
             let f = HistoryFixture(), s = f.session
             var config = HistoryFixture.configuration
@@ -164,7 +164,7 @@ final class ParameterHistoryTests: XCTestCase {
         }
     }
 
-    func testHistoryIsBoundedAndClockRegressionOrInvalidTimeDoesNotMerge() {
+    func testHistoryIsBoundedAndClockRegressionOrInvalidTimeDoesNotMerge() async {
         var h = ParameterValueHistory()
         for value in 1 ... 60 {
             h.record(before: ["x": Double(value - 1)], after: ["x": Double(value)], key: "x", at: Double(value))

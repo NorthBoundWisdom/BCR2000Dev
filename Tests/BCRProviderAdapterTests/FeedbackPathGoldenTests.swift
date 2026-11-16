@@ -25,7 +25,7 @@ final class FeedbackPathGoldenTests: XCTestCase {
         return (session, device, MCPApplicationGateway(session: session, includeAgent: false))
     }
 
-    func testRecordedProviderAndHardwareDisplaySequences() throws {
+    func testRecordedProviderAndHardwareDisplaySequences() async throws {
         var output: [String: [[UInt8]]] = [:]
         do {
             let (session, device, gateway) = try fixture()

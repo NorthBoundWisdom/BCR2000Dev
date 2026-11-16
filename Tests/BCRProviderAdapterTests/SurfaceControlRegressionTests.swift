@@ -67,7 +67,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-01
 
-    func testLegacyMockInputIsDeniedWhileSurfaceControlIsEnabled() throws {
+    func testLegacyMockInputIsDeniedWhileSurfaceControlIsEnabled() async throws {
         let (gateway, _) = try host(provider: true)
         let before = try discovery(gateway)
         let legacyBefore = gateway.session.inputEvents.snapshot()
@@ -90,7 +90,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
         XCTAssertEqual(accepted.objectValue?["disposition"], .string("accepted"))
     }
 
-    func testLegacyMockInputUnchangedWithoutSurfaceControl() throws {
+    func testLegacyMockInputUnchangedWithoutSurfaceControl() async throws {
         let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
                                      configuration: SurfaceControlMCPModule.simulationConfiguration(),
                                      saveHardwareMap: { _ in }, saveConfiguration: { _ in })
@@ -107,7 +107,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
         XCTAssertEqual(gateway.session.engine.value(of: "simulation.arm"), 64)
     }
 
-    func testUnexpectedAgentInputRevokesContextInsteadOfRecordingRemoteInput() throws {
+    func testUnexpectedAgentInputRevokesContextInsteadOfRecordingRemoteInput() async throws {
         let (gateway, adapter) = try host()
         let before = try discovery(gateway)
         gateway.session.withWriteOrigin(.agent) { gateway.session.turn(.pushEncoder(group: 1, 1), by: 50) }
@@ -133,7 +133,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-02
 
-    func testFeedbackOverlayDoesNotSwallowEqualAbsoluteInput() throws {
+    func testFeedbackOverlayDoesNotSwallowEqualAbsoluteInput() async throws {
         let (gateway, _) = try host()
         _ = try call(gateway, "feedback", feedbackArgs(gateway, "pushEncoder.1.1", kind: "value", .number(80)))
         XCTAssertEqual(gateway.session.mock.value(of: .pushEncoder(group: 1, 1)), 80) // display unchanged behavior
@@ -143,7 +143,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
         XCTAssertEqual(gateway.session.mock.inputDataValues[.pushEncoder(group: 1, 1)], 80)
     }
 
-    func testFeedbackOverlayDoesNotSwallowEqualNRPNInput() throws {
+    func testFeedbackOverlayDoesNotSwallowEqualNRPNInput() async throws {
         let (gateway, _) = try host()
         try gateway.session.setMockNRPN(true, for: .pushEncoder(group: 1, 1))
         _ = try call(gateway, "feedback", feedbackArgs(gateway, "pushEncoder.1.1", kind: "value", .number(16383)))
@@ -154,7 +154,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
         XCTAssertEqual(gateway.session.mock.inputDataValues[.pushEncoder(group: 1, 1)], 16383)
     }
 
-    func testAbsoluteInputAfterFeedbackUsesRequestedPositionNotDisplay() throws {
+    func testAbsoluteInputAfterFeedbackUsesRequestedPositionNotDisplay() async throws {
         let (gateway, _) = try host()
         _ = try call(gateway, "input", inputArgs(gateway, "pushEncoder.1.1", .number(20)))
         _ = try call(gateway, "feedback", feedbackArgs(gateway, "pushEncoder.1.1", kind: "value", .number(100)))
@@ -165,7 +165,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-13
 
-    func testObservationFailureRecoversWithFreshEpoch() throws {
+    func testObservationFailureRecoversWithFreshEpoch() async throws {
         let clock = Clock()
         let (gateway, adapter) = try host(clock: clock)
         let before = try discovery(gateway)
@@ -184,7 +184,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-14
 
-    func testEveryMappingChangePathRotatesEpochAndOrdinaryWritesDoNot() throws {
+    func testEveryMappingChangePathRotatesEpochAndOrdinaryWritesDoNot() async throws {
         let paths: [(String, (SurfaceSession) throws -> Void)] = [
             ("replaceConfiguration", { try $0.replaceConfiguration($0.engine.configuration, persist: false) }),
             ("addParameter", { try $0.addParameter(.init(id: "extra", name: "Extra", minimum: 0, maximum: 127)) }),
@@ -233,7 +233,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-15 / R4-18
 
-    func testFailedValidationLeavesEngineJournalAndBudgetUntouched() throws {
+    func testFailedValidationLeavesEngineJournalAndBudgetUntouched() async throws {
         let clock = Clock()
         let (gateway, _) = try host(clock: clock)
         gateway.permissions.writesPerSecond = 1
@@ -252,7 +252,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
         XCTAssertEqual(try discovery(gateway)["latest_sequence"], .string("1"))
     }
 
-    func testResetCommitsSessionThenCoreAndHostErrorsKeepTheirCode() throws {
+    func testResetCommitsSessionThenCoreAndHostErrorsKeepTheirCode() async throws {
         let (gateway, _) = try host()
         _ = try call(gateway, "input", inputArgs(gateway, "pushEncoder.1.1", .number(100)))
         _ = try call(gateway, "feedback", feedbackArgs(gateway, "pushEncoder.1.5", kind: "value", .number(90)))
@@ -269,7 +269,7 @@ final class SurfaceControlRegressionTests: XCTestCase {
 
     // MARK: R4-16
 
-    func testButtonsDeclareOnlyIndicatorFeedback() throws {
+    func testButtonsDeclareOnlyIndicatorFeedback() async throws {
         let (gateway, _) = try host()
         let profile = try discovery(gateway)["profile"]!.objectValue!["controls"]!.arrayValue!
         let buttons = profile.filter { $0.objectValue?["input_kind"] == .string("button") }

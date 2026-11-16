@@ -16,7 +16,7 @@ private final class ColorDevice: SurfaceDevice {
 
 @MainActor
 final class ParameterColorTests: XCTestCase {
-    func testAllColorsRoundTripAndOlderProfilesNeedNoColorField() throws {
+    func testAllColorsRoundTripAndOlderProfilesNeedNoColorField() async throws {
         XCTAssertEqual(
             ParameterColor.allCases.map(\.rawValue),
             ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"]
@@ -32,7 +32,7 @@ final class ParameterColorTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(ParameterDefinition.self, from: invalid))
     }
 
-    func testMetadataAndHighlightSendNothingAndNeverEnterUndoHistory() throws {
+    func testMetadataAndHighlightSendNothingAndNeverEnterUndoHistory() async throws {
         let device = ColorDevice()
         var saves: [SurfaceConfiguration] = []
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),

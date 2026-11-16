@@ -14,7 +14,7 @@ private final class ConsoleDeviceFixture: SurfaceDevice {
 
 @MainActor
 final class ConsoleContractTests: XCTestCase {
-    func testSoftwareAndMockInputsRemainDistinctAndNoOutputIsAUserInput() throws {
+    func testSoftwareAndMockInputsRemainDistinctAndNoOutputIsAUserInput() async throws {
         let session = SurfaceSession(
             hardwareDevice: ConsoleDeviceFixture(),
             saveHardwareMap: { _ in },
@@ -30,7 +30,7 @@ final class ConsoleContractTests: XCTestCase {
             .allSatisfy { $0.objectValue?["payload"]?.objectValue?["accepted"] == .bool(false) })
     }
 
-    func testAbsoluteToggleCrossesThresholdDespiteFeedbackSnappingAtEveryTick() throws {
+    func testAbsoluteToggleCrossesThresholdDespiteFeedbackSnappingAtEveryTick() async throws {
         let control = BCRControlID.pushEncoder(group: 1, 1)
         let definition = ParameterDefinition(
             id: "generic.toggle",
@@ -59,7 +59,7 @@ final class ConsoleContractTests: XCTestCase {
         XCTAssertEqual(session.mock.value(of: control), 0)
     }
 
-    func testEpochChangesAndOldCursorCannotReplayAfterSourceOrMappingChange() throws {
+    func testEpochChangesAndOldCursorCannotReplayAfterSourceOrMappingChange() async throws {
         let session = SurfaceSession(
             hardwareDevice: ConsoleDeviceFixture(),
             saveHardwareMap: { _ in },
@@ -77,7 +77,7 @@ final class ConsoleContractTests: XCTestCase {
         XCTAssertNotEqual(session.inputEvents.generation, hardware)
     }
 
-    func testDiagnosticFramesAreReadbackNotOperatorEventsAndCannotChangeParameters() throws {
+    func testDiagnosticFramesAreReadbackNotOperatorEventsAndCannotChangeParameters() async throws {
         let device = ConsoleDeviceFixture()
         let session = SurfaceSession(
             hardwareDevice: device,
@@ -100,7 +100,7 @@ final class ConsoleContractTests: XCTestCase {
         XCTAssertNotEqual(session.inputEvents.generation, generation)
     }
 
-    func testBoundedInventoryPublishesGapInsteadOfSilentlySkipping() throws {
+    func testBoundedInventoryPublishesGapInsteadOfSilentlySkipping() async throws {
         let journal = ProviderEventJournal(source: .mock, capacity: 2)
         let generation = journal.generation
         for value in 0 ..< 4 { journal.append(kind: "fixture", payload: .number(value)) }
@@ -113,7 +113,7 @@ final class ConsoleContractTests: XCTestCase {
         XCTAssertEqual(initial.objectValue?["events"]?.arrayValue?.count, 2)
     }
 
-    func testPageSwitchInputCannotBeAcceptedUnderTheNewPageGeneration() throws {
+    func testPageSwitchInputCannotBeAcceptedUnderTheNewPageGeneration() async throws {
         let button = BCRControlID.button(row: 2, 1)
         var config = SurfaceConfiguration.neutral()
         try config.addPage(.init(
@@ -141,7 +141,7 @@ final class ConsoleContractTests: XCTestCase {
             })
     }
 
-    func testSynchronousMappingChangeDuringInputCannotPublishOrApplyItAsNewContext() throws {
+    func testSynchronousMappingChangeDuringInputCannotPublishOrApplyItAsNewContext() async throws {
         let button = BCRControlID.button(row: 2, 1)
         var config = SurfaceConfiguration.neutral()
         try config.addParameter(.init(id: "new.toggle", name: "New", minimum: 0, maximum: 1, kind: .toggle))
@@ -167,7 +167,7 @@ final class ConsoleContractTests: XCTestCase {
 }
 
 extension ConsoleContractTests {
-    func testCachedProviderContractMatchesPublishedResource() throws {
+    func testCachedProviderContractMatchesPublishedResource() async throws {
         let url = try XCTUnwrap(ProviderResources.bundle.url(forResource: "provider.schema", withExtension: "json"))
         let published = try Data(contentsOf: url)
         XCTAssertEqual(ProviderContractSchema.data, published)
@@ -176,7 +176,7 @@ extension ConsoleContractTests {
                        ProviderContractSchema.document.objectValue?["$defs"]?.objectValue?["robotSnapshot"])
     }
 
-    func testJournalRetainsDefaultUTCFormatAndFreshTimestampForEachAppend() throws {
+    func testJournalRetainsDefaultUTCFormatAndFreshTimestampForEachAppend() async throws {
         final class Clock { var date = Date(timeIntervalSince1970: 0); var time = 1.0 }
         let clock = Clock()
         let journal = ProviderEventJournal(source: .mock, monotonic: { clock.time }, utc: { clock.date })

@@ -29,7 +29,7 @@ final class IndependentHardwareRuntimeFixtureTests: XCTestCase {
         }
     }
 
-    func testIndependentFixtureUsesRealIgnoredButtonAndDisplayFailurePaths() throws {
+    func testIndependentFixtureUsesRealIgnoredButtonAndDisplayFailurePaths() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let fixture = try JSONSerialization

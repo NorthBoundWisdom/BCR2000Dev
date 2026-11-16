@@ -44,7 +44,7 @@ final class SurfaceControlTests: XCTestCase {
         )
     }
 
-    func testDiscoverSeedAndRawMockInputUseStableIDsAndSeparateInventory() throws {
+    func testDiscoverSeedAndRawMockInputUseStableIDsAndSeparateInventory() async throws {
         let (gateway, _) = try fixture()
         let discovery = try call(gateway, "discover")
         XCTAssertEqual(discovery.objectValue?["source"], .string("simulation"))
@@ -64,7 +64,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(gateway.session.engine.value(of: "simulation.arm"), 0)
     }
 
-    func testRepeatedCASAndInvalidRequestsCannotPartiallyCommit() throws {
+    func testRepeatedCASAndInvalidRequestsCannotPartiallyCommit() async throws {
         let (gateway, _) = try fixture()
         let discovery = try call(gateway, "discover").objectValue!
         var args: [String: JSONValue] = ["expected": discovery["expected"]!, "expected_sequence": .string("0"),
@@ -85,7 +85,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(gateway.session.engine.value(of: "simulation.arm"), 90)
     }
 
-    func testSameValueConsumesSequenceAsIgnoredAndDoesNotRenewInput() throws {
+    func testSameValueConsumesSequenceAsIgnoredAndDoesNotRenewInput() async throws {
         let (gateway, _) = try fixture()
         _ = try write(gateway, value: .number(100))
         let repeatInput = try write(gateway, value: .number(100))
@@ -94,7 +94,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(repeatInput.objectValue?["sequence"], .string("2"))
     }
 
-    func testDisplayFeedbackCannotChangeInputParameterOrTriggerActionAndClearsBeforeHardware() throws {
+    func testDisplayFeedbackCannotChangeInputParameterOrTriggerActionAndClearsBeforeHardware() async throws {
         let (gateway, _) = try fixture()
         var triggers = 0
         gateway.session.onTriggerAgent = { _ in triggers += 1 }
@@ -120,7 +120,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertTrue(gateway.call("surface_control_input", arguments: .object([:])).isError)
     }
 
-    func testDefaultPermissionsProtectedParameterAndContextChangesFailClosed() throws {
+    func testDefaultPermissionsProtectedParameterAndContextChangesFailClosed() async throws {
         let (gateway, _) = try fixture(allow: false)
         let discovery = try call(gateway, "discover").objectValue!
         let args: [String: JSONValue] = ["expected": discovery["expected"]!, "expected_sequence": .string("0"),
@@ -149,7 +149,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(writable.session.engine.value(of: "simulation.arm"), 0)
     }
 
-    func testGUIInputAndResetKeepRawInputSeparateFromFeedback() throws {
+    func testGUIInputAndResetKeepRawInputSeparateFromFeedback() async throws {
         let (gateway, _) = try fixture()
         gateway.session.turn(.pushEncoder(group: 1, 1), by: 70)
         let discovery = try call(gateway, "discover").objectValue!
@@ -168,7 +168,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(after.objectValue?["inputs"]?.objectValue?["pushEncoder.1.1"], .number(0))
     }
 
-    func testDisplayOverlayIsRevokedOnPageAssignmentProgramsAndEncodingChanges() throws {
+    func testDisplayOverlayIsRevokedOnPageAssignmentProgramsAndEncodingChanges() async throws {
         for change in ["page", "assignment", "programs", "encoding"] {
             let (gateway, _) = try fixture()
             let discovery = try call(gateway, "discover").objectValue!
@@ -226,7 +226,7 @@ final class SurfaceControlTests: XCTestCase {
         XCTAssertEqual(stale.value.objectValue?["code"], .string("stale_epoch"))
     }
 
-    func testNewToolsReportRateLimitWithoutConsumingInputSequence() throws {
+    func testNewToolsReportRateLimitWithoutConsumingInputSequence() async throws {
         let (gateway, _) = try fixture()
         gateway.permissions.writesPerSecond = 1
         _ = try write(gateway, value: .number(100))

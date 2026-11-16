@@ -49,7 +49,7 @@ final class MCPTests: XCTestCase {
         return headers
     }
 
-    func testAgentSlotErrorsAreExplicitAndDoNotInvokeHandler() {
+    func testAgentSlotErrorsAreExplicitAndDoNotInvokeHandler() async {
         let service = makeService()
         service.permissions.agentControl = true
         var calls = 0
@@ -64,7 +64,7 @@ final class MCPTests: XCTestCase {
         XCTAssertEqual(calls, 1)
     }
 
-    func testNewControlPermissionsDefaultOffAndAreEnforced() throws {
+    func testNewControlPermissionsDefaultOffAndAreEnforced() async throws {
         let old = Data(#"{"parameterWrite":true,"configurationWrite":false,"writesPerSecond":60}"#.utf8)
         let permissions = try JSONDecoder().decode(MCPPermissions.self, from: old)
         XCTAssertFalse(permissions.agentControl)

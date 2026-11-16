@@ -9,7 +9,7 @@ import XCTest
 
 @MainActor
 final class HardwareConfirmationGatewayTests: XCTestCase {
-    func testHeadlessDefaultAndInjectedHostConfirmation() {
+    func testHeadlessDefaultAndInjectedHostConfirmation() async {
         let service = MCPApplicationGateway(session: SurfaceSession(
             hardwareDevice: MockSurfaceDevice(), configuration: .starter(),
             saveHardwareMap: { _ in }, saveConfiguration: { _ in }

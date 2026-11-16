@@ -13,7 +13,7 @@ final class PluginSurfaceCompatibilityTests: XCTestCase {
     private let button = BCRControlID.button(row: 1, 1)
     private let time = Date(timeIntervalSinceReferenceDate: 1000)
 
-    func testInjectedProductionBindingsOnlyEmitGenericActionAndPreserveFeedbackOrder() throws {
+    func testInjectedProductionBindingsOnlyEmitGenericActionAndPreserveFeedbackOrder() async throws {
         var engine = SurfaceEngine(hardwareMap: .mockPreset(), configuration: .starter(),
                                    pluginBindings: AgentBindingTranslation.bindings)
         let action = try AgentBindingTranslation.action(for: slot)
@@ -30,7 +30,7 @@ final class PluginSurfaceCompatibilityTests: XCTestCase {
         XCTAssertEqual(engine.indicatorFeedback[indicator], 96)
     }
 
-    func testLegacyEnumPatternsStillMatchWithoutInjectedBindings() {
+    func testLegacyEnumPatternsStillMatchWithoutInjectedBindings() async {
         let target = ControlTarget.agentPrimaryAction(slot)
         if case let .agentPrimaryAction(received) = target { XCTAssertEqual(received, slot) }
         else { XCTFail("Legacy target enum pattern must remain source compatible") }
@@ -43,7 +43,7 @@ final class PluginSurfaceCompatibilityTests: XCTestCase {
         XCTAssertEqual(triggered, [slot])
     }
 
-    func testInvalidLegacySlotsFailAtCheckedAndPluginBindingBoundariesWithoutTrapping() throws {
+    func testInvalidLegacySlotsFailAtCheckedAndPluginBindingBoundariesWithoutTrapping() async throws {
         for index in [Int.min, -1, 0, 9, Int.max] {
             let legacy = AgentSlotID(index)
             XCTAssertEqual(legacy.rawValue, index)
@@ -56,7 +56,7 @@ final class PluginSurfaceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testGenericSessionActionCallbackPreservesSynchronousLEDUpdateOnHeldPress() throws {
+    func testGenericSessionActionCallbackPreservesSynchronousLEDUpdateOnHeldPress() async throws {
         let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(), configuration: .starter(),
                                      pluginBindings: AgentBindingTranslation.bindings,
                                      now: { self.time }, saveHardwareMap: { _ in }, saveConfiguration: { _ in })

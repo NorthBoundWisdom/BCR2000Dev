@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class FeedbackPlanTests: XCTestCase {
-    func testPlanTimingSelectsExistingDispatchWithoutSessionMutation() {
+    func testPlanTimingSelectsExistingDispatchWithoutSessionMutation() async {
         let message = MIDIVoiceMessage.controlChange(channel: 0, number: 81, value: 64)
         for origin in [SurfaceWriteOrigin.software, .agent, .external] {
             let regular = FeedbackPlan(message: message, origin: origin, timing: .coalesced)
@@ -18,7 +18,7 @@ final class FeedbackPlanTests: XCTestCase {
         }
     }
 
-    func testPlannerRestoresTimingAfterThrowAndRetainsEachChildOrigin() throws {
+    func testPlannerRestoresTimingAfterThrowAndRetainsEachChildOrigin() async throws {
         enum FixtureFailure: Error { case expected }
         let planner = FeedbackPlanner()
         let message = MIDIVoiceMessage.controlChange(channel: 0, number: 81, value: 64)

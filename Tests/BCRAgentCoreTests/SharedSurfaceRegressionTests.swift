@@ -10,7 +10,7 @@ import XCTest
 
 @MainActor
 final class SharedSurfaceRegressionTests: XCTestCase {
-    func testT03InputOnlyGeneratesFeedbackForOtherMappedControl() {
+    func testT03InputOnlyGeneratesFeedbackForOtherMappedControl() async {
         let device = OutputRecordingDevice()
         let a = BCRControlID.encoder(row: 1, 1), b = BCRControlID.encoder(row: 1, 2)
         let session = SurfaceSession(hardwareDevice: device, configuration: .init(
@@ -29,7 +29,7 @@ final class SharedSurfaceRegressionTests: XCTestCase {
         XCTAssertTrue(device.sent.isEmpty)
     }
 
-    func testT12SameEndpointReconnectDiscardsOldQueuedOutput() throws {
+    func testT12SameEndpointReconnectDiscardsOldQueuedOutput() async throws {
         let device = OutputRecordingDevice()
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(),
                                      configuration: HardwareOutputPolicyTests.configuration(),

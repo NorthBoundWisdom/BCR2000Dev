@@ -166,7 +166,7 @@ final class BehaviorTraceTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), data, name)
     }
 
-    func testRelativeTwentyIncrements() throws {
+    func testRelativeTwentyIncrements() async throws {
         var configuration = HardwareOutputPolicyTests.configuration()
         try configuration.assign(.init(control: .encoder(row: 1, 1), target: .parameter("p1"),
                                        encoderMode: .relative1, encoderStep: 1))
@@ -181,7 +181,7 @@ final class BehaviorTraceTests: XCTestCase {
         try compare("relative-twenty-increments", r)
     }
 
-    func testTopGroupSwitchSamePhysicalEncoder() throws {
+    func testTopGroupSwitchSamePhysicalEncoder() async throws {
         var configuration = HardwareOutputPolicyTests.configuration()
         try configuration.assign(.init(control: .pushEncoder(group: 1, 1), target: .parameter("p1")))
         try configuration.assign(.init(control: .pushEncoder(group: 2, 1), target: .parameter("p2")))
@@ -199,7 +199,7 @@ final class BehaviorTraceTests: XCTestCase {
         try compare("top-group-switch", r)
     }
 
-    func testPressSwitchPageRelease() throws {
+    func testPressSwitchPageRelease() async throws {
         var configuration = HardwareOutputPolicyTests.configuration()
         let button = BCRControlID.button(row: 1, 1)
         try configuration.assign(.init(control: button, target: .agentPrimaryAction(AgentSlotID(1))))
@@ -215,7 +215,7 @@ final class BehaviorTraceTests: XCTestCase {
         try compare("press-page-release", r)
     }
 
-    func testObserveParameterChange() throws {
+    func testObserveParameterChange() async throws {
         let r = BehaviorTraceRecorder(policy: .observe)
         r.step("connect") { r.connectionGeneration += 1; r.device.connect(1); r.session.selectSource(.hardware) }
         r.step("software_parameter", payload: .object(["p1": .number(80)])) { r.session.setParameter("p1", to: 80) }
@@ -226,7 +226,7 @@ final class BehaviorTraceTests: XCTestCase {
         try compare("observe-parameter-change", r)
     }
 
-    func testWriteReconnect() throws {
+    func testWriteReconnect() async throws {
         let r = BehaviorTraceRecorder()
         r.step("connect") { r.connectionGeneration += 1; r.device.connect(1); r.session.selectSource(.hardware) }
         r.step("disconnect") { r.device.connect(nil) }
@@ -237,7 +237,7 @@ final class BehaviorTraceTests: XCTestCase {
         try compare("write-reconnect", r)
     }
 
-    func testUnmappedInput() throws {
+    func testUnmappedInput() async throws {
         let r = BehaviorTraceRecorder()
         r.device.connect(1)
         r.connectionGeneration = 1

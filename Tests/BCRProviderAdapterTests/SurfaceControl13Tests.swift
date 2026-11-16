@@ -49,7 +49,7 @@ final class SurfaceControl13Tests: XCTestCase {
         return result.value
     }
 
-    func testIndependentInputCASAndTrustedRemoteInterfaceExpiryWriters() throws {
+    func testIndependentInputCASAndTrustedRemoteInterfaceExpiryWriters() async throws {
         let clock = Clock(); let (gateway, adapter) = try host(clock)
         let first = call(gateway, "input", try input(adapter))
         XCTAssertEqual(first.value(for: "input_sequence"), .string("1"))
@@ -84,7 +84,7 @@ final class SurfaceControl13Tests: XCTestCase {
                                              sequence: heldSequence), error: "stale_input_sequence")
     }
 
-    func testCategoryBudgetsDoNotBorrowAndLegacyAggregateRemainsSeparate() throws {
+    func testCategoryBudgetsDoNotBorrowAndLegacyAggregateRemainsSeparate() async throws {
         let clock = Clock()
         let limits = BCRSurfaceControlAdapter.WriteLimits(inputPerWindow: 3, feedbackPerWindow: 1,
                                                           renewPerWindow: 1, adminPerWindow: 1)
@@ -130,7 +130,7 @@ final class SurfaceControl13Tests: XCTestCase {
         try feedback()
     }
 
-    func testCategoryLimitParsingIsStrictAndDefaultKeepsAggregateDescription() throws {
+    func testCategoryLimitParsingIsStrictAndDefaultKeepsAggregateDescription() async throws {
         let limits = try BCRSurfaceControlAdapter.parseWriteLimits("input=60,feedback=20,renew=60,admin=5")
         XCTAssertEqual(limits.input_per_window, 60)
         for invalid in ["input=1", "input=1,feedback=1,renew=1,admin=0", "input=1,feedback=1,renew=1,admin=10001",

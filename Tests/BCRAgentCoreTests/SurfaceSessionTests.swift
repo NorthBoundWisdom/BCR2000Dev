@@ -83,7 +83,7 @@ final class SurfaceSessionTests: XCTestCase {
     private let a = BCRControlID.pushEncoder(group: 1, 1)
     private let b = BCRControlID.encoder(row: 1, 1)
 
-    func testParameterObserversSeeBatchesAndCanUnsubscribe() {
+    func testParameterObserversSeeBatchesAndCanUnsubscribe() async {
         let f = SessionFixture(configuration: mirroredConfiguration())
         var batches: [ParameterChangeBatch] = []
         let token = f.session.observeParameters { batches.append($0) }
@@ -97,7 +97,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(batches.count, 1)
     }
 
-    func testMonitorRecordsActualFeedbackDelivery() {
+    func testMonitorRecordsActualFeedbackDelivery() async {
         let f = SessionFixture(configuration: mirroredConfiguration())
         f.session.selectSource(.hardware)
         XCTAssertEqual(f.session.events.last?.delivery, .disconnected)
@@ -109,7 +109,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.events.last?.delivery, .failed)
     }
 
-    func testObserveOutputNeverWritesTheDeviceButStillTakesInput() throws {
+    func testObserveOutputNeverWritesTheDeviceButStillTakesInput() async throws {
         // PLAN D3 / D32: the headless default observes hardware without any output.
         let f = SessionFixture(configuration: mirroredConfiguration(), hardwareOutput: .observe)
         f.device.connect(true)
@@ -128,7 +128,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.hardwareOutput, .observe)
     }
 
-    func testWriteOutputIsTheDefaultAndKeepsResynchronising() {
+    func testWriteOutputIsTheDefaultAndKeepsResynchronising() async {
         let f = SessionFixture(configuration: mirroredConfiguration())
         XCTAssertEqual(f.session.hardwareOutput, .write)
         f.device.connect(true)
@@ -136,7 +136,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertFalse(f.device.sent.isEmpty)
     }
 
-    func testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect() throws {
+    func testQueuedFeedbackIsCoalescedAndDiscardedOnDisconnect() async throws {
         let f = SessionFixture(configuration: mirroredConfiguration())
         f.device.connect(true)
         f.session.selectSource(.hardware)
@@ -153,7 +153,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertEqual(f.session.pendingFeedbackCount, 0)
     }
 
-    func testPhysicalInputCancelsOlderQueuedOriginFeedback() throws {
+    func testPhysicalInputCancelsOlderQueuedOriginFeedback() async throws {
         let f = SessionFixture(configuration: mirroredConfiguration())
         f.device.connect(true)
         f.session.selectSource(.hardware)
@@ -168,7 +168,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertTrue(f.device.sent.contains(message(b, 70)))
     }
 
-    func testFeedbackEchoDoesNotCancelNewerQueuedSoftwareValue() throws {
+    func testFeedbackEchoDoesNotCancelNewerQueuedSoftwareValue() async throws {
         let f = SessionFixture(configuration: mirroredConfiguration())
         f.device.connect(true)
         f.session.selectSource(.hardware)
@@ -182,7 +182,7 @@ final class SurfaceSessionTests: XCTestCase {
         XCTAssertTrue(f.device.sent.contains(message(a, 70)))
     }
 
-    func testSwitchingPagesDoesNotPersistOrExportSessionSelection() throws {
+    func testSwitchingPagesDoesNotPersistOrExportSessionSelection() async throws {
         var config = mirroredConfiguration()
         try config.addPage(.init(id: "second", name: "Second", assignments: config.assignments))
         let f = SessionFixture(configuration: config)

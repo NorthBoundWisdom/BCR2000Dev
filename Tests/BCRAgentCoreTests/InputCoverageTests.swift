@@ -15,7 +15,7 @@ private final class CoverageDevice: SurfaceDevice {
 
 @MainActor
 final class InputCoverageTests: XCTestCase {
-    func testAll108ControlsAreObservedWith56EncoderPositionsAndNoSends() throws {
+    func testAll108ControlsAreObservedWith56EncoderPositionsAndNoSends() async throws {
         let device = CoverageDevice()
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(), configuration: .neutral(),
                                      hardwareOutput: .observe, saveHardwareMap: { _ in }, saveConfiguration: { _ in })
@@ -44,7 +44,7 @@ final class InputCoverageTests: XCTestCase {
         XCTAssertTrue(device.sent.isEmpty)
     }
 
-    func testNRPNCombinesFourCanonicalCCsAndUnmappedInputNeverGuessesControl() throws {
+    func testNRPNCombinesFourCanonicalCCsAndUnmappedInputNeverGuessesControl() async throws {
         var map = HardwareMap.mockPreset()
         let control = BCRControlID.pushEncoder(group: 1, 1)
         try map.bind(control, to: .init(kind: .nrpn, channel: 15, number: 300))
@@ -83,7 +83,7 @@ final class InputCoverageTests: XCTestCase {
         XCTAssertTrue(device.sent.isEmpty)
     }
 
-    func testMappingComparisonUsesLastObservedIdentityAndEchoDoesNotBecomeManualEvidence() throws {
+    func testMappingComparisonUsesLastObservedIdentityAndEchoDoesNotBecomeManualEvidence() async throws {
         let device = CoverageDevice(), control = BCRControlID.pushEncoder(group: 1, 1)
         let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(), configuration: .neutral(),
                                      now: { Date(timeIntervalSinceReferenceDate: 100) }, historyTime: .init(now: { 1 }),
@@ -108,7 +108,7 @@ final class InputCoverageTests: XCTestCase {
         XCTAssertEqual(coverage.review(control).latestValue, 40)
     }
 
-    func testExportCoversEveryControlWithIndependentContentAndMappingFingerprints() throws {
+    func testExportCoversEveryControlWithIndependentContentAndMappingFingerprints() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }

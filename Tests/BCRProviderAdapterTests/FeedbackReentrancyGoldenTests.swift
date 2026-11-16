@@ -14,7 +14,7 @@ final class FeedbackReentrancyGoldenTests: XCTestCase {
         func send(_ message: MIDIVoiceMessage) throws { sent.append(message); callback?(message) }
     }
 
-    func testSynchronousReentrancyPreservesPendingAndCompleteOldOutputOrder() throws {
+    func testSynchronousReentrancyPreservesPendingAndCompleteOldOutputOrder() async throws {
         var captured: [String: JSONValue] = [:]
         for callbackKind in [
             "send_callback",

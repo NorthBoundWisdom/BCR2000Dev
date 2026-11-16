@@ -30,7 +30,7 @@ final class OfflineCaptureTests: XCTestCase {
         .reduce(Data()) { try $0 + $1.encodedLine() }
     }
 
-    func testCompleteCaptureInputsReplayButRecordedOutputDoesNotReachMock() throws {
+    func testCompleteCaptureInputsReplayButRecordedOutputDoesNotReachMock() async throws {
         let capture = try RecordedCapture(data: data(fixture()))
         XCTAssertTrue(capture.review.isComplete)
         let replay = try RecordedCaptureReplay(capture: capture)
@@ -51,7 +51,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertFalse(replay.session.connection.isConnected)
     }
 
-    func testIntegrityCountsVersionRegressionTruncationAndUnparseableLinesSeparately() throws {
+    func testIntegrityCountsVersionRegressionTruncationAndUnparseableLinesSeparately() async throws {
         var records = try fixture()
         records[0].fields["schemaVersion"] = .number(2)
         records[2].fields["monotonicTimestamp"] = .number(9)
@@ -71,7 +71,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertThrowsError(try RecordedCaptureReplay(capture: hostCapture))
     }
 
-    func testSequenceMissingTimestampBadBytesAndTamperedContextCannotLookComplete() throws {
+    func testSequenceMissingTimestampBadBytesAndTamperedContextCannotLookComplete() async throws {
         var records = try fixture()
         records[1].fields["sequence"] = .number(4)
         records[1].fields["monotonicTimestamp"] = nil
@@ -88,7 +88,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertThrowsError(try RecordedCaptureReplay(capture: capture))
     }
 
-    func testLivePrefixAndEventsAfterFooterAreInsufficientEvidence() throws {
+    func testLivePrefixAndEventsAfterFooterAreInsufficientEvidence() async throws {
         let records = try fixture()
         let prefix = try RecordedCapture(data: data(Array(records.prefix(2))))
         XCTAssertFalse(prefix.review.isComplete)
@@ -99,7 +99,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertFalse(extra.review.isComplete)
     }
 
-    func testReadOnlyLoaderRejectsSymlinksFIFOsDirectoriesAndOversizedFiles() throws {
+    func testReadOnlyLoaderRejectsSymlinksFIFOsDirectoriesAndOversizedFiles() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -121,7 +121,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertThrowsError(try OfflineCaptureFile.load(URL(string: "https://example.invalid/capture")!))
     }
 
-    func testRelativeInputUsesCapturedInitialValueAndContextBoundaryChangesOnlyIsolatedMapping() throws {
+    func testRelativeInputUsesCapturedInitialValueAndContextBoundaryChangesOnlyIsolatedMapping() async throws {
         var config = SurfaceConfiguration.neutral()
         try config.assign(.init(control: .pushEncoder(group: 1, 1), target: .parameter("general.1"),
                                 encoderMode: .relative1, encoderStep: 2))
@@ -154,7 +154,7 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertEqual(changed.session.engine.value(of: "general.2"), 100)
     }
 
-    func testReplayNoteOffPreservesReleaseStateAndRejectsInvalidMessage() throws {
+    func testReplayNoteOffPreservesReleaseStateAndRejectsInvalidMessage() async throws {
         var map = HardwareMap()
         let button = BCRControlID.button(row: 1, 1)
         try map.bind(button, to: .init(kind: .note, channel: 0, number: 1))

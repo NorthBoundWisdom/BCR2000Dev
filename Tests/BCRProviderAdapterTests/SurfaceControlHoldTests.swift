@@ -83,7 +83,7 @@ final class SurfaceControlHoldTests: XCTestCase {
          "hold_s": .double(seconds)]
     }
 
-    func testToggleAndUnboundButtonsDoNotOfferLeases() throws {
+    func testToggleAndUnboundButtonsDoNotOfferLeases() async throws {
         let (gateway, adapter) = try host()
         for id in ["button.1.1", "button.1.2", "button.2.1"] {
             let control = try XCTUnwrap(try adapter.discovery().profile.controls.first { $0.id == id })
@@ -99,7 +99,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertNil(blocked.hold)
     }
 
-    func testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold() throws {
+    func testProfileUsesSharedVocabularyDeterministicRevisionAndButtonHold() async throws {
         let (gateway, adapter) = try host()
         let discovery = try adapter.discovery()
         XCTAssertEqual(discovery.contract_version, "1.3")
@@ -139,7 +139,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertTrue(gateway.toolDefinitions.contains { $0.objectValue?["name"] == .string("surface_control_renew") })
     }
 
-    func testLeaseRenewAndSchedulerExpiryReturnTheMockToRest() throws {
+    func testLeaseRenewAndSchedulerExpiryReturnTheMockToRest() async throws {
         let clock = Clock(); let timers = Timers()
         let (gateway, _) = try host(clock: clock, timers: timers)
         let held = try call(gateway, "input", press(gateway, true))
@@ -173,7 +173,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertTrue(timers.live.isEmpty)
     }
 
-    func testRequestsProcessDueLeasesFirstEvenWithoutTheTimer() throws {
+    func testRequestsProcessDueLeasesFirstEvenWithoutTheTimer() async throws {
         let clock = Clock()
         let (gateway, adapter) = try host(clock: clock)
         _ = try call(gateway, "input", press(gateway, true, holdSeconds: 0.5))
@@ -186,7 +186,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(gateway.session.engine.value(of: "simulation.hold"), 0)
     }
 
-    func testPendingExpiryWithoutAutomaticProcessingFailsClosedWithPassThroughCode() throws {
+    func testPendingExpiryWithoutAutomaticProcessingFailsClosedWithPassThroughCode() async throws {
         let clock = Clock()
         let session = SurfaceSession(hardwareDevice: MockSurfaceDevice(),
                                      configuration: SurfaceControlMCPModule.simulationConfiguration(),
@@ -209,7 +209,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(session.engine.value(of: "simulation.hold"), 0)
     }
 
-    func testRenewPermissionsBudgetAndUnsupportedHold() throws {
+    func testRenewPermissionsBudgetAndUnsupportedHold() async throws {
         let (denied, _) = try host(allow: false)
         XCTAssertEqual(code(denied, "renew", try renewArgs(denied)), .string("permission_denied"))
         let (gateway, _) = try host()
@@ -225,7 +225,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(code(gateway, "renew", try renewArgs(gateway)), .string("rate_limited"))
     }
 
-    func testRestValueClearsLeaseAndContextChangeReleasesHeldButton() throws {
+    func testRestValueClearsLeaseAndContextChangeReleasesHeldButton() async throws {
         let clock = Clock(); let timers = Timers()
         let (gateway, _) = try host(clock: clock, timers: timers)
         _ = try call(gateway, "input", press(gateway, true))
@@ -255,7 +255,7 @@ final class SurfaceControlHoldTests: XCTestCase {
         XCTAssertEqual(gateway.session.mock.inputDataValues[hold], 0)
     }
 
-    func testAnyToolCallReleasesDueLeasesBeforeItRuns() throws {
+    func testAnyToolCallReleasesDueLeasesBeforeItRuns() async throws {
         // A queue of unrelated or invalid requests cannot postpone an expiry behind itself: each
         // call first releases what is already due, so the delay is at most the request in flight.
         let clock = Clock()

@@ -49,7 +49,7 @@ final class PluginRegistrationTests: XCTestCase {
               surface: .init(actions: actions), failsStart: failsStart)
     }
 
-    func testDuplicateRegistrationAndStartupFailureLeaveNoPartialRegistration() throws {
+    func testDuplicateRegistrationAndStartupFailureLeaveNoPartialRegistration() async throws {
         let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
         XCTAssertThrowsError(try registry.install([fixture(), fixture()]))
         XCTAssertTrue(try instanceIDs(registry).isEmpty)
@@ -63,7 +63,7 @@ final class PluginRegistrationTests: XCTestCase {
         XCTAssertTrue(try snapshot(registry, "fixture").isStarted)
     }
 
-    func testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup() throws {
+    func testContractNamingAndDuplicateSurfaceIDsAreValidatedBeforeStartup() async throws {
         let invalid = [
             fixture(contract: "2.0"), fixture(id: "bad name"),
             fixture(actions: [.init(id: "other.action", nameKey: "name")]),
@@ -79,7 +79,7 @@ final class PluginRegistrationTests: XCTestCase {
         }
     }
 
-    func testResetOrStopOfOnePluginDoesNotChangeAnother() throws {
+    func testResetOrStopOfOnePluginDoesNotChangeAnother() async throws {
         let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
         try registry.install([AgentRemoteBinding(instanceID: "agent", plugin: try AgentPlugin()), fixture()])
         let other = try snapshot(registry, "fixture")
@@ -88,7 +88,7 @@ final class PluginRegistrationTests: XCTestCase {
         XCTAssertFalse(try snapshot(registry, "agent").isStarted)
     }
 
-    func testSurfaceIDsCannotCollideAcrossNestedPluginNamespaces() throws {
+    func testSurfaceIDsCannotCollideAcrossNestedPluginNamespaces() async throws {
         let registry = try BCRPluginRuntime(clock: { 0 }, epoch: "fixture")
         try registry.install([fixture(actions: [.init(id: "fixture.child.action", nameKey: "name")])])
         XCTAssertThrowsError(try registry.install([
@@ -102,7 +102,7 @@ final class PluginRegistrationTests: XCTestCase {
 final class MockAgentHostTests: XCTestCase {
     private final class Clock { var time: Double = 0 }
 
-    func testSameReferenceSequenceAsTheOtherHostMatchesSharedRegistryAndRemoteApprovalRejection() throws {
+    func testSameReferenceSequenceAsTheOtherHostMatchesSharedRegistryAndRemoteApprovalRejection() async throws {
         let clock = Clock()
         let owner = try BCRPluginRuntime(clock: { clock.time }, epoch: "fixture")
         let host = try BCRMockAgentHost(clock: { clock.time }, runtime: owner)
@@ -134,7 +134,7 @@ final class MockAgentHostTests: XCTestCase {
                        try reference.call("surface_events", arguments: cursor, context: .init(time: 4)))
     }
 
-    func testEveryInjectedTimelineStageMatchesSharedPluginSnapshotAndLegacyProgress() throws {
+    func testEveryInjectedTimelineStageMatchesSharedPluginSnapshotAndLegacyProgress() async throws {
         let clock = Clock()
         let host = try BCRMockAgentHost(clock: { clock.time }, epoch: Date(timeIntervalSince1970: 1000))
         var shared = try AgentPlugin(at: 0)
@@ -170,7 +170,7 @@ final class MockAgentHostTests: XCTestCase {
         XCTAssertEqual(try host.slots[0].state, .completed)
     }
 
-    func testLargeTickReplaysAllStagesAndFeedbackInOriginalOrder() throws {
+    func testLargeTickReplaysAllStagesAndFeedbackInOriginalOrder() async throws {
         let clock = Clock()
         let host = try BCRMockAgentHost(clock: { clock.time })
         var progress: [Double] = []
@@ -186,7 +186,7 @@ final class MockAgentHostTests: XCTestCase {
         XCTAssertEqual(values, [40, 127, 127, 127, 127, 127, 96])
     }
 
-    func testDeclineInterruptsWaitingSlotAndPreservesOtherSlotAndCancelledTimeline() throws {
+    func testDeclineInterruptsWaitingSlotAndPreservesOtherSlotAndCancelledTimeline() async throws {
         let clock = Clock()
         let host = try BCRMockAgentHost(clock: { clock.time })
         try host.invoke(AgentSlotID(1), origin: .interface)
@@ -202,11 +202,11 @@ final class MockAgentHostTests: XCTestCase {
         XCTAssertEqual(try host.slots[1].state, .waitingApproval)
     }
 
-    func testSemanticFeedbackMappingPinsAllSevenLegacyValues() {
+    func testSemanticFeedbackMappingPinsAllSevenLegacyValues() async {
         XCTAssertEqual(IndicatorSemantic.allCases.map(BCRIndicatorPresentation.value), [0, 40, 127, 96, 72, 20, 8])
     }
 
-    func testButtonLEDLightsFrom64LikeTheDevice() {
+    func testButtonLEDLightsFrom64LikeTheDevice() async {
         XCTAssertFalse(BCRButtonLED.isLit(63))
         XCTAssertTrue(BCRButtonLED.isLit(64))
         // With blinking off, only active, waiting and done states light a device LED.
@@ -216,7 +216,7 @@ final class MockAgentHostTests: XCTestCase {
         )
     }
 
-    func testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot() throws {
+    func testInvalidLegacySlotInputIsAVisibleErrorWithUnchangedPluginSnapshot() async throws {
         let host = try BCRMockAgentHost(clock: { 0 })
         let before = try host.snapshot()
         for index in [0, 9, Int.max] {

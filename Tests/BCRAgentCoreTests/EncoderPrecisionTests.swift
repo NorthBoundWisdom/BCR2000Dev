@@ -50,7 +50,7 @@ final class EncoderPrecisionTests: XCTestCase {
         )
     }
 
-    func testRelativeEncodingNeutralSignsMagnitudeAnd14Bit() {
+    func testRelativeEncodingNeutralSignsMagnitudeAnd14Bit() async {
         for maximum: UInt16 in [127, 16383] {
             for mode in [EncoderMode.relative1, .relative2] {
                 for delta in [-63, -4, -1, 0, 1, 4, 63] {
@@ -106,7 +106,7 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(s.engine.value(of: "angle")!, 180 * 2 * 64 / 127 - 180, accuracy: 1e-9)
     }
 
-    func testNRPNEncodingIsFourCCsAndRejectsInvalidSemanticValues() throws {
+    func testNRPNEncodingIsFourCCsAndRejectsInvalidSemanticValues() async throws {
         let message = MIDIVoiceMessage.nrpn(channel: 3, number: 0x1234, value: 0x2345)
         XCTAssertEqual(message.midi1Bytes, [0xB3, 99, 0x24, 0xB3, 98, 0x34, 0xB3, 6, 0x46, 0xB3, 38, 0x45])
         let parts = MIDI1UMPCodec.decode(words: try MIDI1UMPCodec.encodeWords(message))
@@ -121,7 +121,7 @@ final class EncoderPrecisionTests: XCTestCase {
         }
     }
 
-    func testNRPNAcrossCallbacksChannelsAndSameChannelSelectorReplacement() {
+    func testNRPNAcrossCallbacksChannelsAndSameChannelSelectorReplacement() async {
         var a = NRPNAssembler()
         func cc(_ ch: UInt8, _ number: UInt8, _ value: UInt8) -> MIDIVoiceMessage {
             .controlChange(channel: ch, number: number, value: value)
@@ -137,7 +137,7 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertNil(a.consume(cc(0, 38, 12), at: time))
     }
 
-    func testNRPNIncompleteTimeoutClockResetRPNAndUnrelatedMessages() {
+    func testNRPNIncompleteTimeoutClockResetRPNAndUnrelatedMessages() async {
         let parts: [MIDIVoiceMessage] = [
             .controlChange(channel: 0, number: 99, value: 1), .controlChange(channel: 0, number: 98, value: 2),
             .controlChange(channel: 0, number: 6, value: 3)
@@ -198,7 +198,7 @@ final class EncoderPrecisionTests: XCTestCase {
         }
     }
 
-    func testNRPNEchoSuppressionUsesAll14Bits() throws {
+    func testNRPNEchoSuppressionUsesAll14Bits() async throws {
         let midi = MIDIControlID(kind: .nrpn, channel: 0, number: 700)
         var e = SurfaceEngine(
             hardwareMap: .init(entries: [.init(control: encoder, midi: midi)]),
@@ -211,7 +211,7 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(e.value(of: "angle")!, -180 + 8193.0 / 16383 * 360, accuracy: 1e-10)
     }
 
-    func testValidationAndLegacyMigration() throws {
+    func testValidationAndLegacyMigration() async throws {
         var old = try JSONValue.encoded(configuration())
         var raw = old.objectValue!
         raw["version"] = .number(3)
@@ -253,7 +253,7 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(MIDIControlID.self, from: JSONEncoder().encode(identity)), identity)
     }
 
-    func testNRPNBindingRejectsReservedCCConflictAtomicallyAndDefaultPresetUnchanged() throws {
+    func testNRPNBindingRejectsReservedCCConflictAtomicallyAndDefaultPresetUnchanged() async throws {
         var map = HardwareMap()
         try map.bind(encoder, to: .init(kind: .nrpn, channel: 0, number: 1))
         let before = map
@@ -291,7 +291,7 @@ final class EncoderPrecisionTests: XCTestCase {
         XCTAssertEqual(s.engine.hardwareMap.midi(for: mirror), .init(kind: .controlChange, channel: 1, number: 99))
     }
 
-    func testAll14BitPositionsRoundTripWithoutSevenBitLoss() throws {
+    func testAll14BitPositionsRoundTripWithoutSevenBitLoss() async throws {
         let midi = MIDIControlID(kind: .nrpn, channel: 0, number: 1234)
         var engine = SurfaceEngine(hardwareMap: .init(entries: [.init(control: encoder, midi: midi)]),
                                    configuration: configuration())
@@ -362,7 +362,7 @@ final class EncoderPrecisionTests: XCTestCase {
         }
     }
 
-    func testNRPNSoftwareFineAdjustAccumulatesAndAssignmentChangeClearsRemainder() throws {
+    func testNRPNSoftwareFineAdjustAccumulatesAndAssignmentChangeClearsRemainder() async throws {
         let map = HardwareMap(entries: [.init(control: encoder, midi: .init(kind: .nrpn, channel: 0, number: 1000))])
         var config = configuration()
         var definition = config.parameter("angle")!

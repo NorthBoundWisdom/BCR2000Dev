@@ -19,7 +19,7 @@ final class EventRetentionTests: XCTestCase {
         )
     }
 
-    func testManyIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE() throws {
+    func testManyIdleTicksPreserveEarlyEventsAndLegacyTimeRevisionTraceAndSSE() async throws {
         // Well beyond the 1024-entry event journal and the 512-entry traces, so an idle tick that
         // journals or keeps trace would be caught; not so many that the debug test runs for long.
         let ticks = 2000
@@ -81,7 +81,7 @@ final class EventRetentionTests: XCTestCase {
             .contains { $0.objectValue?["event"]?.objectValue?["code"] == .string("host.safety.robot.fault") })
     }
 
-    func testContinuousMotionIsThrottledButStateAndCriticalFinalTransitionStayCurrent() throws {
+    func testContinuousMotionIsThrottledButStateAndCriticalFinalTransitionStayCurrent() async throws {
         let clock = Clock()
         let application = ProviderApplication(
             configuration: .init(robot: true, clock: .manual),
@@ -134,7 +134,7 @@ final class EventRetentionTests: XCTestCase {
                        "A command baseline/final transition must not be rediscovered on the next idle step")
     }
 
-    func testSilentWritesEnforceTheirOwnClockAndFailuresAreAtomicWithoutObservers() throws {
+    func testSilentWritesEnforceTheirOwnClockAndFailuresAreAtomicWithoutObservers() async throws {
         let clock = Clock()
         let owner = try BCRPluginRuntime(clock: { clock.value }, epoch: "atomic")
         let id = AgentRemoteBinding.defaultInstanceID
