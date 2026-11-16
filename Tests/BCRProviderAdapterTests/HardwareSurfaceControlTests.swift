@@ -1,4 +1,6 @@
-import BCRCoreMIDIDriver
+#if os(macOS) && !BCR_PORTABLE_BUILD
+    import BCRCoreMIDIDriver
+#endif
 import BCRFoundation
 import BCRSurfaceDomain
 import BCRMCPAdapter
@@ -177,15 +179,17 @@ final class HardwareSurfaceControlTests: XCTestCase {
         XCTAssertEqual(failures, [.hardwareInput])
     }
 
-    func testRealCoreMIDIQualificationIsOptIn() async throws {
-        guard ProcessInfo.processInfo.environment["BCR_E_ATTENDED_HARDWARE"] == "1" else {
-            throw XCTSkip(
-                "Real CoreMIDI qualification requires an attended supervisor session; E development uses transport doubles only"
-            )
+    #if os(macOS) && !BCR_PORTABLE_BUILD
+        func testRealCoreMIDIQualificationIsOptIn() async throws {
+            guard ProcessInfo.processInfo.environment["BCR_E_ATTENDED_HARDWARE"] == "1" else {
+                throw XCTSkip(
+                    "Real CoreMIDI qualification requires an attended supervisor session; E development uses transport doubles only"
+                )
+            }
+            let driver = CoreMIDIService()
+            try driver.start()
+            for _ in 0 ..< 150 where !driver.connection.isConnected { try await Task.sleep(for: .milliseconds(20)) }
+            XCTAssertTrue(driver.connection.isConnected, "Attended hardware route unavailable")
         }
-        let driver = CoreMIDIService()
-        try driver.start()
-        for _ in 0 ..< 150 where !driver.connection.isConnected { try await Task.sleep(for: .milliseconds(20)) }
-        XCTAssertTrue(driver.connection.isConnected, "Attended hardware route unavailable")
-    }
+    #endif
 }

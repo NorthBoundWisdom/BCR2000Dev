@@ -1,6 +1,10 @@
 import BCRFoundation
 import Foundation
-import Darwin
+#if canImport(Darwin)
+    import Darwin
+#else
+    import Glibc
+#endif
 
 public enum CodexProcessSupervisorError: Error, LocalizedError, Sendable {
     case alreadyRunning

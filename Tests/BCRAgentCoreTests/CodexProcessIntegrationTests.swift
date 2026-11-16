@@ -4,8 +4,6 @@
 @testable import BCRExamples
 @testable import BCRConfigurationAdapter
 @testable import BCRMCPAdapter
-@testable import BCRHTTPTransport
-@testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import BCRTestSupport
 import Foundation
@@ -40,7 +38,7 @@ final class CodexProcessIntegrationTests: XCTestCase {
                 print(json.dumps(reply), flush=True)
                 if mode == 'duplicate': print(json.dumps(reply), flush=True)
         """#
-        try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", "-c", script, mode])
+        try await process.start(executablePath: "/usr/bin/env", arguments: ["python3", "-u", "-c", script, mode])
         let client = CodexRPCClient(transport: process, defaultTimeout: .seconds(2))
         await client.start()
         return client

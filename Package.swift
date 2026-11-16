@@ -267,3 +267,27 @@ let package = Package(
     ],
     swiftLanguageModes: [.v6]
 )
+
+// Native hosts remain native. The same portable slice can be checked on a Mac without
+// claiming Linux validation: BCR_PORTABLE_BUILD=1 swift test --build-path build/swiftpm-portable.
+#if os(macOS)
+    let portableBuild = ProcessInfo.processInfo.environment["BCR_PORTABLE_BUILD"] == "1"
+#else
+    let portableBuild = true
+#endif
+if portableBuild {
+    let nativeTargets: Set<String> = ["BCRAgentConsole", "BCRProviderService", "BCRCoreMIDIDriver",
+                                      "BCRHTTPTransport", "BCRAgentConsoleTests"]
+    package.products.removeAll { nativeTargets.contains($0.name) }
+    package.targets.removeAll { nativeTargets.contains($0.name) }
+    for target in package.targets {
+        target.dependencies.removeAll { dependency in
+            switch dependency {
+            case let .targetItem(name, _), let .byNameItem(name, _): nativeTargets.contains(name)
+            default: false
+            }
+        }
+        target.swiftSettings = (target.swiftSettings ?? []) + [.define("BCR_PORTABLE_BUILD")]
+        if target.name == "BCRTestSupport" { target.exclude.append("RecordingMIDIService.swift") }
+    }
+}

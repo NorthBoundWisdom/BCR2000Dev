@@ -2,7 +2,6 @@ import BCRFoundation
 import BCRSurfaceDomain
 import BCRConfigurationAdapter
 import BCRExamples
-import CryptoKit
 import Foundation
 
 public struct ProtectedFileRead<Value: Sendable>: Sendable {
@@ -107,7 +106,7 @@ public struct ProtectedJSONFile<Value: Codable & Sendable>: Sendable {
     @discardableResult
     private func backupExisting(kind: String) throws -> URL? {
         guard let data = try existingData() else { return nil }
-        let digest = SHA256.hash(data: data).map { String(format: "%02x", Int($0)) }.joined()
+        let digest = ContentDigest.sha256(data)
         let url = store.fileURL.appendingPathExtension("\(kind).\(digest).json")
         if FileManager.default.fileExists(atPath: url.path) {
             guard try Data(contentsOf: url) == data

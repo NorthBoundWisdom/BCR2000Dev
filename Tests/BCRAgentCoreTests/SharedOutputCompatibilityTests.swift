@@ -5,8 +5,6 @@ import struct ParameterOutputPlugin.ParameterOutputPlugin
 @testable import BCRExamples
 @testable import BCRConfigurationAdapter
 @testable import BCRMCPAdapter
-@testable import BCRHTTPTransport
-@testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import enum ParameterOutputPlugin.MotionOutputPrecision
 import enum AgentPlugin.AgentRunState

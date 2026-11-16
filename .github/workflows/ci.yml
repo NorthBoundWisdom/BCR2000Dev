@@ -6,9 +6,62 @@ on:
 permissions:
   contents: read
 jobs:
+  core-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    container: swift:6.2-noble
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: swift --version
+      - run: python3 configs/restore_git_mtimes.py
+      - name: Identify the Swift toolchain for the build cache
+        run: python3 -c "import hashlib, subprocess; v = subprocess.run(['swift', '--version'], capture_output=True); print('SWIFT_ID=' + hashlib.sha256(v.stdout + v.stderr).hexdigest()[:16])" >> "$GITHUB_ENV"
+      - name: Cache the locked dependency
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/seed
+          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
+      - name: Restore the latest portable SwiftPM build
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/swiftpm-linux
+          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
+          restore-keys: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-
+      - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/check_portable_targets.py
+      - run: python3 configs/check_domain_boundaries.py
+      - name: Discover and run every portable XCTest once
+        run: |
+          set -o pipefail
+          mkdir -p build/portable-test-runs
+          swift test --build-path build/swiftpm-linux list > build/portable-test-runs/inventory.txt
+          swift test --build-path build/swiftpm-linux --skip-build 2>&1 | tee build/portable-test-runs/swift-test.log
+          python3 configs/verify_portable_tests.py --inventory build/portable-test-runs/inventory.txt --log build/portable-test-runs/swift-test.log
+      - name: Save the portable build cache
+        if: success() && github.event_name == 'push'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/swiftpm-linux
+          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
+      - name: Preserve portable discovery and results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-tests-${{ github.run_id }}
+          path: build/portable-test-runs/
   checks:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,6 +88,7 @@ jobs:
           key: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
           restore-keys: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/check_domain_boundaries.py
       # setup_local_project.py also builds SurfacePlugins on its own; the test build compiles it anyway.
       - run: python3 configs/validate_repo_commands.py .
       - run: python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check

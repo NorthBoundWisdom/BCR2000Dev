@@ -1,5 +1,9 @@
 import CoreFoundation
-import Darwin
+#if canImport(Darwin)
+    import Darwin
+#else
+    import Glibc
+#endif
 import Foundation
 
 /// Host-issued identities for the one authenticated bearer and the two host-owned event sources.

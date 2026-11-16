@@ -4,8 +4,6 @@
 @testable import BCRExamples
 @testable import BCRConfigurationAdapter
 @testable import BCRMCPAdapter
-@testable import BCRHTTPTransport
-@testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import Foundation
 import XCTest
@@ -18,7 +16,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
         let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appending(path: "Fixtures/mock_app_server.py")
         let process = CodexProcessSupervisor()
-        try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
+        try await process.start(executablePath: "/usr/bin/env", arguments: ["python3", "-u", fixture.path])
         let cache = FileManager.default.temporaryDirectory.appending(path: "bcr-catalog-\(UUID().uuidString).json")
         return CodexSessionCoordinator(
             transport: ApprovalFaultTransport(base: process, failures: failApprovalResponses),
@@ -313,7 +311,7 @@ final class CodexSessionIntegrationTests: XCTestCase {
             modelCatalogStore: CodexModelCatalogStore(fileURL: cache)
         )
         for _ in 0 ..< 2 {
-            try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
+            try await process.start(executablePath: "/usr/bin/env", arguments: ["python3", "-u", fixture.path])
             try await session.start()
             try await session.startTurn(
                 slotID: AgentSlotID(1),

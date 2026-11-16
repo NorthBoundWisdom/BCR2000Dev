@@ -1,7 +1,6 @@
 import BCRFoundation
 import BCRSurfaceDomain
 import enum SurfacePluginContracts.JSONValue
-import CryptoKit
 import Foundation
 
 /// Stages separate, explicitly unverified files; never installs a map or dispatches effects.
@@ -13,9 +12,7 @@ public enum HardwareRoleCandidate {
     private static let files = ["source-map.json", "source-configuration.json", "role-readiness-request.json",
                                 "candidate-hardware-map.json", "candidate-configuration.json",
                                 "software-readiness.json"]
-    public static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }
-        .joined()
-    }
+    public static func sha256(_ data: Data) -> String { ContentDigest.sha256(data) }
 
     private static func id(_ control: BCRControlID)
         -> String { "\(control.section.rawValue).\(control.row).\(control.index)" }

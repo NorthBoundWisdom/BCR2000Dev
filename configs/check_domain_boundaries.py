@@ -4,10 +4,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
+
+MACOS_ONLY = {"BCRAgentConsole", "BCRProviderService", "BCRCoreMIDIDriver", "BCRHTTPTransport"}
+PORTABLE_BUILD = sys.platform != "darwin" or os.environ.get("BCR_PORTABLE_BUILD") == "1"
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -164,6 +168,8 @@ def check():
     errors = check_layers(targets)
     for name, allowed in ALLOWED.items():
         if name not in targets:
+            if PORTABLE_BUILD and name in MACOS_ONLY:
+                continue
             errors.append("Missing module: " + name)
             continue
         dependencies = {

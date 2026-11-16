@@ -351,3 +351,7 @@ H 轮状态面板资料：交付包中的 `DISPLAY_TARGETS.md` / `display-target
 正常结束、SIGINT 或失鲜会先熄灭新鲜灯，再把尝试写过的目标归静止。见交付包 `status-panel-demo.md`。
 默认实体 map 没有可灭按钮反馈，演示会在任何写入前拒绝；现有显式候选只能用于有相应前提的演示，未授实机资格。
 默认 GUI 不开放这组可选合同工具，CLI 的入口是独立无界面宿主；GUI 同 Session 的灯环/按键渲染路径另有测试与截图证据。
+
+### Portable logic tests
+
+Foundation-based targets, provider routing, value history/scenes, capture evidence, offline replay and input coverage have a Linux package slice. Native GUI, CoreMIDI and Network.framework hosts remain macOS targets. The parallel Linux CI lane uses `swift:6.2-noble`; see [the target audit and test inventory](docs/testing/linux-targets.md) for scope, local rehearsal commands and validation limits.

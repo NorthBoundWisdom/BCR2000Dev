@@ -4,7 +4,6 @@ import BCRSurfaceDomain
 import BCRProviderApplication
 import BCRMCPAdapter
 import BCRProviderMCPAdapter
-import BCRHTTPTransport
 import Foundation
 import XCTest
 
