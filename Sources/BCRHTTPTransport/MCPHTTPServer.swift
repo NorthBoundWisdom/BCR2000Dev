@@ -312,7 +312,11 @@ public final class MCPHTTPServer {
         let supplied = String(authorization.dropFirst(7))
         let owner = constantTimeEqual(supplied, token)
         let isOperator = surfaceClients.map { constantTimeEqual(supplied, $0.operatorToken) } ?? false
-        let isDisplay = surfaceClients.map { constantTimeEqual(supplied, $0.display) } ?? false
+        var displayWriterID: String?
+        for credential in surfaceClients?.displayCredentials ?? [] {
+            if constantTimeEqual(supplied, credential.token) { displayWriterID = credential.writerID }
+        }
+        let isDisplay = displayWriterID != nil
         guard authorization.prefix(7).lowercased() == "bearer ", owner || isOperator || isDisplay else {
             reject(id, status: 401, detail: L10n.text("Bearer 鉴权失败"))
             return
@@ -380,11 +384,12 @@ public final class MCPHTTPServer {
                     return
                 }
             }
-            writerID = isOperator ? surfaceClients?.operatorWriterID : surfaceClients?.displayWriterID
+            writerID = isOperator ? surfaceClients?.operatorWriterID : displayWriterID
         }
         let reply = router.service.withAuthenticatedSurfaceWriterID(
             writerID,
-            displayWriteLimit: isDisplay ? displayWriteLimit : nil
+            displayWriteLimit: isDisplay ?
+                (displayWriteLimit ?? (surfaceClients?.hasAdditionalDisplays == true ? 60 : nil)) : nil
         ) {
             router.handle(request.body, headers: request.headers, visibleTools: visibleTools)
         }

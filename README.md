@@ -330,6 +330,6 @@ see the [vendored validator notes](configs/_vendor/README.md).
 
 H 轮状态面板资料：交付包中的 `DISPLAY_TARGETS.md` / `display-targets.json` 由实际档案与映射生成，
 `STATUS_PANEL_BUDGET.md` 给出真实进程/假设备的显示预算。显式 `--display-write-limit 300` 可为显示凭据
-选择独立额度（范围 1..1000 请求/秒）；不带该参数时完全保持原聚合额度及缺省 60/秒。
+选择独立额度（范围 1..1000 请求/秒）；原三字段凭据不带该参数时完全保持原聚合额度及缺省 60/秒。
 它仍需要私有三角色管道，不授予显示权限或实体写入策略，也不是 USB MIDI 可靠速率资格。
 详见 [角色凭据](docs/SURFACE_CLIENTS.md) 与随包现场准备清单。

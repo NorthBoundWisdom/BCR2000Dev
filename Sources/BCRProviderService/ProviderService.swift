@@ -273,7 +273,7 @@ private struct BCRProviderService {
                                   Display requires BOTH --hardware-output write and --allow-surface-feedback
     --describe-surface            Print the selected profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
-    --surface-client-tokens-stdin  Three in-memory owner/operator/display tokens from a dedicated JSON pipe
+    --surface-client-tokens-stdin  Private owner/operator/display JSON pipe; optional displays array adds up to seven displays
     --display-write-limit N       Explicit independent display requests/s, 1...1000; absent keeps old aggregate budget
     --surface-principal-file PATH Explicit private host-issued principal record; default memory only
     --write-limits input=N,feedback=N,renew=N,admin=N
@@ -350,9 +350,9 @@ private struct BCRProviderService {
                     throw BootError(reason: "Surface client credentials require a dedicated pipe")
                 }
                 var data = Data()
-                while let part = try FileHandle.standardInput.read(upToCount: 513 - data.count), !part.isEmpty {
+                while let part = try FileHandle.standardInput.read(upToCount: 2049 - data.count), !part.isEmpty {
                     data.append(part)
-                    guard data.count <= 512 else { throw SurfaceClientCredentials.Invalid() }
+                    guard data.count <= 2048 else { throw SurfaceClientCredentials.Invalid() }
                 }
                 let clients = try SurfaceClientCredentials(data: data)
                 surfaceClients = clients; token = clients.owner

@@ -25,7 +25,7 @@ protocol versions. Tool-level startup permissions still apply; credentials grant
 Hardware operator input and renew remain `permission_denied` / `unsupported_hold`; secondary scope cannot
 turn hardware into simulation. The hardware display still needs `write` plus `--allow-surface-feedback`.
 
-All three identities share the same existing aggregate/category budgets and canonical session. Rejected
+In the original three-role record without an explicit display quota, all three identities share the same existing aggregate/category budgets and canonical session. Rejected
 scope checks consume no write quota. Writer identity comes only from successful server authentication and
 is scoped synchronously to a request; callers cannot supply writer_id. Interface and system events retain
 their own identities. The two secondary IDs explicitly exclude all legacy IDs. They remain stable in one
@@ -72,3 +72,49 @@ precedence only for the display credential. BCR hardware legacy quota exhaustion
 `invalid_argument`; simulation reports `rate_limited`. Do not treat arbitrary invalid arguments as quota.
 
 The panel load measurements and recommended rates are in `STATUS_PANEL_BUDGET.md` in the H delivery.
+
+## Multiple display clients (H)
+
+Two processes given the same display credential share the same writer ID and budget, so their events
+cannot distinguish them. To distinguish clients, keep the original three fields and explicitly add
+`displays`, a nonempty array of 1..7 additional distinct 64-character lowercase-hex credentials. The
+original `display` plus the array permit at most eight displays. All tokens, including owner/operator,
+must be globally distinct. The old record retains its exact 512-byte limit including whitespace; an
+extended record permits 2048 bytes. Duplicate (including escaped), unknown or missing keys, malformed
+arrays and oversized records fail startup without echoing credentials. Provisioning remains anonymous
+private pipe + EOF; no token files, arguments or credentials in reports.
+
+The explicit extended record selects an independent 60/s feedback bucket for **each** display, including
+the original `display`. `--display-write-limit N` changes their common ceiling (1..1000) while counts
+remain independent. `--write-limit` and existing simulation category budgets retain their behavior for
+owner/operator; one exhausted display does not consume their budgets or another display's. The old
+three-field shape with no new flag preserves its original shared aggregate behavior exactly.
+
+Each display gets a host-issued opaque writer ID distinct from other roles and reserved principals;
+IDs remain stable for a process and rotate at restart. Capture a client's own writer from its direct,
+authenticated successful feedback response, then use journal events to identify competing writers.
+Sharing a credential cannot identify separate processes. Two credentials writing the same target use
+**last accepted feedback wins**, with no lock or business arbitration. Both writes are journaled with
+writer_id; an identical ignored/no-change feedback is still an event under the existing contract.
+Neither feedback nor writer identity establishes operator input authority.
+
+A consumer must check logical ID overlap **and** current visible hardware group/context. Different
+top-row groups are not simultaneously visible; 56 logical ring IDs represent only 32 physical rings.
+The host does not switch groups remotely or arbitrate panel mappings. A typical split can use fixed
+lower-row rings for telemetry while reserving an attended-selected top group for controls, but the
+consumer owns that mapping and its conflict policy. Combined physical device throughput still needs
+attended qualification; the H budget measurement used one display credential.
+
+The process owner can generate the extension entirely in memory:
+
+```python
+credentials = {role: secrets.token_hex(32) for role in ("owner", "operator", "display")}
+credentials["displays"] = [secrets.token_hex(32)]
+# Supply the complete object to the host's private anonymous stdin pipe as in the example above.
+# Forward display and displays[0] to separate clients through independent private IPC channels.
+```
+
+Real-process evidence: `configs/verify_multiple_display_clients.py` covers simulation and a Debug-only
+hardware double, both writer/quota isolation and shared-target order, old 512 and new 2048 boundaries,
+maximum eight displays and malformed records. The frozen owner catalogue and legacy aggregate tests
+continue to run separately without changed assertions.
