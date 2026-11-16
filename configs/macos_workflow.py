@@ -254,7 +254,7 @@ def build(
     shutil.copytree(localization, resources / localization.name)
     info = {
         "CFBundleDevelopmentRegion": "en",
-        "CFBundleLocalizations": ["en", "zh-Hans"],
+        "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
         "CFBundleDisplayName": "BCR Agent Console",
         "CFBundleExecutable": PRODUCT,
         "CFBundleIdentifier": BUNDLE_ID,
@@ -289,10 +289,10 @@ def verify_bundle(bundle: Path) -> dict:
         raise ValueError("Unexpected app bundle metadata.")
     if not (bundle / "Contents/Resources/AppIcon.icns").is_file():
         raise ValueError("Packaged application icon is missing.")
-    if info.get("CFBundleLocalizations") != ["en", "zh-Hans"]:
+    if info.get("CFBundleLocalizations") != ["en", "zh-Hans", "zh-Hant"]:
         raise ValueError("Application language metadata is missing.")
     localization = bundle / "Contents/Resources/BCRAgentConsole_BCRFoundation.bundle"
-    for language in ("en", "zh-Hans"):
+    for language in ("en", "zh-Hans", "zh-Hant"):
         candidates = [localization / "Contents/Resources", localization]
         if not any(
             catalog.parent.name.casefold() == f"{language}.lproj".casefold()
@@ -325,7 +325,7 @@ def smoke(bundle: Path, foreground: bool | None = None) -> None:
     info = verify_bundle(bundle)
     bundle = bundle.resolve()
     foreground = smoke_runs_in_foreground() if foreground is None else foreground
-    for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置")):
+    for language, settings_title in (("en", "Settings"), ("zh-Hans", "设置"), ("zh-Hant", "設定")):
         with tempfile.TemporaryDirectory(prefix="bcr-startup-") as temporary:
             # Launch Services supplies normal GUI activation on hosted macOS runners.
             # -n isolates each language probe; -W waits for its startup check to exit.
@@ -369,7 +369,9 @@ def smoke(bundle: Path, foreground: bool | None = None) -> None:
         if marker.get("language") != language or marker.get("settings") != settings_title:
             raise RuntimeError(f"Bundled {language} localization did not resolve correctly: {marker}")
     mode = "foreground" if foreground else "offscreen"
-    print(f"Verified English and Chinese native startup at 1200 × 760 ({mode}) with bundled icon and translations.")
+    print(
+        f"Verified English, Simplified Chinese and Traditional Chinese native startup at 1200 × 760 ({mode}) with bundled icon and translations."
+    )
 
 
 def _zip(bundle: Path, destination: Path, companion: Path | None = None) -> None:

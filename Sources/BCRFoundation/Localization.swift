@@ -5,6 +5,7 @@ import Observation
 public enum AppLanguage: String, CaseIterable, Sendable {
     case system
     case chinese = "zh-Hans"
+    case traditionalChinese = "zh-Hant"
     case english = "en"
 
     public static let preferenceKey = "appLanguage"
@@ -13,8 +14,12 @@ public enum AppLanguage: String, CaseIterable, Sendable {
     public func resolved(preferredLanguages: [String]) -> AppLanguage {
         guard self == .system else { return self }
         for identifier in preferredLanguages {
-            switch identifier.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first {
-            case "zh": return .chinese
+            let parts = identifier.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" })
+            switch parts.first {
+            case "zh":
+                if parts.contains("hant") { return .traditionalChinese }
+                if parts.contains("hans") { return .chinese }
+                return parts.contains(where: { ["tw", "hk", "mo"].contains($0) }) ? .traditionalChinese : .chinese
             case "en": return .english
             default: continue
             }
@@ -126,9 +131,10 @@ public enum L10n {
 
     private static let englishBundle = localizedBundle(.english)
     private static let chineseBundle = localizedBundle(.chinese)
+    private static let traditionalChineseBundle = localizedBundle(.traditionalChinese)
 
     static func localizedBundle(_ language: AppLanguage, resources: Bundle = ProviderResources.bundle) -> Bundle {
-        // SwiftPM toolchains may normalize locale directory names (zh-Hans → zh-hans).
+        // SwiftPM may normalize locale directory names (zh-Hans/zh-Hant → zh-hans/zh-hant).
         // Resolve the shipped spelling explicitly, independent of the host's preferred language.
         guard let identifier = resources.localizations.first(where: {
                   $0.caseInsensitiveCompare(language.rawValue) == .orderedSame
@@ -140,7 +146,11 @@ public enum L10n {
 
     public static func text(_ message: LocalizedMessage, language: AppLanguage = language) -> String {
         let resolved = language.resolved(preferredLanguages: Locale.preferredLanguages)
-        let bundle = resolved == .chinese ? chineseBundle : englishBundle
+        let bundle = switch resolved {
+        case .chinese: chineseBundle
+        case .traditionalChinese: traditionalChineseBundle
+        case .english, .system: englishBundle
+        }
         let template = bundle.localizedString(forKey: message.key, value: message.key, table: "Localizable")
         return render(template, arguments: message.renderedArguments(language: resolved))
     }

@@ -23,7 +23,7 @@ final class LanguagePreferencesTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suite) }
         XCTAssertEqual(AppLanguage.saved(in: defaults), .system)
         defaults.set("kept", forKey: "unrelated")
-        for choice in [AppLanguage.chinese, .english, .system] {
+        for choice in [AppLanguage.chinese, .traditionalChinese, .english, .system] {
             choice.save(in: defaults)
             let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
             XCTAssertEqual(AppLanguage.saved(in: reopened), choice)
@@ -56,6 +56,16 @@ final class LanguagePreferencesTests: XCTestCase {
         XCTAssertEqual(L10n.text("设置"), "Settings")
         XCTAssertEqual(notice.text, "Parameter “\(userName)” updated.")
         XCTAssertEqual(AppLanguage.saved(in: defaults), .english)
+        settings.selection = .traditionalChinese
+        XCTAssertEqual(L10n.text("设置"), "設定")
+        XCTAssertEqual(notice.text, "參數“\(userName)”已更新。")
+        XCTAssertEqual(BuiltInNamePresentation.displayName(configuration.name), "機械臂範例")
+        XCTAssertEqual(BuiltInNamePresentation.displayName(configuration.parameters[0].name), "J1 底座旋轉")
+        XCTAssertEqual(model.configuration, configuration)
+        XCTAssertEqual(AppLanguage.saved(in: defaults), .traditionalChinese)
+        let exposed = try model.mcp.service.parameterInfo("arm.j1")
+        XCTAssertEqual(exposed.objectValue?["name"]?.stringValue, configuration.parameters[0].name)
+        XCTAssertEqual(exposed.objectValue?["group"]?.stringValue, configuration.parameters[0].group)
         settings.selection = .chinese
         XCTAssertEqual(notice.text, "参数“\(userName)”已更新。")
         XCTAssertEqual(model.configuration, configuration)

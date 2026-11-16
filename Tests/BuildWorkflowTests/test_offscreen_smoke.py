@@ -24,7 +24,7 @@ class OffscreenSmokeTests(unittest.TestCase):
                         "type": "bcr.native_startup",
                         "clientVersion": "0.1.0",
                         "language": language,
-                        "settings": "Settings" if language == "en" else "设置",
+                        "settings": {"en": "Settings", "zh-Hans": "设置", "zh-Hant": "設定"}[language],
                     },
                     separators=(",", ":"),
                 )
@@ -42,7 +42,7 @@ class OffscreenSmokeTests(unittest.TestCase):
 
     def test_local_smoke_stays_in_the_background_and_offscreen(self):
         commands = self._commands({})
-        self.assertEqual(len(commands), 2)
+        self.assertEqual(len(commands), 3)
         for command in commands:
             self.assertEqual(command[:4], ["open", "-n", "-W", "-g"])
             arguments = command[command.index("--args") + 1 :]

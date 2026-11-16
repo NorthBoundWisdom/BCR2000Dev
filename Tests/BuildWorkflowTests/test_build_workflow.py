@@ -213,7 +213,7 @@ class LocalizationPackagingTests(unittest.TestCase):
                         "type": "bcr.native_startup",
                         "clientVersion": "0.1.0",
                         "language": language,
-                        "settings": "Settings" if language == "en" else "设置",
+                        "settings": {"en": "Settings", "zh-Hans": "设置", "zh-Hant": "設定"}[language],
                     },
                     separators=(",", ":"),
                 )
@@ -225,7 +225,7 @@ class LocalizationPackagingTests(unittest.TestCase):
             patch.object(macos_workflow.subprocess, "run", side_effect=launch),
         ):
             macos_workflow.smoke(Path("Console.app"))
-        self.assertEqual(languages, ["en", "zh-Hans"])
+        self.assertEqual(languages, ["en", "zh-Hans", "zh-Hant"])
         with (
             patch.object(macos_workflow, "verify_bundle", return_value={"CFBundleShortVersionString": "0.1.0"}),
             patch.object(macos_workflow.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")),
@@ -244,7 +244,7 @@ class LocalizationPackagingTests(unittest.TestCase):
                     "CFBundleExecutable": macos_workflow.PRODUCT,
                     "CFBundleIconFile": "AppIcon.icns",
                     "LSMinimumSystemVersion": "14.0",
-                    "CFBundleLocalizations": ["en", "zh-Hans"],
+                    "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
                 }
                 (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
                 (resources / "AppIcon.icns").write_bytes(b"icon")
@@ -253,12 +253,17 @@ class LocalizationPackagingTests(unittest.TestCase):
                 executable.write_bytes(b"executable")
                 executable.chmod(0o755)
                 catalogs = resources / "BCRAgentConsole_BCRFoundation.bundle" / layout
-                for language in ("en", "zh-hans"):
+                for language in ("en", "zh-hans", "zh-hant"):
                     catalog = catalogs / f"{language}.lproj/Localizable.strings"
                     catalog.parent.mkdir(parents=True)
                     catalog.write_text(language)
                 with patch.object(macos_workflow, "_run", return_value=""):
                     self.assertEqual(macos_workflow.verify_bundle(bundle), info)
+                    traditional = catalogs / "zh-hant.lproj/Localizable.strings"
+                    traditional.unlink()
+                    with self.assertRaisesRegex(ValueError, "Bundled zh-Hant translations are missing"):
+                        macos_workflow.verify_bundle(bundle)
+                    traditional.write_text("zh-hant")
                     (catalogs / "zh-hans.lproj/Localizable.strings").unlink()
                     with self.assertRaisesRegex(ValueError, "Bundled zh-Hans translations are missing"):
                         macos_workflow.verify_bundle(bundle)
@@ -270,7 +275,7 @@ class LocalizationPackagingTests(unittest.TestCase):
                 binary = root / arch / "release" / macos_workflow.PRODUCT
                 binary.parent.mkdir(parents=True)
                 binary.write_bytes(b"executable")
-                for language in ("en", "zh-Hans"):
+                for language in ("en", "zh-Hans", "zh-Hant"):
                     catalog = (
                         binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"
                     )
@@ -292,7 +297,7 @@ class LocalizationPackagingTests(unittest.TestCase):
             ):
                 binary = macos_workflow._swift_build("release", "universal")
                 dependency.assert_called_once_with(macos_workflow.REPO_ROOT)
-            for language in ("en", "zh-Hans"):
+            for language in ("en", "zh-Hans", "zh-Hant"):
                 catalog = (
                     binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"
                 )

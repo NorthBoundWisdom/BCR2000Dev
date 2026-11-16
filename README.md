@@ -127,8 +127,8 @@ Enable panels from the **Panels** menu to the right of the workspace tabs. Selec
 
 ### Interface language
 
-The app follows the preferred macOS language by default, supports Simplified Chinese and English, and falls back to English for other languages.
-Selecting Follow System, Simplified Chinese, or English in Settings takes effect immediately and saves automatically without resetting device connections,
+The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.
+Selecting Follow System, Simplified Chinese, Traditional Chinese, or English in Settings takes effect immediately and saves automatically without resetting device connections,
 agent sessions, or parameter values. Built-in names follow the display language while storage, exports, and MCP retain their original values; user-defined names remain unchanged.
 macOS system menus, file panels, system dialog buttons, and system error descriptions may retain the launch language until the app restarts.
 

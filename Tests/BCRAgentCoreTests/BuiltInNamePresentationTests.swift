@@ -19,6 +19,11 @@ final class BuiltInNamePresentationTests: XCTestCase {
         for message in names {
             let chinese = L10n.text(message, language: .chinese)
             let english = L10n.text(message, language: .english)
+            let traditional = L10n.text(message, language: .traditionalChinese)
+            XCTAssertEqual(BuiltInNamePresentation.displayName(chinese, language: .traditionalChinese), traditional)
+            XCTAssertEqual(BuiltInNamePresentation.displayName(traditional, language: .english), english)
+            XCTAssertEqual(BuiltInNamePresentation.editedName(traditional, replacing: chinese,
+                                                              language: .traditionalChinese), chinese)
             XCTAssertNotEqual(chinese, english)
             XCTAssertEqual(BuiltInNamePresentation.displayName(chinese, language: .english), english)
             XCTAssertEqual(BuiltInNamePresentation.displayName(english, language: .chinese), chinese)
@@ -27,7 +32,7 @@ final class BuiltInNamePresentationTests: XCTestCase {
 
     func testCustomAndUnknownNamesRemainVerbatim() {
         for name in ["我的机械臂", "J1 底座旋转 custom", "Robot Arm 2", "参数 9", " 参数 1", "unknown", ""] {
-            for language in [AppLanguage.chinese, .english] {
+            for language in [AppLanguage.chinese, .traditionalChinese, .english] {
                 XCTAssertEqual(BuiltInNamePresentation.displayName(name, language: language), name)
             }
         }

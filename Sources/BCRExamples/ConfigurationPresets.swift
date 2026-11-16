@@ -58,7 +58,7 @@ public enum BuiltInNamePresentation {
         ] + (1 ... 8).map { "参数 \($0)" }
         var result: [String: LocalizedMessage] = [:]
         for message in names {
-            for language in [AppLanguage.chinese, .english] {
+            for language in [AppLanguage.chinese, .traditionalChinese, .english] {
                 result[L10n.text(message, language: language)] = message
             }
         }

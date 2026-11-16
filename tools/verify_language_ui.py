@@ -45,6 +45,14 @@ try:
     ui.capture(directory / "language-english.png", width=1200)
     assert client.call("get_parameter", {"id": "arm.j1"})["value"] == 37
     assert config.read_bytes() == stored
+    ui.press_description("繁體中文")
+    ui.wait(lambda: "跟隨觸碰" in main_tree(), "Main window did not switch to Traditional Chinese")
+    ui.wait(lambda: "系統對話框按鈕" in all_windows(), "Open settings did not switch to Traditional Chinese")
+    assert "通用" in ui.run("return name of every window"), "Traditional Chinese settings title missing"
+    ui.capture(directory / "language-traditional.png", width=1200)
+    assert client.call("get_parameter", {"id": "arm.j1"})["value"] == 37
+    assert client.parameter_definition("arm.j1")["name"] == definition["name"]
+    assert config.read_bytes() == stored
     ui.press_description("简体中文")
     ui.wait(lambda: "跟随触碰" in main_tree(), "Main window did not switch back to Chinese")
     ui.wait(
@@ -57,7 +65,9 @@ try:
     assert client.call("get_status")["source"] == source
     assert client.parameter_definition("arm.j1")["name"] == definition["name"]
     assert config.read_bytes() == stored
-    print("PASS live Chinese/English switch in the same process; values, user names and configuration preserved")
+    print(
+        "PASS live Simplified/English/Traditional Chinese switch in the same process; values, user names and configuration preserved"
+    )
 except Exception:
     (directory / "language-ui-failure.txt").write_text(all_windows())
     raise

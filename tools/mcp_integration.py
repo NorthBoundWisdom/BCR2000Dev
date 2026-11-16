@@ -39,7 +39,7 @@ def parse_arguments(argv=None):
     )
     parser.add_argument(
         "--language",
-        choices=("en", "zh-Hans"),
+        choices=("en", "zh-Hans", "zh-Hant"),
         default="zh-Hans",
         help="isolated app language (Chinese by default for existing UI acceptance scripts)",
     )

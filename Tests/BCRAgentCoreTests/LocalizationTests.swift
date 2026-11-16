@@ -25,19 +25,36 @@ final class LocalizationTests: XCTestCase {
 
     func testSystemPreferenceOrderAndFallback() {
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-CN", "en"]), .chinese)
-        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW"]), .chinese)
-        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["ZH_HK"]), .chinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW"]), .traditionalChinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["ZH_HK"]), .traditionalChinese)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["en-GB", "zh-CN"]), .english)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["ja", "zh-Hans"]), .chinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-TW"]), .traditionalChinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-MO"]), .traditionalChinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-HK"]), .chinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-SG"]), .chinese)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh"]), .chinese)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["fr"]), .english)
         XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: []), .english)
         XCTAssertEqual(AppLanguage.english.resolved(preferredLanguages: ["zh-Hans"]), .english)
         XCTAssertEqual(AppLanguage.chinese.resolved(preferredLanguages: ["en"]), .chinese)
     }
 
+    func testTraditionalLookupAcceptsSwiftPMLowercaseDirectory() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".bundle")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = root.appending(path: "zh-hant.lproj")
+        try FileManager.default.createDirectory(at: catalog, withIntermediateDirectories: true)
+        try Data("\"probe\" = \"繁體中文\";".utf8).write(to: catalog.appending(path: "Localizable.strings"))
+        let resources = try XCTUnwrap(Bundle(url: root))
+        let localized = L10n.localizedBundle(.traditionalChinese, resources: resources)
+        XCTAssertEqual(localized.localizedString(forKey: "probe", value: nil, table: nil), "繁體中文")
+    }
+
     func testTranslationAndInterpolationDoNotTranslateUserContent() {
         XCTAssertEqual(L10n.text("参数", language: .english), "Parameters")
         XCTAssertEqual(L10n.text("参数", language: .chinese), "参数")
+        XCTAssertEqual(L10n.text("参数", language: .traditionalChinese), "參數")
         let userName = "我的 {1} 100% \\\" custom"
         XCTAssertEqual(L10n.text("参数“\(userName)”已更新。", language: .english), "Parameter “\(userName)” updated.")
         XCTAssertEqual(L10n.text("参数“\(userName)”已更新。", language: .chinese), "参数“\(userName)”已更新。")
@@ -56,6 +73,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [changed], timeout: 1), .completed)
         XCTAssertEqual(L10n.text("参数"), "Parameters")
         XCTAssertEqual(L10n.text("参数", language: .chinese), "参数")
+        XCTAssertEqual(L10n.text("参数", language: .traditionalChinese), "參數")
     }
 
     func testShippedCatalogsHaveCompleteMatchingTranslationsAndPlaceholders() throws {
@@ -69,6 +87,8 @@ final class LocalizationTests: XCTestCase {
         }
         let chinese = try catalog(.chinese)
         let english = try catalog(.english)
+        let traditional = try catalog(.traditionalChinese)
+        XCTAssertEqual(Set(traditional.keys), Set(english.keys))
         XCTAssertGreaterThan(english.count, 600)
         XCTAssertEqual(Set(chinese.keys), Set(english.keys))
         let placeholders = try NSRegularExpression(pattern: #"\{\d+\}"#)
@@ -81,6 +101,9 @@ final class LocalizationTests: XCTestCase {
             XCTAssertNotEqual(translation, key, key)
             XCTAssertEqual(chinese[key], key)
             XCTAssertEqual(tokens(translation), tokens(key), key)
+            let traditionalText = try XCTUnwrap(traditional[key], key)
+            XCTAssertFalse(traditionalText.isEmpty, key)
+            XCTAssertEqual(tokens(traditionalText), tokens(key), key)
         }
     }
 
