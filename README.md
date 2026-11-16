@@ -23,11 +23,12 @@ Turn a knob to change a parameter, then send its value back to the LED ring. The
 
 ## Project status
 
-As of 2026-11-13:
+As of 2026-11-16 (software); hardware rows retain their previously recorded qualification scope:
 
 | Area | Status |
 | --- | --- |
-| Mock and software features | Parameters, learning, preset alignment, agents (Mock / Codex), MCP, output safety gates, Provider, and Surface simulation are implemented and covered by non-hardware regression tests. |
+| Mock and software features | Parameters, Undo/Redo, scenes, color tags, macro toggle and per-step results, JSONL recording/offline review, input coverage, learning, preset alignment, agents (Mock / Codex), MCP, output safety gates, Provider, and Surface simulation have non-hardware regression tests. |
+| Languages and portable core | English, Simplified Chinese and Traditional Chinese; Linux CI executes the pure Foundation/domain/application slice. Native GUI, MIDI and HTTP hosts remain macOS-only. |
 | Physical device | Firmware 1.10, USB mode U-1, Preset 8; connected to the development Mac again. Identity queries, a 108-CC snapshot, and read-only temporary-preset readback passed. All 56 logical knob positions have been learned on hardware, and GUI startup reads back 56/56 current values. |
 | Connection and write validation | Connection confirmation, reading hardware, deferring connection, unplug/replug, unplugging while holding a button, controlled writes, and restoration passed on site. Assigned button actions and lock icons have only been spot-checked; agent button LEDs, display timing, and remaining LED ring modes still need hardware validation. |
 | Bidirectional USB communication | Some Macs need a development-signed DriverKit fix to write to the device. It works on this Mac; driver signing on another Mac remains blocked. |
@@ -124,6 +125,8 @@ Enable panels from the **Panels** menu to the right of the workspace tabs. Selec
 | --- | --- | --- |
 | Arm preview | Side and top views of the example arm, driven by `arm.*` parameters | Hidden |
 | Output | Targets, limited output, and actual feedback values | Hidden; always visible while output is running |
+| Offline captures | JSONL integrity review and isolated Mock input replay | Hidden |
+| Input coverage | Passive observations for all 108 controls and fingerprinted export | Hidden |
 
 Parameter value changes support Undo/Redo (⌘Z / ⇧⌘Z) from the Edit menu and Parameters workspace. Continuous input is grouped within 400 ms; local and MCP batches are undoable, with current parameter protections and output safety still applied.
 
@@ -133,9 +136,11 @@ Parameters also support eight software color tags and per-group panel highlighti
 
 The MIDI monitor can record versioned JSONL evidence to Application Support/Captures. Background writes are bounded and failures are visible; recording does not change MIDI traffic. SysEx payloads are redacted to length and SHA-256.
 
-Enable Offline captures from Panels to inspect JSONL integrity and replay inputs in a fully isolated Mock session. Step/run/pause/reset never open MIDI ports or send recorded outputs.
+Enable Offline captures from Panels to inspect JSONL integrity and replay inputs in a fully isolated Mock session. Step/run/pause/reset never open MIDI ports or send recorded outputs. Foreign-device samples expose common review fields and are explicitly refused for replay.
 
 Input coverage is a passive optional workspace for all 108 logical controls. It separates hardware and Mock observations, flags mapping mismatches, and exports a fingerprinted review without sending MIDI or learning controls.
+
+Macros support set, step, toggle and group reset, with applied/rejected results for each step and one Undo entry for the whole execution. See [configuration versions](docs/CONTROL_MAP.md#配置文件版本) and [native identifiers](docs/UI_IDENTIFIERS.md).
 
 ### Interface language
 
@@ -309,6 +314,7 @@ python3 configs/format_repo.py --all --check
 python3 -m compileall -q configs
 python3 configs/validate_repo_commands.py .
 python3 configs/check_domain_boundaries.py
+python3 configs/check_accessibility.py
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
 python3 configs/macos_workflow.py test     # Aggregate all test packages; any failure returns a nonzero exit code
 # Audit the retained SwiftPM per-case runner:

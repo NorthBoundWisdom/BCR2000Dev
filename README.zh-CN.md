@@ -23,11 +23,12 @@
 
 ## 项目状态
 
-截至 2026-11-13：
+软件状态截至 2026-11-16；硬件条目保留此前记录的验收范围：
 
 | 方面 | 状态 |
 | --- | --- |
-| Mock 与软件功能 | 参数、学习、预设对齐、Agent（Mock / Codex）、MCP、输出安全门、Provider 与 Surface 模拟均已实现，并有非硬件回归测试。 |
+| Mock 与软件功能 | 参数、撤销/重做、场景、颜色标签、宏 toggle 与逐步结果、JSONL 录制/离线审查、输入覆盖、学习、预设对齐、Agent（Mock / Codex）、MCP、输出安全门、Provider 与 Surface 模拟均有非硬件回归测试。 |
+| 语言与可移植核心 | English、简体中文、繁体中文；Linux CI 执行纯 Foundation/领域/应用层部分。原生 GUI、MIDI 与 HTTP 宿主仍仅支持 macOS。 |
 | 实体设备 | 固件 1.10、USB 模式 U-1、Preset 8，已接回开发机。身份查询、108 条 CC 快照和临时预设只读回读通过；56 个旋钮位置已实测学习，GUI 启动可读回 56/56 当前值。 |
 | 连接与写入实测 | 连接确认、读硬件、暂不连接、拔插、按住拔线、受控写入与恢复已在现场通过。业务按键与锁图标只做了样本验证；Agent 按键灯、显示屏节奏和其余灯环模式仍待实测。 |
 | USB 双向通讯 | 部分 Mac 需要开发签署的 DriverKit 修复才能写设备。本机已验证可用；另一台 Mac 的驱动签署仍受阻。 |
@@ -124,11 +125,23 @@ HTTPS 远端。Setup 只用标准库和 Git 把它获取到 `build/seed/SurfaceP
 | --- | --- | --- |
 | 机械臂预览 | 示例机械臂侧视 / 俯视姿态示意，由 `arm.*` 参数驱动 | 隐藏 |
 | 输出 | 目标值、受限输出与实际回传读数 | 隐藏；输出运行期间始终显示 |
+| 离线录制 | JSONL 完整性审查与隔离 Mock 输入重播 | 隐藏 |
+| 输入覆盖审查 | 全部 108 个控件的被动观察与带指纹导出 | 隐藏 |
+
+参数值支持“编辑”菜单与参数工作区的撤销/重做（⌘Z / ⇧⌘Z）；连续输入按 400 ms 合并，本地与 MCP 批量写入均保留当前保护与输出安全门。
+
+命名场景将参数值保存/调用为一个可撤销批次，随配置导出和配置库保存；缺失参数会报告，当前保护仍生效。参数支持八种软件颜色标签与分组高亮；标签随配置保存，高亮仅在会话内有效且不发送 MIDI。
+
+MIDI 监视可将版本化 JSONL 录制到 Application Support/Captures，后台写入有界、错误可见，不改变 MIDI 流量；SysEx 仅保留长度与 SHA-256。
+“离线录制”审查完整性，并在完全隔离的 Mock 会话中步进、运行、暂停、重置，不打开 MIDI 端口或发送录制输出；外部设备样本可审查通用字段但明确拒绝重播。
+
+输入覆盖审查被动记录全部 108 个逻辑控件，分开实体与 Mock 观察，提示映射不一致并导出带指纹的审查；不发送 MIDI 或学习控件。
+宏支持 set、step、toggle、resetGroup，每步呈现 applied/rejected 与原因，整个宏一次撤销。参见[配置文件版本](docs/CONTROL_MAP.md#配置文件版本)与[辅助功能标识](docs/UI_IDENTIFIERS.md)。
 
 ### 界面语言
 
-默认跟随 macOS 首选语言，支持简体中文与 English，其他语言回退到 English。在设置中选择
-“跟随系统 / 简体中文 / English”后立即生效并自动保存，不会重置设备连接、Agent 会话或参数值。
+默认跟随 macOS 首选语言，支持简体中文、繁体中文与 English，其他语言回退到 English。在设置中选择
+“跟随系统 / 简体中文 / 繁體中文 / English”后立即生效并自动保存，不会重置设备连接、Agent 会话或参数值。
 内置名称跟随语言显示，但存储、导出和 MCP 保留原值；用户命名保持原文。
 macOS 系统菜单、文件面板、系统对话框按钮和系统错误描述可能保持启动时的语言，重启应用后切换。
 
@@ -295,6 +308,7 @@ python3 configs/format_repo.py --all --check
 python3 -m compileall -q configs
 python3 configs/validate_repo_commands.py .
 python3 configs/check_domain_boundaries.py
+python3 configs/check_accessibility.py
 python3 -m unittest discover -s Tests/BuildWorkflowTests -v
 python3 configs/macos_workflow.py test     # 汇总各测试包结果，任一失败即返回非零
 python3 configs/macos_workflow.py build
@@ -323,3 +337,7 @@ git diff --check
 
 本项目采用 [MIT 许可证](LICENSE)。第三方代码保留各自的版权与许可声明，见
 [vendored validator 说明](configs/_vendor/README.md)。
+
+## Linux 可移植部分
+
+纯 Foundation 值类型、领域状态、Provider 路由、历史/场景、录制证据、离线重播和输入覆盖在 Linux 有独立包目标；GUI、CoreMIDI、Network.framework 宿主仍仅支持 macOS。Linux CI 使用 `swift:6.2-noble`，实际逐例核对与范围见[目标审计](docs/testing/linux-targets.md)。

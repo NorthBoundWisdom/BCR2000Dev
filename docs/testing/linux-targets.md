@@ -1,6 +1,6 @@
 # Linux target audit
 
-B-8 audit before implementation, 2026-11-16, after B-7. macOS baseline: 773 tests, 0 failures, 1 existing attended-hardware skip.
+Historical B-8 audit before implementation, 2026-11-16, after B-7. macOS baseline: 773 tests, 0 failures, 1 existing attended-hardware skip.
 
 | Target | Platform dependency found | Real dependency or convenience | Plan |
 | --- | --- | --- | --- |
@@ -24,7 +24,7 @@ B-8 audit before implementation, 2026-11-16, after B-7. macOS baseline: 773 test
 
 No new target is needed. Keep original test-target names and macOS coverage; only the GUI test target and one real CoreMIDI qualification method are native-only. Core tests contain unused imports of HTTP/CoreMIDI that can be removed without deleting test bodies.
 
-Local environment audit: Apple Swift 6.4.2 / arm64 macOS. No Docker, Podman, Colima, Orb, Lima or installed Swift SDK. **未在 Linux 上验证**. CI will run the actual Linux slice in swift:6.2-noble; it cannot be checked remotely before an authorized push.
+Local environment audit: Apple Swift 6.4.2 / arm64 macOS. No Docker, Podman, Colima, Orb, Lima or installed Swift SDK. At that initial audit, Linux had not yet been run. The subsequent authorized hosted verification is recorded below.
 
 ## Implemented slices and local proof
 
@@ -58,13 +58,13 @@ BCR_PORTABLE_BUILD=1 swift test --build-path build/swiftpm-portable --skip-build
 python3 configs/verify_portable_tests.py --inventory build/portable-inventory.txt --log build/portable-tests.log
 ```
 
-Linux CI uses the same commands without the override, in `swift:6.2-noble`, in parallel with the unchanged native product checks. It caches the locked seed and SwiftPM outputs by platform/toolchain, preserves discovery/results, and uses a 20-minute hang guard and enforces the same 300-second whole-run budget for cold and warm caches. Actual hosted wall time and Linux Foundation/runtime behavior remain to be verified after an authorized push. **未在 Linux 上验证**; there is no local container or Linux SDK.
+Linux CI uses the same commands without the override, in `swift:6.2-noble`, in parallel with the unchanged native product checks. It caches the locked seed and SwiftPM outputs by platform/toolchain, preserves discovery/results, and uses a 20-minute hang guard and enforces the same 300-second whole-run budget for cold and warm caches. Actual Linux CI has since passed; see the exact-commit evidence below. There is still no local Linux container or SDK.
 
 ## Local native CI budget rehearsal
 
 The full cached local macOS CI command sequence completed in **45.991 seconds** with all 18 commands successful. It included native tests, Python workflow tests, ad-hoc app build, three-language offscreen startup, MCP acceptance, provider packaging, display/catalogue checks, simulation transports, explicit Debug hardware doubles, display budgets, multiple displays and the synthetic status demo. No real MIDI ports or actuators were used. Logs and per-command times are in `build/align-b/ci-budget/summary.json` and numbered logs; stdout is `build/align-b/b8-ci-budget.log`.
 
-This is a cached local measurement, not the prior hosted ~230-second baseline. Hosted cold/cache-restored timing and the actual Linux job remain pending an authorized push; no remote success is claimed.
+This is a cached local measurement, not the prior hosted ~230-second baseline. This paragraph records the initial local rehearsal; the later hosted results below supersede its previously pending remote status.
 
 ## ALIGN2 CI bootstrap correction
 
@@ -74,4 +74,14 @@ A manual workflow dispatch can set `cold_build=true` solely to skip project-buil
 
 User decision (2026-11-16): **no exemption; the entire CI run must finish within 300 seconds**, including cold-cache runs and queue/setup time. Any older ALIGN2 job-only/warm-only wording is superseded. Job wall time and cache state remain useful diagnostics, but neither may replace the whole-run limit. Both live gates measure from the run's `created_at`; the supervisor independently checks the completed exact-SHA run's `created_at` → `updated_at`, including post-job cleanup.
 
-Independent Python/native suites and independent transport acceptances still run concurrently (bounded to three workers), with every subprocess outcome/log and duration retained. All six transport commands and both test commands remain; no check, test or assertion is removed. The execution-structure improvement is retained without its rejected warm-job/cold-exemption policy.
+Independent Python/native suites run concurrently (bounded to three workers); real-clock transport acceptances run serially in the separate delivery job, with every subprocess outcome/log and duration retained. All six transport commands and both test commands remain; no check, test or assertion is removed. The execution-structure improvement is retained without its rejected warm-job/cold-exemption policy.
+
+## Authorized hosted proof
+
+At exact commit `9fc56ae57fe4883af3e0d883d71271cfea9ea0f3`, three consecutive independent warm-cache runs passed: 43827456219, 43827766866 and 43828101980. Their completed whole-run walls were 147, 142 and 135 seconds; macOS checks/delivery walls were 141/107, 137/104 and 130/111 seconds. All three jobs restored compiled caches. The 300-second whole-run rule applies equally to cold and warm runs; 240 seconds remains the macOS optimization target. These are measurements, not exemptions.
+
+Linux actually discovered and reconciled **481 tests, zero failures and zero skips** on that SHA. This supersedes the historical 476-case local rehearsal above: three macro-result cases and two capture-interchange cases were added. Native macOS reconciled 788 tests with zero failures and one existing attended-hardware skip. Later commits can add cases; these counts are pinned evidence, not a fixed expected total.
+
+The first hosted failures were corrected without skipping or relaxing assertions: static asynchronous XCTWaiter avoids transferring a non-Sendable XCTestCase; fixture construction uses a static factory compatible with corelibs; 199 actor-isolated synchronous test entry points in 41 files became async to avoid corelibs discovery casts; the localization waiter and MainActor clock box preserve the original assertions. Successful compilation now saves caches before discovery/tests, avoiding bootstrap starvation after a discovery failure.
+
+The Python workflow suite's remote 45-second time was traced to a loopback HTTP fixture's reverse DNS: one case took 36.028 seconds. Binding that literal-loopback fixture without getfqdn reduced it to 0.618 seconds and all per-case times to 10.595 seconds, retaining every request and credential-redaction assertion.
