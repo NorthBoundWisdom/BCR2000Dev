@@ -109,6 +109,8 @@ public final class MCPHTTPServer {
     private var sources: [String: MCPStreamSource] = [:]
     private var sourceObservers: [String: UUID] = [:]
     private var pendingSources: [String: JSONValue] = [:]
+    private let exposesConsoleSource: Bool
+    private var authenticatedConnections: Set<UUID> = []
     private var sourceTasks: [String: Task<Void, Never>] = [:]
 
     public init(
@@ -116,9 +118,11 @@ public final class MCPHTTPServer {
         providerID: String? = nil,
         eventSources: [String: MCPStreamSource] = [:],
         eventWriter: (@MainActor (NWConnection, Data, @escaping @Sendable (NWError?) -> Void) -> Void)? = nil,
-        eventTime: HostTime = .live
+        eventTime: HostTime = .live,
+        exposesConsoleSource: Bool = false
     ) {
         self.eventTime = eventTime
+        self.exposesConsoleSource = exposesConsoleSource
         self.router = router
         self.providerID = providerID
         sources = eventSources
@@ -237,6 +241,7 @@ public final class MCPHTTPServer {
         for timeout in timeouts.values { timeout.cancel() }
         for connection in connections.values { connection.cancel() }
         connections.removeAll()
+        authenticatedConnections.removeAll()
         timeouts.removeAll()
         token = ""
         surfaceClients = nil
@@ -321,6 +326,13 @@ public final class MCPHTTPServer {
             reject(id, status: 401, detail: L10n.text("Bearer 鉴权失败"))
             return
         }
+        authenticatedConnections.insert(id)
+        if exposesConsoleSource, let required = request.headers["x-bcr-require-source"],
+           required != "mock" || parameterSession?.source != .mock
+        {
+            reject(id, status: 403, detail: "Required Mock source is not active")
+            return
+        }
         if !owner, request.method != "POST" {
             reject(id, status: 403, detail: "Surface client scope denied")
             return
@@ -402,8 +414,10 @@ public final class MCPHTTPServer {
             send(id, reply: MCPReply(status: 429)); return
         }
         eventStreams[id] = EventStream(sessionID: sessionID, channel: channel)
+        let sourceHeader = exposesConsoleSource ? parameterSession
+            .map { "X-BCR-Source: \($0.source.rawValue)\r\n" } ?? "" : ""
         let identityHeader = providerID.map { "BCR-Provider-Id: \($0)\r\n" } ?? ""
-        let header = Data("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\n\(identityHeader)\r\n"
+        let header = Data("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Content-Type-Options: nosniff\r\n\(identityHeader)\(sourceHeader)\r\n"
             .utf8)
         connection.send(content: header, completion: .contentProcessed { [weak self] error in
             Task { @MainActor [weak self] in if error != nil { self?.close(id) } }
@@ -555,6 +569,9 @@ public final class MCPHTTPServer {
         var header = "HTTP/1.1 \(reply.status) \(reason)\r\nContent-Length: \(body.count)\r\nContent-Type: application/json\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
         if reply.status == 401 { header += "WWW-Authenticate: Bearer\r\n" }
         if reply.status == 405 { header += "Allow: GET, POST, DELETE\r\n" }
+        if exposesConsoleSource, authenticatedConnections.contains(id), let source = parameterSession?.source {
+            header += "X-BCR-Source: \(source.rawValue)\r\n"
+        }
         if let providerID { header += "BCR-Provider-Id: \(providerID)\r\n" }
         if let sessionID = reply.sessionID { header += "Mcp-Session-Id: \(sessionID)\r\n" }
         var response = Data((header + "\r\n").utf8)
@@ -570,6 +587,7 @@ public final class MCPHTTPServer {
 
     private func close(_ id: UUID) {
         eventStreams[id] = nil
+        authenticatedConnections.remove(id)
         if eventStreams.isEmpty {
             heartbeatTask?.cancel(); heartbeatTask = nil
             eventTask?.cancel(); eventTask = nil; pendingChanges = ParameterChangeAccumulator()

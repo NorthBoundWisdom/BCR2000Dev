@@ -206,3 +206,11 @@ list_controls 与 assign_control 作用于当前会话页面；get_status 的 ac
 `GET /mcp` 的 `BCR-Event-Stream` 可选 parameters（默认）、console、devices；仅声明实际可用通道。
 控件和设备事件有来源、代次、序号和有界库存。旧游标返回 event_gap，连接/映射改变返回新代次。
 SSE 初始/reset 快照是状态，不可回放为新用户动作；反馈、回显、Agent 注入及诊断读取均有独立来源。
+
+### 默认只读冒烟与 Mock 来源约束
+
+`python3 tools/mcp_smoke.py` 默认只做发现、参数读取、鉴权与 Origin 检查，不调用写工具。只有显式 `--write` 才执行原有写入/回读、保护参数拒绝、批量原子性检查，并在 finally 恢复原参数值；中途失败也尝试恢复。`--legacy` 保持同样规则。隔离 Debug 集成入口 `tools/mcp_integration.py` 显式传入 `--write`。
+
+GUI 的已鉴权响应给出 `X-BCR-Source: mock|hardware`，未鉴权响应不泄露来源。冒烟仅在读取到确切 `mock` 时允许写；来源未知或实体时零写入并报告拒绝。请求中的 `X-BCR-Require-Source: mock` 由 GUI 在同一个 MainActor 同步请求处理中、RPC 分派前再次校验，来源不是 Mock 或约束值无效则 HTTP 403。所有测试写入和恢复请求均带该头，因此检查后切换到实体也不能写入实体；切换导致恢复被拒绝时错误明确可见，不能声称恢复成功。
+
+这些头只由 GUI 组合启用，不增加权限或工具；无界面服务、Provider 1.0、共享 `surface_` 工具与 schema 保持原样。来源头是当前来源事实，不是连接或硬件资格证明。

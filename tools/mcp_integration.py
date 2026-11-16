@@ -194,7 +194,7 @@ def main(argv=None):
                 (directory / "lifecycle-phase.txt").write_text("protocol")
                 for flags in ([], ["--legacy"]):
                     subprocess.run(
-                        [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], *flags],
+                        [sys.executable, "tools/mcp_smoke.py", "--url", environment["BCR_MCP_URL"], "--write", *flags],
                         env=environment,
                         check=True,
                     )

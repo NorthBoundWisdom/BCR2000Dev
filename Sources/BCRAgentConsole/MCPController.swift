@@ -126,7 +126,8 @@ final class MCPController: ObservableObject {
             eventSources: provider.map { ["devices": MCPStreamSource(
                 notification: "notifications/bcr/devicesChanged",
                 journal: $0.events
-            )] } ?? [:]
+            )] } ?? [:],
+            exposesConsoleSource: true
         )
         do {
             if let loaded = try store.load() { try loaded.validate(); settings = loaded }

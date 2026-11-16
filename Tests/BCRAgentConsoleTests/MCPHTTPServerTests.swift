@@ -16,7 +16,8 @@ private final class HTTPFakeDevice: SurfaceDevice {
     let connection = MIDIConnectionSnapshot()
     var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
-    func send(_ message: MIDIVoiceMessage) throws {}
+    private(set) var sent: [MIDIVoiceMessage] = []
+    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
 }
 
 @MainActor
@@ -155,6 +156,52 @@ final class MCPHTTPServerTests: XCTestCase {
         let (_, unsupportedAccept) = try await request(port: port, headers: ["Accept": "text/plain"])
         XCTAssertEqual(unsupportedAccept.statusCode, 406)
         XCTAssertTrue(server.router.service.audit.allSatisfy { !$0.detail.contains(credential) })
+    }
+
+    func testAuthenticatedConsoleSourceGuardsEachWriteAfterSourceSwitch() async throws {
+        let device = HTTPFakeDevice()
+        let session = SurfaceSession(hardwareDevice: device, configuration: .robotArmDemo(),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let server = MCPHTTPServer(router: MCPRouter(service: AgentControlService(session: session)),
+                                   exposesConsoleSource: true)
+        let port = try await server.start(port: 0, token: credential)
+        defer { server.stop() }
+        let (_, observed) = try await request(port: port)
+        XCTAssertEqual(observed.value(forHTTPHeaderField: "X-BCR-Source"), "mock")
+        let (_, unauthenticated) = try await request(port: port, token: "incorrect",
+                                                     headers: ["X-BCR-Require-Source": "mock"])
+        XCTAssertEqual(unauthenticated.statusCode, 401)
+        XCTAssertNil(unauthenticated.value(forHTTPHeaderField: "X-BCR-Source"))
+        var args: [String: JSONValue] = ["name": .string("set_parameter"),
+                                         "arguments": .object(["id": .string("arm.j1"), "value": .number(42)])]
+        let (_, accepted) = try await request(port: port, method: "tools/call", params: args,
+                                              headers: ["X-BCR-Require-Source": "mock"])
+        XCTAssertEqual(accepted.statusCode, 200)
+        XCTAssertEqual(session.engine.value(of: "arm.j1"), 42)
+        session.selectSource(.hardware)
+        let before = session.engine.parameterValues
+        let sent = device.sent.count
+        args["arguments"] = .object(["id": .string("arm.j1"), "value": .number(99)])
+        let (_, rejected) = try await request(port: port, method: "tools/call", params: args,
+                                              headers: ["X-BCR-Require-Source": "mock"])
+        XCTAssertEqual(rejected.statusCode, 403)
+        XCTAssertEqual(rejected.value(forHTTPHeaderField: "X-BCR-Source"), "hardware")
+        XCTAssertEqual(session.engine.parameterValues, before)
+        XCTAssertEqual(device.sent.count, sent)
+        session.selectSource(.mock)
+        let (_, invalid) = try await request(port: port, headers: ["X-BCR-Require-Source": "hardware"])
+        XCTAssertEqual(invalid.statusCode, 403)
+    }
+
+    func testUnknownConsoleSourceDeniesGuardAndDefaultHeadlessHeadersStayDisabled() async throws {
+        for enabled in [false, true] {
+            let server = MCPHTTPServer(router: MCPRouter(service: AgentControlService()), exposesConsoleSource: enabled)
+            let port = try await server.start(port: 0, token: credential)
+            let (_, response) = try await request(port: port, headers: ["X-BCR-Require-Source": "mock"])
+            XCTAssertEqual(response.statusCode, enabled ? 403 : 200)
+            XCTAssertNil(response.value(forHTTPHeaderField: "X-BCR-Source"))
+            server.stop()
+        }
     }
 
     func testLegacySessionHeaderNotificationAndDeletion() async throws {
