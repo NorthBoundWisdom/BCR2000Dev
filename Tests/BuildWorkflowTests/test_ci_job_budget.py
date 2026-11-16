@@ -69,9 +69,9 @@ class CIJobBudgetTests(unittest.TestCase):
 
     def test_both_jobs_save_after_compile_before_tests_independently_of_test_success(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
-        self.assertEqual(text.count("timeout-minutes: 20"), 2)
-        self.assertEqual(text.count("steps.compile.outcome == 'success'"), 2)
-        self.assertEqual(text.count("Report wall time and enforce warm-cache 300s budget"), 2)
+        self.assertEqual(text.count("timeout-minutes: 20"), 3)
+        self.assertEqual(text.count("steps.compile.outcome == 'success'"), 3)
+        self.assertEqual(text.count("Report wall time and enforce warm-cache 300s budget"), 3)
         linux, native = text.split("  checks:\n")
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("Save compiled native"), native.index("ci_parallel_checks.py tests"))
@@ -81,5 +81,5 @@ class CIJobBudgetTests(unittest.TestCase):
         self.assertEqual(text.count("--build-tests"), 2)
         self.assertNotIn("id: compile\n        run: swift test", text)
         self.assertIn("list --skip-build", text)
-        self.assertEqual(text.count("inputs.cold_build != true"), 2)
+        self.assertEqual(text.count("inputs.cold_build != true"), 3)
         self.assertIn("Run and reconcile every portable XCTest once", text)

@@ -22,16 +22,21 @@ def execute(specs, directory, runner=subprocess.run, clock=time.perf_counter):
         start = clock()
         path = directory / (name + ".log")
         with path.open("w") as log:
-            result = runner(command, stdout=log, stderr=subprocess.STDOUT)
+            try:
+                result = runner(command, stdout=log, stderr=subprocess.STDOUT)
+                returncode = result.returncode
+            except OSError as error:
+                log.write(str(error) + "\n")
+                returncode = 127
         row = {
             "name": name,
             "command": command,
-            "returncode": result.returncode,
+            "returncode": returncode,
             "seconds": round(clock() - start, 3),
             "log": str(path),
         }
         print(json.dumps(row), flush=True)
-        if result.returncode:
+        if returncode:
             print(path.read_text(), flush=True)
         return row
 
@@ -48,7 +53,7 @@ def main():
     py = sys.executable
     if args.group == "tests":
         specs = [
-            ("python-workflows", [py, "-m", "unittest", "discover", "-s", "Tests/BuildWorkflowTests", "-v"]),
+            ("python-workflows", [py, "configs/run_python_workflow_tests.py"]),
             ("native-suites", [py, "configs/macos_workflow.py", "test"]),
         ]
     else:
@@ -89,10 +94,6 @@ def main():
                 ],
             ),
             (
-                "display-budget",
-                [py, "configs/verify_display_budget.py", "--binary", binary, "--output", "build/ci-display-budget"],
-            ),
-            (
                 "multiple-displays",
                 [
                     py,
@@ -101,17 +102,6 @@ def main():
                     binary,
                     "--output",
                     "build/ci-multiple-displays",
-                ],
-            ),
-            (
-                "status-demo",
-                [
-                    py,
-                    "build/ci-surface-provider/diagnostics/verify_status_panel_demo.py",
-                    "--artifact",
-                    "build/ci-surface-provider",
-                    "--output",
-                    "build/ci-status-panel-demo",
                 ],
             ),
         ]

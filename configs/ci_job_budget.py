@@ -21,6 +21,7 @@ def report(run, job, cache_key, now):
     warm = bool(cache_key)
     lines = [
         "## Job wall time and warm-cache 300s budget",
+        "Policy: prompts/ALIGN3-B-bcr-host.md supervisory ruling; queue time is diagnostic, cold bootstrap is exempt.",
         "",
         f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{elapsed:.1f}s job wall time** · {whole:.1f}s since run creation",
         f"Restored build key: `{cache_key or 'none'}`",

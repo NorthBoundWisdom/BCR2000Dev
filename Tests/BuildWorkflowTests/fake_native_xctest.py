@@ -15,7 +15,7 @@ with (root / "calls.jsonl").open("a") as log:
 with (root / "bundles.jsonl").open("a") as log:
     log.write(json.dumps(sys.argv[-1]) + "\n")
 if options.get("hang"):
-    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
+    child = subprocess.Popen([sys.executable, "-S", "-c", "import time; time.sleep(3600)"])
     with (root / "children.jsonl").open("a") as log:
         log.write(str(child.pid) + "\n")
     time.sleep(3600)

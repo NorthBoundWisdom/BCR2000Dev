@@ -79,10 +79,12 @@ class ParallelRunnerTests(unittest.TestCase):
         fixture = Path(__file__).with_name("fake_test_runner.py").read_text()
         for name in ("swift", "xcrun"):
             executable = root / name
-            executable.write_text("#!" + sys.executable + "\n" + fixture)
+            executable.write_text("#!" + sys.executable + " -S\n" + fixture)
             executable.chmod(0o755)
         native = root / "native-xctest"
-        native.write_text("#!" + sys.executable + "\n" + Path(__file__).with_name("fake_native_xctest.py").read_text())
+        native.write_text(
+            "#!" + sys.executable + " -S\n" + Path(__file__).with_name("fake_native_xctest.py").read_text()
+        )
         native.chmod(0o755)
         for name in modules:
             (root / (name + ".xctest")).mkdir()

@@ -96,7 +96,7 @@ class NativeExecutionTests(unittest.TestCase):
         (root / "fixture.json").write_text(json.dumps({"cases": cases, **options}))
         executable = root / "fake-native"
         executable.write_text(
-            "#!" + sys.executable + "\n" + Path(__file__).with_name("fake_native_xctest.py").read_text()
+            "#!" + sys.executable + " -S\n" + Path(__file__).with_name("fake_native_xctest.py").read_text()
         )
         executable.chmod(0o755)
         if layout == "split":
