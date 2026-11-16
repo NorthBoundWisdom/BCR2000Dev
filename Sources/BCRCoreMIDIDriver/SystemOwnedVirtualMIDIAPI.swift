@@ -32,22 +32,22 @@ struct SystemOwnedVirtualMIDIAPI: OwnedVirtualMIDIAPI {
     }
 
     func destination(_ client: UInt32, _ name: String,
-                     receive: @escaping @Sendable ([UInt32]) -> Void) throws -> UInt32
+                     receive: @escaping @Sendable (OwnedVirtualWire) -> Void) throws -> UInt32
     {
         var ref: MIDIEndpointRef = 0
         try check(MIDIDestinationCreateWithProtocol(client, name as CFString, ._1_0, &ref) { events, _ in
-            receive(Self.words(events))
+            receive(Self.wire(events))
         }, "create_destination")
         return ref
     }
 
     func inputPort(_ client: UInt32, _ name: String,
-                   receive: @escaping @Sendable ([UInt32], UInt, Double) -> Void) throws -> UInt32
+                   receive: @escaping @Sendable (OwnedVirtualWire, UInt, Double) -> Void) throws -> UInt32
     {
         var ref: MIDIPortRef = 0
         try check(MIDIInputPortCreateWithProtocol(client, name as CFString, ._1_0, &ref) { events, context in
             let receivedAt = ProcessInfo.processInfo.systemUptime
-            receive(Self.words(events), context.map { UInt(bitPattern: $0) } ?? 0, receivedAt)
+            receive(Self.wire(events), context.map { UInt(bitPattern: $0) } ?? 0, receivedAt)
         }, "create_input_port")
         return ref
     }
@@ -75,7 +75,7 @@ struct SystemOwnedVirtualMIDIAPI: OwnedVirtualMIDIAPI {
         try check(MIDIPortDisconnectSource(port, source), "disconnect_owned_source")
     }
 
-    private func event(_ message: MIDIVoiceMessage, operation: String,
+    private func event(_ message: MIDIVoiceMessage, operation: String, timestamp: UInt64 = mach_absolute_time(),
                        _ body: (UnsafePointer<MIDIEventList>) -> OSStatus) throws
     {
         // SysEx, NRPN multiword and Program Change cannot be encoded by this typed path.
@@ -84,7 +84,7 @@ struct SystemOwnedVirtualMIDIAPI: OwnedVirtualMIDIAPI {
         try withUnsafeMutablePointer(to: &list) { pointer in
             let packet = MIDIEventListInit(pointer, ._1_0)
             _ = withUnsafePointer(to: &word) { words in
-                MIDIEventListAdd(pointer, MemoryLayout<MIDIEventList>.size, packet, mach_absolute_time(), 1, words)
+                MIDIEventListAdd(pointer, MemoryLayout<MIDIEventList>.size, packet, timestamp, 1, words)
             }
             try check(body(UnsafePointer(pointer)), operation)
         }
@@ -94,8 +94,12 @@ struct SystemOwnedVirtualMIDIAPI: OwnedVirtualMIDIAPI {
         try event(message, operation: "publish_owned_input") { MIDIReceivedEventList(source, $0) }
     }
 
-    func send(_ port: UInt32, _ destination: UInt32, message: MIDIVoiceMessage) throws {
-        try event(message, operation: "send_owned_display") { MIDISendEventList(port, destination, $0) }
+    func send(_ port: UInt32, _ destination: UInt32, message: MIDIVoiceMessage, timestamp: UInt64) throws {
+        try event(message, operation: "send_owned_display", timestamp: timestamp) { MIDISendEventList(
+            port,
+            destination,
+            $0
+        ) }
     }
 
     func dispose(_ ref: OwnedMIDIRef) throws {
@@ -108,22 +112,27 @@ struct SystemOwnedVirtualMIDIAPI: OwnedVirtualMIDIAPI {
         try check(status, "dispose_owned_" + ref.kind.rawValue)
     }
 
-    private static func words(_ events: UnsafePointer<MIDIEventList>) -> [UInt32] {
+    private static func wire(_ events: UnsafePointer<MIDIEventList>) -> OwnedVirtualWire {
         guard events.pointee.protocol == ._1_0, events.pointee.numPackets <= 256,
               let packetOffset = MemoryLayout<MIDIEventList>.offset(of: \.packet),
               let wordOffset = MemoryLayout<MIDIEventPacket>.offset(of: \.words)
         else {
-            return Array(repeating: 0, count: 257) // Explicit overflow/fault signal to the bounded graph callback.
+            return .init(words: Array(
+                repeating: 0,
+                count: 257
+            )) // Explicit overflow/fault signal to the bounded graph callback.
         }
-        var result: [UInt32] = []
+        var result: [UInt32] = [], timestamps: [UInt64] = []
         var packet = UnsafeRawPointer(events).advanced(by: packetOffset).assumingMemoryBound(to: MIDIEventPacket.self)
         for _ in 0 ..< events.pointee.numPackets {
             let count = Int(packet.pointee.wordCount)
-            guard count <= 256, result.count + count <= 256 else { return Array(repeating: 0, count: 257) }
+            guard count <= 256,
+                  result.count + count <= 256 else { return .init(words: Array(repeating: 0, count: 257)) }
             let words = UnsafeRawPointer(packet).advanced(by: wordOffset).assumingMemoryBound(to: UInt32.self)
             result += UnsafeBufferPointer(start: words, count: count)
+            timestamps += Array(repeating: packet.pointee.timeStamp, count: count)
             packet = UnsafePointer(MIDIEventPacketNext(packet))
         }
-        return result
+        return .init(words: result, timestamps: timestamps)
     }
 }

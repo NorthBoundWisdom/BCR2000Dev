@@ -38,3 +38,21 @@ and cleanup. Ordinary Release still rejects Debug hardware injection. Source-bou
 intentional global enumeration/native-factory calls; the same production call policy rejects foreign refs.
 No credentials are placed in argv, ready or logs. Failed owned cleanup is visible and returns a nonzero result.
 These are software/virtual rehearsal results and never physical qualification or real actuator authorization.
+
+All asynchronous entrances are bounded independently. Native input holds at most 256 consumption tickets;
+private peer commands hold at most 16 batches, 64 commands and 64 KiB of UTF-8 payload until consumption;
+display receipts hold at most 64 pending batches and 4096 UMP words. The incomplete peer buffer is separately
+limited to 64 KiB. Peer freshness begins at its first FD read, including partial lines, and is checked again
+before every command. Capacity exhaustion closes the peer or seals the callback scope before queuing one fault.
+Unrelated MIDI notifications enqueue nothing; owned notifications share one coalesced pending slot.
+
+The owned path validates every word of a batch as complete group-zero MIDI1 CC/note data with seven-bit fields.
+Unsupported, truncated, mixed or high-bit words reject the whole batch. Receipt audit separates original UMP words
+and packet timestamps from its normalized MIDI1 view. A private send timestamp attributes a receipt to the exact
+original generation; a delayed old-generation receipt is history only. Receipt storage stops before 4096 words,
+call audit retains 4096 attempts, and bounded failure history retains 64 entries with truncation counters.
+
+Logical disconnect and generation revocation precede the system call. A throwing disconnect or connect leaves
+ownership uncertain, blocks reuse and is never implicitly retried; cleanup may dispose only the owned refs once.
+A new process is required to recover unconfirmed connection state. Stop is terminal, including synchronous callback
+reentry, and repeated stop preserves the previous cleanup result. No queued peer batch can continue after stop.

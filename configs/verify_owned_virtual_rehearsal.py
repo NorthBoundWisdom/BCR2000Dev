@@ -367,6 +367,21 @@ def run(artifact, output):
         if explicit:
             assert audit["display_receipts"] == [[176, 81, 64], [176, 81, 64]]
         assert audit["call_counts"]["publish_owned_input"] == 2
+        assert audit["pending_input_tickets"] == 0
+        assert audit["receipt_ingress"]["pending_tasks"] == 0
+        assert audit["receipt_ingress"]["pending_units"] == 0
+        assert audit["receipt_ingress"]["pending_bytes"] == 0
+        assert audit["peer_ingress"]["pending_tasks"] == 0
+        assert audit["peer_ingress"]["pending_units"] == 0
+        assert audit["peer_ingress"]["pending_bytes"] == 0
+        assert audit["callback_control"]["notification_pending"] == 0
+        raw_receipts = audit["display_receipt_records"]
+        assert [row["raw_ump_words"] for row in raw_receipts] == ([[0x20B05140], [0x20B05140]] if explicit else [])
+        assert [row["send_generations"] for row in raw_receipts] == ([[1], [3]] if explicit else [])
+        assert [row["callback_generation"] for row in raw_receipts] == ([1, 3] if explicit else [])
+        assert all(row["current_scope"] == [False] for row in raw_receipts)  # Terminal audit is historical only.
+        assert all(row["provenance"] == "localVirtual" for row in raw_receipts)
+        assert all(int(stamp) > 0 for row in raw_receipts for stamp in row["raw_timestamps"])
         cases.append(
             {
                 "name": label,

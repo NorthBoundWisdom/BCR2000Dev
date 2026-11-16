@@ -6,7 +6,12 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ("OwnedVirtualMIDI.swift", "OwnedVirtualRehearsalDevice.swift", "SystemOwnedVirtualMIDIAPI.swift")
+FILES = (
+    "OwnedVirtualIngress.swift",
+    "OwnedVirtualMIDI.swift",
+    "OwnedVirtualRehearsalDevice.swift",
+    "SystemOwnedVirtualMIDIAPI.swift",
+)
 ALLOWED_MIDI_CALLS = frozenset(
     {
         "MIDIClientCreateWithBlock",
