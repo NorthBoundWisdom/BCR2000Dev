@@ -65,6 +65,7 @@ public final class BCRSurfaceControlAdapter {
 
     private let surface: SurfaceSession
     private let monotonic: @MainActor () -> Double
+    private let epochFactory: @MainActor () -> String
     private let permissions: Permissions
     private let diagnose: @MainActor (Diagnostic) -> Void
     private let scheduler: HoldScheduler
@@ -96,9 +97,11 @@ public final class BCRSurfaceControlAdapter {
                 diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
                 holdScheduler: @escaping HoldScheduler = BCRSurfaceControlAdapter.defaultHoldScheduler,
                 automaticHoldExpiry: Bool = true,
-                principals: SurfaceControlPrincipals = .init(), writeLimits: ControlWriteLimits? = nil) throws
+                principals: SurfaceControlPrincipals = .init(), writeLimits: ControlWriteLimits? = nil,
+                epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
         self.principals = principals; self.writeLimits = writeLimits
+        self.epochFactory = epochFactory
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
         diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
         contextRevision = surface.mappingContextRevision; generation = surface.inputEvents.generation
@@ -106,7 +109,7 @@ public final class BCRSurfaceControlAdapter {
         core = try Self.seeded(
             SurfaceControlSession(
                 instanceID: instanceID,
-                epoch: UUID().uuidString,
+                epoch: epochFactory(),
                 profile: Self.profile(surface, writeLimits: writeLimits),
                 eventCapacity: eventCapacity, writeLimits: writeLimits
             ),
@@ -238,7 +241,7 @@ public final class BCRSurfaceControlAdapter {
         try next.reset(
             expected: next.expected,
             expectedSequence: next.discovery().latest_sequence,
-            epoch: UUID().uuidString,
+            epoch: epochFactory(),
             profile: Self.profile(surface, writeLimits: writeLimits),
             at: now
         )
@@ -569,7 +572,7 @@ public final class BCRSurfaceControlAdapter {
             }
             let now = monotonic()
             var next = core
-            try next.reset(expected: expected, expectedSequence: expectedSequence, epoch: UUID().uuidString, at: now)
+            try next.reset(expected: expected, expectedSequence: expectedSequence, epoch: epochFactory(), at: now)
             try surface.validateSimulationReset()
             try consume(gateway, category: .admin, at: now)
             handlingRemote = true

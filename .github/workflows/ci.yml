@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
+          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest portable SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
@@ -47,6 +47,7 @@ jobs:
           key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
           restore-keys: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/control_surface_kit_dependency.py ensure
       - run: python3 configs/check_portable_targets.py
       - run: python3 configs/check_domain_boundaries.py
       - name: Compile portable targets and tests
@@ -99,7 +100,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
+          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
@@ -109,6 +110,7 @@ jobs:
           key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
           restore-keys: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/control_surface_kit_dependency.py ensure
       - name: Restore the matching audit helper binaries
         id: audit-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
@@ -196,7 +198,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
+          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
@@ -208,6 +210,7 @@ jobs:
             swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
             delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/control_surface_kit_dependency.py ensure
       - name: Compile provider and offline profile products
         id: compile
         run: |

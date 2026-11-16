@@ -12,6 +12,7 @@ public final class BCRHardwareSurfaceControlAdapter {
     private let permissions: BCRSurfaceControlAdapter.Permissions
     private let principals: SurfaceControlPrincipals
     private let monotonic: @MainActor () -> Double
+    private let epochFactory: @MainActor () -> String
     private var core: SurfaceControlSession
     private var context: UInt64
     private var generation: String
@@ -87,18 +88,20 @@ public final class BCRHardwareSurfaceControlAdapter {
 
     public init(surface: SurfaceSession, instanceID: String, permissions: BCRSurfaceControlAdapter.Permissions,
                 principals: SurfaceControlPrincipals = .init(), eventCapacity: Int = 1024,
-                monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime }) throws
+                monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+                epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
+        self.epochFactory = epochFactory
         self.surface = surface; self.permissions = permissions; self.principals = principals; self.monotonic = monotonic
         context = surface.mappingContextRevision; generation = surface.inputEvents.generation; source = surface.source
         core = try SurfaceControlSession(
             instanceID: instanceID,
-            epoch: UUID().uuidString,
+            epoch: epochFactory(),
             profile: try Self.profile(surface),
             eventCapacity: eventCapacity
         )
         try core.transitionHardware(
-            epoch: UUID().uuidString,
+            epoch: epochFactory(),
             linkState: surface.source == .hardware && surface.connection.isConnected ? .connected : .disconnected,
             at: monotonic()
         )
@@ -112,7 +115,7 @@ public final class BCRHardwareSurfaceControlAdapter {
         guard context != surface.mappingContextRevision || generation != surface.inputEvents
             .generation || source != surface.source else { return }
         var next = core
-        try next.transitionHardware(epoch: UUID().uuidString,
+        try next.transitionHardware(epoch: epochFactory(),
                                     linkState: surface.source == .hardware && surface.connection
                                         .isConnected ? .connected : .disconnected,
                                     profile: try Self.profile(surface), at: monotonic())
@@ -182,7 +185,7 @@ public final class BCRHardwareSurfaceControlAdapter {
             try core.validateRenew(renew, at: monotonic()); throw ControlContractError("unsupported_hold")
         case let .reset(expected, sequence):
             var next = core
-            try next.reset(expected: expected, expectedSequence: sequence, epoch: UUID().uuidString, at: monotonic())
+            try next.reset(expected: expected, expectedSequence: sequence, epoch: epochFactory(), at: monotonic())
             throw ControlContractError("unsupported_tool")
         case let .feedback(update):
             let now = monotonic()

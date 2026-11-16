@@ -77,6 +77,8 @@ public struct ScheduledFeedback: Equatable, Sendable {
     public let origin: SurfaceWriteOrigin
     public var endpoint: MIDIEndpointSource? = nil
     public var mappingRevision: UInt64? = nil
+    public var source: DeviceSource? = nil
+    public var context: SurfaceEventContext? = nil
 }
 
 /// Token-bucket scheduler. A pending control retains only its most recent desired value.
@@ -88,6 +90,7 @@ public struct FeedbackScheduler: Sendable {
     private var lastRefill: Date?
     private var retryAfter: Date?
     public var count: Int { pending.count }
+    public var pendingItems: [ScheduledFeedback] { order.compactMap { pending[$0] } }
     public init(policy: FeedbackPolicy) throws {
         try policy.validate()
         self.policy = policy
@@ -101,14 +104,17 @@ public struct FeedbackScheduler: Sendable {
     }
 
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
-                                 endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil)
+                                 endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil,
+                                 source: DeviceSource? = nil, context: SurfaceEventContext? = nil)
     {
         if pending[message.controlID] == nil { order.append(message.controlID) }
         pending[message.controlID] = ScheduledFeedback(
             message: message,
             origin: origin,
             endpoint: endpoint,
-            mappingRevision: mappingRevision
+            mappingRevision: mappingRevision,
+            source: source,
+            context: context
         )
     }
 

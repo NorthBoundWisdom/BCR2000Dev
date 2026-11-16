@@ -344,3 +344,6 @@ git diff --check
 
 宿主的可撤销动态授权、受信权威拒绝回滚与内部端点来源见
 [控制器写入边界](docs/controller-write-boundaries.md)。默认 Provider 1.0 线协议不变；这些软件证据不授予实体资格。
+
+受管 ControlSurfaceKit 值合同与设备适配逐字段映射见
+[ControlSurfaceKit 接入](docs/CONTROL_SURFACE_KIT.md)；连接与调度仍由本宿主原有实现持有。

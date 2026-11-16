@@ -3,7 +3,8 @@ import Foundation
 /// Bounded per-resource observations. No domain has access to another journal's mutation.
 @MainActor
 public final class ProviderEventJournal {
-    public private(set) var generation = UUID().uuidString
+    public private(set) var generation: String
+    private let generationFactory: @MainActor () -> String
     public private(set) var sequence = 0
     public private(set) var dropped = 0
     public private(set) var source: ProviderSource
@@ -18,13 +19,15 @@ public final class ProviderEventJournal {
 
     public init(source: ProviderSource, capacity: Int = 512,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
-                utc: @escaping @MainActor () -> Date = { .now })
+                utc: @escaping @MainActor () -> Date = { .now },
+                generationFactory: @escaping @MainActor () -> String = { UUID().uuidString })
     {
         self.source = source; self.capacity = max(1, capacity); self.monotonic = monotonic; self.utc = utc
+        self.generationFactory = generationFactory; generation = generationFactory()
     }
 
     public func reset(source: ProviderSource) {
-        self.source = source; generation = UUID().uuidString; sequence = 0; dropped = 0; events.removeAll()
+        self.source = source; generation = generationFactory(); sequence = 0; dropped = 0; events.removeAll()
         let value = self.snapshot()
         for observer in Array(observers.values) { observer(value) }
     }

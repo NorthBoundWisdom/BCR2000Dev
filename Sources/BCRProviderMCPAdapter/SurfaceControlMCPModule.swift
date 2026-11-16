@@ -15,7 +15,8 @@ public enum SurfaceControlMCPModule {
                                monotonic: @escaping @MainActor ()
                                    -> Double = { ProcessInfo.processInfo.systemUptime },
                                holdScheduler: @escaping BCRSurfaceControlAdapter.HoldScheduler =
-                                   BCRSurfaceControlAdapter.defaultHoldScheduler) throws
+                                   BCRSurfaceControlAdapter.defaultHoldScheduler,
+                               epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
         -> BCRSurfaceControlAdapter?
     {
         guard let surface = gateway.surfaceSession else { return nil }
@@ -26,7 +27,7 @@ public enum SurfaceControlMCPModule {
                 // Existing audit trail; the context itself is revoked by the adapter (fail closed).
                 gateway?.record("surface_control.context", succeeded: false, detail: value.reason + ": " + value.code)
             },
-            holdScheduler: holdScheduler, principals: principals, writeLimits: writeLimits
+            holdScheduler: holdScheduler, principals: principals, writeLimits: writeLimits, epochFactory: epochFactory
         )
         // Any request, including legacy and unrelated tools, first releases due leases: a flood of
         // queued requests then delays an expiry by at most one request, not by the whole queue.
@@ -49,11 +50,16 @@ public enum SurfaceControlMCPModule {
 
     public static func installHardware(on gateway: MCPApplicationGateway, instanceID: String,
                                        permissions: BCRSurfaceControlAdapter.Permissions = .init(),
-                                       principals: SurfaceControlPrincipals = .init()) throws
+                                       principals: SurfaceControlPrincipals = .init(),
+                                       monotonic: @escaping @MainActor ()
+                                           -> Double = { ProcessInfo.processInfo.systemUptime },
+                                       epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
         guard let surface = gateway.surfaceSession else { throw ControlContractError("unsupported_source") }
         let adapter = try BCRHardwareSurfaceControlAdapter(surface: surface, instanceID: instanceID,
-                                                           permissions: permissions, principals: principals)
+                                                           permissions: permissions, principals: principals,
+                                                           monotonic: monotonic,
+                                                           epochFactory: epochFactory)
         let tools = SurfaceControlTools.descriptors(source: .hardware).map { descriptor in JSONValue.object([
             "name": .string(descriptor.name), "description": .string("Hardware surface control 1.4"),
             "inputSchema": descriptor.inputSchema, "outputSchema": descriptor.outputSchema,

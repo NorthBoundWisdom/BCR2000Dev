@@ -16,12 +16,14 @@ from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import ensure_local_build_environment, use_build_environment  # noqa: E402
 from configs.validate_repo_commands import main as validate_commands  # noqa: E402
 from configs.surface_plugins_dependency import DependencyError, ensure_dependency  # noqa: E402
+from configs.control_surface_kit_dependency import ensure_dependency as ensure_kit_dependency  # noqa: E402
 
 
 def configure() -> int:
     ensure_local_build_environment(REPO_ROOT)
     with use_build_environment(REPO_ROOT):
         dependency = ensure_dependency(REPO_ROOT)
+        ensure_kit_dependency(REPO_ROOT)
         settings = load_app_build_settings(REPO_ROOT)
         if validate_commands([str(REPO_ROOT)]) != 0:
             return 1

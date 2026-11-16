@@ -19,6 +19,7 @@ if str(ROOT) not in sys.path:
 
 from configs.build_environment import load_build_environment  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.control_surface_kit_dependency import ensure_dependency as ensure_kit_dependency  # noqa: E402
 
 ALLOWED = {
     "BCRCodexAdapter": {"BCRFoundation"},
@@ -91,7 +92,7 @@ ALLOWED = {
         "BCRProviderMCPAdapter",
         "BCRSurfaceDomain",
     },
-    "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts"},
+    "BCRSurfaceDomain": {"BCRFoundation", "SurfacePluginContracts", "SurfaceDeviceContracts"},
 }
 PURE = {"BCRProviderApplication", "BCRFoundation", "BCRSurfaceDomain", "BCRPluginRuntime"}
 
@@ -150,10 +151,14 @@ def check_layers(targets, root=ROOT):
             continue
         layer = LAYERS[name]
         for dependency in target_dependencies(target):
+            if dependency == "SurfaceDeviceConformance":
+                errors.append(f"Test-only conformance dependency in production: {name}")
             if dependency in production and LAYERS.get(dependency) not in LAYER_DEPENDENCIES[layer]:
                 errors.append(f"Layer violation: {name} ({layer}) -> {dependency} ({LAYERS.get(dependency)})")
         for path in (root / "Sources" / name).rglob("*.swift"):
             for imported in IMPORTS.findall(path.read_text()):
+                if imported == "SurfaceDeviceConformance":
+                    errors.append(f"Test-only conformance import in production: {path.relative_to(root)}")
                 if layer in {"runtime", "values"} and imported in PLATFORM_IMPORTS:
                     errors.append(f"Layer platform import violation: {path.relative_to(root)} -> {imported}")
                 if imported in production and LAYERS.get(imported) not in LAYER_DEPENDENCIES[layer]:
@@ -163,6 +168,7 @@ def check_layers(targets, root=ROOT):
 
 def check():
     ensure_dependency(ROOT, environ=load_build_environment(ROOT))
+    ensure_kit_dependency(ROOT, environ=load_build_environment(ROOT))
     package = json.loads(
         subprocess.check_output(
             [
@@ -205,6 +211,8 @@ def check():
                     "ChassisRemoteBinding",
                     "OutputRemoteBinding",
                     "SurfacePluginContracts",
+                    "SurfaceDeviceContracts",
+                    "SurfaceDeviceConformance",
                     "AgentPlugin",
                     "SimulationContracts",
                     "RobotPlugin",

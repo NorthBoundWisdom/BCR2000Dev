@@ -28,6 +28,9 @@
             "configs/setup_local_project.py",
             "configs/surface_plugins.lock.json",
             "configs/surface_plugins_dependency.py",
+            "configs/control_surface_kit.lock.json",
+            "configs/control_surface_kit_dependency.py",
+            "configs/managed_git_dependency.py",
             "configs/freecm.commands.jsonc",
             "configs/validate_repo_commands.py",
             "configs/build_environment.py",
@@ -39,6 +42,7 @@
           "outputs": [
             "build/configured.json",
             "build/seed/SurfacePlugins/Package.swift",
+            "build/seed/ControlSurfaceKit/Package.swift",
             "build/seed-build/SurfacePlugins/debug"
           ]
         }

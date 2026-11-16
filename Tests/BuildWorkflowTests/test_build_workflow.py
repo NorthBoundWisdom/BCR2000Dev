@@ -61,11 +61,13 @@ class BuildConfigurationTests(unittest.TestCase):
         with (
             patch.object(setup_local_project, "REPO_ROOT", self.root),
             patch.object(setup_local_project, "ensure_dependency") as dependency,
+            patch.object(setup_local_project, "ensure_kit_dependency") as kit_dependency,
             patch.object(setup_local_project.subprocess, "run") as command,
         ):
             dependency.return_value = self.root / "build/seed/SurfacePlugins"
             self.assertEqual(setup_local_project.main(), 0)
             dependency.assert_called_once_with(self.root)
+            kit_dependency.assert_called_once_with(self.root)
             command.assert_any_call(
                 [
                     "swift",
@@ -101,6 +103,7 @@ class BuildConfigurationTests(unittest.TestCase):
             patch.object(
                 setup_local_project, "ensure_dependency", return_value=self.root / "build/seed/SurfacePlugins"
             ),
+            patch.object(setup_local_project, "ensure_kit_dependency"),
             patch.object(setup_local_project, "validate_commands", return_value=0),
             patch.object(setup_local_project.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "swift")),
             patch("sys.stderr", new_callable=io.StringIO) as stderr,
@@ -119,6 +122,20 @@ class BuildConfigurationTests(unittest.TestCase):
             self.assertEqual(setup_local_project.main(), 1)
         command.assert_not_called()
         self.assertIn("fetch failed", stderr.getvalue())
+
+    def test_kit_dependency_failure_stops_before_starting_swift(self):
+        with (
+            patch.object(setup_local_project, "REPO_ROOT", self.root),
+            patch.object(
+                setup_local_project, "ensure_dependency", return_value=self.root / "build/seed/SurfacePlugins"
+            ),
+            patch.object(setup_local_project, "ensure_kit_dependency", side_effect=DependencyError("kit fetch failed")),
+            patch.object(setup_local_project.subprocess, "run") as command,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            self.assertEqual(setup_local_project.main(), 1)
+        command.assert_not_called()
+        self.assertIn("kit fetch failed", stderr.getvalue())
 
     def test_build_number_must_be_positive_integer_string(self):
         for value in ("0", "-1", "1.2", "١", "1\n", 1):
@@ -163,12 +180,14 @@ class BuildConfigurationTests(unittest.TestCase):
                 patch.object(macos_workflow, "build", side_effect=build),
                 patch.object(macos_workflow, "_run_tests", side_effect=run),
                 patch.object(macos_workflow, "ensure_dependency") as dependency,
+                patch.object(macos_workflow, "ensure_kit_dependency") as kit_dependency,
             ):
                 before = dict(os.environ)
                 self.assertEqual(macos_workflow.main(["build"]), 0)
                 self.assertEqual(dict(os.environ), before)
                 self.assertEqual(macos_workflow.main(["test"]), 0)
                 dependency.assert_called_once_with(self.root)
+                kit_dependency.assert_called_once_with(self.root)
                 self.assertEqual(dict(os.environ), before)
                 expected = inherited.get("SURFACE_PLUGINS_PATH", "../SurfacePlugins")
                 self.assertEqual(observed[-2:], [("build", expected), ("test", expected)])
@@ -300,9 +319,11 @@ class LocalizationPackagingTests(unittest.TestCase):
                 patch.object(macos_workflow, "SWIFTPM_BUILD_ROOT", root),
                 patch.object(macos_workflow, "_run", side_effect=run),
                 patch.object(macos_workflow, "ensure_dependency") as dependency,
+                patch.object(macos_workflow, "ensure_kit_dependency") as kit_dependency,
             ):
                 binary = macos_workflow._swift_build("release", "universal")
                 dependency.assert_called_once_with(macos_workflow.REPO_ROOT)
+                kit_dependency.assert_called_once_with(macos_workflow.REPO_ROOT)
             for language in ("en", "zh-Hans", "zh-Hant"):
                 catalog = (
                     binary.parent / "BCRAgentConsole_BCRFoundation.bundle" / f"{language}.lproj/Localizable.strings"

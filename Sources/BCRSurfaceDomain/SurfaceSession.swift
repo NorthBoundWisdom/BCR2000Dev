@@ -2,11 +2,22 @@ import BCRFoundation
 import Foundation
 import struct SurfacePluginContracts.ActionReference
 import struct SurfacePluginContracts.IndicatorID
+import SurfaceDeviceContracts
 
 public enum MIDILearnFormat: String, CaseIterable, Sendable { case voice, nrpn14 }
 
 public enum SurfaceWriteOrigin: String, Equatable, Sendable {
     case software, agent, external
+}
+
+public struct SurfaceEventContext: Equatable, Sendable {
+    public let generation: String
+    public let mappingGeneration: UInt64
+    public let knownDeviceContextID: String?
+    public init(generation: String, mappingGeneration: UInt64, knownDeviceContextID: String? = nil) {
+        self.generation = generation; self.mappingGeneration = mappingGeneration
+        self.knownDeviceContextID = knownDeviceContextID
+    }
 }
 
 public struct MonitorEvent: Identifiable, Equatable, Sendable {
@@ -21,6 +32,8 @@ public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let origin: SurfaceWriteOrigin
     public let delivery: FeedbackDelivery?
     public var endpoint: MIDIEndpointSource? = nil
+    public var context: SurfaceEventContext? = nil
+    public var inputPressMode: HardwarePressMode? = nil
 }
 
 /// Semantic notifications let the app own wording, selection and follow-touch policy.
@@ -85,7 +98,7 @@ public final class SurfaceSession {
     public private(set) var connection: MIDIConnectionSnapshot
     public private(set) var events: [MonitorEvent] = []
     public private(set) var droppedFeedbackCount = 0
-    public let inputEvents = ProviderEventJournal(source: .mock)
+    public let inputEvents: ProviderEventJournal
     public private(set) var diagnosticReadbackActive = false
     private var diagnosticToken: String?
     /// App-owned safety configuration; MCP cannot change which parameter is the enable gate.
@@ -110,6 +123,30 @@ public final class SurfaceSession {
     }
 
     var parameterObserverCount: Int { parameterObservers.count }
+    private var neutralInputObservers: [UUID: (String, @MainActor (DeviceInputEvent) -> Void)] = [:]
+
+    /// Output-only facts from the trusted accepted-input path. This does not inject input.
+    public func observeNeutralInputs(instanceID: String,
+                                     _ observer: @escaping @MainActor (DeviceInputEvent) -> Void) -> UUID
+    {
+        let id = UUID(); neutralInputObservers[id] = (instanceID, observer); return id
+    }
+
+    public func removeNeutralInputObserver(_ id: UUID) { neutralInputObservers[id] = nil }
+
+    public func neutralContext(instanceID: String) throws -> DeviceContext {
+        try BCRNeutralSurfaceProjection.context(instanceID: instanceID, generation: inputEvents.generation,
+                                                mappingGeneration: mappingContextRevision)
+    }
+
+    public func neutralEndpoint(direction: MIDIObservationDirection) throws -> EndpointProvenance {
+        try BCRNeutralSurfaceProjection.endpoint(endpointSource(source: source, direction: direction))
+    }
+
+    public func neutralCapabilities() throws -> DeviceCapabilities {
+        try BCRNeutralSurfaceProjection.capabilities(map: engine.hardwareMap, configuration: engine.configuration)
+    }
+
     public func removeParameterObserver(_ id: UUID) { parameterObservers[id] = nil }
     public func parameterSnapshot() -> ParameterChangeBatch {
         ParameterChangeBatch(revision: parameterRevision,
@@ -214,7 +251,9 @@ public final class SurfaceSession {
     private var nrpnAssembler = NRPNAssembler()
     public private(set) var feedbackPolicy = FeedbackPolicy()
     private var scheduler: FeedbackScheduler?
+    private var feedbackQueueGeneration: UInt64 = 0
     private let feedbackPlanner = FeedbackPlanner()
+    public var pendingFeedbackItems: [ScheduledFeedback] { scheduler?.pendingItems ?? [] }
     public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
     private var feedbackObservers: [UUID: @MainActor (Int) -> Void] = [:]
     public func observeFeedbackQueue(_ observer: @escaping @MainActor (Int) -> Void) -> UUID {
@@ -226,7 +265,11 @@ public final class SurfaceSession {
         for observer in Array(feedbackObservers.values) { observer(pendingFeedbackCount) }
     }
 
-    private func clearFeedbackQueue() { scheduler?.clear(); notifyFeedbackQueue() }
+    private func clearFeedbackQueue() {
+        feedbackQueueGeneration &+= 1
+        scheduler?.clear(); notifyFeedbackQueue()
+    }
+
     private var writeOrigin: SurfaceWriteOrigin = .software
     public private(set) var valueHistory = ParameterValueHistory()
     public private(set) var highlightedGroup: String?
@@ -354,9 +397,11 @@ public final class SurfaceSession {
         hardwareLifecycleFeedback: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
         historyTime: HostTime = .live,
+        generationFactory: @escaping @MainActor () -> String = { UUID().uuidString },
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
     ) {
+        self.inputEvents = ProviderEventJournal(source: .mock, generationFactory: generationFactory)
         self.hardwareDevice = hardwareDevice
         self.requiresHardwareConfirmation = requiresHardwareConfirmation
         self.hardwareOutput = hardwareOutput
@@ -398,6 +443,7 @@ public final class SurfaceSession {
 
     public func configureFeedback(_ policy: FeedbackPolicy) throws {
         let updated = try FeedbackScheduler(policy: policy)
+        feedbackQueueGeneration &+= 1
         engine.recordFeedbackWhenGenerated = !policy.enabled && source == .mock
         feedbackPolicy = policy
         scheduler = updated
@@ -408,17 +454,29 @@ public final class SurfaceSession {
 
     public func flushFeedback() {
         guard source == .hardware, feedbackPolicy.enabled else { return }
+        let queueGeneration = feedbackQueueGeneration
+        let originalSource = source
+        let originalGeneration = inputEvents.generation
+        let originalMapping = mappingContextRevision
+        let originalEndpoint = endpointSource(source: source, direction: .output)
         let batch = scheduler?.drain(at: now()) ?? []
         for (index, value) in batch.enumerated() {
             let result = withWriteOrigin(value.origin) { transmitNow(value.message, expectedEndpoint: value.endpoint,
                                                                      expectedMappingRevision: value.mappingRevision) }
             if result == .failed {
-                for remaining in batch[index...] { scheduler?.enqueue(
-                    remaining.message,
-                    origin: remaining.origin,
-                    endpoint: remaining.endpoint,
-                    mappingRevision: remaining.mappingRevision
-                ) }
+                if feedbackQueueGeneration == queueGeneration, source == originalSource,
+                   inputEvents.generation == originalGeneration, mappingContextRevision == originalMapping,
+                   endpointSource(source: source, direction: .output) == originalEndpoint
+                {
+                    for remaining in batch[index...] { scheduler?.enqueue(
+                        remaining.message,
+                        origin: remaining.origin,
+                        endpoint: remaining.endpoint,
+                        mappingRevision: remaining.mappingRevision,
+                        source: remaining.source,
+                        context: remaining.context
+                    ) }
+                }
                 break
             }
         }
@@ -919,6 +977,11 @@ public final class SurfaceSession {
                          endpoint: MIDIEndpointSource? = nil)
     {
         let batchEndpoint = endpoint ?? endpointSource(source: inputSource, direction: .input)
+        let batchContext = SurfaceEventContext(
+            generation: inputEvents.generation,
+            mappingGeneration: mappingContextRevision,
+            knownDeviceContextID: inputSource == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
+        )
         let batchGeneration = inputEvents.generation
         for rawMessage in messages {
             guard batchGeneration == inputEvents.generation else { break }
@@ -931,7 +994,16 @@ public final class SurfaceSession {
                 ))
             let map = inputSource == .hardware ? hardwareMap : mock.preset
             let rawControl = map.control(for: rawMessage.controlID)
-            log(.input, rawMessage, source: inputSource, control: rawControl, ignored: ignored, endpoint: inputEndpoint)
+            log(
+                .input,
+                rawMessage,
+                source: inputSource,
+                control: rawControl,
+                ignored: ignored,
+                endpoint: inputEndpoint,
+                context: batchContext,
+                inputPressMode: rawControl.flatMap { map.pressMode(for: $0) }
+            )
             guard !ignored, inputGeneration == inputEvents.generation else { continue }
             var message = rawMessage
             if case let .controlChange(channel, number, _) = rawMessage {
@@ -1017,8 +1089,28 @@ public final class SurfaceSession {
                previousCount != engine.state(of: control).eventCount
             {
                 let parameter = engine.configuration.assignment(for: control)?.target.parameterID
+                // Capture the original accepted cause before any client callback can reconnect/rebind.
+                let neutral = neutralInputObservers.values.map { registration in
+                    (registration, Result { try BCRNeutralSurfaceProjection.input(
+                        control: control, message: message,
+                        mode: engine.configuration.assignment(for: control)?.encoderMode ?? .absolute,
+                        context: neutralContext(instanceID: registration.0),
+                        endpoint: BCRNeutralSurfaceProjection.endpoint(inputEndpoint), source: inputSource,
+                        at: historyTime.now(), knownDeviceContextID: batchContext.knownDeviceContextID,
+                        pressMode: map.pressMode(for: control)
+                    ) })
+                }
                 for observer in Array(acceptedInputObservers.values) {
                     observer(control, message, parameter.flatMap { engine.value(of: $0) }, writeOrigin)
+                }
+                for (registration, result) in neutral {
+                    switch result {
+                    case let .success(input): registration.1(input)
+                    case let .failure(error): onEvent?(.failed(
+                            .hardwareInput,
+                            "Neutral input projection failed: \(error)"
+                        ))
+                    }
                 }
                 inputEvents.append(kind: "control.input", payload: .object([
                     "origin": .string(writeOrigin == .agent ? "agent" :
@@ -1083,7 +1175,11 @@ public final class SurfaceSession {
         case .enqueue:
             scheduler?.enqueue(plan.message, origin: plan.origin,
                                endpoint: endpointSource(source: source, direction: .output),
-                               mappingRevision: mappingContextRevision)
+                               mappingRevision: mappingContextRevision, source: source,
+                               context: .init(
+                                   generation: inputEvents.generation,
+                                   mappingGeneration: mappingContextRevision
+                               ))
             notifyFeedbackQueue()
         case .send:
             _ = withWriteOrigin(plan.origin) { transmitNow(plan.message) }
@@ -1094,11 +1190,20 @@ public final class SurfaceSession {
     private func transmitNow(_ message: MIDIVoiceMessage, expectedEndpoint: MIDIEndpointSource? = nil,
                              expectedMappingRevision: UInt64? = nil) -> FeedbackDelivery
     {
-        let device: any SurfaceDevice = source == .mock ? mockDevice : hardwareDevice
-        let endpoint = endpointSource(source: source, direction: .output)
+        let sendSource = source
+        let sendControl = engine.hardwareMap.control(for: message.controlID)
+        let sendOrigin = writeOrigin
+        let sendQueueGeneration = feedbackQueueGeneration
+        let device: any SurfaceDevice = sendSource == .mock ? mockDevice : hardwareDevice
+        let endpoint = endpointSource(source: sendSource, direction: .output)
+        let eventContext = SurfaceEventContext(
+            generation: inputEvents.generation,
+            mappingGeneration: mappingContextRevision,
+            knownDeviceContextID: sendSource == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
+        )
         if let expectedEndpoint, expectedEndpoint != endpoint {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
-                ignored: true, delivery: .suppressed, endpoint: expectedEndpoint)
+                ignored: true, delivery: .suppressed, endpoint: expectedEndpoint, context: eventContext)
             return .suppressed
         }
         if let context = parameterWriteContext,
@@ -1106,7 +1211,7 @@ public final class SurfaceSession {
            context.mappingRevision != mappingContextRevision || !context.allowsDisplay
         {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
-                ignored: true, delivery: .suppressed, endpoint: endpoint)
+                ignored: true, delivery: .suppressed, endpoint: endpoint, context: eventContext)
             return .suppressed
         }
         if let expectedMappingRevision, expectedMappingRevision != mappingContextRevision { return .suppressed }
@@ -1117,18 +1222,30 @@ public final class SurfaceSession {
         } else {
             do {
                 try device.send(message)
-                engine.noteFeedbackSent(message, at: now())
+                // A synchronous send callback may have replaced the source/route/binding.
+                // Acceptance belongs to the captured old IO; it is not evidence for a new epoch.
+                if source == sendSource, inputEvents.generation == eventContext.generation,
+                   mappingContextRevision == eventContext.mappingGeneration,
+                   endpointSource(source: sendSource, direction: .output) == endpoint
+                {
+                    engine.noteFeedbackSent(message, at: now())
+                }
                 delivery = .sent
             } catch {
-                droppedFeedbackCount += 1
-                connection.lastError = error.localizedDescription
-                scheduler?.noteFailure(at: now())
+                if source == sendSource, inputEvents.generation == eventContext.generation,
+                   mappingContextRevision == eventContext.mappingGeneration,
+                   endpointSource(source: sendSource, direction: .output) == endpoint
+                {
+                    droppedFeedbackCount += 1
+                    connection.lastError = error.localizedDescription
+                    if feedbackQueueGeneration == sendQueueGeneration { scheduler?.noteFailure(at: now()) }
+                }
                 onEvent?(.failed(.feedback, error.localizedDescription))
                 delivery = .failed
             }
         }
-        log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
-            ignored: false, delivery: delivery, endpoint: endpoint)
+        log(.output, message, source: sendSource, control: sendControl,
+            ignored: false, delivery: delivery, endpoint: endpoint, context: eventContext, writeCause: sendOrigin)
         return delivery
     }
 
@@ -1146,6 +1263,7 @@ public final class SurfaceSession {
             snapshot.destinationEndpoints.first(where: { $0.id == snapshot.connectedDestinationID })?.provenance
         if snapshot.isConnected != wasConnected || routeChanged {
             connectionGeneration = snapshot.transportGeneration.map(UInt64.init) ?? (connectionGeneration &+ 1)
+            if source == .hardware { engine.invalidateTransportEvidence() }
             nrpnAssembler.reset(); diagnosticReadbackActive = false; diagnosticToken = nil
             invalidateInputEpoch("connection_changed")
         }
@@ -1177,13 +1295,18 @@ public final class SurfaceSession {
     private func log(
         _ direction: MIDIObservationDirection, _ message: MIDIVoiceMessage,
         source: DeviceSource, control: BCRControlID?, ignored: Bool, delivery: FeedbackDelivery? = nil,
-        endpoint: MIDIEndpointSource? = nil
+        endpoint: MIDIEndpointSource? = nil, context: SurfaceEventContext? = nil,
+        writeCause: SurfaceWriteOrigin? = nil, inputPressMode: HardwarePressMode? = nil
     ) {
+        let capturedOrigin = writeCause ?? writeOrigin
         nextEventID += 1
         events.append(MonitorEvent(id: nextEventID, time: now(), monotonicTime: historyTime.now(), direction: direction,
                                    source: source, message: message, control: control, ignored: ignored,
-                                   origin: writeOrigin, delivery: delivery,
-                                   endpoint: endpoint ?? endpointSource(source: source, direction: direction)))
+                                   origin: capturedOrigin, delivery: delivery,
+                                   endpoint: endpoint ?? endpointSource(source: source, direction: direction),
+                                   context: context ?? .init(generation: inputEvents.generation,
+                                                             mappingGeneration: mappingContextRevision),
+                                   inputPressMode: inputPressMode))
         let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
         if let event = events.last {
             for observer in Array(monitorObservers.values) { observer(event, echo) }
@@ -1193,7 +1316,7 @@ public final class SurfaceSession {
             publishCapture(MonitorCaptureRecord.event(
                 event,
                 feedbackEcho: echo,
-                hardwareMode: self.source == .hardware
+                hardwareMode: direction == .output ? source == .hardware : self.source == .hardware
             ))
         }
         if events.count > 300 { events.removeFirst(events.count - 300) }
@@ -1201,7 +1324,7 @@ public final class SurfaceSession {
         let origin = diagnosticReadbackActive && direction == .input ? "readback" :
             (direction == .output || echo ? "feedback" : source.rawValue)
         inputEvents.append(kind: kind, payload: .object([
-            "origin": .string(origin), "writer_origin": .string(writeOrigin.rawValue),
+            "origin": .string(origin), "writer_origin": .string(capturedOrigin.rawValue),
             "accepted": .bool(false), "ignored": .bool(ignored || echo || diagnosticReadbackActive),
             "control": control.map { try! .encoded($0) } ?? .null,
             "midi": try! .encoded(message.controlID), "raw_value": .number(Int(message.dataValue))

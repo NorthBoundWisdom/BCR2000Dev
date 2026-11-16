@@ -10,6 +10,8 @@ import BCRTestSupport
 import CryptoKit
 import Foundation
 import XCTest
+import SurfaceDeviceContracts
+import SurfaceDeviceConformance
 @testable import BCRAgentConsole
 
 private let regressionFeatures: Set<String> = [
@@ -95,6 +97,14 @@ private func regressionProcess(_ arguments: [String], input: Data = Data()) asyn
 private final class RegressionClock { var monotonic = 10.0; var wall = 1000.0 }
 
 @MainActor
+private final class RegressionIdentitySequence {
+    private var journal = 0
+    private var epoch = 0
+    func nextJournal() -> String { journal += 1; return "fixture-journal.\(journal)" }
+    func nextEpoch() -> String { epoch += 1; return "fixture-epoch.\(epoch)" }
+}
+
+@MainActor
 private final class RegressionMIDI: MIDIService {
     var connection: MIDIConnectionSnapshot = {
         var value = MIDIConnectionSnapshot(connectedSource: "BCR2000 Port 1", connectedDestination: "BCR2000 Port 1")
@@ -166,6 +176,24 @@ private final class RegressionInstance {
     let setup: [String: Any]
     let directory: URL
     let clock = RegressionClock()
+    let identities = RegressionIdentitySequence()
+    var monitor: [MonitorEvent] = []
+    var neutralInputs: [DeviceInputEvent] = []
+    var acceptedNative: [(
+        BCRControlID,
+        MIDIVoiceMessage,
+        EncoderMode,
+        String,
+        UInt64,
+        MIDIEndpointSource?,
+        BCRSurfaceDomain.DeviceSource,
+        Double,
+        String?,
+        HardwarePressMode?
+    )] = []
+    var principals: SurfaceControlPrincipals!
+    var successfulWriteFacts = 0
+    var writeFactObservationError: String?
     let device = RegressionMIDI()
     var session: SurfaceSession
     var gateway: MCPApplicationGateway
@@ -202,7 +230,7 @@ private final class RegressionInstance {
 
     init(id: String, source: String, scenario: String, setup: [String: Any], directory: URL) throws {
         self.id = id; self.source = source; self.scenario = scenario; self.setup = setup; self.directory = directory
-        let clock = clock
+        let clock = clock, identities = identities
         let configuration = try Self.configuration(setup)
         let map = HardwareMap.mockPreset()
         originalMap = map
@@ -216,6 +244,8 @@ private final class RegressionInstance {
                                      pluginBindings: AgentBindingTranslation.bindings,
                                      requiresHardwareConfirmation: true, hardwareLifecycleFeedback: false,
                                      now: { Date(timeIntervalSinceReferenceDate: clock.wall) },
+                                     historyTime: .init(now: { clock.monotonic }),
+                                     generationFactory: { identities.nextJournal() },
                                      saveHardwareMap: { try hardwareFile.save($0) },
                                      saveConfiguration: { try configurationFile.save($0) })
         self.session = session
@@ -234,18 +264,29 @@ private final class RegressionInstance {
         intents = ConsoleSurfaceIntents(context: context, configurationFile: configurationFile,
                                         migratedHardwareMap: nil, migratedConfiguration: false)
         if source == "hardware" { session.selectSource(.hardware) }
+        let principalFile = directory.appending(path: "fixture-principals.json")
+        try JSONSerialization.data(withJSONObject: [
+            "schema_version": 1,
+            "remote_writer_id": String(repeating: "0", count: 32),
+            "interface_writer_id": String(repeating: "1", count: 32),
+            "system_writer_id": String(repeating: "2", count: 32)
+        ]).write(to: principalFile)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: principalFile.path)
+        principals = try SurfaceControlPrincipals.loadOrCreate(at: principalFile)
+        installFactObservers()
         if ["T12", "T23"].contains(scenario) { try SurfaceControlMCPModule.installHardware(
             on: gateway,
             instanceID: id,
-            permissions: .init(input: true, feedback: true)
+            permissions: .init(input: true, feedback: true), principals: principals,
+            monotonic: { clock.monotonic }, epochFactory: { identities.nextEpoch() }
         ) }
         if scenario == "T25" {
             hardwareContract = try BCRHardwareSurfaceControlAdapter(
                 surface: session,
                 instanceID: id,
-                permissions: .init(),
+                permissions: .init(), principals: principals,
                 eventCapacity: setup["journal_capacity"] as? Int ?? 16,
-                monotonic: { clock.monotonic }
+                monotonic: { clock.monotonic }, epochFactory: { identities.nextEpoch() }
             )
         }
         session.onTriggerAction = { [weak self] action in
@@ -262,6 +303,62 @@ private final class RegressionInstance {
         session.clearMonitor()
         device.records.removeAll()
         if scenario == "T26" { monotonicResults.append(consumeDisplayBudget()) }
+    }
+
+    func installFactObservers() {
+        _ = session.observeMonitor { [weak self] event, _ in self?.monitor.append(event) }
+        _ = session.inputEvents.observe { [weak self] delta in
+            guard let self else { return }
+            guard let object = delta.objectValue, let events = object["events"]?.arrayValue,
+                  let reset = object["reset"]?.boolValue
+            else {
+                writeFactObservationError = "missing native journal delta envelope"; return
+            }
+            if reset {
+                if !events.isEmpty { writeFactObservationError = "unexpected replay in native journal reset" }
+                return
+            }
+            for event in events {
+                guard let kind = event.objectValue?["kind"]?.stringValue else {
+                    writeFactObservationError = "missing native journal append kind"; return
+                }
+                if kind == "parameter.write" { successfulWriteFacts += 1 }
+            }
+        }
+        _ = session.observeNeutralInputs(instanceID: id) { [weak self] event in self?.neutralInputs.append(event) }
+        _ = session.observeAcceptedInput { [weak self] control, message, _, _ in
+            guard let self else { return }
+            acceptedNative.append((
+                control,
+                message,
+                session.engine.configuration.assignment(for: control)?.encoderMode ?? .absolute,
+                session.inputEvents.generation,
+                session.mappingContextRevision,
+                monitor.last(where: { $0.direction == .input })?.endpoint,
+                session.source,
+                clock.monotonic,
+                monitor.last(where: { $0.direction == .input })?.context?.knownDeviceContextID,
+                monitor.last(where: { $0.direction == .input })?.inputPressMode
+            ))
+        }
+    }
+
+    func execute(_ action: ScenarioAction, repo: URL) async throws -> String? {
+        let data = try JSONEncoder().encode(action)
+        return try await execute(regressionObject(JSONSerialization.jsonObject(with: data)), repo: repo)
+    }
+
+    convenience init(id: String, source: String, scenario: String, setup: ScenarioPayload, directory: URL) throws {
+        let nativeSetup = try regressionObject(JSONSerialization.jsonObject(with: JSONEncoder().encode(setup)))
+        try self.init(id: id, source: source, scenario: scenario, setup: nativeSetup, directory: directory)
+    }
+
+    static func participants(_ setup: ScenarioPayload) throws -> [(id: String, source: String)] {
+        let native = try regressionObject(JSONSerialization.jsonObject(with: JSONEncoder().encode(setup)))
+        return try regressionRows(native["instances"]).map { (
+            try regressionString($0, "id"),
+            try regressionString($0, "source")
+        ) }
     }
 
     static func configuration(_ setup: [String: Any]) throws -> SurfaceConfiguration {
@@ -663,15 +760,18 @@ private final class RegressionInstance {
                     JSONFileStore(fileURL: directory.appending(path: "config.json")),
                     preset: .starter
                 )
-                let clock = clock
+                let clock = clock, identities = identities
                 session = SurfaceSession(hardwareDevice: device, hardwareMap: hardwareFile.load().value,
                                          configuration: configurationFile.load().value,
                                          pluginBindings: AgentBindingTranslation.bindings,
                                          requiresHardwareConfirmation: true, hardwareLifecycleFeedback: false,
                                          now: { Date(timeIntervalSinceReferenceDate: clock.wall) },
+                                         historyTime: .init(now: { clock.monotonic }),
+                                         generationFactory: { identities.nextJournal() },
                                          saveHardwareMap: { try hardwareFile.save($0) },
                                          saveConfiguration: { try configurationFile.save($0) })
                 session.selectSource(.hardware)
+                installFactObservers()
                 let ui = ConsolePresentationState(
                     timing: .immediate,
                     workspacePanelStore: JSONFileStore(fileURL: directory.appending(path: "ui.json"))
@@ -930,7 +1030,7 @@ final class ControllerRegressionExecutorTests: XCTestCase {
             .deletingLastPathComponent()
         let environment = ProcessInfo.processInfo.environment
         let shared = URL(fileURLWithPath: environment["BCR_H10_SCHEMA_ROOT"] ?? repo
-            .appending(path: "build/seed/SurfacePlugins").path)
+            .appending(path: "build/seed/ControlSurfaceKit").path)
         let fixture = URL(fileURLWithPath: environment["BCR_H10_FIXTURE_PATH"] ?? shared
             .appending(path: "fixtures/controller-regression-v1.json").path)
         let destination = URL(fileURLWithPath: environment["BCR_H10_REPORT_ROOT"] ?? repo
@@ -940,13 +1040,13 @@ final class ControllerRegressionExecutorTests: XCTestCase {
         let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(digest, regressionFixtureSHA)
         guard digest == regressionFixtureSHA else { throw RegressionError.shape("coordinate fixture SHA change") }
-        let document = try regressionObject(JSONSerialization.jsonObject(with: bytes))
-        let scenes = try regressionRows(document["scenarios"])
+        let catalog = try ScenarioCatalog.decode(data: bytes)
+        let scenes = catalog.scenarios
         XCTAssertEqual(scenes.count, 30)
         var results: [[String: Any]] = [], traces: [[String: Any]] = []
         for scene in scenes {
-            let scenarioID = try regressionString(scene, "id")
-            let missing = Set(scene["requires_features"] as? [String] ?? []).subtracting(regressionFeatures)
+            let scenarioID = scene.id
+            let missing = Set(scene.requiresFeatures).subtracting(regressionFeatures)
             if !missing.isEmpty {
                 results.append([
                     "id": scenarioID,
@@ -956,27 +1056,24 @@ final class ControllerRegressionExecutorTests: XCTestCase {
                 ])
                 continue
             }
-            let setup = try regressionObject(scene["setup"])
+            let setup = scene.setup
             let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
             defer { try? FileManager.default.removeItem(at: temporary) }
             var instances: [String: RegressionInstance] = [:]
-            for instance in try regressionRows(setup["instances"]) {
-                let id = try regressionString(instance, "id")
+            for participant in try RegressionInstance.participants(setup) {
+                let id = participant.id
                 instances[id] = try RegressionInstance(
                     id: id,
-                    source: regressionString(instance, "source"),
+                    source: participant.source,
                     scenario: scenarioID,
                     setup: setup,
                     directory: temporary.appending(path: id)
                 )
             }
             var records: [[String: Any]] = [], stepTraces: [[String: Any]] = []
-            for (index, action) in try regressionRows(scene["steps"]).enumerated() {
-                let operation = try regressionString(action, "operation"), instanceID = try regressionString(
-                    action,
-                    "instance_id"
-                )
-                let missing = Set(action["requires_features"] as? [String] ?? []).subtracting(regressionFeatures)
+            for (index, action) in scene.steps.enumerated() {
+                let operation = action.operation, instanceID = action.instanceID
+                let missing = Set(action.requiresFeatures).subtracting(regressionFeatures)
                 if !missing.isEmpty {
                     records.append([
                         "index": index,
@@ -997,17 +1094,17 @@ final class ControllerRegressionExecutorTests: XCTestCase {
                 catch { failure = "Actual API error: " + String(describing: error) }
                 let after = instances.mapValues { $0.observations() }
                 let effects = instances.flatMap { id, value in Array(value.effects.dropFirst(offsets[id]!.0)) }
-                let unmet = try regressionRows(action["expect"]).filter { !regressionExpect(
-                    $0,
-                    instance: instanceID,
-                    before: before,
-                    after: after
-                ) }
+                let neutralBefore = try before.mapValues { try $0.mapValues(shadowScalar) }
+                let neutralAfter = try after.mapValues { try $0.mapValues(shadowScalar) }
+                let unmet = try action.expect.filter { assertion in
+                    !(try AssertionEvaluator.evaluate(assertion, instanceID: instanceID,
+                                                      before: neutralBefore, after: neutralAfter))
+                }
                 if !unmet
                     .isEmpty
                 {
                     failure = (failure.map { $0 + "; " } ?? "") + "Real observations differ: " + unmet
-                        .compactMap { $0["metric"] as? String }.joined(separator: ",")
+                        .map(\.metric).joined(separator: ",")
                 }
                 let reason: Any = failure.map { String($0.prefix(512)) } ?? regressionNull
                 records.append([
@@ -1020,7 +1117,8 @@ final class ControllerRegressionExecutorTests: XCTestCase {
                     "effects": effects
                 ])
                 stepTraces.append(["index": index, "operation": operation, "instance_id": instanceID,
-                                   "arguments": action["arguments"]!,
+                                   "arguments": try JSONSerialization
+                                       .jsonObject(with: JSONEncoder().encode(action.arguments)),
                                    "native": instances
                                        .mapValues { value in Array(value.raw.dropFirst(offsets[value.id]!.1)) }])
             }
@@ -1081,5 +1179,426 @@ final class ControllerRegressionExecutorTests: XCTestCase {
             0,
             "Report validity is separate from conformance: \(String(decoding: errors, as: UTF8.self))"
         )
+    }
+}
+
+// This adapter remains device-test code. The Kit owns the typed envelope/assertions,
+// while every operation below still reaches the actual native owners above.
+private func shadowScalar(_ value: Any) throws -> TraceValue {
+    if value is NSNull { return .null }
+    if let number = value as? NSNumber {
+        if CFGetTypeID(number) == CFBooleanGetTypeID() { return .flag(number.boolValue) }
+        guard number.doubleValue.isFinite else { throw RegressionError.shape("nonfinite observation") }
+        return .number(number.doubleValue)
+    }
+    if let text = value as? String { return .text(text) }
+    throw RegressionError.shape("non-scalar native observation")
+}
+
+private func shadowCanonical(_ value: Any) throws -> String {
+    String(
+        decoding: try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]),
+        as: UTF8.self
+    )
+}
+
+private func shadowEndpoint(_ endpoint: MIDIEndpointSource?) -> Any {
+    guard let endpoint else { return regressionNull }
+    return ["endpoint_id": endpoint.endpointID, "device_id": regressionValue(endpoint.deviceID),
+            "connection_generation": endpoint.connectionGeneration,
+            "origin": endpoint.provenance.rawValue] as [String: Any]
+}
+
+private func shadowMonitor(_ event: MonitorEvent) throws -> String {
+    guard let context = event.context else { throw RegressionError.shape("missing captured native event context") }
+    return try shadowCanonical([
+        "event_id": event.id, "wall_at": event.time.timeIntervalSinceReferenceDate,
+        "monotonic_at": event.monotonicTime, "direction": event.direction.rawValue,
+        "source": event.source.rawValue, "bytes": event.message.midi1Bytes,
+        "wire_kind": event.message.controlID.kind.rawValue, "channel": event.message.controlID.channel,
+        "number": event.message.controlID.number, "raw_value": event.message.dataValue,
+        "control": event.control
+            .map { ["section": $0.section.rawValue, "row": $0.row, "index": $0.index] } ?? regressionNull,
+        "ignored": event.ignored, "writer_origin": event.origin.rawValue,
+        "delivery": regressionValue(event.delivery?.rawValue), "endpoint": shadowEndpoint(event.endpoint),
+        "context_generation": context.generation, "mapping_generation": context.mappingGeneration,
+        "known_device_context": regressionValue(context.knownDeviceContextID),
+        "input_press_mode": regressionValue(event.inputPressMode?.rawValue)
+    ] as [String: Any])
+}
+
+private func shadowQueueItem(_ item: ScheduledFeedback) throws -> String {
+    guard let source = item.source, let context = item.context, let endpoint = item.endpoint,
+          let mappingRevision = item.mappingRevision
+    else {
+        throw RegressionError.shape("missing captured queue source/context/endpoint")
+    }
+    return try shadowCanonical(["bytes": item.message.midi1Bytes, "writer_origin": item.origin.rawValue,
+                                "endpoint": shadowEndpoint(endpoint), "source": source.rawValue,
+                                "context_generation": context.generation,
+                                "context_binding_generation": context.mappingGeneration,
+                                "known_device_context": regressionValue(context.knownDeviceContextID),
+                                "mapping_generation": mappingRevision] as [String: Any])
+}
+
+@MainActor
+private struct RegressionShadowMark {
+    let monitor: Int
+    let input: Int
+    let raw: Int
+    let transport: Int
+    let presets: Int
+    let pending: [ScheduledFeedback]
+    let writes: Int
+    init(_ instance: RegressionInstance) throws {
+        monitor = instance.monitor.count; input = instance.neutralInputs.count; raw = instance.raw.count
+        transport = instance.device.records.count; presets = instance.device.batches.count
+        pending = instance.session.pendingFeedbackItems
+        writes = try instance.parameterWriteEvidenceCount
+    }
+}
+
+@MainActor
+private extension RegressionInstance {
+    var parameterWriteEvidenceCount: Int {
+        get throws {
+            if let writeFactObservationError { throw RegressionError.shape(writeFactObservationError) }
+            // Count actual append callbacks, not the bounded journal's retained inventory.
+            return successfulWriteFacts
+        }
+    }
+
+    func shadowDecision(_ action: ScenarioAction, mark: RegressionShadowMark,
+                        failure: String?) throws -> ShadowDecision
+    {
+        if let failure { return .rejected(reason: failure) }
+        if action.operation == "write_parameter", try parameterWriteEvidenceCount == mark.writes {
+            return .rejected(reason: "no_successful_parameter_write")
+        }
+        if action.operation.hasPrefix("receive_"), neutralInputs.count == mark.input {
+            return .ignored(reason: "no_accepted_native_input")
+        }
+        if action.operation == "remote_input", manualAuthority == false {
+            return .rejected(reason: "hardware_remote_input_denied")
+        }
+        if device.records.dropFirst(mark.transport).contains(where: { !$0.1 }) {
+            return .rejected(reason: "native_transport_rejected")
+        }
+        return .accepted
+    }
+
+    func shadowSample(_ action: ScenarioAction, step: Int, mark: RegressionShadowMark,
+                      failure: String?) throws -> ShadowSample
+    {
+        let events = Array(monitor.dropFirst(mark.monitor))
+        let inputs = Array(neutralInputs.dropFirst(mark.input))
+        let context = try session.neutralContext(instanceID: id)
+        var feedback: [EffectDescriptor] = [], transmissions: [TransmissionEvidence] = []
+        for event in events where event.direction == .output {
+            guard let captured = event.context else { throw RegressionError.shape("output lost original context") }
+            let eventContext = try BCRNeutralSurfaceProjection.context(instanceID: id,
+                                                                       generation: captured.generation,
+                                                                       mappingGeneration: captured.mappingGeneration)
+            guard let effect = try BCRNeutralSurfaceProjection.feedback(event, context: eventContext) else {
+                throw RegressionError.shape("output projection missing")
+            }
+            feedback.append(effect)
+            if let transmission = try BCRNeutralSurfaceProjection.transmission(event, effect: effect) {
+                transmissions.append(transmission)
+            }
+        }
+        let remaining = try session.pendingFeedbackItems.map(shadowQueueItem)
+        let previous = try mark.pending.map(shadowQueueItem)
+        let attempts = events.filter { $0.delivery == .sent || $0.delivery == .failed }
+        let revoked = zip(mark.pending, previous).filter { pending, identity in
+            !remaining.contains(identity) && !attempts.contains { event in
+                event.message == pending.message && event.origin == pending.origin &&
+                    event.source == pending.source && event.endpoint == pending.endpoint &&
+                    event.context == pending.context && event.context?.mappingGeneration == pending.mappingRevision
+            }
+        }.map(\.1)
+        var transport = try events.map(shadowMonitor)
+        // Retain every original native diagnostic/API result. No epoch/writer normalization.
+        transport.append("native-raw:" + (try shadowCanonical(Array(raw.dropFirst(mark.raw)))))
+        transport.append("device-attempts:" + (try shadowCanonical(device.records.dropFirst(mark.transport).map {
+            ["bytes": $0.0.midi1Bytes, "accepted": $0.1] as [String: Any]
+        })))
+        transport.append("preset-frames:" + (try shadowCanonical(Array(device.batches.dropFirst(mark.presets)))))
+        transport.append("neutral-capabilities:" + String(reflecting: try session.neutralCapabilities()))
+        return try ShadowSample(stepIndex: step, operationID: action.operation,
+                                decision: shadowDecision(action, mark: mark, failure: failure), context: context,
+                                endpoint: session.neutralEndpoint(direction: .input), pendingQueueItems: remaining,
+                                revokedQueueItems: revoked,
+                                observations: inputs.map(BCRNeutralSurfaceProjection.observation),
+                                feedback: feedback, transmissions: transmissions, transportSequence: transport)
+    }
+}
+
+extension ControllerRegressionExecutorTests {
+    func testIndependentNativeAndTypedOwnersMatchEveryApplicableScenarioStep() async throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let kit = repo.appending(path: "build/seed/ControlSurfaceKit")
+        let fixture = kit.appending(path: "fixtures/controller-regression-v1.json")
+        let bytes = try Data(contentsOf: fixture)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, regressionFixtureSHA)
+        let catalog = try ScenarioCatalog.decode(data: bytes)
+        let nativeCatalog = try regressionRows(regressionObject(JSONSerialization.jsonObject(with: bytes))["scenarios"])
+        let output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BCR_J2_SHADOW_ROOT"] ??
+            repo.appending(path: "build/j/j2/shadow").path)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        var rows: [[String: Any]] = [], compared = 0, assertions = 0, applicable = 0, notApplicable = 0
+        var ownerPairs = 0, actionSteps = 0, ownerExecutions = 0
+        var differences: [[String: Any]] = []
+        for (scene, native) in zip(catalog.scenarios, nativeCatalog) {
+            let absent = Set(scene.requiresFeatures).subtracting(regressionFeatures)
+            if !absent.isEmpty {
+                notApplicable += 1
+                rows.append(["scenario": scene.id, "status": "not_applicable", "missing": absent.sorted()])
+                continue
+            }
+            applicable += 1
+            let setup = try regressionObject(native["setup"])
+            let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            var reference: [String: RegressionInstance] = [:], candidate: [String: RegressionInstance] = [:]
+            for instance in try regressionRows(setup["instances"]) {
+                let id = try regressionString(instance, "id"), source = try regressionString(instance, "source")
+                reference[id] = try RegressionInstance(id: id, source: source, scenario: scene.id, setup: setup,
+                                                       directory: directory.appending(path: "native/\(id)"))
+                candidate[id] = try RegressionInstance(id: id, source: source, scenario: scene.id, setup: setup,
+                                                       directory: directory.appending(path: "typed/\(id)"))
+                ownerPairs += 1
+                XCTAssertFalse(reference[id]!.session === candidate[id]!.session)
+                XCTAssertFalse(reference[id]!.device === candidate[id]!.device)
+                XCTAssertFalse(reference[id]!.identities === candidate[id]!.identities)
+            }
+            for (index, action) in scene.steps.enumerated() {
+                let absent = Set(action.requiresFeatures).subtracting(regressionFeatures)
+                if !absent.isEmpty {
+                    rows.append([
+                        "scenario": scene.id,
+                        "step": index,
+                        "status": "not_applicable",
+                        "missing": absent.sorted()
+                    ])
+                    continue
+                }
+                let beforeReference = reference.mapValues { $0.observations() }
+                let beforeCandidate = candidate.mapValues { $0.observations() }
+                let referenceMarks = try reference.mapValues(RegressionShadowMark.init)
+                let candidateMarks = try candidate.mapValues(RegressionShadowMark.init)
+                let originalAction = try regressionRows(native["steps"])[index]
+                actionSteps += 1
+                let a = try await reference[action.instanceID]!.execute(originalAction, repo: repo)
+                ownerExecutions += 1
+                let b = try await candidate[action.instanceID]!.execute(action, repo: repo)
+                ownerExecutions += 1
+                let afterReference = reference.mapValues { $0.observations() }
+                let afterCandidate = candidate.mapValues { $0.observations() }
+                for owner in Array(reference.values) + Array(candidate.values) {
+                    XCTAssertEqual(owner.acceptedNative.count, owner.neutralInputs.count)
+                    for (nativeInput, projected) in zip(owner.acceptedNative, owner.neutralInputs) {
+                        let (control, message, mode, generation, binding, endpoint, source, at,
+                             knownContext, pressMode) = nativeInput
+                        let physicalRole: String
+                        switch control.section {
+                        case .pushEncoder: physicalRole = "pushEncoder.rotate.\(control.index)"
+                        case .pushEncoderButton: physicalRole = "pushEncoder.press.\(control.index)"
+                        case .encoder, .button, .userButton:
+                            physicalRole = "\(control.section.rawValue).\(control.row).\(control.index)"
+                        }
+                        XCTAssertEqual(projected.elementID, physicalRole)
+                        let kind: InputKind = control.isContinuous ? (mode == .absolute ? .absolute : .relative) :
+                            (pressMode == .momentary ? (message.isPositiveActivation ? .press : .release) : .absolute)
+                        XCTAssertEqual(projected.kind, kind)
+                        let value: DeviceValue = control
+                            .isContinuous ? .number(mode == .absolute ? Double(message.dataValue) :
+                                Double(mode.delta(value: message.dataValue, maximum: message.maximumDataValue))) :
+                            .flag(message.isPositiveActivation)
+                        XCTAssertEqual(projected.value, value)
+                        XCTAssertEqual(
+                            projected.context.id,
+                            owner
+                                .id +
+                                "|binding-facet=\(control.section.rawValue).\(control.row).\(control.index)|device-context=" +
+                                (knownContext ?? "unknown")
+                        )
+                        if source == .hardware { XCTAssertNil(knownContext) }
+                        XCTAssertEqual(projected.context.generation, "\(generation):binding:\(binding)")
+                        XCTAssertNil(projected.context.mappingRevision)
+                        XCTAssertEqual(projected.source, source == .mock ? .simulation : .hardware)
+                        XCTAssertEqual(projected.at, at)
+                        XCTAssertEqual(
+                            projected.endpoint.endpointID,
+                            endpoint.flatMap { $0.endpointID == "unknown" ? nil : $0.endpointID }
+                        )
+                        XCTAssertEqual(projected.endpoint.deviceID, endpoint?.deviceID)
+                        XCTAssertEqual(projected.endpoint.connectionGeneration, endpoint?.connectionGeneration ?? 0)
+                        XCTAssertEqual(
+                            projected.endpoint.transportOrigin.rawValue,
+                            endpoint?.provenance.rawValue ?? "unknown"
+                        )
+                    }
+                }
+                let nativeBefore = try beforeReference.mapValues { try $0.mapValues(shadowScalar) }
+                let typedBefore = try beforeCandidate.mapValues { try $0.mapValues(shadowScalar) }
+                let nativeAfter = try afterReference.mapValues { try $0.mapValues(shadowScalar) }
+                let typedAfter = try afterCandidate.mapValues { try $0.mapValues(shadowScalar) }
+                if a != b { differences.append([
+                    "scenario": scene.id,
+                    "step": index,
+                    "field": "native_operation_error",
+                    "native": regressionValue(a),
+                    "typed": regressionValue(b)
+                ]) }
+                if nativeBefore != typedBefore { differences.append([
+                    "scenario": scene.id,
+                    "step": index,
+                    "field": "complete_before_observations"
+                ]) }
+                if nativeAfter != typedAfter { differences.append([
+                    "scenario": scene.id,
+                    "step": index,
+                    "field": "complete_after_observations"
+                ]) }
+                for (expectation, nativeExpectation) in zip(
+                    action.expect,
+                    try regressionRows(originalAction["expect"])
+                ) {
+                    let old = regressionExpect(
+                        nativeExpectation,
+                        instance: action.instanceID,
+                        before: beforeReference,
+                        after: afterReference
+                    )
+                    let new = try AssertionEvaluator.evaluate(
+                        expectation,
+                        instanceID: action.instanceID,
+                        before: typedBefore,
+                        after: typedAfter
+                    )
+                    assertions += 1
+                    XCTAssertEqual(old, new, "\(scene.id)/\(index) assertion \(expectation.metric)")
+                    XCTAssertTrue(old, "\(scene.id)/\(index) original assertion \(expectation.metric)")
+                    XCTAssertTrue(new, "\(scene.id)/\(index) typed assertion \(expectation.metric)")
+                }
+                for id in reference.keys.sorted() {
+                    let left = try reference[id]!.shadowSample(
+                        action,
+                        step: index,
+                        mark: referenceMarks[id]!,
+                        failure: a
+                    )
+                    let right = try candidate[id]!.shadowSample(
+                        action,
+                        step: index,
+                        mark: candidateMarks[id]!,
+                        failure: b
+                    )
+                    let delta = ShadowComparator.compare(reference: [left], candidate: [right])
+                    differences += delta.map { [
+                        "scenario": scene.id,
+                        "step": index,
+                        "instance": id,
+                        "field": $0.field,
+                        "native": $0.reference,
+                        "typed": $0.candidate
+                    ] as [String: Any] }
+                    compared += 1
+                    rows.append(["scenario": scene.id, "step": index, "instance": id, "operation": action.operation,
+                                 "native": String(reflecting: left), "typed": String(reflecting: right),
+                                 "native_before": beforeReference[id]!, "typed_before": beforeCandidate[id]!,
+                                 "native_after": afterReference[id]!, "typed_after": afterCandidate[id]!,
+                                 "differences": delta.count])
+                }
+            }
+            for instance in reference.values { await instance.drainHeldReplies(); XCTAssertEqual(
+                instance.device.starts,
+                0
+            ) }
+            for instance in candidate.values { await instance.drainHeldReplies(); XCTAssertEqual(
+                instance.device.starts,
+                0
+            ) }
+        }
+        let report: [String: Any] = ["fixture_sha256": digest,
+                                     "hardware_accessed": false,
+                                     "independent_scenario_pairs": applicable,
+                                     "independent_owner_pairs": ownerPairs,
+                                     "paired_action_steps": actionSteps,
+                                     "executed_owner_actions": ownerExecutions,
+                                     "not_applicable_scenarios": notApplicable,
+                                     "compared_owner_steps": compared,
+                                     "assertions": assertions,
+                                     "differences": differences,
+                                     "product_behavior": "native runtime unchanged; primary Kit contract/action/assertions adopted; independent native reference retained",
+                                     "steps": rows]
+        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            .write(to: output.appending(path: "j2-independent-shadow.json"))
+        print(
+            "J2_SHADOW scenario_pairs=\(applicable) owner_pairs=\(ownerPairs) actions=\(actionSteps) owner_executions=\(ownerExecutions) owner_steps=\(compared) assertions=\(assertions) differences=\(differences.count)"
+        )
+        XCTAssertTrue(differences.isEmpty, "See j2-independent-shadow.json for complete step/field differences")
+    }
+}
+
+extension ControllerRegressionExecutorTests {
+    func testRouteReplacementRevokesOldHardwareItemsDespiteSameBytesFromMock() async throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(contentsOf: repo
+            .appending(path: "build/seed/ControlSurfaceKit/fixtures/controller-regression-v1.json"))
+        let scene = try XCTUnwrap(ScenarioCatalog.decode(data: data).scenarios.first { $0.id == "T12" })
+        let setup = try regressionObject(JSONSerialization.jsonObject(with: JSONEncoder().encode(scene.setup)))
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = try RegressionInstance(
+            id: "primary",
+            source: "hardware",
+            scenario: scene.id,
+            setup: setup,
+            directory: directory
+        )
+        _ = try await owner.execute(XCTUnwrap(scene.steps.first { $0.operation == "prepare_display" }), repo: repo)
+        let mark = try RegressionShadowMark(owner)
+        XCTAssertEqual(mark.pending.count, 2)
+        let action = try XCTUnwrap(scene.steps.first { $0.operation == "replace_route" })
+        _ = try await owner.execute(action, repo: repo)
+        let newEvents = owner.monitor.dropFirst(mark.monitor)
+        XCTAssertTrue(newEvents
+            .contains { $0.source == .mock && $0.delivery == .sent && mark.pending.map(\.message).contains($0.message)
+            })
+        XCTAssertFalse(newEvents
+            .contains { $0.source == .hardware && ($0.delivery == .sent || $0.delivery == .failed) })
+        let sample = try owner.shadowSample(action, step: 1, mark: mark, failure: nil)
+        XCTAssertTrue(sample.pendingQueueItems.isEmpty)
+        XCTAssertEqual(sample.revokedQueueItems.count, mark.pending.count)
+    }
+
+    func testSuccessfulWriteDecisionSurvivesFullBoundedJournal() async throws {
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let data = try Data(contentsOf: repo
+            .appending(path: "build/seed/ControlSurfaceKit/fixtures/controller-regression-v1.json"))
+        let scene = try XCTUnwrap(ScenarioCatalog.decode(data: data).scenarios.first { $0.id == "T18" })
+        let setup = try regressionObject(JSONSerialization.jsonObject(with: JSONEncoder().encode(scene.setup)))
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let owner = try RegressionInstance(
+            id: "primary",
+            source: "hardware",
+            scenario: scene.id,
+            setup: setup,
+            directory: directory
+        )
+        for value in 0 ..< 600 { owner.session.setParameter("p1", to: Double(value % 127)) }
+        XCTAssertGreaterThan(owner.session.inputEvents.dropped, 0)
+        let mark = try RegressionShadowMark(owner)
+        let action = try XCTUnwrap(scene.steps.first { $0.operation == "write_parameter" })
+        _ = try await owner.execute(action, repo: repo)
+        XCTAssertEqual(owner.session.engine.value(of: "p1"), 64)
+        XCTAssertEqual(try owner.shadowDecision(action, mark: mark, failure: nil), .accepted)
     }
 }

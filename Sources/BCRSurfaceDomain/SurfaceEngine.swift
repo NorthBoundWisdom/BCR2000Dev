@@ -103,6 +103,15 @@ public struct SurfaceEngine: Sendable {
         }
     }
 
+    /// Forget evidence and input references tied to a transport epoch, without
+    /// changing parameter/plugin authority, learned identities or learning state.
+    public mutating func invalidateTransportEvidence() {
+        recentFeedback.removeAll()
+        absoluteInputs.removeAll()
+        incrementRemainders.removeAll()
+        lastTrigger.removeAll()
+    }
+
     // MARK: Queries
 
     public func value(of parameter: ParameterID) -> Double? {

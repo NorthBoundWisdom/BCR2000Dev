@@ -108,6 +108,7 @@ class ParallelRunnerTests(unittest.TestCase):
         with (
             patch.object(macos_workflow, "REPO_ROOT", root),
             patch.object(macos_workflow, "ensure_dependency"),
+            patch.object(macos_workflow, "ensure_kit_dependency"),
             patch.object(macos_workflow, "REQUIRED_TEST_MODULES", required_modules),
             patch.dict(
                 "os.environ",

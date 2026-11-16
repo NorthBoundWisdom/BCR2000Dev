@@ -49,6 +49,11 @@ class LayerBoundaryTests(unittest.TestCase):
             )
         self.assertEqual(result, [])
 
+    def test_kernel_conformance_target_cannot_become_a_production_dependency(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = check_layers({"BCRSurfaceDomain": target("SurfaceDeviceConformance")}, Path(directory))
+        self.assertEqual(result, ["Test-only conformance dependency in production: BCRSurfaceDomain"])
+
 
 class ImportSyntaxBoundaryTests(unittest.TestCase):
     def check_source(self, spelling, module="BCRMCPAdapter"):
@@ -84,4 +89,10 @@ class ImportSyntaxBoundaryTests(unittest.TestCase):
         self.assertEqual(
             self.check_source("@preconcurrency import SwiftUI", "BCRExamples"),
             ["Layer platform import violation: Sources/BCRExamples/Bad.swift -> SwiftUI"],
+        )
+
+    def test_kernel_conformance_import_is_test_only_even_without_a_manifest_edge(self):
+        self.assertEqual(
+            self.check_source("import SurfaceDeviceConformance", "BCRSurfaceDomain"),
+            ["Test-only conformance import in production: Sources/BCRSurfaceDomain/Bad.swift"],
         )

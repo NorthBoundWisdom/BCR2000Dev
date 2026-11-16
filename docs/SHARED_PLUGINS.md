@@ -117,3 +117,13 @@ Root独立Linux对共享最终103测试、XTouch Core/L10n 84测试及共同Gitm
 输出精度：仅OSC使用float32。首次/重武装actual必须精确Float可表示，否则invalidActual+参数诊断，禁止epsilon放宽或改写actual；
 JSON/WebSocket/rosbridge保留Double。生产OSC/WS/rosbridge在实际IO接收处采monotonic时间，经有界缓冲原样交MainActor；Controller只消费Mono通道，保持排队age。
 生产ping cadence与RTT也全为Mono，不受墙钟跳变；Date仅legacy facade/审计兼容，旧Date-only夹具仍走原投影。坏clock下普通写失败，安全撤权/fault使用最后可信时间并记录诊断。
+
+
+## Controller value contract dependency
+
+`ControlSurfaceKit` is an independent, managed HTTPS/full-SHA dependency, not a second SurfacePlugins
+parameter/plugin/session authority. `configs/control_surface_kit_dependency.py ensure|verify|update` uses
+the same stdlib/Git engine as SurfacePlugins with separate ownership marker, cache, lock and source variables.
+`CONTROL_SURFACE_KIT_SOURCE` (or its acquisition-only `_PATH` alias) never changes the compilation directory.
+Both manifest checks are read-only; workflow/setup/package commands materialize committed objects first.
+Push order is SurfacePlugins → ControlSurfaceKit → host. See [the complete adapter map](CONTROL_SURFACE_KIT.md).

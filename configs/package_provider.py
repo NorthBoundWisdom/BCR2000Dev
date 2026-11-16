@@ -20,6 +20,7 @@ from configs.build_environment import load_build_environment  # noqa: E402
 from configs.display_targets import generate as generate_display_targets  # noqa: E402
 from configs.check_handoff_addresses import render as render_handoff_addresses  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.control_surface_kit_dependency import ensure_dependency as ensure_kit_dependency  # noqa: E402
 from configs.surface_delivery_index import publish  # noqa: E402
 
 
@@ -66,6 +67,7 @@ def candidate_status(*, dirty, source_unpushed):
 
 def package(output, configuration="release", skip_build=False, hardware_map=None):
     shared = Path(ensure_dependency(ROOT, environ=load_build_environment(ROOT)))
+    kit = Path(ensure_kit_dependency(ROOT, environ=load_build_environment(ROOT)))
     if not shared.is_absolute():
         shared = ROOT / shared
     if output.exists():
@@ -350,6 +352,13 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         "schema_version": 1,
         "source": "simulation",
         "source_commit": source_commit,
+        "control_surface_kit": {
+            "remote": run("git", "-C", str(kit), "remote", "get-url", "origin"),
+            "revision": run("git", "-C", str(kit), "rev-parse", "HEAD"),
+            "managed_clean": not bool(run("git", "-C", str(kit), "status", "--porcelain")),
+            "adoption": "neutral-contracts-and-conformance",
+            "runtime_lifecycle_binding_scheduling_owner": "native-host",
+        },
         "source_dirty": dirty,
         "source_origin_main": run("git", "rev-parse", "origin/main"),
         "source_ahead": int(run("git", "rev-list", "--count", "origin/main..HEAD")),

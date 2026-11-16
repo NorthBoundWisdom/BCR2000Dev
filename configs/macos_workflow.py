@@ -25,6 +25,7 @@ if str(REPO_ROOT) not in sys.path:
 from configs.app_build import load_app_build_settings  # noqa: E402
 from configs.build_environment import use_build_environment  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
+from configs.control_surface_kit_dependency import ensure_dependency as ensure_kit_dependency  # noqa: E402
 
 BUILD_ROOT = REPO_ROOT / "build"
 SWIFTPM_BUILD_ROOT = BUILD_ROOT / "swiftpm"
@@ -151,6 +152,7 @@ def _architectures(architecture: str) -> tuple[str, ...]:
 
 def _swift_build(configuration: str, architecture: str) -> Path:
     ensure_dependency(REPO_ROOT)
+    ensure_kit_dependency(REPO_ROOT)
     binaries = []
     for arch in _architectures(architecture):
         if arch not in {"arm64", "x86_64"}:
@@ -756,6 +758,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("This workflow requires macOS and Xcode's Swift 6 toolchain.")
         if args.action == "test":
             ensure_dependency(REPO_ROOT)
+            ensure_kit_dependency(REPO_ROOT)
             if args.precompiled_tests:
                 _run_tests(["swift", "test", "--build-path", SWIFTPM_BUILD_ROOT], precompiled=True)
             else:

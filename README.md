@@ -365,3 +365,6 @@ Foundation-based targets, provider routing, value history/scenes, capture eviden
 Revocable host authorization, trusted authority rejection and internal endpoint evidence are documented in
 [controller write boundaries](docs/controller-write-boundaries.md). They preserve the default Provider 1.0
 wire contract and do not grant physical qualification.
+
+The managed ControlSurfaceKit value contract and device-adapter field map are documented in
+[ControlSurfaceKit integration](docs/CONTROL_SURFACE_KIT.md). The native lifecycle and scheduling owners remain in this host.
