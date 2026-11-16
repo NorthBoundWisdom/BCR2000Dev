@@ -76,22 +76,40 @@ public final class MCPApplicationGateway {
 
     /// Set only by the authenticated HTTP boundary, scoped to one synchronous request.
     public private(set) var authenticatedSurfaceWriterID: String?
-    public func withAuthenticatedSurfaceWriterID<T>(_ writerID: String?, _ operation: () throws -> T) rethrows -> T {
+    private var authenticatedDisplayWriteLimit: Int?
+    public enum DisplayClockFailure: Error { case invalidTime }
+    private struct DisplayBudget { var window: Double; var used: Int }
+    private let displayMonotonic: @MainActor () -> Double
+    private var lastDisplayTime: Double?
+    private var displayBudgets: [String: DisplayBudget] = [:]
+    public var hasIndependentDisplayBudget: Bool {
+        authenticatedSurfaceWriterID != nil && authenticatedDisplayWriteLimit != nil
+    }
+
+    public func clearDisplayBudgets() { displayBudgets.removeAll() }
+    public func withAuthenticatedSurfaceWriterID<T>(_ writerID: String?, displayWriteLimit: Int? = nil,
+                                                    _ operation: () throws -> T) rethrows -> T
+    {
         let previous = authenticatedSurfaceWriterID
+        let previousLimit = authenticatedDisplayWriteLimit
         authenticatedSurfaceWriterID = writerID
-        defer { authenticatedSurfaceWriterID = previous }
+        authenticatedDisplayWriteLimit = displayWriteLimit
+        defer { authenticatedSurfaceWriterID = previous; authenticatedDisplayWriteLimit = previousLimit }
         return try operation()
     }
 
     public var toolDefinitions: [JSONValue] { toolOrder.compactMap { definitions[$0] } }
 
     public init(session: SurfaceSession? = nil, permissions: MCPPermissions = MCPPermissions(),
-                now: @escaping @MainActor () -> Date = { .now }, includeAgent: Bool = true,
+                now: @escaping @MainActor () -> Date = { .now },
+                displayMonotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+                includeAgent: Bool = true,
                 includeDeviceAdministration: Bool = true)
     {
         self.surfaceSession = session
         self.permissions = permissions
         self.now = now
+        self.displayMonotonic = displayMonotonic
         for definition in MCPToolCatalog.tools {
             guard let name = definition.objectValue?["name"]?.stringValue else { continue }
             if !includeDeviceAdministration, Self.deviceAdministrationTools.contains(name) { continue }
@@ -191,6 +209,23 @@ public final class MCPApplicationGateway {
     }
 
     public func consumeWrites(_ count: Int) throws {
+        if let writer = authenticatedSurfaceWriterID, let maximum = authenticatedDisplayWriteLimit {
+            let time = displayMonotonic()
+            guard time.isFinite, lastDisplayTime.map({ time >= $0 }) ?? true else {
+                throw DisplayClockFailure.invalidTime
+            }
+            lastDisplayTime = time
+            var budget = displayBudgets[writer] ?? DisplayBudget(window: time, used: 0)
+            if time - budget.window >= 1 {
+                budget = DisplayBudget(window: time, used: 0)
+            }
+            guard maximum > 0, count <= maximum - budget.used else {
+                throw MCPToolFailure(L10n.text("写入超过每秒限额"))
+            }
+            budget.used += count
+            displayBudgets[writer] = budget
+            return
+        }
         let time = now()
         if rateWindow == nil || time < rateWindow! || time.timeIntervalSince(rateWindow!) >= 1 {
             rateWindow = time

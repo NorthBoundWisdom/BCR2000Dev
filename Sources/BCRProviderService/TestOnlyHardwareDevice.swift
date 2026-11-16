@@ -19,15 +19,36 @@ import Foundation
         private let commands: URL
         private let report: URL
         private var consumed = 0
+        private var timing: FileHandle?
+        private var sentCount = 0
 
-        init(commands: URL, report: URL) {
+        init(commands: URL, report: URL, timing: URL? = nil) throws {
             self.commands = commands; self.report = report
             connection.connectedSourceID = 1; connection.connectedDestinationID = 2
+            if let timing {
+                guard FileManager.default.createFile(atPath: timing.path, contents: nil) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                self.timing = try FileHandle(forWritingTo: timing)
+            }
         }
 
         func send(_ message: MIDIVoiceMessage) throws {
-            sent.append(message.midi1Bytes)
-            try writeReport()
+            if timing != nil {
+                try recordTiming(["kind": "send", "at": ProcessInfo.processInfo.systemUptime,
+                                  "bytes": message.midi1Bytes, "index": sentCount])
+                sentCount += 1
+            } else {
+                sent.append(message.midi1Bytes)
+                try writeReport()
+            }
+        }
+
+        private func recordTiming(_ record: [String: Any]) throws {
+            guard let timing else { return }
+            var data = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+            data.append(10)
+            try timing.write(contentsOf: data)
         }
 
         private func writeReport() throws {
@@ -39,16 +60,20 @@ import Foundation
         }
 
         func start() {
+            try? writeReport()
             task = Task { @MainActor [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
                     do {
                         let steps = try JSONSerialization
                             .jsonObject(with: Data(contentsOf: commands)) as? [[String: Any]] ?? []
+                        let previouslyConsumed = consumed
                         for step in steps.dropFirst(consumed) {
                             switch step["operation"] as? String {
                             case "input":
                                 if let cc = step["cc"] as? UInt8, let value = step["value"] as? UInt8 {
+                                    try recordTiming(["kind": "input", "at": ProcessInfo.processInfo.systemUptime,
+                                                      "cc": cc, "value": value, "index": consumed])
                                     onMessages?([.controlChange(channel: 0, number: cc, value: value)])
                                 }
                             case "disconnect": connection = MIDIConnectionSnapshot(); onConnection?(connection)
@@ -65,7 +90,7 @@ import Foundation
                             }
                             consumed += 1
                         }
-                        try writeReport()
+                        if timing == nil || consumed != previouslyConsumed { try writeReport() }
                     } catch {
                     /* A partial local script write is retried as a read; no external mutation is replayed. */ }
                     try? await Task.sleep(for: .milliseconds(20))
@@ -73,6 +98,9 @@ import Foundation
             }
         }
 
-        func stop() { task?.cancel(); task = nil }
+        func stop() {
+            task?.cancel(); task = nil
+            try? timing?.close(); timing = nil
+        }
     }
 #endif

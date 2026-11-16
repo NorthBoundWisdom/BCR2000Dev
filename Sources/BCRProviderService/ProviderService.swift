@@ -42,6 +42,7 @@ private struct Options {
     var surfacePrincipalFile: URL?
     var surfaceWriteLimits: BCRSurfaceControlAdapter.WriteLimits?
     var aggregateWriteLimitSpecified = false
+    var displayWriteLimit: Int?
     static func parse(_ arguments: [String]) throws -> Options {
         var result = Options(); var i = 0
         func value() throws -> String {
@@ -105,6 +106,10 @@ private struct Options {
             case "--write-limits":
                 guard result.surfaceWriteLimits == nil else { throw BootError(reason: "Repeated write limits option") }
                 result.surfaceWriteLimits = try BCRSurfaceControlAdapter.parseWriteLimits(value())
+            case "--display-write-limit":
+                guard result.displayWriteLimit == nil, let limit = Int(try value()), (1 ... 1000).contains(limit)
+                else { throw BootError(reason: "Invalid or repeated display write limit") }
+                result.displayWriteLimit = limit
             case "--write-limit":
                 result.aggregateWriteLimitSpecified = true
                 guard let limit = Int(try value()),
@@ -114,6 +119,9 @@ private struct Options {
             default: throw BootError(reason: "Unknown provider service option; use --help")
             }
             i += 1
+        }
+        guard result.displayWriteLimit == nil || result.surfaceClientTokensStdin else {
+            throw BootError(reason: "Display write limit requires explicit surface client credentials")
         }
         guard !(result.tokenStdin && result.surfaceClientTokensStdin) else {
             throw BootError(reason: "Surface client token stdin conflicts with legacy token input")
@@ -266,6 +274,7 @@ private struct BCRProviderService {
     --describe-surface            Print the selected profile's published control contract (JSON), then exit
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
     --surface-client-tokens-stdin  Three in-memory owner/operator/display tokens from a dedicated JSON pipe
+    --display-write-limit N       Explicit independent display requests/s, 1...1000; absent keeps old aggregate budget
     --surface-principal-file PATH Explicit private host-issued principal record; default memory only
     --write-limits input=N,feedback=N,renew=N,admin=N
                                   Surface-only independent budgets, mutually exclusive with --write-limit
@@ -403,9 +412,11 @@ private struct BCRProviderService {
                                 reason: "Test-only hardware double requires BCR_PROVIDER_TEST_HARDWARE=1 and local script/report paths"
                             )
                         }
-                        let fake = TestOnlyHardwareDevice(
+                        let fake = try TestOnlyHardwareDevice(
                             commands: URL(fileURLWithPath: script),
-                            report: URL(fileURLWithPath: report)
+                            report: URL(fileURLWithPath: report),
+                            timing: environment["BCR_PROVIDER_TEST_HARDWARE_TIMING_JSONL"]
+                                .map { URL(fileURLWithPath: $0) }
                         )
                         testDevice = fake; hardware = fake; usesTestDouble = true
                     #else
@@ -469,7 +480,12 @@ private struct BCRProviderService {
                     )
                 ]
             )
-            let port = try await server.start(port: options.port, token: token, surfaceClients: surfaceClients)
+            let port = try await server.start(
+                port: options.port,
+                token: token,
+                surfaceClients: surfaceClients,
+                displayWriteLimit: options.displayWriteLimit
+            )
             application.start()
             let ready: JSONValue = .object([
                 "event": .string("provider.ready"), "contract_version": .string("1.0"),

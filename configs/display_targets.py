@@ -70,6 +70,8 @@ def documents(directory):
         "",
         "Generated from this package's exact discovery and map files. No device addresses are handwritten.",
         "Discovery already supplies stable IDs, feedback kinds and feedback ranges; it does not describe each ring style.",
+        "The 56 hardware ring targets are logical IDs: 32 top-row IDs across four mutually exclusive groups plus 24 fixed lower-row encoders. The device has 32 physical rings, not 56 simultaneously visible rings.",
+        "Consumers must check both logical target overlap and the visible hardware group/context; the host does not arbitrate panel mappings or claim a remotely selected group.",
         "This offline table supplies the style without changing frozen simulation discovery. Hardware styles are learned-map expectations, never a readback or attended qualification.",
         "Button blink is a static MIDI value 96 on BCR, not a flashing promise. Unknown ring mode remains unknown.",
         "Ring styles: 1dot shows one position dot; 12dot shows one or two adjacent dots. Both still light a dot at raw zero: zero is a resting position, not off.",

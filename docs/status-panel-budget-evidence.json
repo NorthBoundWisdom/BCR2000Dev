@@ -1,0 +1,1088 @@
+{
+  "schema_version": 1,
+  "scope": "real provider / Debug fake device only; not USB MIDI qualification",
+  "default": {
+    "isolated_concurrent_processes": 1,
+    "conditions": [
+      {
+        "targets": 0,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.278719958034344,
+        "requests": 0,
+        "accepted": 0,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 0,
+        "request_to_fake_ms": {
+          "count": 0
+        },
+        "request_rtt_ms": {
+          "count": 0
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2142499908804893,
+          "p50_ms": 12.915333325508982,
+          "p95_ms": 26.2327499804087,
+          "p99_ms": 28.555916680488735,
+          "max_ms": 33.256250026170164
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3504166272468865,
+          "p50_ms": 13.092625013086945,
+          "p95_ms": 26.384791650343686,
+          "p99_ms": 28.7157500279136,
+          "max_ms": 33.49870833335444
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2108,
+          "min_ms": 1.3212080230005085,
+          "p50_ms": 1.7147909966297448,
+          "p95_ms": 2.2706249728798866,
+          "p99_ms": 4.735417023766786,
+          "max_ms": 18.104583024978638
+        },
+        "final_sequence": "300",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 8,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.27915687498171,
+        "requests": 2400,
+        "accepted": 2400,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 2,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 2400,
+          "min_ms": 0.5800420185551047,
+          "p50_ms": 0.9027920314110816,
+          "p95_ms": 1.6623756964690983,
+          "p99_ms": 3.274917369708419,
+          "max_ms": 17.04912504646927
+        },
+        "request_rtt_ms": {
+          "count": 2400,
+          "min_ms": 0.8157499833032489,
+          "p50_ms": 1.2816250091418624,
+          "p95_ms": 2.1833330392837524,
+          "p99_ms": 4.332875018008053,
+          "max_ms": 22.264958010055125
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.503207953646779,
+          "p50_ms": 13.618582976050675,
+          "p95_ms": 26.73433331074193,
+          "p99_ms": 28.938625007867813,
+          "max_ms": 29.64445762336254
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.5888329362496734,
+          "p50_ms": 13.696082925889641,
+          "p95_ms": 26.813208300154656,
+          "p99_ms": 29.02429166715592,
+          "max_ms": 29.701457591727376
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2110,
+          "min_ms": 1.184249995276332,
+          "p50_ms": 1.680165994912386,
+          "p95_ms": 2.482582989614457,
+          "p99_ms": 7.977249973919243,
+          "max_ms": 14.527666964568198
+        },
+        "final_sequence": "2700",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 8,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.29619962500874,
+        "requests": 4800,
+        "accepted": 3578,
+        "quota_rejected": 1222,
+        "rejections_by_code": {
+          "invalid_argument": 1222
+        },
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 3578,
+          "min_ms": 0.5148336640559137,
+          "p50_ms": 0.8597923442721367,
+          "p95_ms": 1.4654166880063713,
+          "p99_ms": 2.244084025733173,
+          "max_ms": 18.26208335114643
+        },
+        "request_rtt_ms": {
+          "count": 4800,
+          "min_ms": 0.6262080278247595,
+          "p50_ms": 1.155083009507507,
+          "p95_ms": 1.8890840001404285,
+          "p99_ms": 2.9200830031186342,
+          "max_ms": 18.67233298253268
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3778749853372574,
+          "p50_ms": 14.9053746717982,
+          "p95_ms": 27.083624619990587,
+          "p99_ms": 29.831707652192563,
+          "max_ms": 32.049999630544335
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.451874675694853,
+          "p50_ms": 15.049666340928525,
+          "p95_ms": 27.224832971114665,
+          "p99_ms": 29.939915984869003,
+          "max_ms": 32.16037462698296
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2116,
+          "min_ms": 0.780042028054595,
+          "p50_ms": 1.6428750241175294,
+          "p95_ms": 2.341040992178023,
+          "p99_ms": 10.919584019575268,
+          "max_ms": 25.43425001204014
+        },
+        "final_sequence": "3878",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 16,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.29672683298122,
+        "requests": 4800,
+        "accepted": 3553,
+        "quota_rejected": 1247,
+        "rejections_by_code": {
+          "invalid_argument": 1247
+        },
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 3553,
+          "min_ms": 0.5290840053930879,
+          "p50_ms": 0.929583387915045,
+          "p95_ms": 1.7148333718068898,
+          "p99_ms": 2.676875388715416,
+          "max_ms": 29.457875061780214
+        },
+        "request_rtt_ms": {
+          "count": 4800,
+          "min_ms": 0.6472079548984766,
+          "p50_ms": 1.2547500082291663,
+          "p95_ms": 2.1284999675117433,
+          "p99_ms": 3.594250010792166,
+          "max_ms": 29.95033300248906
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.250499626621604,
+          "p50_ms": 15.230833261739463,
+          "p95_ms": 27.98137499485165,
+          "p99_ms": 29.502915975172073,
+          "max_ms": 39.45624933112413
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3383329496718943,
+          "p50_ms": 15.464166295714676,
+          "p95_ms": 28.09483330929652,
+          "p99_ms": 29.568874335382134,
+          "max_ms": 39.55654095625505
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2107,
+          "min_ms": 0.9214170277118683,
+          "p50_ms": 1.8292919849045575,
+          "p95_ms": 3.4808339551091194,
+          "p99_ms": 13.879749982152134,
+          "max_ms": 28.983333962969482
+        },
+        "final_sequence": "3853",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 16,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.27970487502171,
+        "requests": 9600,
+        "accepted": 3600,
+        "quota_rejected": 6000,
+        "rejections_by_code": {
+          "invalid_argument": 6000
+        },
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 3600,
+          "min_ms": 0.5732916761189699,
+          "p50_ms": 0.9712083847261965,
+          "p95_ms": 1.7422083765268326,
+          "p99_ms": 4.524249990936369,
+          "max_ms": 23.56579201295972
+        },
+        "request_rtt_ms": {
+          "count": 9600,
+          "min_ms": 0.6626249523833394,
+          "p50_ms": 1.2018749839626253,
+          "p95_ms": 2.106665982864797,
+          "p99_ms": 4.824207979254425,
+          "max_ms": 32.92745799990371
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.1131243081763387,
+          "p50_ms": 14.938583015464246,
+          "p95_ms": 28.58054166426882,
+          "p99_ms": 36.60737461177632,
+          "max_ms": 47.19879134790972
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2268743012100458,
+          "p50_ms": 15.04779129754752,
+          "p95_ms": 28.649874962866306,
+          "p99_ms": 36.740582960192114,
+          "max_ms": 47.32258297735825
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2113,
+          "min_ms": 0.8412920287810266,
+          "p50_ms": 1.87241705134511,
+          "p95_ms": 4.365667002275586,
+          "p99_ms": 18.17479101009667,
+          "max_ms": 25.28783300658688
+        },
+        "final_sequence": "3900",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 24,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.30205241701333,
+        "requests": 7200,
+        "accepted": 3600,
+        "quota_rejected": 3600,
+        "rejections_by_code": {
+          "invalid_argument": 3600
+        },
+        "ambiguous_request_send_windows": 1,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 3600,
+          "min_ms": 0.5912923370487988,
+          "p50_ms": 0.8649170049466193,
+          "p95_ms": 1.598125381860882,
+          "p99_ms": 2.5544590316712856,
+          "max_ms": 22.160250693559647
+        },
+        "request_rtt_ms": {
+          "count": 7200,
+          "min_ms": 0.664208026137203,
+          "p50_ms": 1.1178750428371131,
+          "p95_ms": 1.9296249956823885,
+          "p99_ms": 3.3296660403721035,
+          "max_ms": 35.02620803192258
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2352493358775973,
+          "p50_ms": 14.784249651711434,
+          "p95_ms": 27.715415984857827,
+          "p99_ms": 29.943124623969197,
+          "max_ms": 40.70241627050564
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2887910124845803,
+          "p50_ms": 14.92104132194072,
+          "p95_ms": 27.833665953949094,
+          "p99_ms": 30.06066632224247,
+          "max_ms": 40.75841628946364
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2113,
+          "min_ms": 0.9965419885702431,
+          "p50_ms": 1.7266249633394182,
+          "p95_ms": 4.227624973282218,
+          "p99_ms": 16.90575003158301,
+          "max_ms": 32.94183302205056
+        },
+        "final_sequence": "3900",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 24,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.27413662499748,
+        "requests": 14400,
+        "accepted": 3600,
+        "quota_rejected": 10800,
+        "rejections_by_code": {
+          "invalid_argument": 10800
+        },
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 3600,
+          "min_ms": 0.5595416878350079,
+          "p50_ms": 0.940375030040741,
+          "p95_ms": 1.5290420269593596,
+          "p99_ms": 2.04941735137254,
+          "max_ms": 33.42712501762435
+        },
+        "request_rtt_ms": {
+          "count": 14400,
+          "min_ms": 0.6043750327080488,
+          "p50_ms": 1.1199580039829016,
+          "p95_ms": 1.7791250138543546,
+          "p99_ms": 2.592833014205098,
+          "max_ms": 45.23808404337615
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2084163026884198,
+          "p50_ms": 16.123166657052934,
+          "p95_ms": 28.911874280311167,
+          "p99_ms": 34.24041601829231,
+          "max_ms": 56.56533263390884
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3216663501225412,
+          "p50_ms": 16.236666298937052,
+          "p95_ms": 29.035249317530543,
+          "p99_ms": 34.292082651518285,
+          "max_ms": 56.67870765319094
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 2109,
+          "min_ms": 0.7179999956861138,
+          "p50_ms": 1.735249999910593,
+          "p95_ms": 3.5190419876016676,
+          "p99_ms": 20.552625006530434,
+          "max_ms": 30.846791982185096
+        },
+        "final_sequence": "3900",
+        "flags": [],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      }
+    ]
+  },
+  "display300": {
+    "isolated_concurrent_processes": 1,
+    "conditions": [
+      {
+        "targets": 0,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.26617983303731,
+        "requests": 0,
+        "accepted": 0,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 0,
+        "request_to_fake_ms": {
+          "count": 0
+        },
+        "request_rtt_ms": {
+          "count": 0
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.0172500042244792,
+          "p50_ms": 12.941540975589305,
+          "p95_ms": 28.0446246615611,
+          "p99_ms": 32.76045760139823,
+          "max_ms": 36.76620760234073
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.1434582993388176,
+          "p50_ms": 13.16133263753727,
+          "p95_ms": 28.160291316453367,
+          "p99_ms": 32.877624267712235,
+          "max_ms": 36.8710826151073
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1950,
+          "min_ms": 0.9810419869609177,
+          "p50_ms": 1.458624959923327,
+          "p95_ms": 2.090084017254412,
+          "p99_ms": 4.8100840067490935,
+          "max_ms": 27.84620801685378
+        },
+        "final_sequence": "300",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 8,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.28620625002077,
+        "requests": 2400,
+        "accepted": 2400,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 2400,
+          "min_ms": 0.5859590601176023,
+          "p50_ms": 0.830375007353723,
+          "p95_ms": 1.5802503330633044,
+          "p99_ms": 2.406125364359468,
+          "max_ms": 10.092084005009383
+        },
+        "request_rtt_ms": {
+          "count": 2400,
+          "min_ms": 0.8207089849747717,
+          "p50_ms": 1.1676670401357114,
+          "p95_ms": 2.0592499640770257,
+          "p99_ms": 3.3655830193310976,
+          "max_ms": 11.890499969013035
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2997500016354024,
+          "p50_ms": 15.988749684765935,
+          "p95_ms": 30.702500022016466,
+          "p99_ms": 33.42841664562002,
+          "max_ms": 34.12804094841704
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3694166555069387,
+          "p50_ms": 16.08466630568728,
+          "p95_ms": 30.787333322223276,
+          "p99_ms": 33.51720829959959,
+          "max_ms": 34.20691593782976
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1913,
+          "min_ms": 1.151000033132732,
+          "p50_ms": 1.6009999671950936,
+          "p95_ms": 2.302332955878228,
+          "p99_ms": 5.889582971576601,
+          "max_ms": 9.380250005051494
+        },
+        "final_sequence": "2700",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 8,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.29760658298619,
+        "requests": 4800,
+        "accepted": 4800,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 4800,
+          "min_ms": 0.4970006993971765,
+          "p50_ms": 0.7507086847908795,
+          "p95_ms": 1.7398333875462413,
+          "p99_ms": 3.1358750420622528,
+          "max_ms": 16.43025071825832
+        },
+        "request_rtt_ms": {
+          "count": 4800,
+          "min_ms": 0.6846250034868717,
+          "p50_ms": 1.0324169998057187,
+          "p95_ms": 2.3423339589498937,
+          "p99_ms": 4.079999984242022,
+          "max_ms": 16.851958993356675
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.010499254334718,
+          "p50_ms": 16.090583347249776,
+          "p95_ms": 30.169207602739334,
+          "p99_ms": 32.66899933805689,
+          "max_ms": 33.78295834409073
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.1095409281551838,
+          "p50_ms": 16.199208330363035,
+          "p95_ms": 30.251040938310325,
+          "p99_ms": 32.73804095806554,
+          "max_ms": 33.84074999485165
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1906,
+          "min_ms": 0.9080839809030294,
+          "p50_ms": 1.5005409950390458,
+          "p95_ms": 2.900834020692855,
+          "p99_ms": 6.60575000802055,
+          "max_ms": 21.63354097865522
+        },
+        "final_sequence": "5100",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 16,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.286782291019335,
+        "requests": 4800,
+        "accepted": 4800,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 4800,
+          "min_ms": 0.5102500435896218,
+          "p50_ms": 0.7930423598736525,
+          "p95_ms": 2.0302500342950225,
+          "p99_ms": 3.8784584030508995,
+          "max_ms": 20.79808368580416
+        },
+        "request_rtt_ms": {
+          "count": 4800,
+          "min_ms": 0.7066659745760262,
+          "p50_ms": 1.0852079722099006,
+          "p95_ms": 2.740916039329022,
+          "p99_ms": 5.201832973398268,
+          "max_ms": 21.713999973144382
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.1255829595029354,
+          "p50_ms": 16.02412498323247,
+          "p95_ms": 32.00187464244664,
+          "p99_ms": 36.398707947228104,
+          "max_ms": 40.564415976405144
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2167496024630964,
+          "p50_ms": 16.12645835848525,
+          "p95_ms": 32.05195796908811,
+          "p99_ms": 36.45670798141509,
+          "max_ms": 40.65049934433773
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1922,
+          "min_ms": 1.0911670397035778,
+          "p50_ms": 1.6182910185307264,
+          "p95_ms": 4.021624976303428,
+          "p99_ms": 12.627625023014843,
+          "max_ms": 19.879499974194914
+        },
+        "final_sequence": "5100",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 16,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.35840704198927,
+        "requests": 9600,
+        "accepted": 9600,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 9600,
+          "min_ms": 0.49995904555544257,
+          "p50_ms": 0.757959031034261,
+          "p95_ms": 1.3541667140088975,
+          "p99_ms": 1.9948750268667936,
+          "max_ms": 28.47025031223893
+        },
+        "request_rtt_ms": {
+          "count": 9600,
+          "min_ms": 0.68845902569592,
+          "p50_ms": 1.017125032376498,
+          "p95_ms": 1.7410829896107316,
+          "p99_ms": 2.696583978831768,
+          "max_ms": 36.79679200286046
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.236749638337642,
+          "p50_ms": 16.28404128132388,
+          "p95_ms": 31.385707610752434,
+          "p99_ms": 34.113041299860924,
+          "max_ms": 37.20483259530738
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.3455412699840963,
+          "p50_ms": 16.337791283149272,
+          "p95_ms": 31.455624266527593,
+          "p99_ms": 34.158332971856,
+          "max_ms": 37.25029097404331
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1927,
+          "min_ms": 0.9798749815672636,
+          "p50_ms": 1.6072920407168567,
+          "p95_ms": 3.080542024690658,
+          "p99_ms": 15.303458028938621,
+          "max_ms": 27.222375036217272
+        },
+        "final_sequence": "9900",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 24,
+        "hz": 5,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.30949120799778,
+        "requests": 7200,
+        "accepted": 7200,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 0,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 7200,
+          "min_ms": 0.5176253616809845,
+          "p50_ms": 0.9390840423293412,
+          "p95_ms": 2.357958350330591,
+          "p99_ms": 3.635625005699694,
+          "max_ms": 31.030834012199193
+        },
+        "request_rtt_ms": {
+          "count": 7200,
+          "min_ms": 0.7090410217642784,
+          "p50_ms": 1.2644579983316362,
+          "p95_ms": 3.0276660108938813,
+          "p99_ms": 4.800499998964369,
+          "max_ms": 32.88566699484363
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2285409611649811,
+          "p50_ms": 16.76558330655098,
+          "p95_ms": 31.68079099850729,
+          "p99_ms": 34.679208300076425,
+          "max_ms": 36.88295796746388
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2767909793183208,
+          "p50_ms": 16.95141661912203,
+          "p95_ms": 32.13033336214721,
+          "p99_ms": 34.72937498008832,
+          "max_ms": 37.03316627070308
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1930,
+          "min_ms": 0.9225840331055224,
+          "p50_ms": 1.8834170186892152,
+          "p95_ms": 4.747083003167063,
+          "p99_ms": 19.292999990284443,
+          "max_ms": 25.53658396936953
+        },
+        "final_sequence": "7500",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      },
+      {
+        "targets": 24,
+        "hz": 10,
+        "requested_seconds": 60.0,
+        "elapsed_seconds": 60.320694665948395,
+        "requests": 14400,
+        "accepted": 14400,
+        "quota_rejected": 0,
+        "rejections_by_code": {},
+        "ambiguous_request_send_windows": 1,
+        "other_rejections": [],
+        "ignored": 0,
+        "coalesced_or_missing_send": 0,
+        "input_overlay_refresh_sends": 300,
+        "request_to_fake_ms": {
+          "count": 14400,
+          "min_ms": 0.4970840527676046,
+          "p50_ms": 0.8256256696768105,
+          "p95_ms": 1.3700423296540976,
+          "p99_ms": 1.9695006776601076,
+          "max_ms": 36.04866738896817
+        },
+        "request_rtt_ms": {
+          "count": 14400,
+          "min_ms": 0.6822089781053364,
+          "p50_ms": 1.0843329946510494,
+          "p95_ms": 1.7112080240622163,
+          "p99_ms": 2.3303329944610596,
+          "max_ms": 36.32108401507139
+        },
+        "input_events_generated": 300,
+        "input_events_read": 300,
+        "input_event_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.1728742974810302,
+          "p50_ms": 16.313166299369186,
+          "p95_ms": 32.575749326497316,
+          "p99_ms": 37.91204164735973,
+          "max_ms": 43.764999660197645
+        },
+        "fake_input_to_reader_ms": {
+          "count": 300,
+          "min_ms": 1.2244159588590264,
+          "p50_ms": 16.361957998014987,
+          "p95_ms": 32.6579159591347,
+          "p99_ms": 38.00729167414829,
+          "max_ms": 43.82541630184278
+        },
+        "quota_error_semantics": "Legacy hardware aggregate exhaustion returns invalid_argument; unchanged. Requests use validated target/range/schema.",
+        "event_poll_rtt_ms": {
+          "count": 1933,
+          "min_ms": 0.7540830411016941,
+          "p50_ms": 1.763500040397048,
+          "p95_ms": 5.026540951803327,
+          "p99_ms": 25.064832996577024,
+          "max_ms": 36.397416959516704
+        },
+        "final_sequence": "14700",
+        "flags": [
+          "--display-write-limit",
+          "300"
+        ],
+        "errors": [],
+        "scope": "Debug fake device only; no USB MIDI reliability or physical qualification"
+      }
+    ]
+  },
+  "binary_identities": {
+    "default-binary": {
+      "binary_sha256": "84b3d9dfee8252b11f5b879f21bd373e8eb2201c1ba6dde55d46e8d24a5f82ae",
+      "base_commit": "317b6e86e19a34e37198c9621f7ceec69d507dd3",
+      "diff_sha256": "091c4ba3b41713da5307efa2384905fd7f706694ab38fbc563f3ca981759c48a",
+      "shared_lock": {
+        "schemaVersion": 1,
+        "remote": "https://github.com/NorthBoundWisdom/SurfacePlugins.git",
+        "revision": "8388873f43dacbcd5c0fc4e3eda5590c42b41e90"
+      }
+    },
+    "configured-monotonic-binary": {
+      "binary_sha256": "32bcd318d195ae639c01bbd61468e7da74f9f5acf9a737db4daece85b91821fb",
+      "base_commit": "317b6e86e19a34e37198c9621f7ceec69d507dd3",
+      "diff_sha256": "d822f74b2f02e8da386030e2a6212cb4cafd8c65c2421587cb5c2aee01d267d8",
+      "driver_sha256": "51b256524ada3f35a72d18df1f08af2bdaa102b9562f17d487abac95a77b0885"
+    }
+  },
+  "raw_data_sha256": {
+    "build/h/h2/default-serial-60s/0x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/0x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/0x5/device-timing.jsonl": "3edc744bfe3b545a01e1d34ccfcc5b60b6bf8f4a6da04113ae3b92708ef5fe2f",
+    "build/h/h2/default-serial-60s/0x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/0x5/events.jsonl": "b0b45472a7881702781b22345df538f1a8634556f66a817e64989fb6e5acbd8d",
+    "build/h/h2/default-serial-60s/0x5/inputs-read.json": "01f6d11758c49db6d46b399553c88c578cd88c5e787c4938445d13138590dbe8",
+    "build/h/h2/default-serial-60s/0x5/polls.json": "678c848b9e54832309188ee70f4e4617b86782347e407374f9d2d7af13f4e04f",
+    "build/h/h2/default-serial-60s/0x5/request-send-matches.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/0x5/requests.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/0x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/0x5/summary.json": "a14c66d5229543d3cc00b9a68cdc3789edf018c26aaa3955bb9ff6584657a5ff",
+    "build/h/h2/default-serial-60s/16x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/16x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/16x10/device-timing.jsonl": "769fe4ce7c78762ae80702ad74f976a164dd2056e732de19cc0794da3cd5e755",
+    "build/h/h2/default-serial-60s/16x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/16x10/events.jsonl": "bb28ac8e972c093ca9b5f9d2325a35631319c17c308289bd8d62513ea589e331",
+    "build/h/h2/default-serial-60s/16x10/inputs-read.json": "d4270366644aeaf56737095daa7040081567ac027c3bdcd2dfb94f4753e04d26",
+    "build/h/h2/default-serial-60s/16x10/polls.json": "706f02698a046addfe1b27aaffed2f8d1043f3e2ef5c8bef76ec56e5196bfd1d",
+    "build/h/h2/default-serial-60s/16x10/request-send-matches.jsonl": "24eeb134d6f544b618e153e101dffcce427c09611ca0baddf90766d78c5d4123",
+    "build/h/h2/default-serial-60s/16x10/requests.jsonl": "52b3deb2637e6b1b73316b9d800adcc066bb8c5697d31a89f0faee61f26fe87b",
+    "build/h/h2/default-serial-60s/16x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/16x10/summary.json": "041d3fe124c8f4347d29a8625932da1390fe418767414e53378138a4677ccb4a",
+    "build/h/h2/default-serial-60s/16x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/16x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/16x5/device-timing.jsonl": "c0d6524bbd2c586de0bac0f692866079d7fb4eac9e9f0897afaa9cdeb6866238",
+    "build/h/h2/default-serial-60s/16x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/16x5/events.jsonl": "892e3b9916a5f8941adfd9d3ac2f1b7d0f26aa342854aaf7372e335fbaaf5618",
+    "build/h/h2/default-serial-60s/16x5/inputs-read.json": "fe20570125f01cea83b697c6a4eb336242a99f25857402c8267d492460e35751",
+    "build/h/h2/default-serial-60s/16x5/polls.json": "e54a7875c803493c033ee23c02875956bd32f9c1a8fd52f2b5523724fc4f9b29",
+    "build/h/h2/default-serial-60s/16x5/request-send-matches.jsonl": "d5292bd8095b6025f52c336f0f196ec94c1b4c1c36495612654de830c9fa96ce",
+    "build/h/h2/default-serial-60s/16x5/requests.jsonl": "5c08d66e607a7769817722625f2c9607e4fb5a8838c3bd136a530b09cea7c5f1",
+    "build/h/h2/default-serial-60s/16x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/16x5/summary.json": "f889d156fece89351c069b23b4b6eed0e29b3097159e84677b79cdfaa3a58bb3",
+    "build/h/h2/default-serial-60s/24x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/24x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/24x10/device-timing.jsonl": "307d30ca0c90a806eed29caab3c2e79c92b57721e9bb1beddc525fd2075aa5db",
+    "build/h/h2/default-serial-60s/24x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/24x10/events.jsonl": "3c4660a1c61d7f9a7aab3ef3bdec7c156a16a4a669c4eeb97f1ef1844f5067a1",
+    "build/h/h2/default-serial-60s/24x10/inputs-read.json": "6b9a1265b374d31c0b6c92254acf091ac9c722412db13caf774ddeaf2fb1a903",
+    "build/h/h2/default-serial-60s/24x10/polls.json": "8b7b39eba13de494e530031f9271a9d5c0cc3c27c6ece36541b23c106d54e04f",
+    "build/h/h2/default-serial-60s/24x10/request-send-matches.jsonl": "11d61a6320f17563b58ae39e8321061905a4b4ae9910fb930345f1e02d6f19cc",
+    "build/h/h2/default-serial-60s/24x10/requests.jsonl": "3808b09cd44161beddd419bf026000d73d07dca35456858aaaca22e904c3ee87",
+    "build/h/h2/default-serial-60s/24x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/24x10/summary.json": "23c8111efccbf456068bd83ceef007f2efbf83d994e6e7188334380aaaa690ff",
+    "build/h/h2/default-serial-60s/24x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/24x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/24x5/device-timing.jsonl": "4417da293e77d5d7f0a03e8153a3ea86c3fe349039b294cef9ae9b83ea033589",
+    "build/h/h2/default-serial-60s/24x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/24x5/events.jsonl": "2fd4855810cb5025001c634c3a51e7960027602fa7a4d89534e8e05d8e3bd611",
+    "build/h/h2/default-serial-60s/24x5/inputs-read.json": "5eecd1022f95ee46d84231663d1af3b482214b45d2079100668e6e9a78c74700",
+    "build/h/h2/default-serial-60s/24x5/polls.json": "4e04a2ec278c83716c820aee37a84857fb5ace964efa07230a20d4ab4f46cfa6",
+    "build/h/h2/default-serial-60s/24x5/request-send-matches.jsonl": "008479faa22a6a68e2084614f2b8df3ab7e4276b28f11d078d5a806563962eb4",
+    "build/h/h2/default-serial-60s/24x5/requests.jsonl": "cb32070cd630dfc1f05a341f27c6fe23ef4c503e58296b0ebbfe784f18dd44a6",
+    "build/h/h2/default-serial-60s/24x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/24x5/summary.json": "3002df3275778cf8f1adc7c58516dbfbf4c2c4fe6c0a7607afe79eac216b5b27",
+    "build/h/h2/default-serial-60s/8x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/8x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/8x10/device-timing.jsonl": "0cf6aa8e65f6bf6f0cf0691856eb2d72272d1b69a7571270dfb2897e5e7278ed",
+    "build/h/h2/default-serial-60s/8x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/8x10/events.jsonl": "a11905070f7c7dee5d8a5bd7a5a4ecd61b81e30aa02865f9004010b910ff4d64",
+    "build/h/h2/default-serial-60s/8x10/inputs-read.json": "53fa314aaa9d4879922d0cbc0b2337971b6ae166df96bb9eb68add42d4ca5ba7",
+    "build/h/h2/default-serial-60s/8x10/polls.json": "4a0aee3749ac5ad8f271f339c68ec02a280078675d7b2a678136ba767d795297",
+    "build/h/h2/default-serial-60s/8x10/request-send-matches.jsonl": "779155a44ddf2916417ddb25da90c7ed61d980b7eab1626f140b39083cca8e9d",
+    "build/h/h2/default-serial-60s/8x10/requests.jsonl": "4a7bfd96d54da90621e32bfcc96502c4da205fe55db5e50c42576a74011d9afa",
+    "build/h/h2/default-serial-60s/8x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/8x10/summary.json": "abc3a9d4265a59fed1f72db5a65d1bdff706c5afff0de47e1f72b5679d695000",
+    "build/h/h2/default-serial-60s/8x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/default-serial-60s/8x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/default-serial-60s/8x5/device-timing.jsonl": "c4d8bda180b167e673c9237c8e87dfbb5a9f8262e3b6d3281ad686f088f87231",
+    "build/h/h2/default-serial-60s/8x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/default-serial-60s/8x5/events.jsonl": "e2e40a1bb4ee401357d980d33df6186e3860e00f152d90f7b06ec5cb8f167f92",
+    "build/h/h2/default-serial-60s/8x5/inputs-read.json": "e944afdf4c93db7a7d6124707db3154e55d7a984c3491138eb8e2424914f4fe8",
+    "build/h/h2/default-serial-60s/8x5/polls.json": "a999012f3c932fd330dad99c3be0c0bdeae7feb6da636e1e546a8b7003a41a87",
+    "build/h/h2/default-serial-60s/8x5/request-send-matches.jsonl": "1234014e210bf388d8efe17ca2337e64eea746c6ea157428c4632346ada0dfa3",
+    "build/h/h2/default-serial-60s/8x5/requests.jsonl": "7e653dad103327bba1d194aa4c04e9a622a556b6bbd7c1c2f06df026fb91999b",
+    "build/h/h2/default-serial-60s/8x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/default-serial-60s/8x5/summary.json": "5a9a0d5c9b9e39de2e919042ca4f5f55bdfbc6312c6fd4f1ec10d9fcafaa737c",
+    "build/h/h2/default-serial-60s/summary.json": "d6db35c353ab1fbc8cfa8950f4b8c3a281f9a0a23a71658b9d1fcc0cfe9e9d37",
+    "build/h/h2/configured300-serial-60s/0x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/0x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/0x5/device-timing.jsonl": "b34dfe4176d4eda893af0db6a29312b100e2a1811810b6054bb4c97c6d13fbc3",
+    "build/h/h2/configured300-serial-60s/0x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/0x5/events.jsonl": "7f0fa2ed02f6de82b00a48a47f1966090bd5e407674dae4432a51a525b906abf",
+    "build/h/h2/configured300-serial-60s/0x5/inputs-read.json": "c30524149df1367ded112ef4d17cdfb8acefe33d6698894636c17e206e9e9e6e",
+    "build/h/h2/configured300-serial-60s/0x5/polls.json": "074836ce72e30ec0089562445c19fcabb666a372b13dd3e2dd17d7c4a4500e21",
+    "build/h/h2/configured300-serial-60s/0x5/request-send-matches.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/0x5/requests.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/0x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/0x5/summary.json": "a8885f6a3684f7cfdfa261a9bbf046db941cb1d8632aba3b0ad3b5613438f807",
+    "build/h/h2/configured300-serial-60s/16x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/16x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/16x10/device-timing.jsonl": "392ddb675c7521df1dd50d0bdb5f571c84ff454f60a0b87d4f1b8a1d1a44964f",
+    "build/h/h2/configured300-serial-60s/16x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/16x10/events.jsonl": "bba6e940ac868cf1cf28c5842a321735823af6c9f03f436eca0d8bc1e961bd10",
+    "build/h/h2/configured300-serial-60s/16x10/inputs-read.json": "671346c5dbe20531a1c12942ee1334ff615c7b80b7f8f2436cb0d8c68f7221aa",
+    "build/h/h2/configured300-serial-60s/16x10/polls.json": "2db148c7191e12ef4193dc159eb575030cd13d179d56f8e03ca5851b99a8fdca",
+    "build/h/h2/configured300-serial-60s/16x10/request-send-matches.jsonl": "12822ee7450fa96c5b7403a178adfab24d23a78bf808c8083e8df80ab5a09db5",
+    "build/h/h2/configured300-serial-60s/16x10/requests.jsonl": "a487433f2535be433b659e4513c8de57edf925cb209492be162afa8f306e8a73",
+    "build/h/h2/configured300-serial-60s/16x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/16x10/summary.json": "997a0a67e2ab56d884d4321e521a3ae3180850079d50cd5d10660c9ffa632e37",
+    "build/h/h2/configured300-serial-60s/16x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/16x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/16x5/device-timing.jsonl": "5815b4ed1a71041ba345c00095c7952e2980d7e79b8e0bccf2e4623a2a8eb64b",
+    "build/h/h2/configured300-serial-60s/16x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/16x5/events.jsonl": "ac07f1c11445dd526ca712d1cb8d3b0e760692db5ab426e12b69a53ddc9d0a6e",
+    "build/h/h2/configured300-serial-60s/16x5/inputs-read.json": "ac150e26ed7958ab35c9fb19281a55d700646263b35ce7e908ab000757584517",
+    "build/h/h2/configured300-serial-60s/16x5/polls.json": "e3ab2a9cc70d8f2b5bbc3f12a930335bfc5da7af631225b4e02543b13684c4ef",
+    "build/h/h2/configured300-serial-60s/16x5/request-send-matches.jsonl": "ef4356945845d8ff80714e35efe66d05ca9431659d05f657ce99dcacf5c21ff1",
+    "build/h/h2/configured300-serial-60s/16x5/requests.jsonl": "d1316640bf00776fcdf2f177d7a93299cdad2eb143196754e2f8fddd91b55bb1",
+    "build/h/h2/configured300-serial-60s/16x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/16x5/summary.json": "6318f948ecfa0db1d777b08b9f7060f6ea63d77402712972f4e5d413014d1a63",
+    "build/h/h2/configured300-serial-60s/24x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/24x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/24x10/device-timing.jsonl": "5106f6fd1ab8c6a98049b7b952eb8b89ed094eee5cfd15795c476f0b2d846e12",
+    "build/h/h2/configured300-serial-60s/24x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/24x10/events.jsonl": "d665bbb5b95a1851585e372f1e06daaed01693d9667a81857147d64badb7ffa2",
+    "build/h/h2/configured300-serial-60s/24x10/inputs-read.json": "332eab1089907c380876d1bc133c862de6824d0e240eb425fafe8ff204922814",
+    "build/h/h2/configured300-serial-60s/24x10/polls.json": "b55e57558839043504c9b908855a5817926ca0945118cf4c3f5281ef89cba3a1",
+    "build/h/h2/configured300-serial-60s/24x10/request-send-matches.jsonl": "d4775cc27f9525f8745d705740ae997e05cde123cdbd7221cfe05f8a2ae8e6df",
+    "build/h/h2/configured300-serial-60s/24x10/requests.jsonl": "09456d9006368c6a08b43b1e7d3e2090642b91fb4d46a3d6904ef0f22680c7b4",
+    "build/h/h2/configured300-serial-60s/24x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/24x10/summary.json": "d5a67988efe2a5657d10474976e084eab26c50be1899079c9245e6347e258969",
+    "build/h/h2/configured300-serial-60s/24x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/24x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/24x5/device-timing.jsonl": "7abe8bd4b5693835f05b4caddfaaac0b99adde1c8aa2138ae5acdc21e8331452",
+    "build/h/h2/configured300-serial-60s/24x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/24x5/events.jsonl": "45a14e7bc74e343d55fe59574dc631a5b68d677700c2d9abd096688528600c68",
+    "build/h/h2/configured300-serial-60s/24x5/inputs-read.json": "d15ea4ad9e1da086fec406cba04db9ff91ce3658adfc6cbce982571bf6e9cf80",
+    "build/h/h2/configured300-serial-60s/24x5/polls.json": "172dfd976a6ea8a805699ff4e782a5ed5ba1da449f88e4fa34f79c33e428f985",
+    "build/h/h2/configured300-serial-60s/24x5/request-send-matches.jsonl": "7b355862886cb2d42fd7f10d459be31b9e5b15b11c4c36db8910c4bb69a58b92",
+    "build/h/h2/configured300-serial-60s/24x5/requests.jsonl": "59203c94a2a557c5ee6f9393de89708fb13fa1664ae4bf2ac2097f907ebbe554",
+    "build/h/h2/configured300-serial-60s/24x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/24x5/summary.json": "40d8369e1c6f2b6975ad19259bbb9c382b9b6bf7f6961b71aac477fcce507e7f",
+    "build/h/h2/configured300-serial-60s/8x10/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/8x10/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/8x10/device-timing.jsonl": "3c01404cf9d98c2e096331ac57ec719561e64aabc3c21f8ac7c1f746c9deea41",
+    "build/h/h2/configured300-serial-60s/8x10/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/8x10/events.jsonl": "460b363eb65b247910283774397eb17b3fc474e933c5f8d978d1b2c5daad81c0",
+    "build/h/h2/configured300-serial-60s/8x10/inputs-read.json": "6a568b53f15b5b1795564b47c48f40201f4d52b222899568e33eccf057eab981",
+    "build/h/h2/configured300-serial-60s/8x10/polls.json": "efc50b8f2fb6a6d05082377a8db8f34daa1a87a4a666f21126dc77736410173d",
+    "build/h/h2/configured300-serial-60s/8x10/request-send-matches.jsonl": "3f7353d9df460715b9866a8e506245d3c785a14974529794ecca5aa44071a6ed",
+    "build/h/h2/configured300-serial-60s/8x10/requests.jsonl": "734501dc346d8bd61b4ace3571c69d2a7c31396deb27ce80d791597985ba98c9",
+    "build/h/h2/configured300-serial-60s/8x10/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/8x10/summary.json": "20e30dda8941b7cc7aabc9a2a624200c5a367a583590a8c71427203680491306",
+    "build/h/h2/configured300-serial-60s/8x5/TEST-ONLY-commands.json": "0aa7335941103310b215435a5e9e9f0cf48e3439d5033af8d43ed3392255d11a",
+    "build/h/h2/configured300-serial-60s/8x5/TEST-ONLY-map.json": "493789f4eeed56755a270ced73929a3730a3357dd74205aca161b41e7e7d730f",
+    "build/h/h2/configured300-serial-60s/8x5/device-timing.jsonl": "2de51d4750ee2b791d22b96f06abd838935cdb7bfd7cd7fca538383e8bb20d9e",
+    "build/h/h2/configured300-serial-60s/8x5/device.json": "8102b5fa00692e013f5aff71be76be58ff9ad9e1abdfcfb9d8442f06f904bb6a",
+    "build/h/h2/configured300-serial-60s/8x5/events.jsonl": "0349e677c303909c0ae0eed8f37d1c7c729ac3455de14110db5dfff4272618e9",
+    "build/h/h2/configured300-serial-60s/8x5/inputs-read.json": "594250219a0951103c381149dff519cd33b41dd5ab891ccbf89796ed7a1fffa9",
+    "build/h/h2/configured300-serial-60s/8x5/polls.json": "cbee72d6f6b17890fc9ddf5e2efa0bd0cfbcf84a73260ab86606cd5e27e18627",
+    "build/h/h2/configured300-serial-60s/8x5/request-send-matches.jsonl": "a16a89c9084dc8e82dda3e79a0612fd717150c63d40e2ac9265b8edc3bb9e9a3",
+    "build/h/h2/configured300-serial-60s/8x5/requests.jsonl": "b26a835de103ee31ce4c545f5d372e4f35b16f5eeff4e2ba9e297223df67ccf3",
+    "build/h/h2/configured300-serial-60s/8x5/stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build/h/h2/configured300-serial-60s/8x5/summary.json": "ecb59396c6f41ba7f5e97ac37b8cee269895fe31e2a028e73f35ea480be2388f",
+    "build/h/h2/configured300-serial-60s/summary.json": "94c61dacc412892ff6a0808a094f91e551bbf0fc14d47db81ff150897cf37406"
+  },
+  "failed_parallel_attempt": {
+    "path": "build/h/h2/default-60s",
+    "qualified": false,
+    "reason": "Seven simultaneous measurement hosts developed transport_unknown around 39 seconds; cause not established. Preserved, not counted as passing."
+  },
+  "network_monitor": {
+    "network-monitor-fixed.jsonl": {
+      "records": 333,
+      "time_wait_min": 0,
+      "time_wait_max": 0,
+      "owned_fd_max": 15
+    },
+    "network-monitor-configured.jsonl": {
+      "records": 446,
+      "time_wait_min": 0,
+      "time_wait_max": 0,
+      "owned_fd_max": 14
+    }
+  }
+}

@@ -87,6 +87,7 @@ public final class MCPHTTPServer {
     private var generation = UUID()
     private var token = ""
     private var surfaceClients: SurfaceClientCredentials?
+    private var displayWriteLimit: Int?
     private var port: UInt16 = 0
     private let providerID: String?
 
@@ -164,12 +165,15 @@ public final class MCPHTTPServer {
 
     /// Port zero is only used by isolated loopback tests. The settings controller rejects it.
     public func start(port: UInt16, token: String,
-                      surfaceClients: SurfaceClientCredentials? = nil) async throws -> UInt16
+                      surfaceClients: SurfaceClientCredentials? = nil,
+                      displayWriteLimit: Int? = nil) async throws -> UInt16
     {
         stop()
         guard !token.isEmpty else { throw MCPHTTPParseError(reason: L10n.text("缺少 Bearer token")) }
         self.token = token
         self.surfaceClients = surfaceClients
+        self.displayWriteLimit = displayWriteLimit
+        router.service.clearDisplayBudgets()
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = false
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
@@ -378,7 +382,10 @@ public final class MCPHTTPServer {
             }
             writerID = isOperator ? surfaceClients?.operatorWriterID : surfaceClients?.displayWriterID
         }
-        let reply = router.service.withAuthenticatedSurfaceWriterID(writerID) {
+        let reply = router.service.withAuthenticatedSurfaceWriterID(
+            writerID,
+            displayWriteLimit: isDisplay ? displayWriteLimit : nil
+        ) {
             router.handle(request.body, headers: request.headers, visibleTools: visibleTools)
         }
         send(id, reply: reply)

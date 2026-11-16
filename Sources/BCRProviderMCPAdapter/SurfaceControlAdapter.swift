@@ -365,6 +365,11 @@ public final class BCRSurfaceControlAdapter {
     }
 
     private func consume(_ gateway: MCPApplicationGateway, category: WriteCategory, at now: Double) throws {
+        if category == .feedback, gateway.hasIndependentDisplayBudget {
+            do { try gateway.consumeWrites(1) }
+            catch { throw ControlContractError("rate_limited") }
+            return
+        }
         guard let limits = writeLimits else {
             do { try gateway.consumeWrites(1) }
             catch { throw ControlContractError("rate_limited") }

@@ -59,3 +59,16 @@ values distinguish them. This requires no change to contracts 1.3/1.4 or SDK wir
 Real-process proof: `configs/verify_surface_clients_transport.py`, both MCP protocol versions; concurrent
 input/feedback events retain distinct writers, secondary cross-role/legacy/reset calls fail, and an owner
 call immediately afterwards retains the original authority.
+
+## Optional independent display request budget
+
+`--display-write-limit N` selects an explicit 1..1000 requests/second budget per authenticated display
+writer. It requires `--surface-client-tokens-stdin`. Without the flag, the old aggregate budget and its
+60/s default remain exactly unchanged, including any existing `--write-limit` override. Owner/operator
+budgets and tool permissions are unchanged. With the flag the display budget does not consume the
+owner/operator aggregate; a role credential never grants missing display permission or write policy.
+Simulation category flags still govern other writers/categories; the explicit display bucket takes
+precedence only for the display credential. BCR hardware legacy quota exhaustion continues to report
+`invalid_argument`; simulation reports `rate_limited`. Do not treat arbitrary invalid arguments as quota.
+
+The panel load measurements and recommended rates are in `STATUS_PANEL_BUDGET.md` in the H delivery.

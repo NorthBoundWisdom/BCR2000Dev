@@ -301,6 +301,9 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         "SURFACE_CLIENTS.md",
         "F_PIPE_HANDOFF.md",
         "F_CANDIDATE_ATTENDED.md",
+        "STATUS_PANEL_BUDGET.md",
+        "status-panel-budget-evidence.json",
+        "H_STATUS_PANEL_ATTENDED.md",
     ):
         if hardware_map is not None and name in ("F_PIPE_HANDOFF.md", "F_CANDIDATE_ATTENDED.md"):
             (output / name).write_text(render_handoff_addresses((ROOT / "docs" / name).read_text(), hardware_map))
@@ -316,6 +319,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     )
     generate_display_targets(output)
     shutil.copy2(ROOT / "configs/display_targets.py", output / "diagnostics/display_targets.py")
+    shutil.copy2(ROOT / "configs/display_budget_report.py", output / "diagnostics/display_budget_report.py")
     shutil.copy2(ROOT / "docs/PROVIDER_API.md", output / "PROVIDER_API.md")
     (output / "adr").mkdir()
     shutil.copy2(

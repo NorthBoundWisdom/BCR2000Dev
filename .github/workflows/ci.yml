@@ -37,6 +37,7 @@ jobs:
       - run: python3 configs/surface_plugins_dependency.py ensure
       # setup_local_project.py also builds SurfacePlugins on its own; the test build compiles it anyway.
       - run: python3 configs/validate_repo_commands.py .
+      - run: python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check
       - run: python3 -m compileall -q configs
       - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
       - run: python3 configs/macos_workflow.py test
@@ -48,6 +49,7 @@ jobs:
       - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
       - run: python3 configs/verify_surface_clients_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-client-roles
       - run: python3 configs/verify_hardware_surface_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-hardware-roles --scoped-clients
+      - run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - run: git diff --check
       - name: Save the SwiftPM build for the next push
         if: success() && github.event_name == 'push'
