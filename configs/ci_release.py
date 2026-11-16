@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from configs.macos_workflow import PRODUCT, _sha  # noqa: E402
+from configs.macos_workflow import PRODUCT, _sha, locked_plugin_revision, validate_package_record  # noqa: E402
 
 
 def release_version(value: str) -> str:
@@ -48,12 +48,16 @@ def validate_assets(
             "commit": commit,
             "dirty": False,
             "architecture": "universal",
+            "architectures": ["arm64", "x86_64"],
+            "surface_plugins_revision": locked_plugin_revision(),
+            "minimum_macos": "14.0",
             "signature": distribution,
             "notarized": distribution == "developer-id",
             "sha256": _sha(asset),
         }
         if any(type(proof.get(key)) is not type(value) or proof.get(key) != value for key, value in expected.items()):
             raise ValueError(f"Release artifact provenance/hash mismatch: {name}")
+        validate_package_record(asset)
         if distribution == "developer-id":
             from configs.driverkit_release import DRIVER_ID, HOST_PRODUCT
 

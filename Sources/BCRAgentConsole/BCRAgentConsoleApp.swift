@@ -98,8 +98,11 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
                             }
                         }
                     #endif
-                    let marker = "{\"type\":\"bcr.native_startup\",\"first_frame\":true,\"icon\":true,\"clientVersion\":\"\(AppBuildVersion.current)\",\"language\":\"\(L10n.language.rawValue)\",\"settings\":\"\(L10n.text("设置"))\"}\n"
-                    FileHandle.standardOutput.write(Data(marker.utf8))
+                    do { try NativeStartupEvidence.gui().emit() }
+                    catch {
+                        FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+                        Darwin.exit(2)
+                    }
                     Darwin.exit(0)
                 }
                 do {
@@ -131,6 +134,16 @@ struct BCRAgentConsoleApp: App {
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        if CommandLine.arguments.contains("--startup-smoke=headless") {
+            do {
+                guard NSApp?.windows.isEmpty != false else { throw CocoaError(.coderInvalidValue) }
+                try NativeStartupEvidence.headless().emit()
+                Darwin.exit(0)
+            } catch {
+                FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+                Darwin.exit(2)
+            }
+        }
         IntegrationStartupLog.write("app.init")
         _ = LanguageSettings.shared
         let smoke = CommandLine.arguments.contains("--startup-smoke")

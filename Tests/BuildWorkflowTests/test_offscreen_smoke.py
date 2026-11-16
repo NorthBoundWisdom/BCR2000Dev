@@ -22,6 +22,12 @@ class OffscreenSmokeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "type": "bcr.native_startup",
+                        "mode": "gui",
+                        "hardwareAccessed": False,
+                        "windowCreated": True,
+                        "firstFramePresented": True,
+                        "first_frame": True,
+                        "icon": True,
                         "clientVersion": "0.1.0",
                         "language": language,
                         "settings": {"en": "Settings", "zh-Hans": "设置", "zh-Hant": "設定"}[language],

@@ -77,7 +77,7 @@ jobs:
         with:
           name: macos-universal
           path: build/package
-      - name: Launch final ZIP and installed DMG payloads on a fresh runner
+      - name: Verify GUI and headless startup from final ZIP and installed DMG payloads
         run: |
           python3 - <<'PY'
           from pathlib import Path

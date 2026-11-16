@@ -145,9 +145,13 @@ class ReleaseSigningTests(unittest.TestCase):
                     "asset": asset.name,
                     "version": "1.2.3",
                     "build": "42",
-                    "commit": "commit-a",
+                    "commit": "a" * 40,
                     "dirty": False,
                     "architecture": "universal",
+                    "architectures": ["arm64", "x86_64"],
+                    "surface_plugins_revision": macos_workflow.locked_plugin_revision(),
+                    "minimum_macos": "14.0",
+                    "swift": "Swift fixture toolchain",
                     "signature": "developer-id",
                     "notarized": True,
                     "sha256": macos_workflow._sha(asset),
@@ -156,7 +160,7 @@ class ReleaseSigningTests(unittest.TestCase):
                 sidecar.write_text(json.dumps(proof))
                 assets.append(sidecar)
             with self.assertRaisesRegex(ValueError, "companion"):
-                validate_assets(root, "1.2.3", "commit-a", "developer-id", "42")
+                validate_assets(root, "1.2.3", "a" * 40, "developer-id", "42")
             for path in assets:
                 proof = json.loads(path.read_text())
                 proof["driverkit"] = {
@@ -167,7 +171,7 @@ class ReleaseSigningTests(unittest.TestCase):
                     "notarized": True,
                 }
                 path.write_text(json.dumps(proof))
-            validate_assets(root, "1.2.3", "commit-a", "developer-id", "42")
+            validate_assets(root, "1.2.3", "a" * 40, "developer-id", "42")
             listed = json.loads((root / "release-assets.json").read_text())
             self.assertEqual(len(listed), 6)
             self.assertNotIn("release-assets.json", listed)
@@ -202,7 +206,22 @@ class ReleaseSigningTests(unittest.TestCase):
             image = Path(directory) / "release.dmg"
             image.write_bytes(b"untrusted image")
             image.with_suffix(".dmg.build.json").write_text(
-                json.dumps({"asset": image.name, "sha256": macos_workflow._sha(image), "notarized": True})
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "asset": image.name,
+                        "sha256": macos_workflow._sha(image),
+                        "notarized": True,
+                        "signature": "developer-id",
+                        "commit": "a" * 40,
+                        "dirty": False,
+                        "architecture": "universal",
+                        "architectures": ["arm64", "x86_64"],
+                        "minimum_macos": "14.0",
+                        "swift": "Swift fixture toolchain",
+                        "surface_plugins_revision": macos_workflow.locked_plugin_revision(),
+                    }
+                )
             )
             with patch.object(macos_workflow, "_run", side_effect=RuntimeError("invalid signature")) as command:
                 with self.assertRaisesRegex(RuntimeError, "invalid signature"):

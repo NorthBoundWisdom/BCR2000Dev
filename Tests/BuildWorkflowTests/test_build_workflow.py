@@ -211,6 +211,12 @@ class LocalizationPackagingTests(unittest.TestCase):
                 json.dumps(
                     {
                         "type": "bcr.native_startup",
+                        "mode": "gui",
+                        "hardwareAccessed": False,
+                        "windowCreated": True,
+                        "firstFramePresented": True,
+                        "first_frame": True,
+                        "icon": True,
                         "clientVersion": "0.1.0",
                         "language": language,
                         "settings": {"en": "Settings", "zh-Hans": "设置", "zh-Hant": "設定"}[language],
@@ -318,9 +324,13 @@ class ReleaseIntegrityTests(unittest.TestCase):
                 "asset": asset.name,
                 "version": "1.2.3",
                 "build": "1",
-                "commit": "commit-a",
+                "commit": "a" * 40,
                 "dirty": False,
                 "architecture": "universal",
+                "architectures": ["arm64", "x86_64"],
+                "surface_plugins_revision": macos_workflow.locked_plugin_revision(),
+                "minimum_macos": "14.0",
+                "swift": "Swift fixture toolchain",
                 "signature": "ad-hoc",
                 "notarized": False,
                 "sha256": macos_workflow._sha(asset),
@@ -329,7 +339,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
             self.assets.append(asset)
 
     def test_complete_release_produces_checksums(self):
-        validate_assets(self.root, "v1.2.3", "commit-a")
+        validate_assets(self.root, "v1.2.3", "a" * 40)
         checksums = (self.root / "SHA256SUMS").read_text()
         self.assertEqual(len(checksums.splitlines()), 2)
         self.assertIn(self.assets[0].name, checksums)
@@ -342,7 +352,7 @@ class ReleaseIntegrityTests(unittest.TestCase):
                 macos_workflow.check_package(self.assets[0])
             command.assert_not_called()
         with self.assertRaisesRegex(ValueError, "provenance/hash"):
-            validate_assets(self.root, "1.2.3", "commit-a")
+            validate_assets(self.root, "1.2.3", "a" * 40)
 
     def test_wrong_commit_dirty_tree_and_false_architecture_block_release(self):
         proof_path = self.assets[0].with_suffix(".zip.build.json")
@@ -351,17 +361,17 @@ class ReleaseIntegrityTests(unittest.TestCase):
             with self.subTest(key=key):
                 proof_path.write_text(json.dumps({**original, key: value}))
                 with self.assertRaisesRegex(ValueError, "provenance/hash"):
-                    validate_assets(self.root, "1.2.3", "commit-a")
+                    validate_assets(self.root, "1.2.3", "a" * 40)
 
     def test_missing_or_stale_release_assets_block_release(self):
         stale = self.root / "old-release.zip"
         stale.touch()
         with self.assertRaisesRegex(ValueError, "exactly"):
-            validate_assets(self.root, "1.2.3", "commit-a")
+            validate_assets(self.root, "1.2.3", "a" * 40)
         stale.unlink()
         self.assets[0].unlink()
         with self.assertRaisesRegex(ValueError, "exactly"):
-            validate_assets(self.root, "1.2.3", "commit-a")
+            validate_assets(self.root, "1.2.3", "a" * 40)
 
     def test_tag_validation_rejects_invalid_or_injected_versions(self):
         self.assertEqual(release_version("v1.2.3"), "1.2.3")

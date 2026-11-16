@@ -233,6 +233,24 @@ def _sign(bundle: Path, distribution: str, identity: str | None, *, hardened: bo
     _run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", bundle])
 
 
+def source_metadata() -> dict:
+    commit = _run(["git", "rev-parse", "HEAD"], capture=True)
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("Cannot identify the full source commit")
+    return {
+        "BCRSourceRevision": commit,
+        "BCRSourceTreeDirty": bool(_run(["git", "status", "--porcelain"], capture=True)),
+        "BCRSurfacePluginsRevision": locked_plugin_revision(),
+    }
+
+
+def locked_plugin_revision() -> str:
+    revision = json.loads((REPO_ROOT / "configs/surface_plugins.lock.json").read_text())["revision"]
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Invalid locked SurfacePlugins revision")
+    return revision
+
+
 def build(
     configuration: str, architecture: str = "native", distribution: str = "ad-hoc", identity: str | None = None
 ) -> Path:
@@ -269,6 +287,7 @@ def build(
         "NSHighResolutionCapable": True,
         "NSPrincipalClass": "NSApplication",
         "BCRDistribution": distribution,
+        **source_metadata(),
     }
     (APP_BUNDLE / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
     (APP_BUNDLE / "Contents/PkgInfo").write_text("APPL????", encoding="ascii")
@@ -321,6 +340,43 @@ def smoke_runs_in_foreground() -> bool:
     return bool(os.environ.get("CI")) or os.environ.get("BCR_FOREGROUND_TESTS") == "1"
 
 
+def validate_smoke(output: str, *, mode: str) -> dict:
+    if mode not in {"gui", "headless"}:
+        raise ValueError("Unknown startup smoke mode")
+    for line in output.splitlines():
+        try:
+            marker = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(marker, dict)
+            and marker.get("type") == "bcr.native_startup"
+            and marker.get("mode") == mode
+            and marker.get("hardwareAccessed") is False
+            and marker.get("windowCreated") is (mode == "gui")
+            and marker.get("firstFramePresented") is (mode == "gui")
+            and marker.get("first_frame") is (mode == "gui")
+            and marker.get("icon") is True
+        ):
+            return marker
+    raise ValueError("Native startup smoke mode/evidence is missing or invalid")
+
+
+def headless_smoke(bundle: Path) -> None:
+    info = verify_bundle(bundle)
+    with tempfile.TemporaryDirectory(prefix="bcr-headless-startup-") as temporary:
+        output = _run(
+            [bundle.resolve() / "Contents/MacOS" / PRODUCT, "--startup-smoke=headless"],
+            cwd=Path(temporary),
+            capture=True,
+            timeout=30,
+        )
+    marker = validate_smoke(output, mode="headless")
+    if marker.get("clientVersion") != info["CFBundleShortVersionString"]:
+        raise ValueError("Headless client version differs from package metadata")
+    print(output)
+
+
 def smoke(bundle: Path, foreground: bool | None = None) -> None:
     info = verify_bundle(bundle)
     bundle = bundle.resolve()
@@ -363,7 +419,7 @@ def smoke(bundle: Path, foreground: bool | None = None) -> None:
             raise RuntimeError(
                 f"Native window startup failed ({result.returncode}):\n{output}\n{errors}\n{result.stderr}"
             )
-        marker = next(json.loads(line) for line in output.splitlines() if SMOKE_MARKER in line)
+        marker = validate_smoke(output, mode="gui")
         if marker.get("clientVersion") != info["CFBundleShortVersionString"]:
             raise RuntimeError("Native client version does not match the packaged app metadata.")
         if marker.get("language") != language or marker.get("settings") != settings_title:
@@ -447,8 +503,7 @@ def _sha(path: Path) -> str:
 
 def _write_records(assets: list[Path], architecture: str, distribution: str, driverkit: dict | None = None) -> None:
     settings = load_app_build_settings()
-    commit = _run(["git", "rev-parse", "HEAD"], capture=True)
-    dirty = bool(_run(["git", "status", "--porcelain"], capture=True))
+    source = source_metadata()
     swift = _run(["swift", "--version"], capture=True)
     checksums = []
     for asset in assets:
@@ -459,9 +514,11 @@ def _write_records(assets: list[Path], architecture: str, distribution: str, dri
             "sha256": checksum,
             "version": settings["MARKETING_VERSION"],
             "build": settings["ARCHIVE_ID"],
-            "commit": commit,
-            "dirty": dirty,
+            "commit": source["BCRSourceRevision"],
+            "dirty": source["BCRSourceTreeDirty"],
             "architecture": architecture,
+            "architectures": list(_architectures(architecture)),
+            "surface_plugins_revision": source["BCRSurfacePluginsRevision"],
             "signature": distribution,
             "notarized": distribution == "developer-id",
             "minimum_macos": "14.0",
@@ -551,11 +608,37 @@ def package(
     return assets
 
 
+def validate_package_record(archive: Path) -> dict:
+    proof = json.loads(archive.with_suffix(archive.suffix + ".build.json").read_text())
+    if (
+        type(proof.get("schema_version")) is not int
+        or proof.get("schema_version") != 1
+        or proof.get("asset") != archive.name
+        or proof.get("sha256") != _sha(archive)
+        or not isinstance(proof.get("commit"), str)
+        or not re.fullmatch(r"[0-9a-f]{40}", proof["commit"])
+        or type(proof.get("dirty")) is not bool
+        or proof.get("minimum_macos") != "14.0"
+        or not isinstance(proof.get("swift"), str)
+        or not proof["swift"].strip()
+        or not isinstance(proof.get("surface_plugins_revision"), str)
+        or not re.fullmatch(r"[0-9a-f]{40}", proof["surface_plugins_revision"])
+        or not isinstance(proof.get("architecture"), str)
+        or proof.get("architecture") not in {"native", "arm64", "x86_64", "universal"}
+        or not isinstance(proof.get("architectures"), list)
+        or (proof["architecture"] == "native" and proof["architectures"] not in [["arm64"], ["x86_64"]])
+        or (proof["architecture"] != "native" and proof["architectures"] != list(_architectures(proof["architecture"])))
+        or proof.get("signature") not in DISTRIBUTIONS
+        or type(proof.get("notarized")) is not bool
+        or proof["notarized"] != (proof["signature"] == "developer-id")
+    ):
+        raise ValueError("Release artifact hash/provenance mismatch.")
+    return proof
+
+
 def check_package(archive: Path) -> None:
     archive = archive.resolve()
-    proof = json.loads(archive.with_suffix(archive.suffix + ".build.json").read_text())
-    if proof.get("asset") != archive.name or proof.get("sha256") != _sha(archive):
-        raise ValueError("Release artifact hash/provenance mismatch.")
+    proof = validate_package_record(archive)
     with tempfile.TemporaryDirectory(prefix="bcr-package-") as temporary:
         root = Path(temporary)
         if archive.suffix == ".zip":
@@ -611,10 +694,14 @@ def _check_payload(bundle: Path, proof: dict) -> None:
         info["CFBundleShortVersionString"] != proof["version"]
         or info["CFBundleVersion"] != proof["build"]
         or info["BCRDistribution"] != proof["signature"]
+        or info.get("BCRSourceRevision") != proof["commit"]
+        or info.get("BCRSourceTreeDirty") is not proof["dirty"]
+        or info.get("BCRSurfacePluginsRevision") != proof["surface_plugins_revision"]
+        or info.get("LSMinimumSystemVersion") != proof["minimum_macos"]
     ):
         raise ValueError("Package metadata differs from build record.")
     archs = _run(["lipo", "-archs", bundle / "Contents/MacOS" / PRODUCT], capture=True).split()
-    if set(archs) != set(_architectures(proof["architecture"])):
+    if set(archs) != set(proof["architectures"]):
         raise ValueError("Packaged executable architectures differ from build record.")
     if proof.get("notarized"):
         from configs.driverkit_release import verify_developer_id
@@ -623,6 +710,7 @@ def _check_payload(bundle: Path, proof: dict) -> None:
         _run(["xcrun", "stapler", "validate", bundle])
         _run(["spctl", "--assess", "--type", "execute", bundle])
     if platform.machine() in archs:
+        headless_smoke(bundle)
         smoke(bundle)
     else:
         print(f"Startup requires a {', '.join(archs)} host; structural verification passed.")

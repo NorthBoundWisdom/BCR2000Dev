@@ -49,15 +49,19 @@ class CredentialFreeCITests(unittest.TestCase):
                     "asset": asset.name,
                     "version": "1.2.3",
                     "build": "1",
-                    "commit": "commit-a",
+                    "commit": "a" * 40,
                     "dirty": False,
                     "architecture": "universal",
+                    "architectures": ["arm64", "x86_64"],
+                    "surface_plugins_revision": macos_workflow.locked_plugin_revision(),
+                    "minimum_macos": "14.0",
+                    "swift": "Swift fixture toolchain",
                     "signature": "ad-hoc",
                     "notarized": False,
                     "sha256": macos_workflow._sha(asset),
                 }
                 asset.with_suffix(asset.suffix + ".build.json").write_text(json.dumps(proof))
-            ci_release.validate_assets(root, "1.2.3", "commit-a")
+            ci_release.validate_assets(root, "1.2.3", "a" * 40)
             notes = (root / "release-notes.md").read_text()
             self.assertIn("ad-hoc signed, unnotarized", notes)
             self.assertIn("does not install", notes)

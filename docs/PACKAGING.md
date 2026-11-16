@@ -163,3 +163,11 @@ Package 默认 DMG + ZIP，保留原 `release-zip` ID，并新增 Developer ID �
 
 申请草稿见 [DRIVERKIT_DISTRIBUTION_REQUEST.md](DRIVERKIT_DISTRIBUTION_REQUEST.md)。
 本轮没有提交申请、配置账号凭证或创建版本 tag。
+
+## 最终产物启动证据与来源
+
+`check-package` 从最终 ZIP 解包、将 DMG 只读挂载后复制 `.app`，分别执行无界面值模型启动与 GUI 三语最小窗口启动。`--startup-smoke=headless` 在创建控制台模型/设备/持久存储之前，仅构造并校验隔离领域值；`--startup-smoke` 保持原有真实窗口首帧检查。两者返回 `bcr.native_startup` 的不同 `mode`，校验器要求 `hardwareAccessed=false`，并按模式严格匹配 `windowCreated`、`firstFramePresented` 与兼容字段 `first_frame`；无界面标记不能冒充窗口验收，反向亦然。
+
+`.build.json` 的共用字段与 X-Touch 对齐：`schema_version`、`asset`、`sha256`、`version`、`build`、`commit`（完整源提交）、`dirty`、`architecture`、`architectures`（切片数组）、`minimum_macos`、`swift`、`surface_plugins_revision`、`signature`、`notarized`。BCR 的可选 `driverkit` 记录保留。最终 bundle 的源提交、干净状态、插件锁、版本与架构必须与 sidecar 匹配；Release 汇总还检查精确源提交、当前锁与校验和。`native` 标签不随验证机器改变已记录的实际切片。
+
+手动触发 `release.yml` 只构建和验证，不发布；发布任务仍要求显式推送版本标签。本轮不创建标签或 Release。无界面 Provider 的交付布局和 `package_provider.py` 不在此改动范围。
