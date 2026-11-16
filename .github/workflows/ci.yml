@@ -194,7 +194,7 @@ jobs:
           key: delivery-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
       - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
       - run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
-      - name: Independent non-timing-sensitive transport acceptance
+      - name: Serial real-clock transport acceptance
         run: python3 configs/ci_parallel_checks.py transports
       - name: Isolated display budget latency and cadence acceptance
         run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget

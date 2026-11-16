@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run independent CI checks concurrently, retaining every command, outcome and duration."""
+"""Run independent suites concurrently and real-clock transport checks serially, retaining all outcomes."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
-def execute(specs, directory, runner=subprocess.run, clock=time.perf_counter):
+def execute(specs, directory, runner=subprocess.run, clock=time.perf_counter, workers=3):
     directory.mkdir(parents=True, exist_ok=True)
     if len({name for name, _ in specs}) != len(specs):
         raise ValueError("Check names must be unique")
@@ -40,7 +40,7 @@ def execute(specs, directory, runner=subprocess.run, clock=time.perf_counter):
             print(path.read_text(), flush=True)
         return row
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         rows = list(pool.map(one, specs))
     (directory / "timing.json").write_text(json.dumps(rows, indent=2) + "\n")
     return rows
@@ -105,7 +105,7 @@ def main():
                 ],
             ),
         ]
-    rows = execute(specs, Path("build/ci-verification") / args.group)
+    rows = execute(specs, Path("build/ci-verification") / args.group, workers=3 if args.group == "tests" else 1)
     import os
 
     if path := os.environ.get("GITHUB_STEP_SUMMARY"):

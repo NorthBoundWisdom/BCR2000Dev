@@ -348,10 +348,12 @@ def main():
         rows = {row["id"]: row for row in profile["controls"]}
         assert rows["button.1.1"]["hold"]["rest_value"] is False
         assert "hold" not in rows["button.1.2"]
-        held = configured.client.input("button.1.1", "boolean", True, hold_s=0.2)
         configured.client.input("pushEncoder.1.1", "scalar", 90)
         configured.client.input("pushEncoder.1.2", "scalar", 80)
         configured.client.input("button.1.2", "boolean", True)
+        # Arm the expiring hold last: its scheduled rest advances input CAS. Unrelated
+        # setup writes must not race that intentional transition on a busy runner.
+        configured.client.input("button.1.1", "boolean", True, hold_s=0.2)
         time.sleep(0.35)
         snapshot = configured.client.snapshot()
         assert snapshot["inputs"]["button.1.1"] is False
