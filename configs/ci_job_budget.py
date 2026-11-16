@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report queue and job time separately; enforce the same 300s job target for cold and warm builds."""
+"""Report job diagnostics and enforce the whole-run 300s limit equally for cold and warm builds."""
 
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ def report(run, job, cache_key, now):
     whole = (now - instant(run["created_at"])).total_seconds()
     warm = bool(cache_key)
     lines = [
-        "## Job wall time and 300s budget",
-        "Policy: user clarification after ALIGN3; cold and warm executions share the 300s target. Queue time is diagnostic.",
+        "## Whole-run wall time and 300s budget",
+        "Policy: direct user instruction in this window (2026-11-16): the whole run is limited to 300 seconds with no cold-cache or queue exemption.",
         "",
-        f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{elapsed:.1f}s job wall time** · {whole:.1f}s since run creation",
+        f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{whole:.1f}s since run creation** · {elapsed:.1f}s job wall time",
         f"Restored build key: `{cache_key or 'none'}`",
         "",
         "| Step | Result | Seconds |",
@@ -37,10 +37,12 @@ def report(run, job, cache_key, now):
         lines.append(f"| {step['name'].replace('|', '/')} | {step.get('conclusion') or step['status']} | {duration} |")
     lines += [
         "",
-        "Scope: this live check, job start through this check; whole-run creation/queue time is reported separately. Other jobs and post-job cleanup may still be running; final completed wall times must also be independently checked after completion.",
+        "Scope: run creation through this live check, including queue/setup/cache time across jobs. Job wall time is diagnostic only. Other jobs and post-job cleanup may still be running; final completed created-to-updated wall time must also be independently checked after completion.",
     ]
-    failed = elapsed > 300
-    lines.append("**Job 300s budget exceeded.**" if failed else "Job 300s budget met; no cold-cache exemption.")
+    failed = whole > 300
+    lines.append(
+        "**Whole-run 300s budget exceeded.**" if failed else "Whole-run live 300s budget met; no cold-cache exemption."
+    )
     return "\n".join(lines) + "\n", failed
 
 

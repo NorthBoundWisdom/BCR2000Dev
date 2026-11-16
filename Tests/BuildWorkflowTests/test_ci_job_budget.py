@@ -31,11 +31,11 @@ class CIJobBudgetTests(unittest.TestCase):
             ],
         }
 
-    def test_cold_cache_execution_has_the_same_budget(self):
-        text, failed = report(self.run_record(), self.job(), "", datetime(2026, 11, 16, 0, 6, tzinfo=timezone.utc))
+    def test_cold_cache_whole_run_over_budget_fails(self):
+        text, failed = report(self.run_record(), self.job(), "", datetime(2026, 11, 16, 0, 5, 1, tzinfo=timezone.utc))
         self.assertTrue(failed)
         self.assertIn("cold build cache", text)
-        self.assertIn("360.0s", text)
+        self.assertIn("301.0s", text)
         self.assertIn("| Tests | failure | 181.0 |", text)
 
     def test_restored_prefix_is_warm_and_over_budget_fails(self):
@@ -53,11 +53,11 @@ class CIJobBudgetTests(unittest.TestCase):
         _, failed = report(self.run_record(), self.job(), "key", datetime(2026, 11, 16, 0, 5, tzinfo=timezone.utc))
         self.assertFalse(failed)
 
-    def test_job_and_queue_are_both_reported_without_mixing_clock_scopes(self):
+    def test_queue_and_late_job_cannot_bypass_whole_run_budget(self):
         job = self.job()
         job["started_at"] = "2026-11-16T00:04:50Z"
         text, failed = report(self.run_record(), job, "", datetime(2026, 11, 16, 0, 5, 1, tzinfo=timezone.utc))
-        self.assertFalse(failed)
+        self.assertTrue(failed)
         self.assertIn("11.0s job wall time", text)
         self.assertIn("301.0s since run creation", text)
         self.assertIn("post-job cleanup", text)
@@ -71,7 +71,7 @@ class CIJobBudgetTests(unittest.TestCase):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
         self.assertEqual(text.count("timeout-minutes: 20"), 3)
         self.assertEqual(text.count("steps.compile.outcome == 'success'"), 3)
-        self.assertEqual(text.count("Report wall time and enforce 300s job budget"), 3)
+        self.assertEqual(text.count("Report whole-run wall time and enforce 300s budget"), 3)
         linux, native = text.split("  checks:\n")
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("Save compiled native"), native.index("ci_parallel_checks.py tests"))
