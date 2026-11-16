@@ -64,6 +64,11 @@ final class OfflineCaptureTests: XCTestCase {
         XCTAssertEqual(review.unparseableLines, 1)
         XCTAssertEqual(review.boundaryErrors, 1)
         XCTAssertThrowsError(try RecordedCaptureReplay(capture: capture))
+        var unsupportedHost = try fixture()
+        unsupportedHost[0].fields["hostFormatVersion"] = .number(2)
+        let hostCapture = try RecordedCapture(data: data(unsupportedHost))
+        XCTAssertEqual(hostCapture.review.unsupportedVersions, 1)
+        XCTAssertThrowsError(try RecordedCaptureReplay(capture: hostCapture))
     }
 
     func testSequenceMissingTimestampBadBytesAndTamperedContextCannotLookComplete() throws {

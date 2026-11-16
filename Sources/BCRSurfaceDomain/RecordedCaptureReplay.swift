@@ -28,7 +28,8 @@ public final class RecordedCaptureReplay {
     public var mock: MockBCR2000 { session.mock }
 
     public init(capture: RecordedCapture) throws {
-        guard let header = capture.header, header["schemaVersion"]?.exactIntValue == 1,
+        guard capture.review.unsupportedVersions == 0,
+              let header = capture.header, header["schemaVersion"]?.exactIntValue == 1,
               let context = header["session"]?.objectValue,
               let timestamp = header["monotonicTimestamp"]?.finiteNumber,
               timestamp >= 0 else { throw CaptureDocumentError.missingContext }
