@@ -353,6 +353,7 @@ private struct MIDIMonitorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            MonitorCaptureControls(capture: model.monitorCapture)
             HStack {
                 Text(L10n.text("IN = 设备 → 软件，OUT = 软件 → 设备。灰色为 Mock 模式下收到但未处理的实体输入。"))
                     .font(.caption)

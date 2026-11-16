@@ -131,6 +131,8 @@ Named scenes in the Parameters workspace save and recall parameter values as one
 
 Parameters also support eight software color tags and per-group panel highlighting. Tags persist with profiles; highlights are session-only and send no MIDI.
 
+The MIDI monitor can record versioned JSONL evidence to Application Support/Captures. Background writes are bounded and failures are visible; recording does not change MIDI traffic. SysEx payloads are redacted to length and SHA-256.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.

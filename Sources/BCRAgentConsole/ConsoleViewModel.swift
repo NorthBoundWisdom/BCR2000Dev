@@ -23,6 +23,7 @@ import Foundation
 final class ConsoleViewModel: ObservableObject {
     @Published private(set) var deviceWork: ConsoleDeviceWork
     private var updates: AnyCancellable?
+    let monitorCapture: MonitorCaptureController
     static let infoNoticeSeconds = ConsoleDeviceWork.infoNoticeSeconds
     typealias BackgroundWorkTimeout = ConsoleDeviceWork.BackgroundWorkTimeout
     subscript<Value>(dynamicMember keyPath: KeyPath<ConsoleDeviceWork, Value>) -> Value { deviceWork[keyPath: keyPath] }
@@ -92,13 +93,17 @@ final class ConsoleViewModel: ObservableObject {
          automaticallyAdvancesMock: Bool = true,
          timing: ConsoleTiming = .init())
     {
-        deviceWork = ConsoleDeviceWork(stores: stores, startsMIDI: startsMIDI, mcpCredentials: mcpCredentials,
-                                       integrationTest: integrationTest, midiService: midiService,
-                                       outputTransport: outputTransport,
-                                       initialPreset: initialPreset, codexFactory: codexFactory,
-                                       providerConfiguration: providerConfiguration,
-                                       mockClock: mockClock, automaticallyAdvancesMock: automaticallyAdvancesMock,
-                                       timing: timing)
+        let work = ConsoleDeviceWork(stores: stores, startsMIDI: startsMIDI, mcpCredentials: mcpCredentials,
+                                     integrationTest: integrationTest, midiService: midiService,
+                                     outputTransport: outputTransport,
+                                     initialPreset: initialPreset, codexFactory: codexFactory,
+                                     providerConfiguration: providerConfiguration,
+                                     mockClock: mockClock, automaticallyAdvancesMock: automaticallyAdvancesMock,
+                                     timing: timing)
+        deviceWork = work
+        monitorCapture = MonitorCaptureController(session: work.session,
+                                                  directory: stores.configuration.fileURL.deletingLastPathComponent()
+                                                      .appending(path: "Captures", directoryHint: .isDirectory))
         updates = deviceWork.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 

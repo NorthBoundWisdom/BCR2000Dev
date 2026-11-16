@@ -75,11 +75,12 @@ enum CoreMIDIEndpointAvailability {
 /// Main-actor device boundary. The transport only decodes and hands off value batches;
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
-public final class CoreMIDIService: MIDIService {
+public final class CoreMIDIService: MIDIService, SurfaceSysExObserving {
     public var supportsStartupConfiguration: Bool { true }
     static let snapshotRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x43, 0xF7]
     public var supportsSnapshotReadback: Bool { true }
     public private(set) var connection = MIDIConnectionSnapshot()
+    public var onSysExObservation: (@MainActor (Data) -> Void)?
     public var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
     public var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     private var transport: CoreMIDITransport?
@@ -443,6 +444,7 @@ public final class CoreMIDIService: MIDIService {
         guard generation == inputGeneration else { return }
         for chunk in chunks {
             guard let frame = sysEx.consume(chunk) else { continue }
+            onSysExObservation?(Data(frame))
             if let id = dumpID, frame.count >= 10, frame.prefix(4) == [0xF0, 0, 0x20, 0x32],
                frame[5] == 0x15, frame[6] == 0x20
             {

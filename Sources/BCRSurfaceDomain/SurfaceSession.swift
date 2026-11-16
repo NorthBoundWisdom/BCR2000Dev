@@ -12,6 +12,7 @@ public enum SurfaceWriteOrigin: String, Equatable, Sendable {
 public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let id: Int
     public let time: Date
+    public let monotonicTime: Double
     public let direction: MIDIObservationDirection
     public let source: DeviceSource
     public let message: MIDIVoiceMessage
@@ -113,6 +114,37 @@ public final class SurfaceSession {
             for observer in Array(parameterObservers.values) { observer(batch) }
         }
         onChange?()
+    }
+
+    private var captureObservers: [UUID: @MainActor (MonitorCaptureRecord) -> Void] = [:]
+    public func observeCapture(_ observer: @escaping @MainActor (MonitorCaptureRecord) -> Void) -> UUID {
+        let id = UUID(); captureObservers[id] = observer; return id
+    }
+
+    public func removeCaptureObserver(_ id: UUID) { captureObservers[id] = nil }
+    private func publishCapture(_ record: MonitorCaptureRecord) {
+        for observer in Array(captureObservers.values) { observer(record) }
+    }
+
+    private func observeSysEx(_ data: Data) {
+        guard !captureObservers.isEmpty else { return }
+        publishCapture(.sysEx(data, at: now(), monotonic: historyTime.now()))
+    }
+
+    public func captureHeader(sessionID: String, applicationVersion: String) throws -> MonitorCaptureRecord {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let map = source == .mock ? mock.preset : learnedHardwareMap
+        let connection = source == .mock ? mockDevice.connection : self.connection
+        return try .start(sessionID: sessionID, applicationVersion: applicationVersion, source: source,
+                          connection: connection, mappingFingerprint: ContentDigest.sha256(encoder.encode(map)),
+                          configuration: engine.configuration, hardwareMap: map,
+                          parameterValues: engine.parameterValues,
+                          at: now(),
+                          monotonic: historyTime.now())
+    }
+
+    public func captureEnd(eventCount: Int) -> MonitorCaptureRecord {
+        .end(at: now(), monotonic: historyTime.now(), eventCount: eventCount)
     }
 
     public var onChange: (@MainActor () -> Void)?
@@ -304,6 +336,7 @@ public final class SurfaceSession {
         publishedValues = engine.parameterValues
         mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
+        (hardwareDevice as? any SurfaceSysExObserving)?.onSysExObservation = { [weak self] in self?.observeSysEx($0) }
         hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
         hardwareDevice.onConnection = { [weak self] in self?.handleConnection($0) }
         mockDevice.onMessages = { [weak self] in self?.receive($0, from: .mock) }
@@ -917,9 +950,13 @@ public final class SurfaceSession {
         source: DeviceSource, control: BCRControlID?, ignored: Bool, delivery: FeedbackDelivery? = nil
     ) {
         nextEventID += 1
-        events.append(MonitorEvent(id: nextEventID, time: now(), direction: direction,
+        events.append(MonitorEvent(id: nextEventID, time: now(), monotonicTime: historyTime.now(), direction: direction,
                                    source: source, message: message, control: control, ignored: ignored,
                                    origin: writeOrigin, delivery: delivery))
+        if !captureObservers.isEmpty, let event = events.last {
+            // The record contains validated MIDI values only; no filesystem work runs on this path.
+            publishCapture(MonitorCaptureRecord.event(event))
+        }
         if events.count > 300 { events.removeFirst(events.count - 300) }
         let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
         let kind = direction == .input ? "control.raw" : "feedback.\(delivery?.rawValue ?? "generated")"

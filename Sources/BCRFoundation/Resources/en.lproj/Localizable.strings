@@ -1026,3 +1026,9 @@
 "分组高亮" = "Highlight group";
 "颜色标签" = "Color tag";
 "无颜色" = "No color";
+"开始录制" = "Start recording";
+"停止录制" = "Stop recording";
+"录制中" = "Recording";
+"正在完成录制…" = "Finishing recording…";
+"录制失败：{0}" = "Recording failed: {0}";
+"录制队列已满；录制已停止，MIDI 处理继续。" = "Recording queue full; capture stopped, MIDI processing continues.";

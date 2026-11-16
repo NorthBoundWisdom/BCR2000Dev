@@ -476,3 +476,19 @@ values 是参数 ID 到数值的 JSON 对象。旧配置仍能读取，迁移提
 参数组标题旁“分组高亮”切换本次会话的面板提示，带眼睛形状与边框，不持久化。
 颜色同时有文字名称、标签形状与无障碍描述，不作为唯一区分依据。两者均不发送或排队任何 MIDI，
 不进入撤销栈，不改变设备灯的红色。Provider 1.0 参数对象不暴露本地颜色元数据。
+
+### MIDI 监视器 JSONL 录制
+
+“MIDI 监视”页可开始/停止录制，文件位于既有 Application Support 目录的 `Captures/` 子目录。
+录制独立于屏幕 300 条事件上限，采用 4096 条有界后台邮箱；文件慢/写入失败会显示错误并停止录制，
+不会阻塞、丢弃或改变 MIDI 处理。文件以排他方式创建，不覆盖旧录制或最终路径的符号链接。
+
+JSONL v1 沿用 X-Touch 的 `kind/schemaVersion/timestamp/session/sequence/direction/source/rawMIDI1Bytes/message/control/decoded/delivery`
+通用字段，首行为 `capture-start`，末行为 `capture-end/eventCount`。`timestamp` 为审计时间，
+新增 `monotonicTimestamp` 是注入 HostTime 的主机会话观察时间（不是设备时钟），同域内非递减。
+session 包含应用版本、设备来源、端口事实、映射 SHA-256、配置/映射值快照与时钟域；不含凭据。
+映射/来源发生变化后，下个观察前插入 `origin=contextChanged` 的上下文事件，保留独立重播所需事实。
+事件带 `origin`（deviceInput/softwareFeedback/agent/externalState）、`bcrControl` 与解码值；NRPN 保留四条 canonical CC 的 12 字节。
+SysEx 接收只记录 `sysEx.byteCount/sha256/redacted`，不保存个人预设、名称或原始 BCL 数据。
+`session.bcrDisplay` 明确四位显示器及实际文本未知（装置不报告此文本），不把软件推测写成设备事实。
+录制旁路从来不发起端口连接、学习、快照或预设请求，也不新增任何设备发送。
