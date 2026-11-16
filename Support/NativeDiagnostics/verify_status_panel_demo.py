@@ -4,6 +4,7 @@
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import http.client
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,36 @@ import sys
 import threading
 import time
 from urllib.parse import urlsplit
+
+if __package__:
+    from .surface_sdk_metadata import verify_manifest
+else:
+    from surface_sdk_metadata import verify_manifest
+
+
+def verified_sdk(artifact):
+    """Authenticate every artifact resource hash before selecting the known SDK ZIP."""
+    manifest_path = artifact / "manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("Artifact manifest is not a regular file")
+    manifest = json.loads(manifest_path.read_text())
+    files = manifest.get("files_sha256")
+    if not isinstance(files, dict) or not files:
+        raise ValueError("Artifact has no verified file inventory")
+    for name, digest in files.items():
+        relative = Path(name)
+        path = artifact / relative
+        if (
+            relative.is_absolute()
+            or ".." in relative.parts
+            or path.is_symlink()
+            or not path.is_file()
+            or not path.resolve().is_relative_to(artifact.resolve())
+        ):
+            raise ValueError("Artifact resource escaped its verified directory")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError("Artifact resource differs from verified manifest: " + name)
+    return verify_manifest(artifact, manifest)
 
 
 class RecordingProxy(ThreadingHTTPServer):
@@ -56,7 +87,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
             connection.close()
 
 
-def case(artifact, profiles, output, source, mode, Client, mapping, sdk=None):
+def case(artifact, profiles, output, source, mode, Client, mapping, sdk_path, sdk=None):
     output.mkdir(parents=True, exist_ok=False)
     tokens = {role: secrets.token_hex(32) for role in ("owner", "operator", "display")}
 
@@ -66,7 +97,7 @@ def case(artifact, profiles, output, source, mode, Client, mapping, sdk=None):
         return text
 
     environment = {key: value for key, value in os.environ.items() if key != "BCR_PROVIDER_TOKEN"}
-    environment["PYTHONPATH"] = str(artifact / "surface-control-sdk-1.4.0.zip")
+    environment["PYTHONPATH"] = str(sdk_path)
     arguments = [
         str(artifact / "BCRProviderService"),
         "--port",
@@ -365,12 +396,17 @@ def main():
     )
     args = parser.parse_args()
     artifact, output = args.artifact.resolve(), args.output.resolve()
+    sdk_path, sdk_version = verified_sdk(artifact)
     output.mkdir(parents=True, exist_ok=False)
     sys.dont_write_bytecode = True
-    sys.path.insert(0, str(artifact / "surface-control-sdk-1.4.0.zip"))
+    sys.path.insert(0, str(sdk_path))
     from surface_control import Client
     from surface_panel_demo import DisplayClient, load_mapping, run
 
+    import surface_control
+
+    if surface_control.__version__ != sdk_version or not surface_control.__file__.startswith(str(sdk_path) + "/"):
+        raise ValueError("Checker imported a different SDK from the verified artifact")
     mapping = load_mapping("bcr")
     profiles = artifact
     if not args.simulation_only and not (artifact / "hardware-map.json").is_file():
@@ -410,7 +446,7 @@ def main():
         )
         (profiles / "staging-result.json").write_text(staged.stdout)
     results = [
-        case(artifact, profiles, output / (source + "-" + mode), source, mode, Client, mapping)
+        case(artifact, profiles, output / (source + "-" + mode), source, mode, Client, mapping, sdk_path)
         for source in (("simulation",) if args.simulation_only else ("simulation", "hardware"))
         for mode in ("normal", "stale", "sigint")
     ]
@@ -425,6 +461,7 @@ def main():
             "sdk-progress",
             Client,
             mapping,
+            sdk_path,
             sdk=(DisplayClient, run),
         )
         for source in (("simulation",) if args.simulation_only else ("simulation", "hardware"))
@@ -432,7 +469,14 @@ def main():
     if not args.simulation_only:
         results.append(
             case(
-                artifact, profiles, output / "hardware-default-refused", "hardware", "default-refused", Client, mapping
+                artifact,
+                profiles,
+                output / "hardware-default-refused",
+                "hardware",
+                "default-refused",
+                Client,
+                mapping,
+                sdk_path,
             )
         )
     report = {
@@ -441,6 +485,8 @@ def main():
         "skipped_count": 0,
         "cases": results,
         "simulation_only": args.simulation_only,
+        "sdk_version": sdk_version,
+        "sdk_zip_sha256": hashlib.sha256(sdk_path.read_bytes()).hexdigest(),
         "profile_fixture": "artifact" if profiles == artifact else "generated-test-only",
         "scope": "Packaged CLI process modes plus separately identified SDK data-clock progress; all RPC real, simulation/Debug fake device only, no CoreMIDI qualification",
     }
