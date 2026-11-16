@@ -95,6 +95,7 @@ struct ControlInspectorView: View {
                         get: { model.engine.hardwareMap.midi(for: control)?.kind == .nrpn },
                         set: { model.setMockNRPN($0, for: control) }
                     ))
+                    .accessibilityIdentifier("control.inspector.set.mock.nrpn")
                     .help(L10n.text("仅切换所选 Mock 编码器的 14-bit NRPN 预设"))
                 }
             case .hardware:
@@ -114,19 +115,22 @@ struct ControlInspectorView: View {
                     Picker(L10n.text("学习消息格式"), selection: $learnFormat) {
                         Text("CC / Note").tag(MIDILearnFormat.voice)
                         Text("14-bit NRPN").tag(MIDILearnFormat.nrpn14)
-                    }
-                    .disabled(model.isLearning)
+                    }.accessibilityIdentifier("control.inspector.message.format.to.learn")
+                        .disabled(model.isLearning)
                 }
                 HStack {
                     if model.isLearning {
                         Button(L10n.text("停止学习")) { model.stopLearning() }
+                            .accessibilityIdentifier("control.inspector.stop.learning")
                             .buttonStyle(.borderedProminent)
                             .tint(.orange)
                     } else {
                         Button(L10n.text("从这里开始学习")) { model.beginLearning(at: control, format: learnFormat) }
+                            .accessibilityIdentifier("control.inspector.learn.from.here")
                             .buttonStyle(.borderedProminent)
                     }
                     Button(L10n.text("清除绑定")) { model.unbind(control) }
+                        .accessibilityIdentifier("control.inspector.clear.binding")
                         .disabled(model.engine.hardwareMap.midi(for: control) == nil)
                 }
                 FieldNote(
@@ -136,11 +140,13 @@ struct ControlInspectorView: View {
                         )
                 )
                 Button(L10n.text("清空全部实体映射…"), role: .destructive) { confirmsMapReset = true }
+                    .accessibilityIdentifier("control.inspector.clear.all.hardware.mappings")
                     .buttonStyle(.link)
                     .font(.caption)
                     .disabled(model.learnedCount == 0)
                     .confirmationDialog(L10n.text("清空全部实体映射？"), isPresented: $confirmsMapReset) {
                         Button(L10n.text("清空"), role: .destructive) { model.resetHardwareMap() }
+                            .accessibilityIdentifier("control.inspector.clear.all.hardware.mappings.clear")
                     } message: {
                         Text(L10n.text("功能分配会保留，只删除学到的 MIDI 身份。"))
                     }
@@ -231,7 +237,7 @@ private struct FunctionSection: View {
             FieldRow(L10n.text("类型")) {
                 Picker(L10n.text("类型"), selection: kindBinding) {
                     ForEach(availableKinds) { Text($0.title).tag($0) }
-                }
+                }.accessibilityIdentifier("function.type.\(control.accessibilityID)")
             }
 
             switch assignment?.target {
@@ -243,13 +249,13 @@ private struct FunctionSection: View {
                     ) {
                         Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
                         ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
-                    }
+                    }.accessibilityIdentifier("function.page.\(control.accessibilityID)")
                 }
             case let .runMacro(id)?:
                 FieldRow(L10n.text("宏")) {
                     Picker(L10n.text("宏"), selection: Binding(get: { id }, set: { update(target: .runMacro($0)) })) {
                         ForEach(model.configuration.macros) { Text($0.name).tag($0.id) }
-                    }
+                    }.accessibilityIdentifier("function.macro.\(control.accessibilityID)")
                 }
 
             case let .parameter(id)?:
@@ -265,14 +271,14 @@ private struct FunctionSection: View {
                                     "\(BuiltInNamePresentation.displayName(parameter.group)) · \(BuiltInNamePresentation.displayName(parameter.name))")
                                     .tag(parameter.id)
                             }
-                        }
+                        }.accessibilityIdentifier("function.parameters.\(control.accessibilityID)")
                         Button {
                             model.createParameter(assigningTo: control)
                         } label: {
                             Image(systemName: "plus")
-                        }
-                        .help(L10n.text("新建参数并分配给此控件"))
-                        .accessibilityLabel(L10n.text("新建参数并分配给此控件"))
+                        }.accessibilityIdentifier("function.create.parameter.\(control.accessibilityID)")
+                            .help(L10n.text("新建参数并分配给此控件"))
+                            .accessibilityLabel(L10n.text("新建参数并分配给此控件"))
                     }
                 }
                 if !control.isContinuous {
@@ -282,8 +288,8 @@ private struct FunctionSection: View {
                             set: { behavior in modify { $0.buttonBehavior = behavior } }
                         )) {
                             ForEach(ButtonBehavior.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
+                        }.accessibilityIdentifier("function.button.behavior.\(control.accessibilityID)")
+                            .pickerStyle(.segmented)
                     }
                 }
                 if control.isContinuous {
@@ -295,9 +301,9 @@ private struct FunctionSection: View {
                             Text(L10n.text("绝对")).tag(EncoderMode.absolute)
                             Text(L10n.text("相对 1")).tag(EncoderMode.relative1)
                             Text(L10n.text("相对 2")).tag(EncoderMode.relative2)
-                        }
-                        .pickerStyle(.segmented)
-                        .help(L10n.text("相对模式：1 为补码，2 为二进制偏移；待 R1 实机验证"))
+                        }.accessibilityIdentifier("function.encoder.mode.\(control.accessibilityID)")
+                            .pickerStyle(.segmented)
+                            .help(L10n.text("相对模式：1 为补码，2 为二进制偏移；待 R1 实机验证"))
                     }
                     if assignment?.encoderMode != .absolute {
                         FieldRow(L10n.text("相对步长")) {
@@ -305,6 +311,7 @@ private struct FunctionSection: View {
                                 get: { assignment?.encoderStep ?? 1 },
                                 set: { value in modify { $0.encoderStep = value } }
                             ), format: .number)
+                                .accessibilityIdentifier("function.relative.step.\(control.accessibilityID)")
                                 .textFieldStyle(.roundedBorder)
                                 .accessibilityLabel(L10n.text("相对步长"))
                                 .help(L10n.text("设置相对编码器每格步长"))
@@ -317,6 +324,7 @@ private struct FunctionSection: View {
                         get: { assignment?.inverted ?? false },
                         set: { inverted in modify { $0.inverted = inverted } }
                     ))
+                    .accessibilityIdentifier("function.invert.\(control.accessibilityID)")
                 }
                 let shared = model.configuration.controls(targetingParameter: id).filter { $0 != control }
                 if !shared.isEmpty {
@@ -330,7 +338,7 @@ private struct FunctionSection: View {
                         set: { update(target: .agentPrimaryAction(AgentSlotID($0))) }
                     )) {
                         ForEach(1 ... 8, id: \.self) { Text("Agent \($0)").tag($0) }
-                    }
+                    }.accessibilityIdentifier("function.slot.\(control.accessibilityID)")
                 }
                 FieldNote(L10n.text("空闲时启动、运行时中断、等待批准时批准；LED 亮度表示 Agent 状态。"))
 
@@ -348,7 +356,7 @@ private struct FunctionSection: View {
                         ForEach(model.configuration.parameterGroups, id: \.self) {
                             Text($0.isEmpty ? L10n.text("（未分组）") : BuiltInNamePresentation.displayName($0)).tag($0)
                         }
-                    }
+                    }.accessibilityIdentifier("function.parameter.group.\(control.accessibilityID)")
                 }
                 FieldNote(L10n.text("按下时把该组全部参数恢复为默认值，并回写所有绑定控件。"))
 
@@ -453,12 +461,14 @@ private struct ParameterEditor: View {
                             get: { value >= definition.midpoint },
                             set: { model.setParameter(definition.id, to: $0 ? definition.maximum : definition.minimum) }
                         ))
+                        .accessibilityIdentifier("inspector.parameter.value.toggle.\(definition.id.rawValue)")
                         .labelsHidden()
                     } else {
                         Slider(
                             value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
                             in: definition.minimum ... definition.maximum
                         )
+                        .accessibilityIdentifier("inspector.parameter.value.slider.\(definition.id.rawValue)")
                     }
                 }
             }
@@ -484,46 +494,55 @@ private struct ParameterEditor: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                textRow(L10n.text("名称"), displayedName($draftState.value.name))
-                textRow(L10n.text("分组"), displayedName($draftState.value.group))
-                textRow(L10n.text("单位"), $draftState.value.unit)
+                textRow(L10n.text("名称"), displayedName($draftState.value.name), identifier: "parameter.name")
+                textRow(L10n.text("分组"), displayedName($draftState.value.group), identifier: "parameter.group")
+                textRow(L10n.text("单位"), $draftState.value.unit, identifier: "parameter.unit")
                 FieldRow(L10n.text("类型")) {
                     Picker(L10n.text("类型"), selection: $draftState.value.kind) {
                         ForEach(ParameterKind.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                    }
+                    }.accessibilityIdentifier("inspector.parameter.type.\(definition.id.rawValue)")
                 }
-                numberRow(L10n.text("最小值"), $draftState.value.minimum)
-                numberRow(L10n.text("最大值"), $draftState.value.maximum)
-                numberRow(L10n.text("默认值"), $draftState.value.defaultValue)
-                FieldIndent { Toggle(L10n.text("允许 Agent 写入"), isOn: $draftState.value.agentWritable) }
+                numberRow(L10n.text("最小值"), $draftState.value.minimum, identifier: "parameter.minimum")
+                numberRow(L10n.text("最大值"), $draftState.value.maximum, identifier: "parameter.maximum")
+                numberRow(L10n.text("默认值"), $draftState.value.defaultValue, identifier: "parameter.default")
+                FieldIndent {
+                    Toggle(L10n.text("允许 Agent 写入"), isOn: $draftState.value.agentWritable)
+                        .accessibilityIdentifier("inspector.parameter.allow.agent.writes.\(definition.id.rawValue)")
+                }
                 FieldIndent {
                     Toggle(L10n.text("启用步长吸附"), isOn: Binding(
                         get: { draftState.value.step != nil },
                         set: { draftState.value.step = $0 ? (draftState.value.step ?? 1) : nil }
                     ))
+                    .accessibilityIdentifier("inspector.parameter.snap.to.step.\(definition.id.rawValue)")
                 }
                 if draftState.value.step != nil {
                     numberRow(L10n.text("步长"), Binding(
                         get: { draftState.value.step ?? 1 }, set: { draftState.value.step = $0 }
-                    ))
+                    ), identifier: "parameter.step")
                 }
             }
 
             HStack {
                 Button(L10n.text("应用修改")) {
                     if let applied = model.updateParameter(draftState.value) { draftState.reload(applied) }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!draftState.isDirty || draftState.conflict != nil)
+                }.accessibilityIdentifier("inspector.parameter.apply.changes.\(definition.id.rawValue)")
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!draftState.isDirty || draftState.conflict != nil)
                 Button(L10n.text("还原")) { draftState.reload(definition) }
+                    .accessibilityIdentifier("inspector.parameter.revert.\(definition.id.rawValue)")
                     .disabled(!draftState.isDirty && draftState.conflict == nil)
                 Spacer()
                 Button(L10n.text("删除参数…"), role: .destructive) { confirmsRemoval = true }
+                    .accessibilityIdentifier("inspector.parameter.delete.parameter.\(definition.id.rawValue)")
                     .confirmationDialog(
                         L10n.text("删除参数“\(BuiltInNamePresentation.displayName(definition.name))”？"),
                         isPresented: $confirmsRemoval
                     ) {
                         Button(L10n.text("删除"), role: .destructive) { model.removeParameter(definition.id) }
+                            .accessibilityIdentifier(
+                                "inspector.parameter.confirmation.delete.\(definition.id.rawValue)"
+                            )
                     } message: {
                         Text(L10n.text("所有绑定到它的控件都会变为未分配。"))
                     }
@@ -541,17 +560,18 @@ private struct ParameterEditor: View {
         )
     }
 
-    private func textRow(_ label: String, _ text: Binding<String>) -> some View {
+    private func textRow(_ label: String, _ text: Binding<String>, identifier: String) -> some View {
         FieldRow(label) {
-            TextField(label, text: text)
+            TextField(label, text: text).accessibilityIdentifier(identifier + "." + definition.id.rawValue)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel(label)
         }
     }
 
-    private func numberRow(_ label: String, _ value: Binding<Double>) -> some View {
+    private func numberRow(_ label: String, _ value: Binding<Double>, identifier: String) -> some View {
         FieldRow(label) {
             TextField(label, value: value, format: .number)
+                .accessibilityIdentifier(identifier + "." + definition.id.rawValue)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel(label)
         }

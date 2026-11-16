@@ -22,12 +22,12 @@ struct BulkAssignmentSection: View {
             FieldRow(L10n.text("控件区")) {
                 Picker(L10n.text("控件区"), selection: $section) {
                     ForEach(BCRSection.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                }
+                }.accessibilityIdentifier("bulk.assignment.control.section")
             }
             FieldRow(L10n.text("组 / 行")) {
                 Picker(L10n.text("组 / 行"), selection: $row) {
                     ForEach(Array(section.rowRange), id: \.self) { Text(String($0)).tag($0) }
-                }
+                }.accessibilityIdentifier("bulk.assignment.group.row")
             }
             FieldRow(L10n.text("参数组")) {
                 if OffscreenPresentation.isEnabled {
@@ -48,7 +48,7 @@ struct BulkAssignmentSection: View {
                         ForEach(model.configuration.parameterGroups, id: \.self) {
                             Text($0.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName($0)).tag($0)
                         }
-                    }
+                    }.accessibilityIdentifier("bulk.assignment.parameter.group")
                 }
             }
             HStack {
@@ -57,9 +57,9 @@ struct BulkAssignmentSection: View {
                     if let plan = model.bulkAssignmentPlan(section: section, row: row, group: group) {
                         preview = BulkPreviewPresentation(plan: plan)
                     }
-                }
-                .disabled(model.configuration.parameters.isEmpty)
-                .help(L10n.text("预览整行与参数组的顺序绑定，确认后应用"))
+                }.accessibilityIdentifier("bulk.assignment.preview.assignment")
+                    .disabled(model.configuration.parameters.isEmpty)
+                    .help(L10n.text("预览整行与参数组的顺序绑定，确认后应用"))
             }
         }
         .panelStyle()
@@ -115,14 +115,14 @@ private struct BulkAssignmentPreview: View {
                 Text(L10n.text("配置已改变，请关闭并重新预览。")).foregroundStyle(.orange)
             }
             HStack {
-                Button(L10n.text("取消")) { dismiss() }
+                Button(L10n.text("取消")) { dismiss() }.accessibilityIdentifier("bulk.assignment.preview.cancel")
                 Spacer()
                 Button(L10n.text("确认分配"), role: .destructive) {
                     if model.applyBulkAssignment(plan) { dismiss() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.configuration != plan.base)
-                .help(L10n.text("确认应用预览中的批量分配"))
+                }.accessibilityIdentifier("bulk.assignment.preview.assign")
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.configuration != plan.base)
+                    .help(L10n.text("确认应用预览中的批量分配"))
             }
         }
         .padding(24)

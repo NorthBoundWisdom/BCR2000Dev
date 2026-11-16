@@ -21,8 +21,10 @@ struct ParameterScenesView: View {
                         TextField(L10n.text("场景名称"), text: $rename)
                             .accessibilityIdentifier("scenes.renameName")
                         Button(L10n.text("重命名")) { model.renameScene(scene.id, to: rename); renaming = nil }
+                            .accessibilityIdentifier("parameter.scenes.rename.commit.\(scene.id)")
                             .disabled(rename.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         Button(L10n.text("取消")) { renaming = nil }
+                            .accessibilityIdentifier("parameter.scenes.cancel.\(scene.id)")
                     } else {
                         Text(scene.name).lineLimit(1)
                         Text(L10n.text("\(scene.values.count) 个数值")).font(.caption).foregroundStyle(.secondary)
@@ -31,9 +33,15 @@ struct ParameterScenesView: View {
                             .accessibilityIdentifier("scenes.recall.\(scene.id)")
                         Menu {
                             Button(L10n.text("覆盖为当前值…")) { overwriting = scene.name }
+                                .accessibilityIdentifier(
+                                    "parameter.scenes.replace.with.current.values.begin.\(scene.id)"
+                                )
                             Button(L10n.text("重命名")) { renaming = scene; rename = scene.name }
+                                .accessibilityIdentifier("parameter.scenes.rename.\(scene.id)")
                             Button(L10n.text("删除"), role: .destructive) { deleting = scene }
+                                .accessibilityIdentifier("parameter.scenes.delete.\(scene.id)")
                         } label: { Image(systemName: "ellipsis.circle") }
+                            .accessibilityIdentifier("parameter.scenes.replace.with.current.values.\(scene.id)")
                             .menuStyle(.borderlessButton)
                             .fixedSize()
                             .accessibilityLabel(L10n.text("场景操作"))
@@ -61,16 +69,18 @@ struct ParameterScenesView: View {
             Button(L10n.text("覆盖"), role: .destructive) {
                 if let overwriting { model.captureScene(name: overwriting, overwrite: true) }
                 overwriting = nil; name = ""
-            }
+            }.accessibilityIdentifier("parameter.scenes.overwrite.saved.scene.values.overwrite")
             Button(L10n.text("取消"), role: .cancel) { overwriting = nil }
+                .accessibilityIdentifier("parameter.scenes.overwrite.saved.scene.values.cancel")
         }
         .confirmationDialog(L10n.text("删除场景？"), isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } }
         )) {
             Button(L10n.text("删除"), role: .destructive) {
                 if let deleting { model.deleteScene(deleting.id) }; deleting = nil
-            }
+            }.accessibilityIdentifier("parameter.scenes.delete.scene.delete")
             Button(L10n.text("取消"), role: .cancel) { deleting = nil }
+                .accessibilityIdentifier("parameter.scenes.delete.scene.cancel")
         }
     }
 }

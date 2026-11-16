@@ -49,11 +49,13 @@ struct MCPSettingsView: View {
                 get: { controller.settings.enabled },
                 set: { enabled in Task { await controller.setEnabled(enabled) } }
             ))
+            .accessibilityIdentifier("mcpsettings.enable.local.mcp.server")
             ImmediateEffectNote()
             HStack {
                 Text(controller.endpoint).font(.body.monospaced()).textSelection(.enabled)
                 Spacer()
                 Button(L10n.text("一键停止"), role: .destructive) { controller.stop() }
+                    .accessibilityIdentifier("mcpsettings.stop.now")
                     .disabled(!controller.settings.enabled)
             }
             if let error = controller.error {
@@ -66,14 +68,52 @@ struct MCPSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
             Form {
                 TextField(L10n.text("端口"), value: $draft.port, format: .number)
-                Toggle(L10n.text("参数写入（关闭时只读）"), isOn: $draft.permissions.parameterWrite)
-                Toggle(L10n.text("配置写入（修改分配和定义）"), isOn: $draft.permissions.configurationWrite)
-                Toggle(L10n.text("允许 Agent 启动和中断任务"), isOn: $draft.permissions.agentControl)
-                Toggle(L10n.text("允许设备源切换、MIDI 端口设置、诊断和 Mock 输入"), isOn: $draft.permissions.deviceControl)
-                Toggle(L10n.text("允许机器人模拟控制"), isOn: $draft.permissions.robotControl)
-                Toggle(L10n.text("允许底盘模拟控制"), isOn: $draft.permissions.chassisControl)
-                Toggle(L10n.text("允许仿真重置、故障和时钟推进"), isOn: $draft.permissions.simulationControl)
-                TextField(L10n.text("每秒最多写入参数数"), value: $draft.permissions.writesPerSecond, format: .number)
+                    .accessibilityIdentifier("mcpsettings.port")
+                Toggle(
+                    L10n.text("参数写入（关闭时只读）"),
+                    isOn: $draft.permissions.parameterWrite
+                )
+                .accessibilityIdentifier("mcpsettings.parameter.writes.read.only.when.off")
+                Toggle(
+                    L10n.text("配置写入（修改分配和定义）"),
+                    isOn: $draft.permissions.configurationWrite
+                )
+                .accessibilityIdentifier("mcpsettings.configuration.writes.assignments.and.definitions")
+                Toggle(
+                    L10n.text("允许 Agent 启动和中断任务"),
+                    isOn: $draft.permissions.agentControl
+                )
+                .accessibilityIdentifier("mcpsettings.allow.starting.and.interrupting.agent.tasks")
+                Toggle(
+                    L10n.text("允许设备源切换、MIDI 端口设置、诊断和 Mock 输入"),
+                    isOn: $draft.permissions.deviceControl
+                )
+                .accessibilityIdentifier(
+                    "mcpsettings.allow.source.changes.midi.port.settings.diagnostics.and.mock.input"
+                )
+                Toggle(
+                    L10n.text("允许机器人模拟控制"),
+                    isOn: $draft.permissions.robotControl
+                )
+                .accessibilityIdentifier("mcpsettings.allow.simulated.robot.control")
+                Toggle(
+                    L10n.text("允许底盘模拟控制"),
+                    isOn: $draft.permissions.chassisControl
+                )
+                .accessibilityIdentifier("mcpsettings.allow.simulated.chassis.control")
+                Toggle(
+                    L10n.text("允许仿真重置、故障和时钟推进"),
+                    isOn: $draft.permissions.simulationControl
+                )
+                .accessibilityIdentifier(
+                    "mcpsettings.allow.simulation.reset.faults.and.clock.advancement"
+                )
+                TextField(
+                    L10n.text("每秒最多写入参数数"),
+                    value: $draft.permissions.writesPerSecond,
+                    format: .number
+                )
+                .accessibilityIdentifier("mcpsettings.maximum.parameter.writes.per.second")
             }
             .formStyle(.columns)
             HStack {
@@ -82,12 +122,14 @@ struct MCPSettingsView: View {
                         await controller.apply(draft)
                         if controller.error == nil { applied += 1 }
                     }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!hasChanges)
+                }.accessibilityIdentifier("mcpsettings.apply.settings")
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!hasChanges)
                 Button(L10n.text("复制 Token")) { Task { await controller.copyToken() } }
+                    .accessibilityIdentifier("mcpsettings.copy.token")
                     .disabled(!controller.settings.enabled || controller.isStarting)
                 Button(L10n.text("复制连接命令")) { Task { await controller.copyConnectionCommand() } }
+                    .accessibilityIdentifier("mcpsettings.copy.connection.command")
                     .disabled(!controller.settings.enabled || controller.isStarting)
                 ApplyStatusLabel(dirty: hasChanges, applied: applied)
             }

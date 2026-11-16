@@ -225,15 +225,15 @@ struct BCRAgentConsoleApp: App {
 
         .commands {
             CommandGroup(replacing: .undoRedo) {
-                Button(L10n.text("撤销数值变化")) { model.undo() }
+                Button(L10n.text("撤销数值变化")) { model.undo() }.accessibilityIdentifier("app.undo.value.change")
                     .keyboardShortcut("z", modifiers: .command)
                     .disabled(!model.canUndo)
-                Button(L10n.text("重做数值变化")) { model.redo() }
+                Button(L10n.text("重做数值变化")) { model.redo() }.accessibilityIdentifier("app.redo.value.change")
                     .keyboardShortcut("z", modifiers: [.command, .shift])
                     .disabled(!model.canRedo)
             }
             CommandGroup(replacing: .appSettings) {
-                SettingsLink { Text(L10n.text("设置") + "…") }
+                SettingsLink { Text(L10n.text("设置") + "…") }.accessibilityIdentifier("commands.settings")
                     .keyboardShortcut(",", modifiers: .command)
             }
         }

@@ -27,10 +27,10 @@ struct WorkspaceTabsView: View {
             HStack(spacing: 10) {
                 Picker(L10n.text("工作区"), selection: Binding(get: { tab }, set: { selection = $0 })) {
                     ForEach(tabs) { Label($0.title, systemImage: $0.systemImage).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(maxWidth: 520)
+                }.accessibilityIdentifier("workspace.tabs.workspace")
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: 520)
                 Spacer(minLength: 0)
                 panelMenu(outputActive: outputActive)
             }
@@ -108,8 +108,9 @@ private struct ParameterListView: View {
                 Button(L10n.text("导入并替换"), role: .destructive) {
                     if let pendingImport { model.installConfiguration(pendingImport) }
                     pendingImport = nil
-                }
+                }.accessibilityIdentifier("parameters.replace.all.parameters.and.assignments.import.and.replace")
                 Button(L10n.text("取消"), role: .cancel) { pendingImport = nil }
+                    .accessibilityIdentifier("parameters.replace.all.parameters.and.assignments.cancel")
             } message: {
                 if let pendingImport {
                     Text(
@@ -126,7 +127,8 @@ private struct ParameterListView: View {
                 presenting: pendingPreset
             ) { preset in
                 Button(L10n.text("载入并替换"), role: .destructive) { model.loadPreset(preset) }
-                Button(L10n.text("取消"), role: .cancel) {}
+                    .accessibilityIdentifier("parameters.confirmation.load.and.replace")
+                Button(L10n.text("取消"), role: .cancel) {}.accessibilityIdentifier("parameters.confirmation.cancel")
             } message: { preset in
                 Text(L10n.text("\(preset.summary)。会替换当前全部参数与功能分配；实体硬件映射不受影响。"))
             }
@@ -145,6 +147,7 @@ private struct ParameterListView: View {
                         .accessibilityIdentifier("parameters.highlight.\(group)")
                         .controlSize(.small)
                         Button(L10n.text("复位到默认")) { model.resetGroup(group) }
+                            .accessibilityIdentifier("parameters.reset.to.defaults.\(group)")
                             .controlSize(.small)
                     }
                     ForEach(model.configuration.parameters.filter { $0.group == group }) { definition in
@@ -161,7 +164,7 @@ private struct ParameterListView: View {
             model.createParameter()
         } label: {
             Label(L10n.text("新建参数"), systemImage: "plus")
-        }
+        }.accessibilityIdentifier("parameters.new.parameter")
     }
 
     private var importButton: some View {
@@ -191,7 +194,7 @@ private struct ParameterListView: View {
                 } label: {
                     Text(preset.title)
                     Text(preset.summary)
-                }
+                }.accessibilityIdentifier("parameters.button.\(preset.id)")
             }
         }
         .fixedSize()
@@ -255,7 +258,7 @@ private struct ParameterRow: View {
                     get: { value >= definition.midpoint },
                     set: { model.setParameter(definition.id, to: $0 ? definition.maximum : definition.minimum) }
                 ))
-                .labelsHidden()
+                .accessibilityIdentifier("parameter.row.value.toggle.\(definition.id.rawValue)").labelsHidden()
                 Spacer(minLength: 0)
             }
         } else {
@@ -263,6 +266,7 @@ private struct ParameterRow: View {
                 value: Binding(get: { value }, set: { model.setParameter(definition.id, to: $0) }),
                 in: definition.minimum ... definition.maximum
             )
+            .accessibilityIdentifier("parameter.row.value.slider.\(definition.id.rawValue)")
         }
     }
 
@@ -278,12 +282,12 @@ private struct ParameterRow: View {
                     if control.section == .pushEncoder || control.section == .pushEncoderButton {
                         model.selectGroup(control.row)
                     }
-                }
-                .buttonStyle(.plain)
-                .font(.caption2.monospaced().bold())
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Theme.selection.opacity(model.selectedControl == control ? 0.35 : 0.14), in: Capsule())
+                }.accessibilityIdentifier("parameter.row.select.group.\(control.accessibilityID)")
+                    .buttonStyle(.plain)
+                    .font(.caption2.monospaced().bold())
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Theme.selection.opacity(model.selectedControl == control ? 0.35 : 0.14), in: Capsule())
             }
         }
     }
@@ -320,12 +324,15 @@ private struct AgentGridView: View {
                         HStack {
                             Button(slot.state == .waitingApproval && model.codex.backend == .codex ? L10n
                                 .text("查看审批") : primaryActionTitle(slot.state)) { model.performPrimaryAction(slot.id) }
+                                .accessibilityIdentifier("agents.review.approval.\(slot.id.rawValue)")
                                 .buttonStyle(.borderedProminent)
                                 .tint(stateColor(slot.state))
                             if slot.state == .waitingApproval {
                                 Button(L10n.text("拒绝")) { model.decline(slot.id) }
+                                    .accessibilityIdentifier("agents.deny.\(slot.id.rawValue)")
                                 if model.codex.backend == .codex {
                                     Button(L10n.text("中断")) { model.interrupt(slot.id) }
+                                        .accessibilityIdentifier("agents.interrupt.\(slot.id.rawValue)")
                                 }
                             }
                             Spacer()
@@ -361,7 +368,7 @@ private struct MIDIMonitorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button(L10n.text("清空")) { model.clearMonitor() }
+                Button(L10n.text("清空")) { model.clearMonitor() }.accessibilityIdentifier("midimonitor.clear")
                     .controlSize(.small)
             }
             if model.events.isEmpty {

@@ -34,8 +34,9 @@ struct GeneralSettingsView: View {
             Button(L10n.text("载入并替换"), role: .destructive) {
                 if let entry = loading { _ = model.installConfiguration(entry.configuration) }
                 loading = nil
-            }
+            }.accessibilityIdentifier("general.settings.replace.all.parameters.and.assignments.load.and.replace")
             Button(L10n.text("取消"), role: .cancel) { loading = nil }
+                .accessibilityIdentifier("general.settings.replace.all.parameters.and.assignments.cancel")
         }
         .confirmationDialog(L10n.text("删除保存的配置？"), isPresented: Binding(
             get: { deleting != nil }, set: { if !$0 { deleting = nil } }
@@ -43,8 +44,9 @@ struct GeneralSettingsView: View {
             Button(L10n.text("删除"), role: .destructive) {
                 if let entry = deleting { model.library.delete(entry.id) }
                 deleting = nil
-            }
+            }.accessibilityIdentifier("general.settings.delete.the.saved.configuration.delete")
             Button(L10n.text("取消"), role: .cancel) { deleting = nil }
+                .accessibilityIdentifier("general.settings.delete.the.saved.configuration.cancel")
         }
         .padding(12)
         .settingsPage()

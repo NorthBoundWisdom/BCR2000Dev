@@ -90,34 +90,44 @@ struct OutputSettingsView: View {
                 Text("OSC UDP").tag(OutputTransportKind.osc)
                 Text("WebSocket JSON").tag(OutputTransportKind.webSocket)
                 Text("ROS 2 · rosbridge").tag(OutputTransportKind.rosbridge)
-            }
+            }.accessibilityIdentifier("output.settings.output.protocol")
             Form {
                 TextField(L10n.text("目标地址"), text: $draft.host)
-                TextField(L10n.text("端口"), value: $draft.port, format: .number)
+                    .accessibilityIdentifier("output.settings.destination.address")
+                TextField(
+                    L10n.text("端口"),
+                    value: $draft.port,
+                    format: .number
+                )
+                .accessibilityIdentifier("output.settings.port")
             }
             .formStyle(.columns)
             Picker(L10n.text("使能参数"), selection: $draft.enableParameter) {
                 ForEach(controller.session.engine.configuration.parameters.filter { $0.kind == .toggle }) {
                     Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
                 }
-            }
+            }.accessibilityIdentifier("output.settings.enable.parameter")
             HStack {
                 Button(controller.settings.enabled ? L10n.text("停止输出") : L10n.text("启动输出")) {
                     if controller.settings.enabled { controller.stop() }
                     else { controller.apply(draft); if controller.error == nil { controller.start() } }
-                }
-                .buttonStyle(.borderedProminent)
-                .help(L10n.text("启动或停止经过安全门的 OSC 输出"))
+                }.accessibilityIdentifier("output.settings.stop.output")
+                    .buttonStyle(.borderedProminent)
+                    .help(L10n.text("启动或停止经过安全门的 OSC 输出"))
                 Button(L10n.text("应用设置")) {
                     controller.apply(draft)
                     if controller.error == nil { applied += 1 }
-                }
-                .disabled(!hasChanges)
+                }.accessibilityIdentifier("output.settings.apply.settings")
+                    .disabled(!hasChanges)
                 Button(L10n.text("重新生成限位草稿…")) { confirmsLimits = true }
+                    .accessibilityIdentifier("output.settings.regenerate.limit.draft")
                     .confirmationDialog(L10n.text("按当前参数范围重建限位草稿？"), isPresented: $confirmsLimits) {
                         Button(L10n.text("重建草稿"), role: .destructive) {
                             draft.limits = OutputSettings.defaults(for: controller.session.engine.configuration).limits
                         }
+                        .accessibilityIdentifier(
+                            "output.settings.rebuild.the.limit.draft.from.current.parameter.ranges.rebuild.draft"
+                        )
                     } message: { Text(L10n.text("尚未应用的限位编辑会被替换，实际输出设置不会立即改变。")) }
                 ApplyStatusLabel(dirty: hasChanges, applied: applied)
             }
@@ -127,8 +137,8 @@ struct OutputSettingsView: View {
             )) {
                 Text(L10n.text("目标值")).tag(LEDFeedbackSource.target)
                 Text(L10n.text("实际回传")).tag(LEDFeedbackSource.actual)
-            }
-            .pickerStyle(.segmented)
+            }.accessibilityIdentifier("output.settings.led.ring.display")
+                .pickerStyle(.segmented)
             Text(L10n.text("实际回传只投影到连续参数灯环，不覆盖目标。使能与触发按键 LED 始终反映软件目标。"))
                 .font(.caption).foregroundStyle(.secondary)
             ImmediateEffectNote()
@@ -145,10 +155,26 @@ struct OutputSettingsView: View {
                             Text(controller.session.engine.configuration.parameter(limit.id)
                                 .map { BuiltInNamePresentation.displayName($0.name) } ?? limit.id.rawValue)
                                 .frame(width: 145, alignment: .leading).lineLimit(1)
-                            numberField($limit.minimum, label: L10n.text("\(limit.id.rawValue) 软下限"))
-                            numberField($limit.maximum, label: L10n.text("\(limit.id.rawValue) 软上限"))
-                            numberField($limit.maximumChange, label: L10n.text("\(limit.id.rawValue) 单周期最大变化"))
-                            numberField($limit.maximumVelocity, label: L10n.text("\(limit.id.rawValue) 最大速度"))
+                            numberField(
+                                $limit.minimum,
+                                label: L10n.text("\(limit.id.rawValue) 软下限"),
+                                identifier: "output.limit.minimum.\(limit.id.rawValue)"
+                            )
+                            numberField(
+                                $limit.maximum,
+                                label: L10n.text("\(limit.id.rawValue) 软上限"),
+                                identifier: "output.limit.maximum.\(limit.id.rawValue)"
+                            )
+                            numberField(
+                                $limit.maximumChange,
+                                label: L10n.text("\(limit.id.rawValue) 单周期最大变化"),
+                                identifier: "output.limit.maximumChange.\(limit.id.rawValue)"
+                            )
+                            numberField(
+                                $limit.maximumVelocity,
+                                label: L10n.text("\(limit.id.rawValue) 最大速度"),
+                                identifier: "output.limit.maximumVelocity.\(limit.id.rawValue)"
+                            )
                         }
                     }
                 }
@@ -162,8 +188,8 @@ struct OutputSettingsView: View {
         .onAppear { draft = controller.settings }
     }
 
-    private func numberField(_ value: Binding<Double>, label: String) -> some View {
-        TextField("", value: value, format: .number)
+    private func numberField(_ value: Binding<Double>, label: String, identifier: String) -> some View {
+        TextField("", value: value, format: .number).accessibilityIdentifier(identifier)
             .accessibilityLabel(label)
             .frame(width: 118)
             .textFieldStyle(.roundedBorder)

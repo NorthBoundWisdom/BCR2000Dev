@@ -74,9 +74,9 @@ struct OffscreenSafeMenu<Actions: View, Label: View>: View {
                 OffscreenInteractionPanel.present(id: id, view: AnyView(VStack(alignment: .leading, spacing: 12) {
                     actions()
                 }.padding(20).frame(width: 480)))
-            } label: { label() }
+            } label: { label() }.accessibilityIdentifier(id)
         } else {
-            Menu(content: actions, label: label)
+            Menu(content: actions, label: label).accessibilityIdentifier(id)
         }
     }
 }

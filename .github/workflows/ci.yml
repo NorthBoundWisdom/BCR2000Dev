@@ -122,6 +122,7 @@ jobs:
       # setup_local_project.py also builds SurfacePlugins on its own; the test build compiles it anyway.
       - run: python3 configs/validate_repo_commands.py .
       - run: python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check
+      - run: python3 configs/check_accessibility.py
       - run: python3 -m compileall -q configs
       - name: Run all Python workflows and native suites independently
         run: python3 configs/ci_parallel_checks.py tests

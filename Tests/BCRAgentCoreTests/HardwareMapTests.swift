@@ -19,6 +19,20 @@ final class HardwareMapTests: XCTestCase {
         XCTAssertNil(BCRLayout.control(after: .encoder(row: 3, 8)))
     }
 
+    func testAll108AccessibilityIDsUseOnlyStableGeometry() throws {
+        let controls = BCRLayout.allControls
+        let expected = controls.map { "surface.\($0.section.rawValue).\($0.row).\($0.index)" }
+        XCTAssertEqual(controls.map(\.accessibilityID), expected)
+        XCTAssertEqual(Set(expected).count, 108)
+        XCTAssertEqual(try JSONDecoder().decode([BCRControlID].self, from: JSONEncoder().encode(controls))
+            .map(\.accessibilityID), expected)
+        XCTAssertEqual(BCRControlID.userButton(4).accessibilityID, "surface.userButton.1.4")
+        XCTAssertNotEqual(BCRControlID.pushEncoder(group: 1, 1).accessibilityID,
+                          BCRControlID.pushEncoderButton(group: 1, 1).accessibilityID)
+        XCTAssertNotEqual(BCRControlID.pushEncoder(group: 1, 1).accessibilityID,
+                          BCRControlID.pushEncoder(group: 2, 1).accessibilityID)
+    }
+
     func testControlIDDecodingRejectsPositionsOutsideTheLayout() {
         let invalid = Data(#"{"section":"button","row":3,"index":1}"#.utf8)
         XCTAssertThrowsError(try JSONDecoder().decode(BCRControlID.self, from: invalid))

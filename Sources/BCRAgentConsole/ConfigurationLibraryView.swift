@@ -22,9 +22,10 @@ struct ConfigurationLibrarySection: View {
         Section {
             HStack {
                 TextField(L10n.text("配置名称"), text: $name, prompt: Text(L10n.text("输入名称后保存")))
+                    .accessibilityIdentifier("configuration.library.configuration.name")
                 Button(L10n.text("保存当前配置")) {
                     if library.save(name: name, configuration: model.configuration) { name = "" }
-                }
+                }.accessibilityIdentifier("configuration.library.save.current.configuration")
             }
             if let error = library.error {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)
@@ -38,7 +39,9 @@ struct ConfigurationLibrarySection: View {
                     Text(entry.name)
                     Spacer()
                     Button(L10n.text("载入")) { loading = entry }
+                        .accessibilityIdentifier("configuration.library.load.\(entry.id)")
                     Button(L10n.text("删除"), role: .destructive) { deleting = entry }
+                        .accessibilityIdentifier("configuration.library.delete.\(entry.id)")
                 }
             }
             Text(L10n.text("保存参数、分配、页面与宏，不含硬件映射；载入前确认，会替换当前全部参数与分配。"))

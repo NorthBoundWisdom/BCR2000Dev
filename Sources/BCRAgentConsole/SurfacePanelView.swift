@@ -306,8 +306,8 @@ struct SurfacePanelView: View {
                     } label: {
                         DeviceKey(label: "\(group)", lit: group == model.visibleGroup,
                                   marked: model.source == .hardware && group == deviceGroup)
-                    }
-                    .buttonStyle(.plain)
+                    }.accessibilityIdentifier("surface.panel.select.group.\(group)")
+                        .buttonStyle(.plain)
                 }
             }
             .help(groupHelp)
@@ -539,6 +539,7 @@ private struct UserKeyCell: View {
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(presentation.accessibilitySummary)
+        .accessibilityIdentifier(presentation.control.accessibilityID)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
             onPress()
@@ -647,6 +648,7 @@ private struct KnobCell: View {
             CellLabels(presentation: presentation)
         }
         .modifier(CellChrome(presentation: presentation))
+        .accessibilityIdentifier(presentation.control.accessibilityID)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityValue(presentation.detail ?? "\(presentation.value)")
@@ -741,6 +743,7 @@ private struct PadCell: View {
             CellLabels(presentation: presentation)
         }
         .modifier(CellChrome(presentation: presentation))
+        .accessibilityIdentifier(presentation.control.accessibilityID)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityAddTraits(.isButton)
@@ -787,6 +790,7 @@ private struct PushButtonCell: View {
             )
         }
         .modifier(PressGesture(isDown: $isDown, onPress: onPress, onRelease: onRelease))
+        .accessibilityIdentifier(presentation.control.accessibilityID)
         .help(presentation.accessibilitySummary)
         .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityAddTraits(.isButton)

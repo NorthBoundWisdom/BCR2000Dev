@@ -135,7 +135,7 @@ struct SettingsChipButton<Label: View>: View {
         Button {
             SettingsNavigation.shared.tab = tab
             openSettings()
-        } label: { label() }
+        } label: { label() }.accessibilityIdentifier("settings.open.\(tab.rawValue)")
             .buttonStyle(.plain)
     }
 }

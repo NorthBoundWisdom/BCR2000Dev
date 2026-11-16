@@ -81,18 +81,35 @@ struct FeedbackSettingsSection: View {
     var body: some View {
         Section {
             Toggle(L10n.text("合并并限速实体反馈"), isOn: $draft.enabled)
-            TextField(L10n.text("每秒消息上限"), value: $draft.messagesPerSecond, format: .number)
-            TextField(L10n.text("突发消息上限"), value: $draft.burst, format: .number)
-            TextField(L10n.text("错误重试间隔（秒）"), value: $draft.errorCooldown, format: .number)
-            Text(L10n.text("同一控件只发送最新值；切换端口、设备或配置时清除待发送反馈。默认关闭，真机速率需实测校准。"))
+                .accessibilityIdentifier("feedback.settings.coalesce.and.rate.limit.hardware.feedback")
+            TextField(
+                L10n.text("每秒消息上限"),
+                value: $draft.messagesPerSecond,
+                format: .number
+            )
+            .accessibilityIdentifier("feedback.settings.maximum.messages.per.second")
+            TextField(
+                L10n.text("突发消息上限"),
+                value: $draft.burst,
+                format: .number
+            )
+            .accessibilityIdentifier("feedback.settings.maximum.burst")
+            TextField(
+                L10n.text("错误重试间隔（秒）"),
+                value: $draft.errorCooldown,
+                format: .number
+            )
+            .accessibilityIdentifier("feedback.settings.error.retry.interval.seconds")
+            Text(L10n
+                .text("同一控件只发送最新值；切换端口、设备或配置时清除待发送反馈。默认关闭，真机速率需实测校准。"))
                 .font(.caption).fixedSize(horizontal: false, vertical: true)
             if let error = controller.error { Text(error).foregroundStyle(.red) }
             HStack {
                 Button(L10n.text("应用设置")) {
                     controller.apply(draft)
                     if controller.error == nil { applied += 1 }
-                }
-                .disabled(draft == controller.policy)
+                }.accessibilityIdentifier("feedback.settings.apply.settings")
+                    .disabled(draft == controller.policy)
                 ApplyStatusLabel(dirty: draft != controller.policy, applied: applied)
             }
         } header: {

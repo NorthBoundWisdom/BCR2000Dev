@@ -35,12 +35,13 @@ struct SurfaceProgramsView: View {
                 )) {
                     Text(L10n.text("基础页面")).tag(SurfaceConfiguration.basePageID)
                     ForEach(model.configuration.pages) { Text($0.name).tag($0.id) }
-                }
+                }.accessibilityIdentifier("surface.programs.current.page")
                 if let warning = model.configuration.pageNavigationWarning {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
                 HStack {
                     TextField(L10n.text("页面名称"), text: $pageName)
+                        .accessibilityIdentifier("surface.programs.page.name")
                     Button(L10n.text("复制当前分配为新页面")) {
                         perform {
                             var next = model.configuration
@@ -48,23 +49,25 @@ struct SurfaceProgramsView: View {
                             try model.updatePrograms(next)
                             pageName = ""
                         }
-                    }
+                    }.accessibilityIdentifier("surface.programs.copy.assignments.to.new.page")
                 }
                 ForEach(model.configuration.pages) { page in
                     HStack {
                         Text(page.name); Spacer(); Button(L10n.text("删除"), role: .destructive) { deletingPage = page }
+                            .accessibilityIdentifier("surface.programs.delete.\(page.id)")
                     }
                 }
             }
             Section(L10n.text("宏")) {
                 TextField(L10n.text("宏名称"), text: $macroName)
+                    .accessibilityIdentifier("surface.programs.macro.name")
                 ForEach($actions) { $action in
                     HStack {
                         Picker(L10n.text("参数"), selection: $action.parameter) {
                             ForEach(model.configuration.parameters) {
                                 Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
                             }
-                        }
+                        }.accessibilityIdentifier("surface.programs.parameters.\(action.id)")
                         Picker(L10n.text("动作"), selection: $action.kind) {
                             Text(L10n.text("设为指定值")).tag(MacroActionDraft.Kind.set)
                             Text(L10n.text("步进")).tag(MacroActionDraft.Kind.step)
@@ -72,10 +75,14 @@ struct SurfaceProgramsView: View {
                         }
                         .accessibilityIdentifier("macros.action.kind.\(action.id)")
                         if action.kind != .toggle {
-                            TextField(L10n.text("值"), value: $action.value, format: .number).frame(width: 90)
+                            TextField(L10n.text("值"), value: $action.value, format: .number)
+                                .accessibilityIdentifier("surface.programs.value.\(action.id)").frame(width: 90)
                         }
-                        Button { actions.removeAll { $0.id == action.id } } label: { Image(systemName: "minus.circle") }
-                            .accessibilityLabel(L10n.text("删除操作"))
+                        Button { actions.removeAll { $0.id == action.id } } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .accessibilityIdentifier("surface.programs.minus.circle.\(action.id)")
+                        .accessibilityLabel(L10n.text("删除操作"))
                     }
                 }
                 HStack {
@@ -83,7 +90,8 @@ struct SurfaceProgramsView: View {
                         if let first = model.configuration.parameters.first {
                             actions.append(.init(parameter: first.id, value: first.defaultValue))
                         }
-                    }.disabled(actions.count >= 64 || model.configuration.parameters.isEmpty)
+                    }.accessibilityIdentifier("surface.programs.add.action")
+                        .disabled(actions.count >= 64 || model.configuration.parameters.isEmpty)
                     Button(L10n.text("保存宏")) {
                         perform {
                             var next = model.configuration
@@ -98,7 +106,7 @@ struct SurfaceProgramsView: View {
                             try model.updatePrograms(next)
                             actions = []; macroName = ""
                         }
-                    }
+                    }.accessibilityIdentifier("surface.programs.save.macro")
                 }
                 ForEach(model.configuration.macros) { macro in
                     HStack {
@@ -107,6 +115,7 @@ struct SurfaceProgramsView: View {
                         Button(L10n.text("运行")) { model.runMacro(macro.id) }
                             .accessibilityIdentifier("macros.run.\(macro.id)")
                         Button(L10n.text("删除"), role: .destructive) { deletingMacro = macro }
+                            .accessibilityIdentifier("surface.programs.delete.\(macro.id)")
                     }
                 }
                 Text(L10n.text("从检查器将页面或宏分配给按键。页面共享参数值；宏按顺序执行，最多 64 项。"))
@@ -130,8 +139,9 @@ struct SurfaceProgramsView: View {
                     }
                 }
                 deletingPage = nil
-            }
+            }.accessibilityIdentifier("surface.programs.delete.this.page.and.its.switching.assignments.delete")
             Button(L10n.text("取消"), role: .cancel) { deletingPage = nil }
+                .accessibilityIdentifier("surface.programs.delete.this.page.and.its.switching.assignments.cancel")
         }
         .confirmationDialog(L10n.text("删除宏及其按键绑定？"), isPresented: Binding(
             get: { deletingMacro != nil }, set: { if !$0 { deletingMacro = nil } }
@@ -143,8 +153,9 @@ struct SurfaceProgramsView: View {
                     }
                 }
                 deletingMacro = nil
-            }
+            }.accessibilityIdentifier("surface.programs.delete.this.macro.and.its.button.assignments.delete")
             Button(L10n.text("取消"), role: .cancel) { deletingMacro = nil }
+                .accessibilityIdentifier("surface.programs.delete.this.macro.and.its.button.assignments.cancel")
         }
         .preferredColorScheme(.dark)
     }

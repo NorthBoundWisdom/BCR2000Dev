@@ -51,7 +51,7 @@ struct MIDIEndpointSettingsSection: View {
                 if let id = draft.sourceID, !model.connection.sourceEndpoints.contains(where: { $0.id == id }) {
                     Text(L10n.text("所选输入已断开")).tag(id)
                 }
-            }
+            }.accessibilityIdentifier("midiendpoint.settings.input.port")
             Picker(L10n.text("输出端口"), selection: Binding(
                 get: { draft.destinationID ?? 0 }, set: { draft.destinationID = $0 == 0 ? nil : $0 }
             )) {
@@ -64,7 +64,7 @@ struct MIDIEndpointSettingsSection: View {
                 {
                     Text(L10n.text("所选输出已断开")).tag(id)
                 }
-            }
+            }.accessibilityIdentifier("midiendpoint.settings.output.port")
             Text(L10n.text("当前输入：\(model.connection.connectedSource ?? L10n.text("未连接"))"))
             Text(L10n.text("当前输出：\(model.connection.connectedDestination ?? L10n.text("未连接"))"))
             if let error = model.connection.lastError {
@@ -75,16 +75,17 @@ struct MIDIEndpointSettingsSection: View {
             }
             HStack {
                 Button(L10n.text("恢复自动选择")) { draft = .init() }
+                    .accessibilityIdentifier("midiendpoint.settings.use.automatic.selection")
                 ApplyStatusLabel(dirty: dirty, applied: applied)
                 Spacer()
                 Button(L10n.text("应用端口")) {
                     model.applyEndpointSelection(draft)
                     if model.endpointSelection == draft, !model.endpointSettingsNeedRepair { applied += 1 }
-                }
-                .buttonStyle(.borderedProminent)
-                // Re-applying the same choice is still needed to repair unreadable saved settings.
-                .disabled(!model.canConfigureMIDI || (!dirty && !model.endpointSettingsNeedRepair))
-                .help(L10n.text("保存并重新连接所选 MIDI 输入与输出端口"))
+                }.accessibilityIdentifier("midiendpoint.settings.apply.ports")
+                    .buttonStyle(.borderedProminent)
+                    // Re-applying the same choice is still needed to repair unreadable saved settings.
+                    .disabled(!model.canConfigureMIDI || (!dirty && !model.endpointSettingsNeedRepair))
+                    .help(L10n.text("保存并重新连接所选 MIDI 输入与输出端口"))
             }
             Text(L10n.text("端口选择保留当前实体映射；换设备或预设后需重新学习。"))
                 .font(.caption).foregroundStyle(.secondary)

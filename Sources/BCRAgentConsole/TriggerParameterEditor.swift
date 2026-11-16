@@ -23,7 +23,7 @@ struct TriggerParameterEditor: View {
                         ForEach(model.configuration.parameters) {
                             Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
                         }
-                    }
+                    }.accessibilityIdentifier("trigger.parameter.editor.parameters.\(control.accessibilityID)")
                 }
                 fields(id)
             }
@@ -40,27 +40,34 @@ struct TriggerParameterEditor: View {
                 TextField(L10n.text("步进量"), value: Binding(get: { step }, set: {
                     update(.stepParameter(id: id, step: $0, wraps: wraps))
                 }), format: .number)
+                    .accessibilityIdentifier("trigger.parameter.editor.step.amount.\(control.accessibilityID)")
                     .textFieldStyle(.roundedBorder)
             }
             FieldIndent {
                 Toggle(L10n.text("越界循环到另一端"), isOn: Binding(get: { wraps }, set: {
                     update(.stepParameter(id: id, step: step, wraps: $0))
                 }))
+                .accessibilityIdentifier("trigger.parameter.editor.wrap.at.range.boundary.\(control.accessibilityID)")
             }
         case let .setParameter(_, value):
             FieldRow(L10n.text("指定值")) {
                 TextField(L10n.text("指定值"), value: Binding(get: { value }, set: {
                     update(.setParameter(id: id, value: $0))
                 }), format: .number)
+                    .accessibilityIdentifier("trigger.parameter.editor.value.\(control.accessibilityID)")
                     .textFieldStyle(.roundedBorder)
             }
         case .cycleParameter:
             FieldRow(L10n.text("循环预设值")) {
                 TextField(L10n.text("循环值（逗号分隔）"), text: $cycleText)
+                    .accessibilityIdentifier(
+                        "trigger.parameter.editor.cycle.values.comma.separated.\(control.accessibilityID)"
+                    )
                     .textFieldStyle(.roundedBorder)
             }
             FieldIndent {
                 Button(L10n.text("应用循环值")) { model.setCycleValues(cycleText, parameter: id, for: control) }
+                    .accessibilityIdentifier("trigger.parameter.editor.apply.cycle.values.\(control.accessibilityID)")
             }
             FieldNote(L10n.text("按给定顺序循环；当前值不在列表时从第一项开始。"))
         default: EmptyView()

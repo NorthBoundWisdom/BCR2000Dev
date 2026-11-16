@@ -56,6 +56,9 @@ public enum BCRSection: String, Codable, Sendable, CaseIterable, Comparable {
 /// One physical control. `row` is the encoder group for the top encoders (1...4), the row for
 /// buttons (1...2) and encoders (1...3), and always 1 for user buttons.
 public struct BCRControlID: Hashable, Codable, Sendable, Comparable, Identifiable, CustomStringConvertible {
+    /// Persistent geometric identity, independent of wire mappings, assignment/page or language.
+    public var accessibilityID: String { "surface.\(section.rawValue).\(row).\(index)" }
+
     public let section: BCRSection
     public let row: Int
     public let index: Int

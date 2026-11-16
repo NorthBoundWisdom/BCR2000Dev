@@ -20,6 +20,7 @@ struct CodexAgentSettingsView: View {
                 Toggle(L10n.text("用闪烁表示 Agent 状态"), isOn: Binding(
                     get: { model.blinksAgentLEDs }, set: { model.setBlinksAgentLEDs($0) }
                 ))
+                .accessibilityIdentifier("codex.agent.settings.show.agent.states.by.blinking")
                 AgentLEDBlinkPreview()
                 Text(L10n.text("按键灯只有亮灭：空闲灭、运行常亮、排队慢闪、等待审批快闪、出错急闪。关闭后发送原有数值，实体灯在 64 及以上才亮：出错、中断、排队与空闲都灭，等待审批与运行都亮。"))
                     .font(.caption).fixedSize(horizontal: false, vertical: true)
@@ -29,25 +30,31 @@ struct CodexAgentSettingsView: View {
             })) {
                 Text("Mock").tag(AgentBackend.mock)
                 Text("Codex").tag(AgentBackend.codex)
-            }
+            }.accessibilityIdentifier("codex.agent.settings.agent.backend")
             HStack {
                 TextField(L10n.text("可执行文件"), text: $controller.executable, prompt: Text(L10n.text("codex 可执行文件的绝对路径")))
-                Button(L10n.text("选择文件…")) { chooseExecutable() }
+                    .accessibilityIdentifier("codex.agent.settings.executable")
+                Button(L10n.text("选择文件…")) {
+                    chooseExecutable()
+                }.accessibilityIdentifier("codex.agent.settings.choose.file")
             }
             .disabled(controller.phase != .stopped && controller.phase != .failed)
             TextField(L10n.text("工作目录"), text: $controller.workspace, prompt: Text(L10n.text("工作目录的绝对路径")))
+                .accessibilityIdentifier("codex.agent.settings.workspace")
                 .disabled(controller.phase != .stopped && controller.phase != .failed)
             HStack {
                 Button(L10n.text("连接")) { Task { await controller.connect() } }
+                    .accessibilityIdentifier("codex.agent.settings.connect")
                     .disabled(controller.backend != .codex || ![.stopped, .failed].contains(controller.phase))
                 Button(L10n.text("全部停止")) { Task { await controller.stopAll() } }
+                    .accessibilityIdentifier("codex.agent.settings.stop.all")
                 Text(controller.phase.title)
             }
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             Picker(L10n.text("模型"), selection: $controller.modelID) {
                 Text("—").tag("")
                 ForEach(controller.models, id: \.id) { Text($0.displayName).tag($0.id) }
-            }
+            }.accessibilityIdentifier("codex.agent.settings.model")
             Picker(L10n.text("推理强度"), selection: $controller.effort) {
                 Text(L10n.text("默认值")).tag("")
                 ForEach(
@@ -56,14 +63,17 @@ struct CodexAgentSettingsView: View {
                 ) {
                     Text($0).tag($0)
                 }
-            }
+            }.accessibilityIdentifier("codex.agent.settings.reasoning.effort")
             Toggle(L10n.text("允许写入当前工作目录"), isOn: $controller.allowWorkspaceWrites)
-            Text(L10n.text("默认只读；写入仅限所选目录。审批前请查看 Agent 页中的操作详情。"))
+                .accessibilityIdentifier("codex.agent.settings.allow.writes.to.this.workspace")
+            Text(L10n
+                .text("默认只读；写入仅限所选目录。审批前请查看 Agent 页中的操作详情。"))
                 .font(.caption).foregroundStyle(.secondary)
             TextField(L10n.text("任务内容"), text: $controller.prompt, prompt: Text(L10n.text("描述要执行的任务")), axis: .vertical)
-                .lineLimit(3 ... 6)
+                .accessibilityIdentifier("codex.agent.settings.task").lineLimit(3 ... 6)
             HStack {
                 Button(L10n.text("保存设置")) { if controller.savePreferences() { saved += 1 } }
+                    .accessibilityIdentifier("codex.agent.settings.save.settings")
                 ApplyStatusLabel(dirty: false, applied: saved, confirmation: L10n.text("已保存"))
             }
             Text(L10n.text("改动立即用于本次运行；“保存设置”后重启仍保留。"))
@@ -126,6 +136,7 @@ struct AgentBackendStatusView: View {
                 Spacer()
                 if controller.backend == .codex {
                     Button(L10n.text("全部停止")) { Task { await controller.stopAll() } }
+                        .accessibilityIdentifier("agent.backend.status.stop.all")
                 }
             }
             if let error = controller.error { Text(error).font(.caption).foregroundStyle(.red) }
@@ -136,7 +147,9 @@ struct AgentBackendStatusView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Button(L10n.text("查看审批")) { controller.reviewApproval(approval.id) }
+                        .accessibilityIdentifier("agent.backend.status.review.approval.\(approval.id)")
                     Button(L10n.text("拒绝")) { controller.rejectApproval(approval.id) }
+                        .accessibilityIdentifier("agent.backend.status.deny.\(approval.id)")
                         .disabled(controller.respondingApprovals.contains(approval.id))
                 }
             }
@@ -174,11 +187,15 @@ struct CodexApprovalReviewView: View {
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Button(L10n.text("关闭")) { controller.dismissApprovalReview() }
+                    .accessibilityIdentifier("codex.approval.review.close")
                 Button(L10n.text("中断")) { controller.interrupt(approval.slotID) }
+                    .accessibilityIdentifier("codex.approval.review.interrupt")
                 Spacer()
                 Button(L10n.text("拒绝")) { controller.rejectApproval(approval.id) }
+                    .accessibilityIdentifier("codex.approval.review.deny")
                     .disabled(controller.respondingApprovals.contains(approval.id))
                 Button(L10n.text("批准此请求")) { controller.approveReviewedRequest(approval) }
+                    .accessibilityIdentifier("codex.approval.review.approve.this.request")
                     .disabled(controller.respondingApprovals.contains(approval.id))
             }
         }

@@ -8,7 +8,8 @@ struct OfflineCaptureView: View {
             HStack {
                 Button(L10n.text("导入录制…")) { controller.chooseFile() }
                     .accessibilityIdentifier("offline.import")
-                Button(L10n.text("清空")) { controller.clear() }.disabled(controller.loaded == nil)
+                Button(L10n.text("清空")) { controller.clear() }.accessibilityIdentifier("offline.capture.clear")
+                    .disabled(controller.loaded == nil)
             }
             Text(L10n.text("只读导入；仅输入送入隔离 Mock。录制的输出只展示，不重发。"))
                 .font(.caption).foregroundStyle(.secondary)

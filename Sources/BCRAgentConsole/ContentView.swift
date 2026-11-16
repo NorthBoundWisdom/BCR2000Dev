@@ -171,10 +171,10 @@ private struct HeaderBar: View {
             HStack(spacing: 10) {
                 Picker(L10n.text("设备"), selection: Binding(get: { model.source }, set: { model.requestSource($0) })) {
                     ForEach(DeviceSource.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                }.accessibilityIdentifier("header.device")
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
 
                 if let target = model.engine.learnTarget {
                     HStack(spacing: 6) {
@@ -183,7 +183,7 @@ private struct HeaderBar: View {
                         Text(L10n.text("学习中：请操作实体 \(target.shortName)"))
                             .fontWeight(.semibold)
                             .lineLimit(1)
-                        Button(L10n.text("停止")) { model.stopLearning() }
+                        Button(L10n.text("停止")) { model.stopLearning() }.accessibilityIdentifier("header.stop")
                             .controlSize(.mini)
                     }
                     .font(.caption)
@@ -202,7 +202,7 @@ private struct HeaderBar: View {
                 Divider().frame(height: 16)
 
                 Toggle(L10n.text("跟随触碰"), isOn: $model.followsTouch)
-                    .toggleStyle(.switch)
+                    .accessibilityIdentifier("header.follow.touch").toggleStyle(.switch)
                     .controlSize(.mini)
                     .font(.caption)
                     .fixedSize()
@@ -288,23 +288,26 @@ private struct NoticeBanner: View {
             Spacer()
             if notice.action == .switchToHardware {
                 Button(L10n.text("切换到实体")) { model.performNoticeAction(.switchToHardware) }
+                    .accessibilityIdentifier("notice.banner.use.physical.device")
                     .controlSize(.small)
             }
             if notice.action == .saveMigration {
                 Button(L10n.text("保存升级")) { model.performNoticeAction(.saveMigration) }
+                    .accessibilityIdentifier("notice.banner.save.upgrade")
                     .controlSize(.small)
                     .help(L10n.text("把升级后的内容写回文件；原文件会先原样备份在同一目录。保存后此提示不再出现。"))
             }
             if notice.action == .retryConfigurationSave {
                 Button(L10n.text("重试保存")) { model.performNoticeAction(.retryConfigurationSave) }
+                    .accessibilityIdentifier("notice.banner.retry.save")
                     .controlSize(.small)
             }
             Button {
                 if let onDismiss { onDismiss() } else { model.clearNotice() }
             } label: {
                 Image(systemName: "xmark")
-            }
-            .buttonStyle(.plain)
+            }.accessibilityIdentifier("notice.banner.clear.notice")
+                .buttonStyle(.plain)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
