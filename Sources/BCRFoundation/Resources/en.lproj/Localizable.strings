@@ -1048,3 +1048,14 @@
 "暂停" = "Pause";
 "重置重播" = "Reset replay";
 "位置 {0}/{1} · 输入 {2} · 已跳过输出 {3}" = "Position {0}/{1} · Inputs {2} · Outputs skipped {3}";
+"观察来源" = "Observation source";
+"实体输入" = "Hardware input";
+"Mock 输入" = "Mock input";
+"只观察，不发送、不学习、不改映射；覆盖记录不是硬件验收结论。" = "Observe only: no sending, learning or mapping changes. Coverage is not hardware acceptance.";
+"已观察 {0}/108 · 消息 {1} · 未映射 {2} · 回声 {3}" = "Observed {0}/108 · Messages {1} · Unmapped {2} · Echoes {3}";
+"导出审查…" = "Export review…";
+"未观察" = "Not observed";
+"匹配映射" = "Mapping matches";
+"映射不一致" = "Mapping mismatch";
+"输入覆盖审查" = "Input coverage";
+"被动观察 108 个控件并导出带指纹的审查" = "Passively review 108 controls and export fingerprinted evidence";

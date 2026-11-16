@@ -24,6 +24,7 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var deviceWork: ConsoleDeviceWork
     private var updates: AnyCancellable?
     let monitorCapture: MonitorCaptureController
+    let inputReview: InputReviewController
     let offlineCapture = OfflineCaptureController()
     static let infoNoticeSeconds = ConsoleDeviceWork.infoNoticeSeconds
     typealias BackgroundWorkTimeout = ConsoleDeviceWork.BackgroundWorkTimeout
@@ -102,6 +103,7 @@ final class ConsoleViewModel: ObservableObject {
                                      mockClock: mockClock, automaticallyAdvancesMock: automaticallyAdvancesMock,
                                      timing: timing)
         deviceWork = work
+        inputReview = InputReviewController(session: work.session, now: timing.intentNow)
         monitorCapture = MonitorCaptureController(session: work.session,
                                                   directory: stores.configuration.fileURL.deletingLastPathComponent()
                                                       .appending(path: "Captures", directoryHint: .isDirectory))

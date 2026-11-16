@@ -40,7 +40,7 @@ public struct MonitorCaptureRecord: Equatable, Sendable {
         ])
     }
 
-    public static func event(_ event: MonitorEvent) -> Self {
+    public static func event(_ event: MonitorEvent, feedbackEcho: Bool = false) -> Self {
         let origin = event.origin == .agent ? "agent" : (event.origin == .external ? "externalState" :
             (event.direction == .input ? "deviceInput" : "softwareFeedback"))
         var fields: [String: JSONValue] = [
@@ -50,7 +50,8 @@ public struct MonitorCaptureRecord: Equatable, Sendable {
                 (event.direction == .input ? event.source.rawValue : "application")),
             "deviceSource": .string(event.source.rawValue), "origin": .string(origin),
             "direction": .string(event.direction == .input ? "IN" : "OUT"),
-            "ignored": .bool(event.ignored), "rawMIDI1Bytes": .array(event.message.midi1Bytes.map { .number(Int($0)) }),
+            "ignored": .bool(event.ignored || feedbackEcho), "echo": .bool(feedbackEcho),
+            "rawMIDI1Bytes": .array(event.message.midi1Bytes.map { .number(Int($0)) }),
             "message": .string(event.message.diagnosticDescription),
             "control": event.control.map { .string($0.shortName) } ?? .null,
             "bcrControl": event.control.map { .object(["section": .string($0.section.rawValue),

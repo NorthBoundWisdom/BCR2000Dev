@@ -116,6 +116,13 @@ public final class SurfaceSession {
         onChange?()
     }
 
+    private var monitorObservers: [UUID: @MainActor (MonitorEvent, Bool) -> Void] = [:]
+    public func observeMonitor(_ observer: @escaping @MainActor (MonitorEvent, Bool) -> Void) -> UUID {
+        let id = UUID(); monitorObservers[id] = observer; return id
+    }
+
+    public func removeMonitorObserver(_ id: UUID) { monitorObservers[id] = nil }
+
     private var captureObservers: [UUID: @MainActor (MonitorCaptureRecord) -> Void] = [:]
     public func observeCapture(_ observer: @escaping @MainActor (MonitorCaptureRecord) -> Void) -> UUID {
         let id = UUID(); captureObservers[id] = observer; return id
@@ -953,12 +960,15 @@ public final class SurfaceSession {
         events.append(MonitorEvent(id: nextEventID, time: now(), monotonicTime: historyTime.now(), direction: direction,
                                    source: source, message: message, control: control, ignored: ignored,
                                    origin: writeOrigin, delivery: delivery))
+        let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
+        if let event = events.last {
+            for observer in Array(monitorObservers.values) { observer(event, echo) }
+        }
         if !captureObservers.isEmpty, let event = events.last {
             // The record contains validated MIDI values only; no filesystem work runs on this path.
-            publishCapture(MonitorCaptureRecord.event(event))
+            publishCapture(MonitorCaptureRecord.event(event, feedbackEcho: echo))
         }
         if events.count > 300 { events.removeFirst(events.count - 300) }
-        let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
         let kind = direction == .input ? "control.raw" : "feedback.\(delivery?.rawValue ?? "generated")"
         let origin = diagnosticReadbackActive && direction == .input ? "readback" :
             (direction == .output || echo ? "feedback" : source.rawValue)

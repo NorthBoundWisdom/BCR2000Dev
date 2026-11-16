@@ -276,7 +276,13 @@ struct BCRAgentConsoleApp: App {
         captureRows.append(captureSession.captureEnd(eventCount: captureRows.count - 1))
         let captureData = try captureRows.reduce(Data()) { try $0 + $1.encodedLine() }
         sceneModel.offlineCapture.importData(captureData, name: "offline-preview.jsonl")
+        sceneModel.inputReview.source = .mock
         let previews: [(String, AnyView, CGSize)] = [
+            (
+                "inputReview",
+                AnyView(HardwareInputReviewView(controller: sceneModel.inputReview).padding()),
+                CGSize(width: 800, height: 1100)
+            ),
             (
                 "offline",
                 AnyView(OfflineCaptureView(controller: sceneModel.offlineCapture).padding()
@@ -299,7 +305,7 @@ struct BCRAgentConsoleApp: App {
             ("general", AnyView(GeneralSettingsView(model: model)), SettingsLayout.size)
         ]
         for (name, content, size) in previews {
-            if name == "offline" {
+            if name == "offline" || name == "inputReview" {
                 // Pure SwiftUI evidence panels render directly; NSView cacheDisplay can omit
                 // their deferred text layers while the transparent window is offscreen.
                 let renderer = ImageRenderer(content: content

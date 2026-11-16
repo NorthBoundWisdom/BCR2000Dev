@@ -42,6 +42,7 @@ struct WorkspaceTabsView: View {
             case .monitor: MIDIMonitorView(model: model)
             case .output: OutputReadoutView(model: model, controller: model.output)
             case .offlineCapture: OfflineCaptureView(controller: model.offlineCapture)
+            case .inputReview: HardwareInputReviewView(controller: model.inputReview)
             }
         }
         .panelStyle()

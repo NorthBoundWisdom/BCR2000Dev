@@ -10,7 +10,7 @@ import BCRPersistenceAdapter
 import Foundation
 
 enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
-    case parameters, arm, agents, monitor, output, offlineCapture
+    case parameters, arm, agents, monitor, output, offlineCapture, inputReview
 
     var id: String { rawValue }
 
@@ -22,6 +22,7 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .monitor: L10n.text("MIDI 监视")
         case .output: L10n.text("输出")
         case .offlineCapture: L10n.text("离线录制")
+        case .inputReview: L10n.text("输入覆盖审查")
         }
     }
 
@@ -33,13 +34,14 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .monitor: "waveform.path"
         case .output: "arrow.up.forward.circle"
         case .offlineCapture: "play.rectangle"
+        case .inputReview: "checklist"
         }
     }
 
     /// Specialist panels stay out of the workspace until the user enables them from the panel menu.
     var isOptional: Bool {
         switch self {
-        case .arm, .output, .offlineCapture: true
+        case .arm, .output, .offlineCapture, .inputReview: true
         case .parameters, .agents, .monitor: false
         }
     }
@@ -49,6 +51,7 @@ enum WorkspaceTab: String, CaseIterable, Identifiable, Codable, Sendable {
         case .arm: L10n.text("示例机械臂的侧视 / 俯视姿态示意")
         case .output: L10n.text("OSC 目标、受限输出与实际回传读数")
         case .offlineCapture: L10n.text("只读审查与隔离重播 MIDI 录制")
+        case .inputReview: L10n.text("被动观察 108 个控件并导出带指纹的审查")
         case .parameters, .agents, .monitor: nil
         }
     }

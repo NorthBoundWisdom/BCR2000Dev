@@ -135,6 +135,8 @@ The MIDI monitor can record versioned JSONL evidence to Application Support/Capt
 
 Enable Offline captures from Panels to inspect JSONL integrity and replay inputs in a fully isolated Mock session. Step/run/pause/reset never open MIDI ports or send recorded outputs.
 
+Input coverage is a passive optional workspace for all 108 logical controls. It separates hardware and Mock observations, flags mapping mismatches, and exports a fingerprinted review without sending MIDI or learning controls.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.
