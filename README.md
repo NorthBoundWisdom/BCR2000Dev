@@ -125,6 +125,8 @@ Enable panels from the **Panels** menu to the right of the workspace tabs. Selec
 | Arm preview | Side and top views of the example arm, driven by `arm.*` parameters | Hidden |
 | Output | Targets, limited output, and actual feedback values | Hidden; always visible while output is running |
 
+Parameter value changes support Undo/Redo (⌘Z / ⇧⌘Z) from the Edit menu and Parameters workspace. Continuous input is grouped within 400 ms; local and MCP batches are undoable, with current parameter protections and output safety still applied.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.

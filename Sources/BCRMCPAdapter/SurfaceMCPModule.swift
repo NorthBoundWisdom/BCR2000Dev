@@ -253,11 +253,13 @@ extension AgentControlService {
         try consumeWrites(entries.count)
         // All validation completes before the first synchronous effect. No await can interleave a change.
         return session.withWriteOrigin(.agent) {
-            entries.map { id, requested in
-                session.setParameter(id, to: requested)
-                let actual = session.engine.value(of: id)!
-                return .object(["id": .string(id.rawValue), "value": .double(actual),
-                                "clamped": .bool(actual != requested)])
+            session.withParameterHistory(key: entries.count == 1 ? "parameter:\(entries[0].0)" : nil) {
+                entries.map { id, requested in
+                    session.setParameter(id, to: requested)
+                    let actual = session.engine.value(of: id)!
+                    return .object(["id": .string(id.rawValue), "value": .double(actual),
+                                    "clamped": .bool(actual != requested)])
+                }
             }
         }
     }

@@ -88,6 +88,7 @@ private struct ParameterListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ParameterHistoryButtons(model: model)
             Text(L10n.text("软件参数是唯一事实来源：拖动滑块会回写所有绑定控件，转动控件也会移动这里的滑块。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)

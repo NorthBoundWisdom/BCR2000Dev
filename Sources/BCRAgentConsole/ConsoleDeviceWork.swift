@@ -21,7 +21,7 @@ final class ConsoleDeviceWork: ObservableObject {
     let presentation: ConsolePresentationState
     private var ownerUpdates: [AnyCancellable] = []
     private let timing: ConsoleTiming
-    private let session: SurfaceSession
+    let session: SurfaceSession
     let connectionWork: ConsoleConnectionWork
     let presetWork: ConsolePresetWork
     let recoveryWork: ConsoleRecoveryWork
@@ -252,7 +252,7 @@ final class ConsoleDeviceWork: ObservableObject {
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
             pluginBindings: AgentBindingTranslation.bindings,
             requiresHardwareConfirmation: true,
-            now: timing.intentNow,
+            now: timing.intentNow, historyTime: timing.work,
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
         )
@@ -482,6 +482,8 @@ final class ConsoleDeviceWork: ObservableObject {
     func touch(_ control: BCRControlID) { surfaceIntents.touch(control) }
     func setParameter(_ id: ParameterID, to value: Double) { surfaceIntents.setParameter(id, to: value) }
     func resetGroup(_ group: String) { surfaceIntents.resetGroup(group) }
+    func undo() { surfaceIntents.undo() }
+    func redo() { surfaceIntents.redo() }
     @discardableResult
     func createParameter(assigningTo control: BCRControlID? = nil) -> ParameterID? { surfaceIntents
         .createParameter(assigningTo: control)

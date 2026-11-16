@@ -224,6 +224,14 @@ struct BCRAgentConsoleApp: App {
         }
 
         .commands {
+            CommandGroup(replacing: .undoRedo) {
+                Button(L10n.text("撤销数值变化")) { model.undo() }
+                    .keyboardShortcut("z", modifiers: .command)
+                    .disabled(!model.canUndo)
+                Button(L10n.text("重做数值变化")) { model.redo() }
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                    .disabled(!model.canRedo)
+            }
             CommandGroup(replacing: .appSettings) {
                 SettingsLink { Text(L10n.text("设置") + "…") }
                     .keyboardShortcut(",", modifiers: .command)

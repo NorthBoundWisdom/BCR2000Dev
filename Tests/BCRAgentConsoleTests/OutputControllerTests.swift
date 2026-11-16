@@ -67,6 +67,44 @@ private final class OutputTestClock {
 
 @MainActor
 final class OutputControllerTests: XCTestCase {
+    func testUndoTargetsStillPassOutputCadenceChangeAndVelocityLimits() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = OutputTestClock(), transport = OutputFakeTransport()
+        let session = SurfaceSession(hardwareDevice: OutputFakeDevice(), configuration: .robotArmDemo(),
+                                     now: { clock.now }, historyTime: .init(now: { clock.monotonic }),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+                                          adapter: transport, automaticallyTicks: false, now: { clock.now })
+        controller.start()
+        defer { controller.stop() }
+        func fresh() {
+            transport.onHeartbeat?(clock.now)
+            transport.onSamples?(session.engine.configuration.parameters.filter { $0.kind == .continuous }.map {
+                ParameterObservation(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
+            })
+        }
+        fresh()
+        controller.tick() // Observe the safe low state with fresh actual before the explicit enable edge.
+        session.setParameter("arm.enabled", to: 1)
+        session.setParameter("arm.j1", to: 90)
+        session.endParameterHistoryGroup()
+        session.setParameter("arm.j1", to: 0)
+        controller.tick()
+        let count = transport.frames.count
+        try session.undo()
+        XCTAssertEqual(session.engine.value(of: "arm.j1"), 90)
+        XCTAssertEqual(transport.frames.count, count, "Undo changes intent, never bypasses the output driver")
+        clock.now.addTimeInterval(0.1); fresh(); controller.tick()
+        let first = try XCTUnwrap(controller.outputs["arm.j1"])
+        XCTAssertLessThanOrEqual(abs(first), 1)
+        clock.now.addTimeInterval(0.02); fresh(); controller.tick()
+        let second = try XCTUnwrap(controller.outputs["arm.j1"])
+        XCTAssertLessThanOrEqual(abs(second - first), 45 * 0.02 + 0.000001)
+        XCTAssertLessThan(second, 90)
+    }
+
     func testTransportFailureAlwaysStopsOutput() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

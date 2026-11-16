@@ -142,6 +142,7 @@ public final class SurfaceSession {
     private let hardwareLifecycleFeedback: Bool
     private let mockDevice: MockSurfaceDevice
     private let now: @MainActor () -> Date
+    private let historyTime: HostTime
     private let saveHardwareMap: @MainActor (HardwareMap) throws -> Void
     private let saveConfiguration: @MainActor (SurfaceConfiguration) throws -> Void
     private var hardwareMap: HardwareMap
@@ -164,6 +165,53 @@ public final class SurfaceSession {
 
     private func clearFeedbackQueue() { scheduler?.clear(); notifyFeedbackQueue() }
     private var writeOrigin: SurfaceWriteOrigin = .software
+    public private(set) var valueHistory = ParameterValueHistory()
+    private var valueTransactionDepth = 0
+    private var restoringHistory = false
+    public var canUndo: Bool { valueHistory.canUndo }
+    public var canRedo: Bool { valueHistory.canRedo }
+
+    /// Nesting keeps macros, group resets and authenticated batches in one value-only step.
+    public func withParameterHistory<T>(key: String? = nil, _ operation: () throws -> T) rethrows -> T {
+        let before = engine.parameterValues
+        let revision = configurationRevision, previousSource = source
+        let outermost = valueTransactionDepth == 0
+        valueTransactionDepth += 1
+        defer {
+            valueTransactionDepth -= 1
+            if outermost, !restoringHistory, revision == configurationRevision, previousSource == source {
+                valueHistory.record(before: before, after: engine.parameterValues,
+                                    key: key.map { "\(source.rawValue):\(writeOrigin.rawValue):\($0)" },
+                                    at: historyTime.now())
+                onChange?()
+            }
+        }
+        return try operation()
+    }
+
+    public func endParameterHistoryGroup() { valueHistory.endGroup() }
+    public func undo() throws { try restoreParameterHistory(redo: false) }
+    public func redo() throws { try restoreParameterHistory(redo: true) }
+
+    private func restoreParameterHistory(redo: Bool) throws {
+        guard let entry = redo ? valueHistory.redoEntry : valueHistory.undoEntry else { return }
+        let target = redo ? entry.after : entry.before
+        let existing = target.filter { engine.configuration.parameter($0.key) != nil }
+        // Validate the whole batch before any write; permissions may have changed since capture.
+        for id in existing.keys {
+            guard engine.configuration.parameter(id)?.agentWritable == true, !isMCPProtectedParameter(id)
+            else { throw ParameterHistoryError(parameter: id) }
+        }
+        let before = engine.parameterValues
+        restoringHistory = true
+        defer { restoringHistory = false }
+        withParameterHistory {
+            for id in existing.keys.sorted(by: { $0.rawValue < $1.rawValue }) { setParameter(id, to: existing[id]!) }
+        }
+        if redo { valueHistory.didRedo(actualBefore: before, actualAfter: engine.parameterValues) }
+        else { valueHistory.didUndo(actualBefore: before, actualAfter: engine.parameterValues) }
+        publishChange()
+    }
 
     public init(
         hardwareDevice: any SurfaceDevice,
@@ -175,6 +223,7 @@ public final class SurfaceSession {
         hardwareOutput: HardwareOutputPolicy = .write,
         hardwareLifecycleFeedback: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
+        historyTime: HostTime = .live,
         saveHardwareMap: @escaping @MainActor (HardwareMap) throws -> Void,
         saveConfiguration: @escaping @MainActor (SurfaceConfiguration) throws -> Void
     ) {
@@ -185,6 +234,7 @@ public final class SurfaceSession {
         self.mockDevice = mockDevice
         self.hardwareMap = hardwareMap
         self.now = now
+        self.historyTime = historyTime
         self.saveHardwareMap = saveHardwareMap
         self.saveConfiguration = saveConfiguration
         connection = hardwareDevice.connection
@@ -246,6 +296,7 @@ public final class SurfaceSession {
         clearFeedbackQueue()
         engine = candidate
         source = .hardware
+        valueHistory.clear()
         engine.recordFeedbackWhenGenerated = false
         engine.echoWindow = 0.18
         diagnosticReadbackActive = false; diagnosticToken = nil
@@ -265,6 +316,7 @@ public final class SurfaceSession {
         clearFeedbackQueue()
         _ = engine.clearDisplayFeedback(at: now())
         source = newSource
+        valueHistory.clear()
         engine.recordFeedbackWhenGenerated = !feedbackPolicy.enabled && newSource == .mock
         diagnosticReadbackActive = false; diagnosticToken = nil
         invalidateInputEpoch("source_changed")
@@ -294,25 +346,33 @@ public final class SurfaceSession {
     }
 
     public func turn(_ control: BCRControlID, by delta: Int) {
-        if source == .mock { mockDevice.turn(control, by: delta) }
-        else { perform(engine.adjust(control, by: delta, at: now())) }
+        withParameterHistory(key: "control:\(control)") {
+            if source == .mock { mockDevice.turn(control, by: delta) }
+            else { perform(engine.adjust(control, by: delta, at: now())) }
+        }
         publishChange()
     }
 
     public func press(_ control: BCRControlID) {
-        if source == .mock { mockDevice.press(control) }
-        else { perform(engine.press(control, isDown: true, at: now())) }
+        withParameterHistory {
+            if source == .mock { mockDevice.press(control) }
+            else { perform(engine.press(control, isDown: true, at: now())) }
+        }
         publishChange()
     }
 
     public func release(_ control: BCRControlID) {
-        if source == .mock { mockDevice.release(control) }
-        else { perform(engine.press(control, isDown: false, at: now())) }
+        withParameterHistory {
+            if source == .mock { mockDevice.release(control) }
+            else { perform(engine.press(control, isDown: false, at: now())) }
+        }
         publishChange()
     }
 
     public func setParameter(_ id: ParameterID, to value: Double) {
-        perform(engine.setParameter(id, to: value, at: now()))
+        withParameterHistory(key: "parameter:\(id)") {
+            perform(engine.setParameter(id, to: value, at: now()))
+        }
         inputEvents.append(kind: "parameter.write", payload: .object([
             "parameter_id": .string(id.rawValue), "origin": .string(writeOrigin.rawValue),
             "mapped_value": engine.value(of: id).map(JSONValue.double) ?? .null
@@ -321,7 +381,7 @@ public final class SurfaceSession {
     }
 
     public func resetGroup(_ group: String) {
-        perform(engine.resetGroup(group, at: now()))
+        withParameterHistory { perform(engine.resetGroup(group, at: now())) }
         publishChange()
     }
 
@@ -391,6 +451,7 @@ public final class SurfaceSession {
         let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
         clearFeedbackQueue()
         configurationRevision &+= 1
+        valueHistory.clear()
         noteMappingContextChanged()
         mockDevice.configureModes(configuration)
         nrpnAssembler.reset()
@@ -623,6 +684,22 @@ public final class SurfaceSession {
                 onEvent?(.deviceInput(control, rawValue: message.dataValue, pressed: pressed))
             }
             guard inputGeneration == inputEvents.generation else { continue }
+            let historyBefore = engine.parameterValues
+            let historyRevision = configurationRevision
+            let recordInputHistory = valueTransactionDepth == 0
+            defer {
+                if recordInputHistory, historyRevision == configurationRevision {
+                    valueHistory.record(before: historyBefore, after: engine.parameterValues,
+                                        key: control
+                                            .flatMap {
+                                                $0
+                                                    .isContinuous ?
+                                                    "\(writeOrigin.rawValue):input:\(inputSource.rawValue):\($0)" :
+                                                    nil
+                                            },
+                                        at: historyTime.now())
+                }
+            }
             let previousCount = control.map { engine.state(of: $0).eventCount }
             let trusted = inputSource == .hardware && source == .hardware && !engine.isFeedbackEcho(message, at: now())
             let effects: [SurfaceEffect]
