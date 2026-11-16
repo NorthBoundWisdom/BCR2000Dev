@@ -64,6 +64,13 @@ public final class SurfaceSession {
     public private(set) var parameterWriteContext: ParameterWriteContext?
     public var parameterAuthority: (@MainActor (ParameterAuthorityRequest) throws -> ParameterAuthorityDecision)?
     public private(set) var connectionGeneration: UInt64 = 0
+    // Connection observers are synchronous. Until the snapshot is published, native
+    // IO may already use a newer route than the session can attribute safely.
+    private var connectionNotificationRevision: UInt64 = 0
+    // Cosmetic notifications still publish their latest snapshot, but do not revoke
+    // lifecycle work belonging to the same route and connection status.
+    private var connectionScopeRevision: UInt64 = 0
+    private var unpublishedConnectionRevision: UInt64?
 
     /// Explicit host operation; remote role settings do not implicitly revoke local input.
     public func configureParameterWrites(allowsWrite: Bool, allowsDisplay: Bool,
@@ -453,7 +460,7 @@ public final class SurfaceSession {
     }
 
     public func flushFeedback() {
-        guard source == .hardware, feedbackPolicy.enabled else { return }
+        guard source == .hardware, feedbackPolicy.enabled, unpublishedConnectionRevision == nil else { return }
         let queueGeneration = feedbackQueueGeneration
         let originalSource = source
         let originalGeneration = inputEvents.generation
@@ -816,7 +823,8 @@ public final class SurfaceSession {
                                            accepted: (@MainActor () throws -> Void)? = nil) throws
     {
         guard source == .hardware, hardwareOutput == .write, connection.isConnected,
-              !diagnosticReadbackActive, let midi = engine.hardwareMap.midi(for: control),
+              unpublishedConnectionRevision == nil, !diagnosticReadbackActive,
+              let midi = engine.hardwareMap.midi(for: control),
               !engine.hardwareMap.isVisualizationOnly(control), midi.kind != .nrpn, rawValue <= 127
         else { throw ProviderDomainError("permission_denied", "Hardware display output is not permitted") }
         let originalSource = source, originalGeneration = inputEvents.generation
@@ -1149,15 +1157,21 @@ public final class SurfaceSession {
     }
 
     private func performLifecycleFeedback(_ effects: [SurfaceEffect]) {
+        // Every hardware lifecycle entry captures one semantic route revision,
+        // including synchronize/configuration paths. Cosmetic notifications preserve it.
+        let connectionScope = source == .hardware ? connectionScopeRevision : nil
         guard source != .hardware || hardwareLifecycleFeedback else {
             clearFeedbackQueue()
             return
         }
-        perform(effects)
+        perform(effects, connectionScope: connectionScope)
     }
 
-    private func perform(_ effects: [SurfaceEffect], timing: FeedbackTiming? = nil, receipt: FeedbackReceipt? = nil) {
+    private func perform(_ effects: [SurfaceEffect], timing: FeedbackTiming? = nil, receipt: FeedbackReceipt? = nil,
+                         connectionScope: UInt64? = nil)
+    {
         for effect in effects {
+            if let connectionScope, connectionScope != connectionScopeRevision { break }
             switch effect {
             case .pageChanged:
                 invalidateInputEpoch("page_changed")
@@ -1183,6 +1197,7 @@ public final class SurfaceSession {
             case let .learnRejected(control, error): onEvent?(.learnRejected(control, error))
             case .unmappedInput: break // The raw input remains visible in the monitor.
             }
+            if let connectionScope, connectionScope != connectionScopeRevision { break }
         }
     }
 
@@ -1227,6 +1242,13 @@ public final class SurfaceSession {
             mappingGeneration: mappingContextRevision,
             knownDeviceContextID: sendSource == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
         )
+        if sendSource == .hardware, unpublishedConnectionRevision != nil {
+            log(.output, message, source: sendSource, control: sendControl,
+                ignored: true, delivery: .suppressed, endpoint: endpoint, context: eventContext,
+                writeCause: sendOrigin)
+            receipt?.record(.suppressed)
+            return .suppressed
+        }
         if let expectedEndpoint, expectedEndpoint != endpoint {
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed, endpoint: expectedEndpoint, context: eventContext)
@@ -1282,6 +1304,12 @@ public final class SurfaceSession {
     }
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
+        connectionNotificationRevision &+= 1
+        let revision = connectionNotificationRevision
+        unpublishedConnectionRevision = revision
+        defer {
+            if unpublishedConnectionRevision == revision { unpublishedConnectionRevision = nil }
+        }
         let wasConnected = connection.isConnected
         let routeChanged = connection.transportGeneration != snapshot.transportGeneration
             || connection.connectedSourceID != snapshot.connectedSourceID
@@ -1294,21 +1322,31 @@ public final class SurfaceSession {
             .provenance !=
             snapshot.destinationEndpoints.first(where: { $0.id == snapshot.connectedDestinationID })?.provenance
         if snapshot.isConnected != wasConnected || routeChanged {
+            connectionScopeRevision &+= 1
             connectionGeneration = snapshot.transportGeneration.map(UInt64.init) ?? (connectionGeneration &+ 1)
             if source == .hardware { engine.invalidateTransportEvidence() }
             nrpnAssembler.reset(); diagnosticReadbackActive = false; diagnosticToken = nil
-            invalidateInputEpoch("connection_changed")
+            invalidateInputEpoch("connection_changed", connectionRevision: revision)
+            guard connectionNotificationRevision == revision else { return }
         }
-        if routeChanged || !snapshot.isConnected { clearFeedbackQueue() }
+        if routeChanged || !snapshot.isConnected {
+            clearFeedbackQueue()
+            guard connectionNotificationRevision == revision else { return }
+        }
         connection = snapshot
+        if unpublishedConnectionRevision == revision { unpublishedConnectionRevision = nil }
+        let scopeRevision = connectionScopeRevision
         if requiresHardwareConfirmation, source == .hardware, routeChanged || !snapshot.isConnected {
             selectSource(.mock)
+            guard connectionScopeRevision == scopeRevision else { return }
         }
         if snapshot.isConnected, !wasConnected || routeChanged {
             onEvent?(.connected(snapshot))
+            guard connectionScopeRevision == scopeRevision else { return }
             if source == .hardware {
                 droppedFeedbackCount = 0
                 performLifecycleFeedback(engine.fullFeedback(at: now()))
+                guard connectionScopeRevision == scopeRevision else { return }
             }
         }
         publishChange()
@@ -1382,8 +1420,9 @@ public final class SurfaceSession {
         }
     }
 
-    private func invalidateInputEpoch(_ reason: String) {
+    private func invalidateInputEpoch(_ reason: String, connectionRevision: UInt64? = nil) {
         inputEvents.reset(source: source == .hardware ? .hardware : .mock)
+        if let connectionRevision, connectionRevision != connectionNotificationRevision { return }
         inputEvents.append(
             kind: "context.changed",
             payload: .object(["reason": .string(reason), "diagnostic_readback": .bool(diagnosticReadbackActive)])

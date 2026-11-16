@@ -70,3 +70,24 @@ restore an old-context overlay or overwrite a newer operation's projection. No c
 If IO was accepted but the epoch changed or the transaction could not be canonically completed, the existing
 `delivery_failed` code reports incomplete transaction completion. Output may already have happened. This is
 not `stale`, does not promise non-execution, adds no remote field/tool/schema and causes no automatic resend.
+
+## Connection snapshot publication callbacks
+
+Connection journal and feedback-queue observers run synchronously before the session publishes its new
+connection snapshot. While that snapshot is unpublished, an explicit hardware display request is rejected
+by the existing `permission_denied` guard. Ordinary hardware output is suppressed, and a queue flush leaves
+pending work untouched until the established clear boundary. Mock output remains available. This prevents
+IO on a newly selected native endpoint from being attributed to the previous published endpoint.
+
+Each connection notification owns a publication revision. A nested notification supersedes the outer one;
+the older callback cannot restore its snapshot or append an obsolete context transition after a nested
+journal reset. After publication, lifecycle work uses a separate semantic connection revision, changed only
+by the existing route or connected-status predicate. The connected-event callback is checked before that
+work resumes. Every hardware lifecycle entry captures this semantic revision, including synchronization.
+A route change during one send cancels the remaining old batch; it does not resend or compensate. Diagnostic
+or unselected-endpoint notifications preserve the remaining batch and final publication. The headless
+lifecycle policy still sends nothing, and same-route GUI lifecycle ordering is unchanged.
+
+These guards do not change the private display receipt or canonical completion rules above. A request
+already admitted before IO still reports the existing `delivery_failed` when its epoch changes; that result
+must not be interpreted as proof that no output occurred. No remote tool, error code or schema is added.
