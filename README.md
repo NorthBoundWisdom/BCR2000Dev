@@ -133,6 +133,8 @@ Parameters also support eight software color tags and per-group panel highlighti
 
 The MIDI monitor can record versioned JSONL evidence to Application Support/Captures. Background writes are bounded and failures are visible; recording does not change MIDI traffic. SysEx payloads are redacted to length and SHA-256.
 
+Enable Offline captures from Panels to inspect JSONL integrity and replay inputs in a fully isolated Mock session. Step/run/pause/reset never open MIDI ports or send recorded outputs.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.

@@ -25,13 +25,15 @@ final class WorkspacePanelSettingsTests: XCTestCase {
     func testSpecialistPanelsAreHiddenUntilEnabled() throws {
         var settings = WorkspacePanelSettings()
         XCTAssertEqual(settings.visibleTabs(outputActive: false), [.parameters, .agents, .monitor])
-        XCTAssertEqual(WorkspaceTab.optional, [.arm, .output])
+        XCTAssertEqual(WorkspaceTab.optional, [.arm, .output, .offlineCapture])
 
         try settings.set(.output, enabled: true)
         try settings.set(.arm, enabled: true)
         try settings.set(.arm, enabled: true)
         XCTAssertEqual(settings.enabled, [.arm, .output])
+        try settings.set(.offlineCapture, enabled: true)
         XCTAssertEqual(settings.visibleTabs(outputActive: false), WorkspaceTab.allCases)
+        try settings.set(.offlineCapture, enabled: false)
 
         try settings.set(.arm, enabled: false)
         XCTAssertEqual(settings.visibleTabs(outputActive: false), [.parameters, .agents, .monitor, .output])

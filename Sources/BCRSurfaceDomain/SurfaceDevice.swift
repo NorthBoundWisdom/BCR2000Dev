@@ -111,6 +111,13 @@ public final class MockSurfaceDevice: SurfaceDevice {
         if let message = model.move(control, to: rawValue) { emit(message) }
     }
 
+    /// Used exclusively by an isolated replay session. Recorded output is never passed here.
+    public func applyCapturedInput(_ messages: [MIDIVoiceMessage]) throws {
+        for message in messages { try message.validate() }
+        for message in messages { try model.applyCapturedInput(message) }
+        onMessages?(messages)
+    }
+
     private func emit(_ message: MIDIVoiceMessage) {
         if case .nrpn = message {
             // Emit the same four CCs as the wire, as one decoded callback batch.

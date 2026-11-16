@@ -24,6 +24,7 @@ final class ConsoleViewModel: ObservableObject {
     @Published private(set) var deviceWork: ConsoleDeviceWork
     private var updates: AnyCancellable?
     let monitorCapture: MonitorCaptureController
+    let offlineCapture = OfflineCaptureController()
     static let infoNoticeSeconds = ConsoleDeviceWork.infoNoticeSeconds
     typealias BackgroundWorkTimeout = ConsoleDeviceWork.BackgroundWorkTimeout
     subscript<Value>(dynamicMember keyPath: KeyPath<ConsoleDeviceWork, Value>) -> Value { deviceWork[keyPath: keyPath] }

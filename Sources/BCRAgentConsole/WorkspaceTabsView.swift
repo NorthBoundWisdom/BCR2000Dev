@@ -41,6 +41,7 @@ struct WorkspaceTabsView: View {
             case .agents: AgentGridView(model: model)
             case .monitor: MIDIMonitorView(model: model)
             case .output: OutputReadoutView(model: model, controller: model.output)
+            case .offlineCapture: OfflineCaptureView(controller: model.offlineCapture)
             }
         }
         .panelStyle()

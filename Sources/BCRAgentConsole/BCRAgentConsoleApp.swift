@@ -261,7 +261,28 @@ struct BCRAgentConsoleApp: App {
         sceneModel.captureScene(name: "Intro")
         sceneModel.setParameterColor(.purple, for: "arm.j1")
         sceneModel.highlightGroup(sceneModel.configuration.parameters[0].group)
+        let captureSession = sceneModel.deviceWork.session
+        var captureRows = [try captureSession.captureHeader(
+            sessionID: "offline-preview",
+            applicationVersion: AppBuildVersion.current
+        )]
+        let captureToken = captureSession.observeCapture { record in
+            var record = record
+            record.fields["sequence"] = .number(captureRows.count)
+            captureRows.append(record)
+        }
+        sceneModel.turn(.pushEncoder(group: 1, 1), by: 2)
+        captureSession.removeCaptureObserver(captureToken)
+        captureRows.append(captureSession.captureEnd(eventCount: captureRows.count - 1))
+        let captureData = try captureRows.reduce(Data()) { try $0 + $1.encodedLine() }
+        sceneModel.offlineCapture.importData(captureData, name: "offline-preview.jsonl")
         let previews: [(String, AnyView, CGSize)] = [
+            (
+                "offline",
+                AnyView(OfflineCaptureView(controller: sceneModel.offlineCapture).padding()
+                    .preferredColorScheme(.dark)),
+                CGSize(width: 700, height: 720)
+            ),
             ("colors", AnyView(SurfacePanelView(model: sceneModel)), CGSize(width: 820, height: 780)),
             ("scenes", AnyView(ParameterScenesView(model: sceneModel).padding()), CGSize(width: 680, height: 260)),
             ("approval", AnyView(CodexApprovalReviewView(controller: model.codex, approval: .init(
@@ -278,6 +299,21 @@ struct BCRAgentConsoleApp: App {
             ("general", AnyView(GeneralSettingsView(model: model)), SettingsLayout.size)
         ]
         for (name, content, size) in previews {
+            if name == "offline" {
+                // Pure SwiftUI evidence panels render directly; NSView cacheDisplay can omit
+                // their deferred text layers while the transparent window is offscreen.
+                let renderer = ImageRenderer(content: content
+                    .environment(\.locale, Locale(identifier: L10n.language.rawValue))
+                    .environment(\.colorScheme, .dark)
+                    .frame(width: size.width, height: size.height, alignment: .topLeading)
+                    .background(Theme.background))
+                renderer.scale = 2
+                guard let cgImage = renderer.cgImage,
+                      let data = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+                else { throw CocoaError(.fileWriteUnknown) }
+                try data.write(to: directory.appending(path: "\(name).png"))
+                continue
+            }
             let hosting = NSHostingView(rootView: content.environment(
                 \.locale,
                 Locale(identifier: L10n.language.rawValue)

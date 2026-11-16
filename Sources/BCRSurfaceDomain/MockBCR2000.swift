@@ -133,6 +133,21 @@ public struct MockBCR2000: Sendable {
         inputDataValues[control] = nil // A new wire encoding has no observed input yet.
     }
 
+    /// Replay-only device input observation; validated MIDI values never open a physical endpoint.
+    public mutating func applyCapturedInput(_ message: MIDIVoiceMessage) throws {
+        try message.validate()
+        sentCount += 1
+        guard let control = preset.control(for: message.controlID) else { return }
+        inputDataValues[control] = message.dataValue
+        if control.section == .pushEncoder || control.section == .pushEncoderButton { activeGroup = control.row }
+        if case .noteOff = message {
+            rawValues[control] = 0; values[control] = 0
+        } else if !control.isContinuous || (encoderModes[control] ?? .absolute) == .absolute {
+            rawValues[control] = message.dataValue
+            values[control] = message.value
+        }
+    }
+
     /// Applies incoming feedback. Returns the updated control, or nil if the preset has no
     /// control with that MIDI identity (the real device ignores such messages as well).
     @discardableResult
