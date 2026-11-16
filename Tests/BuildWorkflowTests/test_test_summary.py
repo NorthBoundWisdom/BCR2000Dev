@@ -1,13 +1,15 @@
 import contextlib
 import io
 import json
+import signal
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from configs import macos_workflow
+from configs import macos_workflow, xctest_runner
 
 
 def report(directory, cases):
@@ -151,14 +153,39 @@ class ParallelRunnerTests(unittest.TestCase):
 
     def test_a_hung_native_batch_is_killed_and_missing_case_is_named(self):
         cases = ["First.Sample/testOne", "First.Sample/testHangs"]
+        processes = []
+        native_popen = subprocess.Popen
+
+        def record_process(*args, **kwargs):
+            process = native_popen(*args, **kwargs)
+            processes.append(process)
+            return process
+
+        def prepared(command, root, log, deadline):
+            # This case measures native-hang termination. Other runner tests exercise the CLI
+            # preparation; three Python startup processes must not consume its one-second budget.
+            if command[-1] == "list":
+                output = "\n".join(cases)
+            elif command[-1] == "--show-bin-path":
+                output = str(root)
+            else:
+                self.assertEqual(command, ["xcrun", "--find", "xctest"])
+                output = str(root / "native-xctest")
+            log.write_text(output)
+            return output
+
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(macos_workflow, "TEST_TIMEOUT_S", 1),
+            patch.object(xctest_runner, "_checked", side_effect=prepared),
+            patch.object(xctest_runner.subprocess, "Popen", side_effect=record_process),
         ):
             with self.assertRaisesRegex(RuntimeError, "bundle verification failed"):
                 self.run_fake_modules(
                     Path(directory), ["First"], cases, hang_case="First.Sample/testHangs", workers="1"
                 )
+            self.assertEqual(len(processes), 1)
+            self.assertEqual(processes[0].returncode, -signal.SIGKILL)
             run = next((Path(directory) / "build/test-runs").glob("run-*"))
             self.assertIn("First.Sample/testHangs", (run / "xunit.xml").read_text())
             self.assertIn("exceeded suite timeout 1s", (run / "xunit.xml").read_text())
