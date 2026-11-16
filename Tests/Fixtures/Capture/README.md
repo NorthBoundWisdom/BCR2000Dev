@@ -3,6 +3,7 @@
 `xtouch-sample.jsonl` is copied byte-for-byte from XTouchCompactDev commit
 `edcc120f74cb597dd4b6dcad3f3a524974a3ed40`, `Tests/Fixtures/Capture/xtouch-sample.jsonl`.
 It is the committed recorder-generated Mock sample, not a handwritten placeholder.
+SHA-256: `32892cc876ab2619af6d247a2b597b20734d8df116c894c04e492acd177fc3a2`.
 
 `bcr-sample.jsonl` is produced by the BCR recorder with explicit synthetic values,
 a fixed injected clock/session ID and a two-control Mock map. Regenerate only with
