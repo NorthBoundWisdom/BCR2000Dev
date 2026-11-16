@@ -31,9 +31,9 @@ class CIJobBudgetTests(unittest.TestCase):
             ],
         }
 
-    def test_cold_cache_bootstrap_is_measured_but_exempt(self):
+    def test_cold_cache_execution_has_the_same_budget(self):
         text, failed = report(self.run_record(), self.job(), "", datetime(2026, 11, 16, 0, 6, tzinfo=timezone.utc))
-        self.assertFalse(failed)
+        self.assertTrue(failed)
         self.assertIn("cold build cache", text)
         self.assertIn("360.0s", text)
         self.assertIn("| Tests | failure | 181.0 |", text)
@@ -65,13 +65,13 @@ class CIJobBudgetTests(unittest.TestCase):
     def test_cold_cache_exact_boundary_still_passes_without_exemption(self):
         text, failed = report(self.run_record(), self.job(), "", datetime(2026, 11, 16, 0, 5, tzinfo=timezone.utc))
         self.assertFalse(failed)
-        self.assertIn("budget exempt", text)
+        self.assertIn("no cold-cache exemption", text)
 
     def test_both_jobs_save_after_compile_before_tests_independently_of_test_success(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
         self.assertEqual(text.count("timeout-minutes: 20"), 3)
         self.assertEqual(text.count("steps.compile.outcome == 'success'"), 3)
-        self.assertEqual(text.count("Report wall time and enforce warm-cache 300s budget"), 3)
+        self.assertEqual(text.count("Report wall time and enforce 300s job budget"), 3)
         linux, native = text.split("  checks:\n")
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("Save compiled native"), native.index("ci_parallel_checks.py tests"))
