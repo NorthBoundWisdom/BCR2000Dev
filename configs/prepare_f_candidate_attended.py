@@ -15,7 +15,7 @@ def plan():
             False,
             "<delivery>/BCRProfileTool --verify-hardware-candidate <candidate-directory>",
             "请确认设备当前预设编号，并核对已学习CC地址；不切换、不写预设。",
-            "当前预设与这份候选的CC8/9、67/68地址和momentary模式一致吗？",
+            "当前预设与这份候选的四角色映射地址和momentary模式一致吗？",
             "原map/config哈希与candidate-manifest匹配、software_ready=true、hardware_qualified=false；人的预设编号/一致回答单独留证，否即停止",
         ),
         (
@@ -32,7 +32,7 @@ def plan():
             probe + " --action edges --control button.1.1",
             "等awaiting_new_edges后，按下并松开使能候选按钮一次。",
             "这个按钮按下与松开各发生一次吗？",
-            "CC67按下127/松开0→同epoch硬件accepted boolean true/false；两个新边沿，其他值或断代失败",
+            "button.1.1按下127/松开0→同epoch硬件accepted boolean true/false；两个新边沿，其他值或断代失败",
         ),
         (
             "stop-edges",
@@ -40,7 +40,7 @@ def plan():
             probe + " --action edges --control button.1.2",
             "等awaiting_new_edges后，按下并松开停止候选按钮一次。",
             "这个按钮按下与松开各发生一次吗？",
-            "CC68按下127/松开0→同epoch硬件accepted boolean true/false；两个新边沿",
+            "button.1.2按下127/松开0→同epoch硬件accepted boolean true/false；两个新边沿",
         ),
         (
             "start-display",
@@ -62,11 +62,11 @@ def plan():
                     row[2].replace("--action edges", "--action raw-edges"),
                     "等awaiting_new_raw_edges后，再按下并松开同一按钮。",
                     "同一按钮按下/松开各一次了吗？",
-                    "Provider1.0 console_events同generation无gap：指定CC67/68 channel0原始127/0；不是仅布尔证据",
+                    "Provider1.0 console_events同generation无gap：指定control在候选map中的精确MIDI地址、原始127/0；不是仅布尔证据",
                 )
             )
     rows = expanded
-    for control, cc in [("button.1.1", 67), ("button.1.2", 68)]:
+    for control in ("button.1.1", "button.1.2"):
         for value in ("on", "off"):
             rows.append(
                 (
@@ -75,7 +75,7 @@ def plan():
                     probe + f" --action display --control {control} --value {value} --confirm-attended-display",
                     f"仅发送{control}灯{value}，请观察对应灯。",
                     f"对应灯是否确实{value}且其他灯没有变化？",
-                    f"只有CC{cc}单条127/0传输accepted；输入序号不变；现场on/off原话独立记录；sent不等于灯亮",
+                    f"只有{control}候选映射地址单条127/0传输accepted；输入序号不变；现场on/off原话独立记录；sent不等于灯亮",
                 )
             )
     rows += [

@@ -6,6 +6,10 @@ changes a device preset or promotes the candidate. Use only an owned Mock platfo
 
 ## Flow commands and feedback
 
+The learned MIDI identities in the two F tables are checked against the exact packaging map by
+`python3 configs/check_handoff_addresses.py --hardware-map <hardware-map.json>`. Packaging refuses a
+mismatch. The address for `pushEncoder.1.4` corrects the handwritten F text; the frozen F map is unchanged.
+
 Recommended **control IDs**, independent of business parameter IDs:
 
 | Pipe intent | Stable control ID → default parameter ID | Reason | Default hardware qualification/binding |
@@ -13,7 +17,7 @@ Recommended **control IDs**, independent of business parameter IDs:
 | prepare | `pushEncoder.1.1` → `general.1` | existing learned absolute CC8; same group, distinct endpoint | learned absolute input + neutral parameter binding present; not an attended-qualified flow command |
 | start | `pushEncoder.1.2` → `general.2` | existing learned absolute CC9; adjacent independent axis | same |
 | pause | `pushEncoder.1.3` → `general.3` | existing learned absolute CC10; avoids unqualified buttons | same |
-| cancel | `pushEncoder.1.4` → `general.4` | existing learned absolute CC11; independent of the first three | same |
+| cancel | `pushEncoder.1.4` → `general.4` | existing learned absolute CC12; independent of the first three | same |
 
 These are absolute knobs, not momentary buttons. Pipe must define a new-action threshold, return-to-rest
 rule and fresh-generation preparation; continuous high values must never trigger repeats. The consumer

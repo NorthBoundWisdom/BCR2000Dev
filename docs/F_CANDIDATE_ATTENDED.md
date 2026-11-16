@@ -41,17 +41,17 @@ switch presets or send BCL. Record the preset number, endpoint identity, exact h
 answer. A mismatch stops all physical steps. The verifier proves file integrity, never that a preset matches.
 
 Then, under new joint attended authorization, start the isolated observe process from the step command,
-with the candidate files explicitly supplied. Startup emits zero. Run separate edges probes for CC67 and
-CC68: wait for `awaiting_new_edges`, then ask for one press and one release. Each probe requires exactly
+with the candidate files explicitly supplied. Startup emits zero. Run separate edges probes for `button.1.1` and
+`button.1.2`: wait for `awaiting_new_edges`, then ask for one press and one release. Each probe requires exactly
 new accepted hardware true/false edges, uninterrupted sequence, same epoch and connected link.
 Run the same probe with `--action raw-edges --control button.1.1` (then button.1.2), repeat one press/release
 after `awaiting_new_raw_edges`. It reads Provider 1.0 `console_events` from a new generation/sequence baseline
-and requires exactly channel-1 CC67/68 raw values127/0. The boolean-only edges probe is separate; its
+and requires the exact mapped MIDI identities in the table above, raw values127/0. The boolean-only edges probe is separate; its
 success cannot substitute for this raw check. The owner credential is needed for Provider 1.0 reads. A missing/repeated/wrong edge, ignored input or context change fails.
 
 Stop observe before starting write+display. Ask fresh confirmation before **each** on/off display command
 for each button. The display probe also reads Provider 1.0 console_events before/after and checks exactly one sent event,
-CC67/68 on channel1 with127/0, plus unchanged 1.4 input_sequence. Check transport acceptance/count=1, no new input sequence, the exact CC67/68 output,
+the exact mapped MIDI identities in the table above with127/0, plus unchanged 1.4 input_sequence. Check transport acceptance/count=1, no new input sequence, the exact mapped output,
 and the person's independent on/off observation. No startup/reconnect replay is permitted.
 
 The current Pipe BCR plan is still hard-coded blocked and has no independent stop-button phase. Pipe

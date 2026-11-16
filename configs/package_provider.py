@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from configs.build_environment import load_build_environment  # noqa: E402
+from configs.check_handoff_addresses import check as check_handoff_addresses  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 from configs.surface_delivery_index import publish  # noqa: E402
 
@@ -153,6 +154,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     discovery = json.loads(contract)["discovery"]
     hardware_discovery = None
     if hardware_map is not None:
+        check_handoff_addresses(hardware_map)
         shutil.copy2(hardware_map, output / "hardware-map.json")
         hardware_contract = subprocess.run(
             [
