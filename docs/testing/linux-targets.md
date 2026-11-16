@@ -107,3 +107,19 @@ setup and cache time, with the same 300-second limit for cold and warm builds. F
 preparation; it does not establish that a future hosted queue will be short enough. The failed J-0 run
 43841996950 is retained and never rerun. Its native functional checks succeeded but its live whole-run wall
 was 476.3 seconds, including a 305-second macOS runner wait; that run did not satisfy the budget.
+
+
+## J hosted image capacity follow-up
+
+The single native job now requests the standard Arm64 `macos-26` image. Both J macOS-15 attempts exhausted
+the whole-run budget while waiting for a native runner; they remain failed evidence and are never rerun.
+The X-Touch host independently completed its exact J-0 SHA on macos-26 within 265 seconds. GitHub's
+[official image table](https://github.com/actions/runner-images/blob/main/README.md) lists both labels as
+standard Arm64 images; the label change selects another hosted image pool, without a larger-runner option.
+
+Native binary cache keys and restore prefixes include `macos-26` as well as the Swift toolchain identity,
+so SDK-specific outputs cannot restore from the old image namespace. Git-object seed caches remain portable.
+All commands, assertions, the 300-second creation-to-completion rule and deployment target macOS 14 stay
+unchanged. This verifies builds and checks on the new SDK against the existing minimum target; it does not
+establish runtime qualification on an actual macOS 14 machine. A new exact-SHA hosted run must still prove
+the whole-run budget. An external queue exceeding it remains a failure, with no further blind label tuning.

@@ -74,7 +74,7 @@ class IndependentCIChecksTests(unittest.TestCase):
         self.assertIn("Isolated real-time synthetic status", delivery)
         self.assertNotIn("needs:", workflow)
         self.assertNotIn("  delivery:\n", workflow)
-        self.assertEqual(workflow.count("runs-on: macos-15"), 1)
+        self.assertEqual(workflow.count("runs-on: macos-26"), 1)
         self.assertLess(native.index("ci_parallel_checks.py tests"), native.index("tools/mcp_integration.py"))
         self.assertIn("assert_ci_processes_exited.py", delivery)
         self.assertLess(delivery.index("assert_ci_processes_exited.py"), delivery.index("package_provider.py"))

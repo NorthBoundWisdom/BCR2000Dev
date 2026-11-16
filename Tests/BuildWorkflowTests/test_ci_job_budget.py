@@ -94,3 +94,12 @@ class CIJobBudgetTests(unittest.TestCase):
         self.assertIn("list --skip-build", text)
         self.assertEqual(text.count("inputs.cold_build != true"), 2)
         self.assertIn("Run and reconcile every portable XCTest once", text)
+
+    def test_native_binary_cache_is_scoped_to_selected_runner_image(self):
+        text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
+        native = text.split("  checks:\n")[1]
+        self.assertEqual(native.count("runs-on: macos-26"), 1)
+        self.assertEqual(native.count("swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}"), 3)
+        self.assertNotIn("restore-keys: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}", native)
+        self.assertIn("inputs.cold_build != true", native)
+        self.assertIn("steps.compile.outcome == 'success'", native)
