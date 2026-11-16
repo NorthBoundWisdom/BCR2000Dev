@@ -59,6 +59,11 @@ SURFACE_ARTIFACT = "surface-control-simulator"
 SURFACE_MANIFEST = "surface-control-manifest.json"
 
 
+def candidate_status(*, dirty, source_unpushed):
+    """Private artifact label, not a served contract/schema or a release authorization."""
+    return "local-unpushed-candidate" if dirty or source_unpushed else "remote-head-unreleased-candidate"
+
+
 def package(output, configuration="release", skip_build=False, hardware_map=None):
     shared = Path(ensure_dependency(ROOT, environ=load_build_environment(ROOT)))
     if not shared.is_absolute():
@@ -338,6 +343,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         }
 
     source_commit, dirty = run("git", "rev-parse", "HEAD"), bool(run("git", "status", "--porcelain"))
+    source_unpushed = int(run("git", "rev-list", "--count", "origin/main..HEAD")) > 0
     # Common surface delivery fields (SurfacePlugins docs/surface-control-delivery.md). They describe
     # the optional surface control simulation only, never the provider's hardware source.
     surface = {
@@ -348,8 +354,8 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         "source_origin_main": run("git", "rev-parse", "origin/main"),
         "source_ahead": int(run("git", "rev-list", "--count", "origin/main..HEAD")),
         "source_behind": int(run("git", "rev-list", "--count", "HEAD..origin/main")),
-        "source_unpushed": int(run("git", "rev-list", "--count", "origin/main..HEAD")) > 0,
-        "status": "local-unpushed-candidate",
+        "source_unpushed": source_unpushed,
+        "status": candidate_status(dirty=dirty, source_unpushed=source_unpushed),
         "published": False,
         "physical_qualification": False,
         "provider_tool_compatibility": "provider-tool-compatibility.json",
