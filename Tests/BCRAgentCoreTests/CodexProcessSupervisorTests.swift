@@ -59,7 +59,8 @@ final class CodexProcessSupervisorTests: XCTestCase {
             received.fulfill()
         }
         try await supervisor.sendLine("hello")
-        await fulfillment(of: [received], timeout: 3)
+        let completed = await XCTWaiter.fulfillment(of: [received], timeout: 3)
+        XCTAssertEqual(completed, .completed)
         await supervisor.stop()
         _ = try await reader.value
         await supervisor.stop()

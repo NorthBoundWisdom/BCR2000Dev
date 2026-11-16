@@ -11,8 +11,13 @@ import XCTest
 
 @MainActor
 final class HardwareSurfaceControlTests: XCTestCase {
-    func fixture(_ policy: HardwareOutputPolicy = .observe,
-                 feedback: Bool = false) throws
+    func fixture(_ policy: HardwareOutputPolicy = .observe, feedback: Bool = false) throws
+        -> (SurfaceSession, ProviderHardwareVisibilityTests.Device, MCPApplicationGateway)
+    {
+        try Self.makeFixture(policy, feedback: feedback)
+    }
+
+    static func makeFixture(_ policy: HardwareOutputPolicy = .observe, feedback: Bool = false) throws
         -> (SurfaceSession, ProviderHardwareVisibilityTests.Device, MCPApplicationGateway)
     {
         let device = ProviderHardwareVisibilityTests.Device()
