@@ -1,5 +1,13 @@
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
 import AppKit
-import BCRAgentCore
 import BCRPluginHost
 import BCRProviderApplication
 import BCRProviderMCPAdapter
@@ -119,7 +127,7 @@ final class ConsoleViewModel: ObservableObject {
     var connection: MIDIConnectionSnapshot { session.connection }
     var events: [MonitorEvent] { session.events }
     var droppedFeedbackCount: Int { session.droppedFeedbackCount }
-    @Published private(set) var slots: [AgentSlot]
+    @Published private(set) var slots: [AgentSlotPresentation]
     @Published private(set) var notice: ConsoleNotice? {
         didSet { scheduleNoticeDismissal() }
     }
@@ -251,7 +259,7 @@ final class ConsoleViewModel: ObservableObject {
         )
         library = ConfigurationLibrary(url: stores.configuration.fileURL.deletingLastPathComponent()
             .appending(path: "configuration-library.json"))
-        slots = AgentStateMachine().slots
+        slots = AgentSlotPresentation.mockSlots()
 
         supportDirectory = stores.configuration.fileURL.deletingLastPathComponent()
         displayProfileStore = JSONFileStore(fileURL: supportDirectory.appending(path: "display-profile.json"))
@@ -329,7 +337,10 @@ final class ConsoleViewModel: ObservableObject {
         midi.observeTransferLines { [weak self] direction in self?.displayMarquee.step(direction) }
         mcp.service.onReadAgents = { [weak self] in
             guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
-            return .object(["backend": .string(self.codex.backend.rawValue), "slots": try .encoded(self.slots)])
+            return .object([
+                "backend": .string(self.codex.backend.rawValue),
+                "slots": try AgentSlotArchive.json(self.slots)
+            ])
         }
         mcp.service.onAgentAction = { [weak self] action, slot in
             guard let self else { throw MCPToolFailure(L10n.text("Agent 服务不可用")) }
@@ -508,7 +519,7 @@ final class ConsoleViewModel: ObservableObject {
         }
     }
 
-    func slot(_ id: AgentSlotID) -> AgentSlot? {
+    func slot(_ id: AgentSlotID) -> AgentSlotPresentation? {
         slots.first { $0.id == id }
     }
 
@@ -2019,7 +2030,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     /// Publishes agent slots and writes a changed state to the slot's LEDs.
-    func applyAgentSlots(_ newSlots: [AgentSlot], changed slotID: AgentSlotID) {
+    func applyAgentSlots(_ newSlots: [AgentSlotPresentation], changed slotID: AgentSlotID) {
         let previous = Dictionary(uniqueKeysWithValues: slots.map { ($0.id, $0.state) })
         slots = newSlots
         for slot in newSlots where previous[slot.id] != slot.state {
@@ -2035,7 +2046,7 @@ final class ConsoleViewModel: ObservableObject {
     }
 
     /// Writes one slot's state to its LEDs: the level directly, or a steady/blinking on-off pattern.
-    private func showAgentState(_ slot: AgentSlot, level: UInt8) {
+    private func showAgentState(_ slot: AgentSlotPresentation, level: UInt8) {
         agentSemantics[slot.id] = slot.state.indicatorSemantic
         guard blinksAgentLEDs else {
             blinkLevels[slot.id] = nil

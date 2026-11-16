@@ -1,13 +1,17 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
 import BCRTestSupport
 import Foundation
 import Network
 import XCTest
-@testable import BCRAgentCore
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRFoundation
-@testable import BCRHTTPTransport
-@testable import BCRSurfaceDomain
 
 @MainActor
 private final class SSEDevice: SurfaceDevice {

@@ -1,4 +1,3 @@
-import BCRFoundation
 import SimulationContracts
 
 /// Legacy Provider errors are presentation; the shared core supplies stable reason keys.

@@ -2,8 +2,8 @@ import BCRFoundation
 import BCRMCPAdapter
 import BCRSurfaceDomain
 import BCRProviderApplication
-import BCRRobotDomain
-import BCRChassisDomain
+import RobotPlugin
+import ChassisPlugin
 import Foundation
 
 @MainActor

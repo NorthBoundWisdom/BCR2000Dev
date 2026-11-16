@@ -1,17 +1,27 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterSample
+import struct ParameterOutputPlugin.ParameterOutputFrame
 import Foundation
 
 enum OutputTransportKind: String, Codable, CaseIterable { case osc, webSocket, rosbridge }
 
 @MainActor
 final class OutputTransportRouter: MonotonicOutputTransport {
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
-    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicySamples: (@MainActor ([ParameterSample]) -> Void)?
     var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
     var onPolicyPeerReset: (@MainActor (Double) -> Void)?
     var supportsMonotonicReceipts: Bool { (active as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true }

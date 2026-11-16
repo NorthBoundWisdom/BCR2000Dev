@@ -1,17 +1,28 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterSample
+import struct ParameterOutputPlugin.ParameterOutputFrame
+import struct ParameterOutputPlugin.JSONParameterLink
 import Foundation
 
 /// ROS 2 uses rosbridge and std_msgs/msg/String envelopes carrying the same validated link frames.
 @MainActor
 final class WebSocketParameterAdapter: MonotonicOutputTransport {
     private(set) var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
-    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicySamples: (@MainActor ([ParameterSample]) -> Void)?
     var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
     var onPolicyPeerReset: (@MainActor (Double) -> Void)?
     private let monotonic: @Sendable () -> Double
@@ -23,7 +34,7 @@ final class WebSocketParameterAdapter: MonotonicOutputTransport {
     private let queueLimit: Int
     private let receiveCapacity: Int
     private let writeMessage: @MainActor (URLSessionWebSocketTask, String) async throws -> Void
-    private var link = SharedJSONParameterLink(session: UUID().uuidString)
+    private var link = JSONParameterLink(session: UUID().uuidString)
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var receiver: Task<Void, Never>?
@@ -73,7 +84,7 @@ final class WebSocketParameterAdapter: MonotonicOutputTransport {
         let socket = session.webSocketTask(with: url)
         socket.maximumMessageSize = 1_048_576
         self.socket = socket
-        link = SharedJSONParameterLink(session: UUID().uuidString)
+        link = JSONParameterLink(session: UUID().uuidString)
         let revision = generation
         let stream = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingOldest(queueLimit))
         outgoing = stream.continuation

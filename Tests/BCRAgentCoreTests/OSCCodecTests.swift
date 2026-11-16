@@ -1,8 +1,17 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import enum ParameterOutputPlugin.OSCCodec
+import struct ParameterOutputPlugin.OSCMessage
+import enum ParameterOutputPlugin.OSCPacket
 import Foundation
 import XCTest
-@testable import BCRAgentCore
-@testable import BCRMCPAdapter
-@testable import BCRSurfaceDomain
 
 final class OSCCodecTests: XCTestCase {
     func testFloatMessageMatchesBigEndianAlignedWireBytes() throws {
@@ -26,10 +35,10 @@ final class OSCCodecTests: XCTestCase {
         for id in ["arm.j1", "custom /含空格%"] {
             let encoded = OSCCodec.parameterAddress(ParameterID(id), prefix: "/bcr/state/")
             XCTAssertTrue(encoded.utf8.allSatisfy { $0 < 128 })
-            XCTAssertEqual(try OSCCodec.parameterID(encoded), ParameterID(id))
+            XCTAssertEqual(try OSCCodec.parameterID(encoded, prefix: "/bcr/state/"), ParameterID(id))
         }
-        XCTAssertThrowsError(try OSCCodec.parameterID("/other/x"))
-        XCTAssertThrowsError(try OSCCodec.parameterID("/bcr/state/%ZZ"))
+        XCTAssertThrowsError(try OSCCodec.parameterID("/other/x", prefix: "/bcr/state/"))
+        XCTAssertThrowsError(try OSCCodec.parameterID("/bcr/state/%ZZ", prefix: "/bcr/state/"))
     }
 
     func testMalformedPaddingTruncationTypesAndNonfiniteNumbersAreRejected() throws {

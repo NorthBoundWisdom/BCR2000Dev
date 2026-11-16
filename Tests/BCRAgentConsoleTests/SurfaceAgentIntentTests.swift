@@ -1,10 +1,17 @@
-import BCRAgentCore
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import enum AgentPlugin.AgentRunState
 import BCRTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 @MainActor
 final class SurfaceAgentIntentTests: XCTestCase {
@@ -118,7 +125,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
                 model.interrupt(id)
             case .error:
                 // Error is a published backend snapshot; the Mock has no failing task stage.
-                var slots = AgentSlot.mockSlots()
+                var slots = AgentSlotPresentation.mockSlots()
                 slots[0].state = .error
                 model.applyAgentSlots(slots, changed: id)
             }

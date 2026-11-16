@@ -1,4 +1,13 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
+import enum AgentPlugin.AgentRunState
 import SwiftUI
 
 struct CodexAgentSettingsView: View {

@@ -1,9 +1,15 @@
 import BCRFoundation
 import Foundation
+import struct ParameterOutputPlugin.MotionSafetyError
+import enum ParameterOutputPlugin.MotionGateStatus
+import struct ParameterOutputPlugin.ParameterSample
+import struct ParameterOutputPlugin.ParameterOutputFrame
+import struct ParameterOutputPlugin.MotionSafetyDecision
 
 public func withLegacyOutputErrors<T>(_ operation: () throws -> T) throws -> T {
     do { return try operation() }
-    catch let error as SharedMotionSafetyError { throw MotionSafetyError(legacyOutputReason(error.reason)) }
+    catch let error as ParameterOutputPlugin
+        .MotionSafetyError { throw BCRFoundation.MotionSafetyError(legacyOutputReason(error.reason)) }
 }
 
 public func legacyOutputReason(_ key: String, parameterID: ParameterID? = nil) -> String {
@@ -62,7 +68,7 @@ public func legacyOutputReason(_ key: String, parameterID: ParameterID? = nil) -
     }
 }
 
-public func legacyMotionStatus(_ status: SharedMotionGateStatus) -> MotionGateStatus {
+public func legacyMotionStatus(_ status: ParameterOutputPlugin.MotionGateStatus) -> BCRFoundation.MotionGateStatus {
     switch status {
     case .disconnected: .disconnected
     case .disabled: .disabled
@@ -75,5 +81,48 @@ public func legacyMotionStatus(_ status: SharedMotionGateStatus) -> MotionGateSt
     case .clockError: .clockError
     case .waitingRearm: .waitingRearm
     case .ready: .ready
+    }
+}
+
+public struct ParameterObservation: Equatable, Sendable {
+    public let id: ParameterID
+    public let value: Double
+    public let receivedAt: Date
+    public init(id: ParameterID, value: Double, receivedAt: Date) {
+        self.id = id; self.value = value; self.receivedAt = receivedAt
+    }
+
+    public var shared: ParameterOutputPlugin.ParameterSample { .init(
+        id: id,
+        value: value,
+        receivedAt: receivedAt.timeIntervalSinceReferenceDate
+    ) }
+    public init(shared: ParameterOutputPlugin.ParameterSample) { self.init(
+        id: shared.id,
+        value: shared.value,
+        receivedAt: Date(timeIntervalSinceReferenceDate: shared.receivedAt)
+    ) }
+}
+
+@MainActor public protocol ParameterSink: AnyObject {
+    var isConnected: Bool { get }
+    func send(_ frame: ParameterOutputPlugin.ParameterOutputFrame) throws
+}
+
+@MainActor public protocol ParameterSource: AnyObject {
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)? { get set }
+    var onHeartbeat: (@MainActor (Date) -> Void)? { get set }
+}
+
+public struct OutputDecisionPresentation: Equatable, Sendable {
+    public let status: BCRFoundation.MotionGateStatus
+    public let reason: String
+    public let command: ParameterOutputPlugin.ParameterOutputFrame?
+    public let limited: Bool
+    public let parameterID: ParameterID?
+    public init(shared: ParameterOutputPlugin.MotionSafetyDecision) {
+        status = legacyMotionStatus(shared.status)
+        reason = legacyOutputReason(shared.reason, parameterID: shared.parameterID)
+        command = shared.command; limited = shared.limited; parameterID = shared.parameterID
     }
 }

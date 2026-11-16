@@ -1,7 +1,7 @@
 import BCRFoundation
-import BCRSimulationKernel
-import BCRRobotDomain
-import BCRChassisDomain
+import SimulationContracts
+import RobotPlugin
+import ChassisPlugin
 import BCRSurfaceDomain
 import BCRConfigurationAdapter
 import Foundation
@@ -13,17 +13,27 @@ final class SimulationTests: XCTestCase {
     }
 
     func robot() throws -> (RobotSimulator, DeviceControlGrant) {
-        var robot = try RobotSimulator()
+        var robot = try RobotSimulator(instanceID: UUID().uuidString)
         try robot.initialize(Array(repeating: 0, count: 6), generation: robot.control.generation)
-        let grant = try robot.acquire(generation: robot.control.generation, owner: "fixture", ttl: 5)
+        let grant = try robot.acquire(
+            generation: robot.control.generation,
+            owner: "fixture",
+            ttl: 5,
+            controlToken: UUID().uuidString
+        )
         try robot.enable(proof(grant, 1))
         return (robot, grant)
     }
 
     func chassis() throws -> (ChassisSimulator, DeviceControlGrant) {
-        var chassis = try ChassisSimulator()
+        var chassis = try ChassisSimulator(instanceID: UUID().uuidString)
         try chassis.initialize([0, 0, 0], generation: chassis.control.generation)
-        let grant = try chassis.acquire(generation: chassis.control.generation, owner: "fixture", ttl: 5)
+        let grant = try chassis.acquire(
+            generation: chassis.control.generation,
+            owner: "fixture",
+            ttl: 5,
+            controlToken: UUID().uuidString
+        )
         try chassis.enable(proof(grant, 1))
         return (chassis, grant)
     }
@@ -47,11 +57,16 @@ final class SimulationTests: XCTestCase {
     }
 
     func testUnknownInitialStateDoesNotBecomeZeroAndSourceIsSimulation() throws {
-        var robot = try RobotSimulator()
+        var robot = try RobotSimulator(instanceID: UUID().uuidString)
         XCTAssertNil(robot.snapshot().actual)
         XCTAssertFalse(robot.snapshot().stopped)
         XCTAssertEqual(robot.snapshot().metadata.source, .simulation)
-        XCTAssertThrowsError(try robot.acquire(generation: robot.control.generation, owner: "x", ttl: 1))
+        XCTAssertThrowsError(try robot.acquire(
+            generation: robot.control.generation,
+            owner: "x",
+            ttl: 1,
+            controlToken: UUID().uuidString
+        ))
         XCTAssertNil(robot.snapshot().actual)
     }
 
@@ -160,9 +175,14 @@ final class SimulationTests: XCTestCase {
     }
 
     func testExpiredLeaseStopsAndRejectsOldControl() throws {
-        var chassis = try ChassisSimulator()
+        var chassis = try ChassisSimulator(instanceID: UUID().uuidString)
         try chassis.initialize([0, 0, 0], generation: chassis.control.generation)
-        let grant = try chassis.acquire(generation: chassis.control.generation, owner: "fixture", ttl: 0.2)
+        let grant = try chassis.acquire(
+            generation: chassis.control.generation,
+            owner: "fixture",
+            ttl: 0.2,
+            controlToken: UUID().uuidString
+        )
         try chassis.enable(proof(grant, 1))
         try chassis.drive(proof(grant, 2), speed: 0.5, steering: 0, validFor: 0.2)
         for _ in 0 ..< 6 { try chassis.advance(0.1) }
@@ -199,12 +219,12 @@ final class SimulationTests: XCTestCase {
         let stoppedSequence = chassis.control.lastCommandSequence
         XCTAssertFalse(chassis.snapshot().stopped)
         XCTAssertThrowsError(try chassis.enable(proof(grant, 4))) { XCTAssertEqual(
-            ($0 as? ProviderDomainError)?.code,
+            ($0 as? SimulationError)?.code,
             "busy"
         ) }
         XCTAssertThrowsError(try chassis.drive(proof(grant, 4), speed: 0.4, steering: -0.2, validFor: 1)) {
             XCTAssertEqual(
-                ($0 as? ProviderDomainError)?.code,
+                ($0 as? SimulationError)?.code,
                 "busy"
             )
         }
@@ -225,9 +245,14 @@ final class SimulationTests: XCTestCase {
         try chassis.advance(0.1)
         let angleAtExpiry = try XCTUnwrap(chassis.snapshot().actual).steering_angle_rad
         XCTAssertFalse(chassis.control.enabled)
-        let next = try chassis.acquire(generation: chassis.control.generation, owner: "next-owner", ttl: 2)
+        let next = try chassis.acquire(
+            generation: chassis.control.generation,
+            owner: "next-owner",
+            ttl: 2,
+            controlToken: UUID().uuidString
+        )
         XCTAssertThrowsError(try chassis.enable(proof(next, 1))) { XCTAssertEqual(
-            ($0 as? ProviderDomainError)?.code,
+            ($0 as? SimulationError)?.code,
             "busy"
         ) }
         for _ in 0 ..< 6 { try chassis.advance(0.1) }

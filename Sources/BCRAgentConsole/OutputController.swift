@@ -1,4 +1,16 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.MotionLimit
+import struct ParameterOutputPlugin.ParameterSample
+import enum ParameterOutputPlugin.MotionOutputPrecision
+import struct ParameterOutputPlugin.ParameterOutputPlugin
 import Combine
 import Foundation
 import BCRPluginRuntime
@@ -46,7 +58,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
         guard configuration.parameter(enableParameter)?.kind == .toggle
         else { throw MotionSafetyError(L10n.text("请配置一个开关类型的使能参数")) }
         for limit in limits {
-            try limit.validate()
+            try withLegacyOutputErrors { try limit.validate() }
             guard let definition = configuration.parameter(limit.id), definition.kind == .continuous,
                   limit.minimum >= definition.minimum, limit.maximum <= definition.maximum,
                   (transport != .osc || (Float(limit.minimum).isFinite && Float(limit.maximum).isFinite))
@@ -54,7 +66,7 @@ struct OutputSettings: Codable, Equatable, Sendable {
                 throw MotionSafetyError(L10n.text("输出限位必须属于现有连续参数的范围并可用 float32 表示"))
             }
         }
-        _ = try MotionSafetyGate(limits: limits)
+        _ = try withLegacyOutputErrors { try ParameterOutputPlugin(limits: limits) }
     }
 }
 
@@ -77,8 +89,8 @@ final class OutputController: ObservableObject {
     private var wallAnchor: Date
     private var policyAnchor: Double
     private var observedEnable: Bool?
-    private var gate: MotionSafetyGate? {
-        runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self).map { .init(plugin: $0.plugin) }
+    private var gate: ParameterOutputPlugin? {
+        runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self).map { $0.plugin }
     }
 
     private var configuration: SurfaceConfiguration
@@ -89,6 +101,18 @@ final class OutputController: ObservableObject {
     private let time: HostTime
     private let automaticallyTicks: Bool
     private let now: @MainActor () -> Date
+
+    private static func makeOutputPlugin(limits: [MotionLimit], heartbeatTimeout: TimeInterval = 0.3,
+                                         precision: MotionOutputPrecision = .double) throws -> ParameterOutputPlugin
+    {
+        var value = try withLegacyOutputErrors { try ParameterOutputPlugin(
+            limits: limits,
+            heartbeatTimeout: heartbeatTimeout,
+            precision: precision
+        ) }
+        _ = try value.handle(.start, at: 0)
+        return value
+    }
 
     init(
         session: SurfaceSession,
@@ -116,9 +140,9 @@ final class OutputController: ObservableObject {
         // Output is physically inactive on construction. Valid settings may prepare a
         // discoverable policy, but invalid/unconfigured limits are reported only when
         // the operator explicitly starts output. A real settings read failure stays visible.
-        let preparedGate: MotionSafetyGate?
+        let preparedGate: ParameterOutputPlugin?
         do {
-            preparedGate = try MotionSafetyGate(
+            preparedGate = try Self.makeOutputPlugin(
                 limits: settings.limits, precision: settings.transport == .osc ? .float32 : .double
             )
         } catch is MotionSafetyError { preparedGate = nil }
@@ -138,14 +162,17 @@ final class OutputController: ObservableObject {
                 if !self.usesMonotonicReceipts { self.policyAnchor = self.runtime.now; self.wallAnchor = self.now() }
                 self.observedEnable = nil
             }
-            do { try self.mutateGate("connection") { $0.plugin.setConnected(connected, at: self.runtime.now) } }
+            do { try self.mutateGate("connection") { $0.setConnected(connected, at: self.runtime.now) } }
             catch { self.stop(failure: error.localizedDescription); return }
             self.tick()
         }
         adapter.onHeartbeat = { [weak self] received in
             guard let self, !self.usesMonotonicReceipts, self.settings.enabled, !self.isStopping else { return }
             do {
-                try self.mutateGate("heartbeat", journal: false) { $0.receiveHeartbeat(at: self.policyTime(received)) }
+                try self
+                    .mutateGate("heartbeat", journal: false) {
+                        $0.receiveHeartbeat(at: self.policyTime(received).timeIntervalSinceReferenceDate)
+                    }
             } catch { self.stop(failure: error.localizedDescription) }
         }
         adapter.onSamples = { [weak self] samples in
@@ -158,7 +185,7 @@ final class OutputController: ObservableObject {
         if let policy = adapter as? any MonotonicOutputTransport {
             policy.onPolicyHeartbeat = { [weak self] received in
                 guard let self, self.usesMonotonicReceipts, self.settings.enabled, !self.isStopping else { return }
-                do { try self.mutateGate("heartbeat", journal: false) { $0.plugin.receiveHeartbeat(at: received) } }
+                do { try self.mutateGate("heartbeat", journal: false) { $0.receiveHeartbeat(at: received) } }
                 catch { self.stop(failure: error.localizedDescription) }
             }
             policy.onPolicySamples = { [weak self] samples in
@@ -191,7 +218,7 @@ final class OutputController: ObservableObject {
     func start() {
         do {
             try settings.validate(configuration: session.engine.configuration)
-            let gate = try MotionSafetyGate(
+            let gate = try Self.makeOutputPlugin(
                 limits: settings.limits,
                 precision: settings.transport == .osc ? .float32 : .double
             )
@@ -231,8 +258,8 @@ final class OutputController: ObservableObject {
                 _ = try runtime.handle(Self.instanceID, input: .stop)
                 gate = self.gate ?? gate
                 let safetyTime = Date(timeIntervalSinceReferenceDate: runtime.safetyTimestamp)
-                gate.setConnected(false, at: safetyTime)
-                _ = gate.evaluateRequested(targets: [:], at: safetyTime)
+                gate.setConnected(false, at: safetyTime.timeIntervalSinceReferenceDate)
+                _ = gate.evaluate(targets: [:], at: safetyTime.timeIntervalSinceReferenceDate)
                 try storeGate(gate, operation: "disconnect", safety: true)
             } catch { closingFailure = error.localizedDescription }
         }
@@ -282,7 +309,7 @@ final class OutputController: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
 
-    private func receive(_ samples: [ParameterSample]) {
+    private func receive(_ samples: [ParameterObservation]) {
         guard settings.enabled else { return }
         let time = now()
         guard samples.allSatisfy({ $0.receivedAt <= time && time.timeIntervalSince($0.receivedAt) < 0.3 }) else {
@@ -302,7 +329,7 @@ final class OutputController: ObservableObject {
         (adapter as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true
     }
 
-    private func receiveMonotonic(_ samples: [SharedParameterSample]) {
+    private func receiveMonotonic(_ samples: [ParameterSample]) {
         guard settings.enabled else { return }
         let time = runtime.now
         guard samples.allSatisfy({ $0.receivedAt.isFinite && $0.receivedAt <= time && time - $0.receivedAt < 0.3 })
@@ -312,7 +339,7 @@ final class OutputController: ObservableObject {
         do { try commitActual(samples) } catch { stop(failure: error.localizedDescription) }
     }
 
-    private func commitActual(_ samples: [SharedParameterSample]) throws {
+    private func commitActual(_ samples: [ParameterSample]) throws {
         var values: [ParameterID: Double] = [:]
         for sample in samples {
             guard session.engine.configuration.parameter(sample.id) != nil, sample.value.isFinite else {
@@ -320,7 +347,7 @@ final class OutputController: ObservableObject {
             }
             values[sample.id] = sample.value
         }
-        try mutateGate("actual", journal: false) { $0.plugin.receiveActual(samples) }
+        try mutateGate("actual", journal: false) { $0.receiveActual(samples) }
         if values.contains(where: { actual[$0.key] != $0.value }) {
             actual.merge(values) { _, new in new }
             try session.setActualFeedback(values)
@@ -332,11 +359,11 @@ final class OutputController: ObservableObject {
     private func resetPeerPolicy() {
         guard settings.enabled, !isStopping else { return }
         do {
-            try mutateGate("peer.disconnect") { $0.plugin.setConnected(false, at: runtime.now) }
+            try mutateGate("peer.disconnect") { $0.setConnected(false, at: runtime.now) }
             tick()
             if !usesMonotonicReceipts { policyAnchor = runtime.now; wallAnchor = now() }
             observedEnable = nil
-            try mutateGate("peer.connect") { $0.plugin.setConnected(true, at: runtime.now) }
+            try mutateGate("peer.connect") { $0.setConnected(true, at: runtime.now) }
         } catch { stop(failure: error.localizedDescription) }
     }
 
@@ -369,19 +396,19 @@ final class OutputController: ObservableObject {
             })
             // Only a real host enable-parameter edge changes the requested flag. A remote
             // disable therefore persists until an actual off/on; polling cannot undo it.
-            if observedEnable != enabled { try gate.setRequestedEnabled(enabled); observedEnable = enabled }
-            let previous = gate.plugin.decision
-            let decision = MotionSafetyDecision(shared: gate.plugin.evaluate(targets: targets, at: runtime.now))
-            let current = gate.plugin.decision
+            if observedEnable != enabled { try gate.setEnabled(enabled); observedEnable = enabled }
+            let previous = gate.decision
+            let decision = OutputDecisionPresentation(shared: gate.evaluate(targets: targets, at: runtime.now))
+            let current = gate.decision
             let changed = previous?.status != current?.status || previous?.reason != current?.reason ||
                 previous?.parameterID != current?.parameterID || previous?.limited != current?.limited
             try storeGate(gate, operation: "evaluate", journal: changed)
             if let command = decision.command, adapter.isConnected { try adapter.send(command) }
             if status != decision.status { status = decision.status }
-            let displayReason = decision.status == .disabled && enabled && !gate.plugin.requestedEnabled
+            let displayReason = decision.status == .disabled && enabled && !gate.requestedEnabled
                 ? L10n.text("请先关闭再开启使能，禁止自动恢复运动") : decision.reason
             if reason != displayReason { reason = displayReason }
-            if outputs != gate.outputs { outputs = gate.outputs }
+            if outputs != gate.gate.outputs { outputs = gate.gate.outputs }
             if limited != decision.limited { limited = decision.limited }
             publishSnapshot()
         } catch { stop(failure: error.localizedDescription) }
@@ -394,12 +421,12 @@ final class OutputController: ObservableObject {
     }
 
     private func storeGate(
-        _ gate: MotionSafetyGate,
+        _ gate: ParameterOutputPlugin,
         operation: String,
         safety: Bool = false,
         journal: Bool = true
     ) throws {
-        let binding = OutputRemoteBinding(instanceID: Self.instanceID, plugin: gate.plugin)
+        let binding = OutputRemoteBinding(instanceID: Self.instanceID, plugin: gate)
         if runtime.optionalBinding(Self.instanceID, as: OutputRemoteBinding.self) == nil {
             try runtime.install([binding])
         } else if safety {
@@ -412,18 +439,18 @@ final class OutputController: ObservableObject {
     private func mutateGate(
         _ operation: String,
         journal: Bool = true,
-        _ body: (inout MotionSafetyGate) throws -> Void
+        _ body: (inout ParameterOutputPlugin) throws -> Void
     ) throws {
         guard var gate else { throw MotionSafetyError(L10n.text("安全门尚未初始化")) }
         try body(&gate); try storeGate(gate, operation: operation, journal: journal)
     }
 
     private func applyRemoteDecision() {
-        guard let gate, let core = gate.plugin.decision else { return }
-        let decision = MotionSafetyDecision(shared: core)
+        guard let gate, let core = gate.decision else { return }
+        let decision = OutputDecisionPresentation(shared: core)
         do {
             if let command = decision.command, adapter.isConnected { try adapter.send(command) }
-            status = decision.status; reason = decision.reason; outputs = gate.outputs; limited = decision.limited
+            status = decision.status; reason = decision.reason; outputs = gate.gate.outputs; limited = decision.limited
             publishSnapshot()
         } catch { stop(failure: error.localizedDescription) }
     }
@@ -435,7 +462,7 @@ final class OutputController: ObservableObject {
             outputs: outputs,
             actual: actual,
             limited: limited,
-            baseline: gate?.baseline ?? [:]
+            baseline: gate?.gate.baseline ?? [:]
         ))
     }
 }

@@ -1,4 +1,4 @@
-import BCRAgentDomain
+import enum AgentPlugin.AgentRunState
 import SurfacePluginContracts
 
 /// The BCR device's seven-bit presentation is independent of the shared plugin contract.

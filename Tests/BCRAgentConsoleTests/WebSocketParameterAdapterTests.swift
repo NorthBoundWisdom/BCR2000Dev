@@ -1,9 +1,15 @@
-import BCRAgentCore
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 @MainActor
 final class WebSocketParameterAdapterTests: XCTestCase {
@@ -110,7 +116,7 @@ final class WebSocketParameterAdapterTests: XCTestCase {
             let port = try XCTUnwrap(portLine.flatMap(UInt16.init))
             let adapter = WebSocketParameterAdapter(rosbridge: rosbridge)
             var heartbeat = false
-            var samples: [ParameterSample] = []
+            var samples: [ParameterObservation] = []
             var failure: String?
             adapter.onHeartbeat = { _ in heartbeat = true }
             adapter.onSamples = { samples = $0 }

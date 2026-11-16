@@ -1,8 +1,14 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
 import Foundation
 import XCTest
-@testable import BCRAgentCore
-@testable import BCRMCPAdapter
-@testable import BCRSurfaceDomain
 
 final class PersistenceValidationTests: XCTestCase {
     func testAgentSlotDecoderRejectsOutOfRangeInsteadOfBypassingInitializer() throws {

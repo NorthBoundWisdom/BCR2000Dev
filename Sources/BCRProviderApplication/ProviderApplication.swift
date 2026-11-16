@@ -1,6 +1,8 @@
+import struct RobotPlugin.RobotSnapshot
+import struct ChassisPlugin.ChassisSnapshot
 import BCRFoundation
-import BCRRobotDomain
-import BCRChassisDomain
+import RobotPlugin
+import ChassisPlugin
 import BCRSurfaceDomain
 import Foundation
 import BCRPluginRuntime
@@ -65,14 +67,14 @@ public final class ProviderApplication {
     public let runtime: BCRPluginRuntime
     public static let robotInstanceID = RobotRemoteBinding.defaultInstanceID
     public static let chassisInstanceID = ChassisRemoteBinding.defaultInstanceID
-    private var robot: RobotSimulator? { configuration.robot ? runtime.optionalBinding(
+    private var robot: RobotPlugin? { configuration.robot ? runtime.optionalBinding(
         Self.robotInstanceID,
         as: RobotRemoteBinding.self
-    ).map { .init(plugin: $0.plugin) } : nil }
-    private var chassis: ChassisSimulator? { configuration.chassis ? runtime.optionalBinding(
+    ).map { $0.plugin } : nil }
+    private var chassis: ChassisPlugin? { configuration.chassis ? runtime.optionalBinding(
         Self.chassisInstanceID,
         as: ChassisRemoteBinding.self
-    ).map { .init(plugin: $0.plugin) } : nil }
+    ).map { $0.plugin } : nil }
     private struct SimulationRoute {
         let enabled: Bool
         let advance: @MainActor (Double) throws -> Void
@@ -104,11 +106,11 @@ public final class ProviderApplication {
             var bindings: [any RemoteBinding] = []
             if configuration.robot { bindings.append(RobotRemoteBinding(
                 instanceID: Self.robotInstanceID,
-                plugin: try RobotSimulator().plugin
+                plugin: try Self.makeRobot()
             )) }
             if configuration.chassis { bindings.append(ChassisRemoteBinding(
                 instanceID: Self.chassisInstanceID,
-                plugin: try ChassisSimulator().plugin
+                plugin: try Self.makeChassis()
             )) }
             try self.runtime.install(bindings)
         } catch { preconditionFailure("Invalid built-in simulation composition: \(error)") }
@@ -117,13 +119,16 @@ public final class ProviderApplication {
                 "unsupported",
                 "The robot module is not enabled"
             ) }
-            try value.advance(dt); try self.storeRobot(value, operation: "advance")
+            try withLegacySimulationErrors { try value.advanceSimulation(dt) }; try self.storeRobot(
+                value,
+                operation: "advance"
+            )
         }, revoke: { [unowned self] in
             guard var value = self.robot else { return }
-            value.revokeControl(); try self.storeRobot(value, operation: "revoke", safety: true)
+            value.simulator.revokeControl(); try self.storeRobot(value, operation: "revoke", safety: true)
         }, fault: { [unowned self] code in
             guard var value = self.robot else { return }
-            try value.plugin.simulator.fault(code, generation: value.control.generation)
+            try value.simulator.fault(code, generation: value.simulator.control.generation)
             try self.storeRobot(value, operation: "fault", safety: true)
         })
         routes["chassis"] = .init(enabled: configuration.chassis, advance: { [unowned self] dt in
@@ -131,13 +136,16 @@ public final class ProviderApplication {
                 "unsupported",
                 "The chassis module is not enabled"
             ) }
-            try value.advance(dt); try self.storeChassis(value, operation: "advance")
+            try withLegacySimulationErrors { try value.advanceSimulation(dt) }; try self.storeChassis(
+                value,
+                operation: "advance"
+            )
         }, revoke: { [unowned self] in
             guard var value = self.chassis else { return }
-            value.revokeControl(); try self.storeChassis(value, operation: "revoke", safety: true)
+            value.simulator.revokeControl(); try self.storeChassis(value, operation: "revoke", safety: true)
         }, fault: { [unowned self] code in
             guard var value = self.chassis else { return }
-            try value.plugin.simulator.fault(code, generation: value.control.generation)
+            try value.simulator.fault(code, generation: value.simulator.control.generation)
             try self.storeChassis(value, operation: "fault", safety: true)
         })
         observer = self.runtime.observe { [weak self] change in
@@ -152,6 +160,22 @@ public final class ProviderApplication {
         timer?.cancel()
         let owner = runtime, token = observer
         Task { @MainActor in if let token { owner.removeObserver(token) } }
+    }
+
+    private static func requireStarted(_ started: Bool) throws {
+        guard started else { throw ProviderDomainError("stopped", "The plugin is stopped") }
+    }
+
+    private static func makeRobot() throws -> RobotPlugin {
+        var value = try withLegacySimulationErrors { try RobotPlugin(instanceID: UUID().uuidString) }
+        _ = try value.handle(.start, at: 0)
+        return value
+    }
+
+    private static func makeChassis() throws -> ChassisPlugin {
+        var value = try withLegacySimulationErrors { try ChassisPlugin(instanceID: UUID().uuidString) }
+        _ = try value.handle(.start, at: 0)
+        return value
     }
 
     public func start() {
@@ -198,9 +222,9 @@ public final class ProviderApplication {
         if elapsed > 0 { publish() }
     }
 
-    private func storeRobot(_ value: RobotSimulator, operation: String, safety: Bool = false) throws {
+    private func storeRobot(_ value: RobotPlugin, operation: String, safety: Bool = false) throws {
         var binding = try runtime.binding(Self.robotInstanceID, as: RobotRemoteBinding.self)
-        var plugin = value.plugin
+        var plugin = value
         let observation = try plugin.simulationEvent(at: safety ? runtime.safetyTimestamp : runtime.now)
         binding.plugin = plugin
         if safety {
@@ -213,9 +237,9 @@ public final class ProviderApplication {
         }
     }
 
-    private func storeChassis(_ value: ChassisSimulator, operation: String, safety: Bool = false) throws {
+    private func storeChassis(_ value: ChassisPlugin, operation: String, safety: Bool = false) throws {
         var binding = try runtime.binding(Self.chassisInstanceID, as: ChassisRemoteBinding.self)
-        var plugin = value.plugin
+        var plugin = value
         let observation = try plugin.simulationEvent(at: safety ? runtime.safetyTimestamp : runtime.now)
         binding.plugin = plugin
         if safety {
@@ -230,22 +254,24 @@ public final class ProviderApplication {
 
     public func robotState() throws -> RobotSnapshot {
         guard let robot else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }
-        return robot.snapshot()
+        return robot.simulator.snapshot()
     }
 
     public func chassisState() throws -> ChassisSnapshot {
         guard let chassis else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }
-        return chassis.snapshot()
+        return chassis.simulator.snapshot()
     }
 
     public func robotTrace() throws -> [RobotTraceSample] {
         guard let robot
-        else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }; return robot.trace
+        else { throw ProviderDomainError("unsupported", "The robot module is not enabled") }; return robot.simulator
+            .trace
     }
 
     public func chassisTrace() throws -> [ChassisTraceSample] {
         guard let chassis
-        else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }; return chassis.trace
+        else { throw ProviderDomainError("unsupported", "The chassis module is not enabled") }; return chassis.simulator
+            .trace
     }
 
     public func executeRobot(_ operation: RobotOperation, access: ProviderAccess) throws -> RobotCommandReply {
@@ -256,41 +282,53 @@ public final class ProviderApplication {
             "Robot control permission is required"
         )
         var grant: DeviceControlGrant?
-        switch operation {
-        case let .initialize(generation, joints): try robot.initialize(joints, generation: generation)
-        case let .acquire(generation, owner, ttl): grant = try robot.acquire(
-                generation: generation,
-                owner: owner,
-                ttl: ttl
-            )
-        case let .enable(proof): try robot.enable(proof)
-        case let .stop(proof): try robot.stop(proof)
-        case let .disable(proof): try robot.stop(proof, disable: true)
-        case let .release(proof): try robot.release(proof)
-        case let .renew(proof, ttl): try robot.renew(proof, ttl: ttl)
-        case let .move(proof, joints, duration, validity): try robot.move(
-                proof,
-                target: joints,
-                duration: duration,
-                validFor: validity
-            )
-        case let .reset(generation), let .clearFault(generation):
-            try ProviderValidation.require(
-                access.simulation,
-                "permission_denied",
-                "Simulation administration permission is required"
-            )
-            try robot.reset(generation: generation)
-        case let .fault(generation, code):
-            try ProviderValidation.require(
-                access.simulation,
-                "permission_denied",
-                "Simulation fault permission is required"
-            )
-            try robot.fault(code, generation: generation)
+        try withLegacySimulationErrors {
+            switch operation {
+            case let .initialize(generation, joints): try Self.requireStarted(robot.acceptsWrites); try robot.simulator
+                .initialize(
+                    joints,
+                    generation: generation
+                )
+            case let .acquire(generation, owner, ttl): try Self.requireStarted(robot.acceptsWrites); grant = try robot
+                .simulator.acquire(
+                    generation: generation,
+                    owner: owner,
+                    ttl: ttl,
+                    controlToken: UUID().uuidString
+                )
+            case let .enable(proof): try Self.requireStarted(robot.acceptsWrites); try robot.simulator.enable(proof)
+            case let .stop(proof): try robot.simulator.stop(proof)
+            case let .disable(proof): try robot.simulator.stop(proof, disable: true)
+            case let .release(proof): try Self.requireStarted(robot.acceptsWrites); try robot.simulator.release(proof)
+            case let .renew(proof, ttl): try Self.requireStarted(robot.acceptsWrites); try robot.simulator.renew(
+                    proof,
+                    ttl: ttl
+                )
+            case let .move(proof, joints, duration, validity): try Self.requireStarted(robot.acceptsWrites); try robot
+                .simulator.move(
+                    proof,
+                    target: joints,
+                    duration: duration,
+                    validFor: validity
+                )
+            case let .reset(generation), let .clearFault(generation):
+                try ProviderValidation.require(
+                    access.simulation,
+                    "permission_denied",
+                    "Simulation administration permission is required"
+                )
+                try Self.requireStarted(robot.acceptsWrites); try robot.simulator.reset(generation: generation)
+            case let .fault(generation, code):
+                try ProviderValidation.require(
+                    access.simulation,
+                    "permission_denied",
+                    "Simulation fault permission is required"
+                )
+                try Self.requireStarted(robot.acceptsWrites); try robot.simulator.fault(code, generation: generation)
+            }
         }
         try storeRobot(robot, operation: "command"); publish()
-        return RobotCommandReply(accepted: true, control: grant, state: robot.snapshot())
+        return RobotCommandReply(accepted: true, control: grant, state: robot.simulator.snapshot())
     }
 
     public func executeChassis(_ operation: ChassisOperation, access: ProviderAccess) throws -> ChassisCommandReply {
@@ -301,41 +339,57 @@ public final class ProviderApplication {
             "Chassis control permission is required"
         )
         var grant: DeviceControlGrant?
-        switch operation {
-        case let .initialize(generation, pose): try chassis.initialize(pose, generation: generation)
-        case let .acquire(generation, owner, ttl): grant = try chassis.acquire(
-                generation: generation,
-                owner: owner,
-                ttl: ttl
-            )
-        case let .enable(proof): try chassis.enable(proof)
-        case let .stop(proof): try chassis.stop(proof)
-        case let .disable(proof): try chassis.stop(proof, disable: true)
-        case let .release(proof): try chassis.release(proof)
-        case let .renew(proof, ttl): try chassis.renew(proof, ttl: ttl)
-        case let .drive(proof, speed, steering, validity): try chassis.drive(
-                proof,
-                speed: speed,
-                steering: steering,
-                validFor: validity
-            )
-        case let .reset(generation), let .clearFault(generation):
-            try ProviderValidation.require(
-                access.simulation,
-                "permission_denied",
-                "Simulation administration permission is required"
-            )
-            try chassis.reset(generation: generation)
-        case let .fault(generation, code):
-            try ProviderValidation.require(
-                access.simulation,
-                "permission_denied",
-                "Simulation fault permission is required"
-            )
-            try chassis.fault(code, generation: generation)
+        try withLegacySimulationErrors {
+            switch operation {
+            case let .initialize(generation, pose): try Self.requireStarted(chassis.acceptsWrites); try chassis
+                .simulator.initialize(
+                    pose,
+                    generation: generation
+                )
+            case let .acquire(generation, owner, ttl): try Self
+                .requireStarted(chassis.acceptsWrites); grant = try chassis.simulator.acquire(
+                    generation: generation,
+                    owner: owner,
+                    ttl: ttl,
+                    controlToken: UUID().uuidString
+                )
+            case let .enable(proof): try Self.requireStarted(chassis.acceptsWrites); try chassis.simulator.enable(proof)
+            case let .stop(proof): try chassis.simulator.stop(proof)
+            case let .disable(proof): try chassis.simulator.stop(proof, disable: true)
+            case let .release(proof): try Self.requireStarted(chassis.acceptsWrites); try chassis.simulator
+                .release(proof)
+            case let .renew(proof, ttl): try Self.requireStarted(chassis.acceptsWrites); try chassis.simulator.renew(
+                    proof,
+                    ttl: ttl
+                )
+            case let .drive(proof, speed, steering, validity): try Self
+                .requireStarted(chassis.acceptsWrites); try chassis.simulator.drive(
+                    proof,
+                    speed: speed,
+                    steering: steering,
+                    validFor: validity
+                )
+            case let .reset(generation), let .clearFault(generation):
+                try ProviderValidation.require(
+                    access.simulation,
+                    "permission_denied",
+                    "Simulation administration permission is required"
+                )
+                try Self.requireStarted(chassis.acceptsWrites); try chassis.simulator.reset(generation: generation)
+            case let .fault(generation, code):
+                try ProviderValidation.require(
+                    access.simulation,
+                    "permission_denied",
+                    "Simulation fault permission is required"
+                )
+                try Self.requireStarted(chassis.acceptsWrites); try chassis.simulator.fault(
+                    code,
+                    generation: generation
+                )
+            }
         }
         try storeChassis(chassis, operation: "command"); publish()
-        return ChassisCommandReply(accepted: true, control: grant, state: chassis.snapshot())
+        return ChassisCommandReply(accepted: true, control: grant, state: chassis.simulator.snapshot())
     }
 
     public func advance(domain: String, dt: Double, access: ProviderAccess) throws {
@@ -360,8 +414,8 @@ public final class ProviderApplication {
             "provider_id": .string(providerID),
             "source": .string("simulation"),
             "clock": .string(configuration.clock.rawValue),
-            "robot": robot.map { try! JSONValue.encoded($0.snapshot()) } ?? .null,
-            "chassis": chassis.map { try! JSONValue.encoded($0.snapshot()) } ?? .null
+            "robot": robot.map { try! JSONValue.encoded($0.simulator.snapshot()) } ?? .null,
+            "chassis": chassis.map { try! JSONValue.encoded($0.simulator.snapshot()) } ?? .null
         ])
     }
 

@@ -1,9 +1,16 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import enum AgentPlugin.AgentRunState
 import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRAgentCore
-@testable import BCRConfigurationAdapter
-@testable import BCRCoreMIDIDriver
 
 private typealias BlinkMIDI = RecordingMIDIService
 
@@ -40,7 +47,7 @@ final class AgentLEDBlinkTests: XCTestCase {
         return (model, midi, directory)
     }
 
-    private func slots(_ state: AgentRunState, in model: ConsoleViewModel) -> [AgentSlot] {
+    private func slots(_ state: AgentRunState, in model: ConsoleViewModel) -> [AgentSlotPresentation] {
         model.slots.map { slot in
             guard slot.id == AgentSlotID(1) else { return slot }
             var changed = slot

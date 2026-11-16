@@ -1,5 +1,4 @@
 import AgentPlugin
-import BCRAgentDomain
 import BCRConfigurationAdapter
 import BCRFoundation
 import BCRPluginHost

@@ -1,8 +1,8 @@
+import BCRConfigurationAdapter
+import enum AgentPlugin.AgentRunState
 import AgentPlugin
 import AgentRemoteBinding
 import BCRPluginRuntime
-import BCRAgentDomain
-import BCRConfigurationAdapter
 import BCRFoundation
 import BCRSurfaceDomain
 import Foundation
@@ -16,8 +16,8 @@ public final class BCRMockAgentHost {
     private var observer: UUID?
     private let epoch: TimeInterval
     private var driver: Task<Void, Never>?
-    private var lastPublished: [BCRAgentDomain.AgentSlot]?
-    public var onUpdate: (@MainActor ([BCRAgentDomain.AgentSlot], [AgentSlotID: UInt8]) -> Void)?
+    private var lastPublished: [AgentSlotPresentation]?
+    public var onUpdate: (@MainActor ([AgentSlotPresentation], [AgentSlotID: UInt8]) -> Void)?
     public var onError: (@MainActor (any Error) -> Void)?
 
     public init(clock: @escaping @MainActor () -> PluginTime = { ProcessInfo.processInfo.systemUptime },
@@ -45,13 +45,11 @@ public final class BCRMockAgentHost {
         Task { @MainActor in if let token { owner.removeObserver(token) } }
     }
 
-    public var slots: [BCRAgentDomain.AgentSlot] {
+    public var slots: [AgentSlotPresentation] {
         get throws {
             try plugin().slots.map { slot in
-                BCRAgentDomain.AgentSlot(
-                    id: AgentSlotID(slot.id), name: "Agent \(slot.id)",
-                    state: slot.state,
-                    progress: slot.progress, statusText: Self.statusText(slot.statusKey),
+                AgentSlotPresentation(
+                    core: slot, name: "Agent \(slot.id)", statusText: Self.statusText(slot.statusKey),
                     lastUpdated: Date(timeIntervalSince1970: epoch + slot.lastUpdated)
                 )
             }
@@ -114,7 +112,7 @@ public final class BCRMockAgentHost {
                     guard let id = event.fields["slot"]?.exactIntValue,
                           let index = projection.firstIndex(where: { $0.id.rawValue == id }),
                           let rawState = event.fields["state"]?.stringValue,
-                          let state = BCRAgentDomain.AgentRunState(rawValue: rawState),
+                          let state = AgentRunState(rawValue: rawState),
                           let progress = event.fields["progress"]?.finiteNumber,
                           let key = event.fields["statusKey"]?.stringValue,
                           let time = event.fields["time"]?.finiteNumber

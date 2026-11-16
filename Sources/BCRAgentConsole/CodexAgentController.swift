@@ -1,4 +1,12 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
 import Combine
 import Foundation
 
@@ -16,14 +24,14 @@ final class CodexAgentController: ObservableObject {
     private var presentedApprovalID: UUID?
     private var approvalTasks: [CodexRequestID: Task<Void, Never>] = [:]
     @Published private(set) var error: String?
-    @Published private(set) var slots = AgentSlot.mockSlots()
+    @Published private(set) var slots = AgentSlotPresentation.mockSlots()
     @Published var executable = ""
     @Published var workspace = ""
     @Published var prompt = ""
     @Published var modelID = ""
     @Published var effort = ""
     @Published var allowWorkspaceWrites = false
-    var onSlots: (([AgentSlot]) -> Void)?
+    var onSlots: (([AgentSlotPresentation]) -> Void)?
     var onStopMock: (() -> Void)?
     private let preferences: ProtectedJSONFile<CodexPreferences>
     private let directory: URL

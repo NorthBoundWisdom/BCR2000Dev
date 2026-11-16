@@ -1,4 +1,15 @@
-import BCRAgentCore
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterOutputFrame
+import enum ParameterOutputPlugin.OSCCodec
+import struct ParameterOutputPlugin.JSONParameterLink
 import BCRPluginRuntime
 import BCRProviderApplication
 import BCRPluginHost
@@ -6,8 +17,6 @@ import OutputRemoteBinding
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 @MainActor
 private final class OutputFakeDevice: SurfaceDevice {
@@ -20,7 +29,7 @@ private final class OutputFakeDevice: SurfaceDevice {
 @MainActor
 private final class OutputFakeTransport: OutputTransport {
     var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
@@ -36,7 +45,7 @@ private final class OutputFakeTransport: OutputTransport {
 @MainActor
 private final class PrecisionOutputTransport: OutputTransport {
     var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
@@ -129,7 +138,7 @@ final class OutputControllerTests: XCTestCase {
         func fresh() {
             transport.onHeartbeat?(clock.now)
             transport.onSamples?(SurfaceConfiguration.robotArmDemo().parameters.filter { $0.kind == .continuous }.map {
-                ParameterSample(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
+                ParameterObservation(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
             })
         }
         fresh()
@@ -430,13 +439,13 @@ final class OutputControllerTests: XCTestCase {
         let frame = try XCTUnwrap(adapter.frames.last { $0.enabled })
         XCTAssertEqual(frame.values["axis"], 0.1)
         var link = JSONParameterLink(session: "fixture")
-        let ping = link.ping(at: clock.now)
+        let ping = link.ping(at: clock.now.timeIntervalSinceReferenceDate)
         _ = try link.receive(.object([
             "type": .string("pong"),
             "session": .string("fixture"),
             "epoch": .string("peer"),
             "sequence": try XCTUnwrap(ping.objectValue?["sequence"])
-        ]), at: clock.now)
+        ]), at: clock.now.timeIntervalSinceReferenceDate)
         let wire = try link.command(frame)
         let encoded = try wire.jsonText
         let decoded = try JSONDecoder().decode(JSONValue.self, from: Data(encoded.utf8))

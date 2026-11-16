@@ -1,4 +1,15 @@
-import BCRAgentCore
+import struct ParameterOutputPlugin.ParameterOutputPlugin
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import enum ParameterOutputPlugin.MotionOutputPrecision
+import enum AgentPlugin.AgentRunState
 import Foundation
 import XCTest
 
@@ -11,53 +22,53 @@ final class SharedOutputCompatibilityTests: XCTestCase {
     private let id = ParameterID("joint")
     private let start = Date(timeIntervalSinceReferenceDate: 1000)
 
-    private func gate() throws -> MotionSafetyGate {
-        var gate = try MotionSafetyGate(limits: [
+    private func gate() throws -> ParameterOutputPlugin {
+        var gate = try startedOutputFixture(limits: [
             .init(id: id, minimum: 0, maximum: 10, maximumChange: 1, maximumVelocity: 2)
         ])
-        gate.setConnected(true, at: start)
-        gate.receiveHeartbeat(at: start)
-        _ = gate.evaluate(targets: [id: 5], enabled: false, at: start)
+        gate.setConnected(true, at: start.timeIntervalSinceReferenceDate)
+        gate.receiveHeartbeat(at: start.timeIntervalSinceReferenceDate)
+        _ = try evaluateFixture(&gate, targets: [id: 5], enabled: false, at: start)
         return gate
     }
 
     func testSharedFailureParameterIDRestoresAllThreeLegacyDiagnosticMessages() throws {
         var gate = try gate()
-        var decision = gate.evaluate(targets: [id: 5], enabled: true, at: start)
+        var decision = try evaluateFixture(&gate, targets: [id: 5], enabled: true, at: start)
         XCTAssertEqual(decision.status, .waitingActual)
         XCTAssertEqual(decision.parameterID, id)
-        XCTAssertEqual(decision.reason, L10n.text("等待新鲜实际状态：\(id)"))
-        XCTAssertEqual(gate.plugin.decision?.parameterID, id)
-        gate.receiveActual([.init(id: id, value: -1, receivedAt: start)])
-        decision = gate.evaluate(targets: [id: 5], enabled: true, at: start)
+        XCTAssertEqual(OutputDecisionPresentation(shared: decision).reason, L10n.text("等待新鲜实际状态：\(id)"))
+        XCTAssertEqual(gate.decision?.parameterID, id)
+        gate.receiveActual([.init(id: id, value: -1, receivedAt: start.timeIntervalSinceReferenceDate)])
+        decision = try evaluateFixture(&gate, targets: [id: 5], enabled: true, at: start)
         XCTAssertEqual(decision.status, .actualOutOfLimits)
-        XCTAssertEqual(decision.reason, L10n.text("实际状态超出软限位：\(id)"))
-        gate.receiveActual([.init(id: id, value: 1, receivedAt: start)])
-        decision = gate.evaluate(targets: [:], enabled: true, at: start)
+        XCTAssertEqual(OutputDecisionPresentation(shared: decision).reason, L10n.text("实际状态超出软限位：\(id)"))
+        gate.receiveActual([.init(id: id, value: 1, receivedAt: start.timeIntervalSinceReferenceDate)])
+        decision = try evaluateFixture(&gate, targets: [:], enabled: true, at: start)
         XCTAssertEqual(decision.status, .invalidTarget)
-        XCTAssertEqual(decision.reason, L10n.text("目标缺失或不是有限数值：\(id)"))
+        XCTAssertEqual(OutputDecisionPresentation(shared: decision).reason, L10n.text("目标缺失或不是有限数值：\(id)"))
     }
 
     func testHeartbeatGapRequiresExplicitOffOnEvenWhenFreshHeartbeatArrivesBeforeEvaluation() throws {
         var gate = try gate()
-        gate.receiveActual([.init(id: id, value: 1, receivedAt: start)])
-        XCTAssertEqual(gate.evaluate(targets: [id: 5], enabled: true, at: start).status, .ready)
+        gate.receiveActual([.init(id: id, value: 1, receivedAt: start.timeIntervalSinceReferenceDate)])
+        XCTAssertEqual(try evaluateFixture(&gate, targets: [id: 5], enabled: true, at: start).status, .ready)
         let late = start.addingTimeInterval(1)
-        gate.receiveHeartbeat(at: late)
-        gate.receiveActual([.init(id: id, value: 1, receivedAt: late)])
-        let stopped = gate.evaluate(targets: [id: 5], enabled: true, at: late)
+        gate.receiveHeartbeat(at: late.timeIntervalSinceReferenceDate)
+        gate.receiveActual([.init(id: id, value: 1, receivedAt: late.timeIntervalSinceReferenceDate)])
+        let stopped = try evaluateFixture(&gate, targets: [id: 5], enabled: true, at: late)
         XCTAssertEqual(stopped.status, .waitingRearm)
         XCTAssertEqual(stopped.command?.enabled, false)
-        XCTAssertEqual(gate.evaluate(targets: [id: 5], enabled: false, at: late).status, .disabled)
-        XCTAssertEqual(gate.evaluate(targets: [id: 5], enabled: true, at: late).status, .ready)
+        XCTAssertEqual(try evaluateFixture(&gate, targets: [id: 5], enabled: false, at: late).status, .disabled)
+        XCTAssertEqual(try evaluateFixture(&gate, targets: [id: 5], enabled: true, at: late).status, .ready)
     }
 
     func testRegressingHeartbeatLatchesVisibleClockFailure() throws {
         var gate = try gate()
-        gate.receiveHeartbeat(at: start.addingTimeInterval(-0.1))
-        let decision = gate.evaluate(targets: [id: 5], enabled: false, at: start)
+        gate.receiveHeartbeat(at: start.addingTimeInterval(-0.1).timeIntervalSinceReferenceDate)
+        let decision = try evaluateFixture(&gate, targets: [id: 5], enabled: false, at: start)
         XCTAssertEqual(decision.status, .clockError)
-        XCTAssertEqual(decision.reason, L10n.text("心跳时间倒退，需重新连接安全门"))
+        XCTAssertEqual(OutputDecisionPresentation(shared: decision).reason, L10n.text("心跳时间倒退，需重新连接安全门"))
         XCTAssertEqual(legacyOutputDefaults(), .object([:]))
     }
 

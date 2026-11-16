@@ -1,13 +1,20 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.JSONParameterLink
 import Foundation
 import XCTest
-@testable import BCRAgentCore
-@testable import BCRMCPAdapter
-@testable import BCRSurfaceDomain
 
 final class JSONParameterLinkTests: XCTestCase {
     func testHeartbeatFreshnessSessionAndReplayProtection() throws {
         var link = JSONParameterLink(session: "test")
-        let now = Date(timeIntervalSince1970: 100)
+        let now = Date(timeIntervalSince1970: 100).timeIntervalSinceReferenceDate
         let ping = link.ping(at: now)
         let pong: JSONValue = .object(["type": .string("pong"), "session": .string("test"), "epoch": .string("peer"),
                                        "sequence": ping.objectValue!["sequence"]!])
@@ -20,13 +27,13 @@ final class JSONParameterLinkTests: XCTestCase {
         let next = link.ping(at: now)
         let stale: JSONValue = .object(["type": .string("pong"), "session": .string("test"), "epoch": .string("peer"),
                                         "sequence": next.objectValue!["sequence"]!])
-        XCTAssertEqual(try link.receive(stale, at: now.addingTimeInterval(1)), .ignored)
+        XCTAssertEqual(try link.receive(stale, at: now + 1), .ignored)
     }
 
     func testOutputRequiresPeerAndStopCannotContainMotionValues() throws {
         var link = JSONParameterLink(session: "test")
         XCTAssertThrowsError(try link.command(.init(enabled: true, values: [:])))
-        let now = Date()
+        let now = Date().timeIntervalSinceReferenceDate
         let ping = link.ping(at: now)
         _ = try link.receive(.object(["type": .string("pong"), "session": .string("test"), "epoch": .string("peer"),
                                       "sequence": ping.objectValue!["sequence"]!]), at: now)
@@ -37,7 +44,7 @@ final class JSONParameterLinkTests: XCTestCase {
 
     func testPeerRestartInvalidatesOldStateEpoch() throws {
         var link = JSONParameterLink(session: "test")
-        let now = Date()
+        let now = Date().timeIntervalSinceReferenceDate
         for (index, epoch) in ["old", "new"].enumerated() {
             let ping = link.ping(at: now)
             XCTAssertEqual(

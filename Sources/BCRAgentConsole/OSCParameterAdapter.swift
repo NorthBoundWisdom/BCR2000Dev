@@ -1,4 +1,17 @@
-import BCRAgentCore
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterSample
+import struct ParameterOutputPlugin.ParameterOutputFrame
+import enum ParameterOutputPlugin.OSCCodec
+import struct ParameterOutputPlugin.OSCMessage
+import enum ParameterOutputPlugin.OSCPacket
 import Foundation
 import Network
 
@@ -26,12 +39,12 @@ extension OutputTransport {
 @MainActor
 final class OSCParameterAdapter: MonotonicOutputTransport {
     private(set) var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
-    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicySamples: (@MainActor ([ParameterSample]) -> Void)?
     var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
     var onPolicyPeerReset: (@MainActor (Double) -> Void)?
     private let monotonic: @Sendable () -> Double
@@ -141,7 +154,10 @@ final class OSCParameterAdapter: MonotonicOutputTransport {
         isConnected = false
         if connected, serverEpoch != nil {
             do {
-                let data = try OSCCodec.encode(commandPacket(.init(enabled: false, values: [:])))
+                let data = try withLegacyOutputErrors { try OSCCodec.encode(commandPacket(.init(
+                    enabled: false,
+                    values: [:]
+                ))) }
                 connection.send(content: data, completion: .contentProcessed { _ in connection.cancel() })
             } catch {
                 connection.cancel()
@@ -163,7 +179,7 @@ final class OSCParameterAdapter: MonotonicOutputTransport {
         for id in frame.values.keys.sorted() {
             let value = Float(frame.values[id]!)
             guard value.isFinite else { throw MotionSafetyError(L10n.text("OSC 输出超出 float32 范围")) }
-            elements.append(.message(OSCMessage(OSCCodec.parameterAddress(id), [.float(value)])))
+            elements.append(.message(OSCMessage(OSCCodec.parameterAddress(id, prefix: "/bcr/param/"), [.float(value)])))
         }
         return .bundle(timetag: 1, elements: elements)
     }
@@ -171,7 +187,7 @@ final class OSCParameterAdapter: MonotonicOutputTransport {
     private func transmit(_ packet: OSCPacket) throws {
         guard isConnected, let connection else { throw MotionSafetyError(L10n.text("OSC UDP 端点未就绪")) }
         let generation = generation
-        let data = try OSCCodec.encode(packet)
+        let data = try withLegacyOutputErrors { try OSCCodec.encode(packet) }
         connection.send(content: data, completion: .contentProcessed { [weak self] error in
             if let error {
                 let reason = error.localizedDescription
@@ -218,10 +234,10 @@ final class OSCParameterAdapter: MonotonicOutputTransport {
             let sequence = UInt32(bitPattern: rawSequence)
             if let previous = lastStateSequence,
                Int32(bitPattern: sequence &- previous) <= 0 { onDroppedPacket?(); return }
-            var samples: [SharedParameterSample] = []
+            var samples: [ParameterSample] = []
             var seen = Set<ParameterID>()
             for message in messages.dropFirst(2) {
-                let id = try OSCCodec.parameterID(message.address)
+                let id = try withLegacyOutputErrors { try OSCCodec.parameterID(message.address, prefix: "/bcr/state/") }
                 guard seen.insert(id).inserted, message.arguments.count == 1,
                       case let .float(value) = message.arguments[0], value.isFinite
                 else {
@@ -252,7 +268,10 @@ final class OSCParameterAdapter: MonotonicOutputTransport {
             }
             guard let data else { _ = handler(.failure(MotionSafetyError(L10n.text("OSC 接收端已关闭"))), received); return }
             do {
-                guard handler(.success(try OSCCodec.immediateMessages(OSCCodec.decode(data))), received) else { return }
+                guard handler(
+                    .success(try withLegacyOutputErrors { try OSCCodec.immediateMessages(OSCCodec.decode(data)) }),
+                    received
+                ) else { return }
             } catch { guard handler(.failure(MotionSafetyError(error.localizedDescription)), received) else { return } }
             receiveLoop(connection, monotonic: monotonic, wallClock: wallClock, handler: handler)
         }

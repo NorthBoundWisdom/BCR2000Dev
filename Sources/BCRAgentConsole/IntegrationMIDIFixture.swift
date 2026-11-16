@@ -1,5 +1,9 @@
 #if DEBUG
-    import BCRAgentCore
+    import BCRFoundation
+    import BCRSurfaceDomain
+    import BCRCoreMIDIDriver
+    import BCRConfigurationAdapter
+    import BCRPersistenceAdapter
     import CryptoKit
     import Foundation
 

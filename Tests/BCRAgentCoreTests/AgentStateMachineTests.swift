@@ -1,39 +1,51 @@
-import XCTest
-@testable import BCRAgentCore
-@testable import BCRMCPAdapter
+import struct AgentPlugin.AgentStateMachine
+import SurfacePluginContracts
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
 @testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import XCTest
 
 final class AgentStateMachineTests: XCTestCase {
     func testMockLifecycleRequiresApprovalBeforeCompletion() throws {
         let slot = AgentSlotID(1)
-        var machine = AgentStateMachine()
+        var machine = try AgentStateMachine()
 
-        try machine.transition(slot, to: .queued, progress: 0, statusText: "queued")
-        try machine.transition(slot, to: .running, progress: 0.1, statusText: "running")
-        try machine.updateProgress(slot, progress: 0.6, statusText: "work")
+        try machine.transition(slot.rawValue, to: .queued, progress: 0, statusKey: "queued", at: 0)
+        try machine.transition(slot.rawValue, to: .running, progress: 0.1, statusKey: "running", at: 0)
+        try machine.updateProgress(slot.rawValue, progress: 0.6, statusKey: "work", at: 0)
         try machine.transition(
-            slot,
+            slot.rawValue,
             to: .waitingApproval,
             progress: 0.6,
-            statusText: "approval"
+            statusKey: "approval"
+            , at: 0
         )
-        try machine.transition(slot, to: .running, progress: 0.7, statusText: "approved")
-        try machine.transition(slot, to: .completed, progress: 1, statusText: "done")
+        try machine.transition(slot.rawValue, to: .running, progress: 0.7, statusKey: "approved", at: 0)
+        try machine.transition(slot.rawValue, to: .completed, progress: 1, statusKey: "done", at: 0)
 
-        XCTAssertEqual(machine.slot(slot)?.state, .completed)
-        XCTAssertEqual(machine.slot(slot)?.progress, 1)
+        XCTAssertEqual(machine.slot(slot.rawValue)?.state, .completed)
+        XCTAssertEqual(machine.slot(slot.rawValue)?.progress, 1)
     }
 
-    func testRejectsImpossibleIdleToCompletedTransition() {
+    func testRejectsImpossibleIdleToCompletedTransition() throws {
         let slot = AgentSlotID(2)
-        var machine = AgentStateMachine()
+        var machine = try AgentStateMachine()
 
         XCTAssertThrowsError(
-            try machine.transition(slot, to: .completed, statusText: "invalid")
+            try machine.transition(slot.rawValue, to: .completed, statusKey: "invalid", at: 0)
         ) { error in
             XCTAssertEqual(
-                error as? AgentStateMachineError,
-                .invalidTransition(slot: slot, from: .idle, to: .completed)
+                error as? PluginError,
+                .init(
+                    code: .invalidTransition,
+                    fields: ["index": .number(slot.rawValue), "from": .string("idle"), "to": .string("completed")]
+                )
             )
         }
     }
@@ -41,18 +53,18 @@ final class AgentStateMachineTests: XCTestCase {
     func testActiveStatesCanBeInterrupted() throws {
         for slotNumber in 1 ... 3 {
             let slot = AgentSlotID(slotNumber)
-            var machine = AgentStateMachine()
-            try machine.transition(slot, to: .queued, statusText: "queued")
+            var machine = try AgentStateMachine()
+            try machine.transition(slot.rawValue, to: .queued, statusKey: "queued", at: 0)
 
             if slotNumber >= 2 {
-                try machine.transition(slot, to: .running, statusText: "running")
+                try machine.transition(slot.rawValue, to: .running, statusKey: "running", at: 0)
             }
             if slotNumber == 3 {
-                try machine.transition(slot, to: .waitingApproval, statusText: "approval")
+                try machine.transition(slot.rawValue, to: .waitingApproval, statusKey: "approval", at: 0)
             }
 
-            try machine.transition(slot, to: .interrupted, statusText: "stopped")
-            XCTAssertEqual(machine.slot(slot)?.state, .interrupted)
+            try machine.transition(slot.rawValue, to: .interrupted, statusKey: "stopped", at: 0)
+            XCTAssertEqual(machine.slot(slot.rawValue)?.state, .interrupted)
         }
     }
 }

@@ -1,5 +1,4 @@
 import BCRFoundation
-import BCRAgentDomain
 import Foundation
 
 public enum CodexApprovalGateError: Error, LocalizedError, Sendable {

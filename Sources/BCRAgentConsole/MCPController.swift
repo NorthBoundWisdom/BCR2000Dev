@@ -1,5 +1,13 @@
+import BCRFoundation
+import BCRCodexAdapter
+import BCRSurfaceDomain
+import BCRExamples
+import BCRConfigurationAdapter
+import BCRMCPAdapter
+import BCRHTTPTransport
+import BCRCoreMIDIDriver
+import BCRPersistenceAdapter
 import AppKit
-import BCRAgentCore
 import BCRProviderApplication
 import Combine
 import Foundation

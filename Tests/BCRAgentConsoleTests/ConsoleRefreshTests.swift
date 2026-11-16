@@ -1,11 +1,17 @@
-import BCRAgentCore
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
 import BCRTestSupport
 import Combine
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 @MainActor
 private final class RefreshMIDI: MIDIService {

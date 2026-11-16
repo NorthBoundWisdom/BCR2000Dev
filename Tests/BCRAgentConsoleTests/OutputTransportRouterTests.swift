@@ -1,14 +1,21 @@
-import BCRAgentCore
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterOutputFrame
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 @MainActor
 private final class RoutedFakeTransport: OutputTransport {
     var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?

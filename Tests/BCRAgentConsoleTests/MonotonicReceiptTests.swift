@@ -1,10 +1,18 @@
-import BCRAgentCore
+import struct ParameterOutputPlugin.ParameterSample
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
+import struct ParameterOutputPlugin.ParameterOutputFrame
 import BCRPluginRuntime
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 private final class ReceiptWall: @unchecked Sendable {
     private let lock = NSLock()
@@ -40,13 +48,13 @@ private final class ReceiptCounts {
 @MainActor
 private final class DualReceiptTransport: MonotonicOutputTransport {
     var isConnected = false
-    var onSamples: (@MainActor ([ParameterSample]) -> Void)?
+    var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
     var onHeartbeat: (@MainActor (Date) -> Void)?
     var onConnection: (@MainActor (Bool, String?) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
     var onPeerReset: (@MainActor (Date) -> Void)?
     var onDroppedPacket: (@MainActor () -> Void)?
-    var onPolicySamples: (@MainActor ([SharedParameterSample]) -> Void)?
+    var onPolicySamples: (@MainActor ([ParameterSample]) -> Void)?
     var onPolicyHeartbeat: (@MainActor (Double) -> Void)?
     var onPolicyPeerReset: (@MainActor (Double) -> Void)?
     var pings = 0

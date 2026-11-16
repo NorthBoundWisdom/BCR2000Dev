@@ -1,7 +1,15 @@
+@testable import BCRFoundation
+@testable import BCRCodexAdapter
+@testable import BCRSurfaceDomain
+@testable import BCRExamples
+@testable import BCRConfigurationAdapter
+@testable import BCRMCPAdapter
+@testable import BCRHTTPTransport
+@testable import BCRCoreMIDIDriver
+@testable import BCRPersistenceAdapter
 import BCRTestSupport
 import XCTest
 @testable import BCRAgentConsole
-@testable import BCRAgentCore
 
 private typealias ButtonFunctionMIDI = RecordingMIDIService
 
