@@ -27,6 +27,15 @@ private final class OutputFakeDevice: SurfaceDevice {
 }
 
 @MainActor
+private final class MetadataOutputDevice: SurfaceDevice {
+    let connection = MIDIConnectionSnapshot(connectedSource: "fixture input", connectedDestination: "fixture output")
+    var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
+    var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
+    var sent: [MIDIVoiceMessage] = []
+    func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
+}
+
+@MainActor
 private final class OutputFakeTransport: OutputTransport {
     var isConnected = false
     var onSamples: (@MainActor ([ParameterObservation]) -> Void)?
@@ -67,6 +76,51 @@ private final class OutputTestClock {
 
 @MainActor
 final class OutputControllerTests: XCTestCase {
+    func testPresentationMetadataDuringActiveOutputNeitherStopsOutputNorAddsMIDI() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let clock = OutputTestClock(), transport = OutputFakeTransport(), device = MetadataOutputDevice()
+        let session = SurfaceSession(hardwareDevice: device, hardwareMap: .mockPreset(), configuration: .robotArmDemo(),
+                                     now: { clock.now }, historyTime: .init(now: { clock.monotonic }),
+                                     saveHardwareMap: { _ in }, saveConfiguration: { _ in })
+        session.selectSource(.hardware)
+        let controller = OutputController(session: session,
+                                          store: JSONFileStore(fileURL: directory.appending(path: "output.json")),
+                                          adapter: transport, automaticallyTicks: false, now: { clock.now })
+        controller.start()
+        defer { controller.stop() }
+        transport.onHeartbeat?(clock.now)
+        transport.onSamples?(session.engine.configuration.parameters.filter { $0.kind == .continuous }.map {
+            ParameterObservation(id: $0.id, value: $0.defaultValue, receivedAt: clock.now)
+        })
+        controller.tick()
+        session.setParameter("arm.enabled", to: 1); controller.tick()
+        XCTAssertEqual(controller.status, .ready)
+        device.sent.removeAll()
+        let frames = transport.frames
+        try session.setParameterColor(.purple, for: "arm.j1")
+        try session.highlightGroup(session.engine.configuration.parameters[0].group)
+        try session.captureScene(id: "metadata", name: "Intro")
+        try session.renameScene("metadata", to: "Verse")
+        try session.deleteScene("metadata")
+        XCTAssertEqual(transport.frames, frames, "Metadata intents do not send output frames")
+        controller.tick()
+        XCTAssertTrue(controller.settings.enabled)
+        XCTAssertEqual(controller.status, .ready)
+        XCTAssertTrue(device.sent.isEmpty)
+        XCTAssertEqual(
+            transport.frames.count,
+            frames.count + 1,
+            "Only the explicitly requested normal tick emits a frame"
+        )
+        XCTAssertEqual(transport.frames.last, frames.last, "The normal frame remains unchanged")
+        var actualDefinition = try XCTUnwrap(session.engine.configuration.parameter("arm.j1"))
+        actualDefinition.maximum = 90
+        try session.updateParameter(actualDefinition)
+        controller.tick()
+        XCTAssertFalse(controller.settings.enabled, "Functional changes retain the existing stop/rearm rule")
+    }
+
     func testUndoTargetsStillPassOutputCadenceChangeAndVelocityLimits() throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

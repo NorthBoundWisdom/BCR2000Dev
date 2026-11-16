@@ -391,6 +391,22 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         // activePageID is session state; exported/durable configurations always open on the base page.
     }
 
+    /// Presentation-only metadata does not change the functional control graph. Explicit
+    /// configuration loads still change the session revision and retain their safety boundary.
+    public func hasSameFunctionalConfiguration(as other: Self) -> Bool {
+        func functional(_ value: Self) -> Self {
+            var result = value
+            result.scenes = nil
+            result.parameters = value.parameters.map {
+                var parameter = $0
+                parameter.color = nil
+                return parameter
+            }
+            return result
+        }
+        return functional(self) == functional(other)
+    }
+
     public var pageNavigationWarning: String? {
         guard !pages.isEmpty else { return nil }
         let current = activePageID ?? Self.basePageID

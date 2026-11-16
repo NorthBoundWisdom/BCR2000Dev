@@ -372,7 +372,7 @@ final class OutputController: ObservableObject {
         guard var gate else { stop(failure: L10n.text("安全门尚未初始化")); return }
         let time = now()
         guard session.configurationRevision == configurationRevision,
-              session.engine.configuration == configuration
+              session.engine.configuration.hasSameFunctionalConfiguration(as: configuration)
         else {
             stop(failure: L10n.text("配置已变化，请确认使能和限位后重新启动输出"))
             return
