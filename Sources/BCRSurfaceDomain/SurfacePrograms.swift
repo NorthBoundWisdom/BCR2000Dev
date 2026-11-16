@@ -14,6 +14,7 @@ public struct AssignmentPage: Codable, Equatable, Sendable, Identifiable {
 public enum ParameterMutation: Codable, Hashable, Sendable {
     case set(ParameterID, Double)
     case step(ParameterID, Double)
+    case toggle(ParameterID)
     case resetGroup(String)
 }
 
@@ -61,8 +62,39 @@ extension SurfaceMacro {
                     throw MotionSafetyError(L10n.text("宏定义无效"))
                 }
                 if case .step = action, value == 0 { throw MotionSafetyError(L10n.text("宏定义无效")) }
+            case let .toggle(id):
+                guard !id.rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                else { throw MotionSafetyError(L10n.text("宏定义无效")) }
             case .resetGroup: break
             }
         }
     }
+}
+
+public enum MacroStepRejection: LocalizedMessageError, Equatable, Sendable {
+    case unknownParameter(ParameterID), requiresToggle(ParameterID), invalidValue(ParameterID), unknownGroup(String),
+         unknownMacro
+    public var localizedMessage: LocalizedMessage {
+        switch self {
+        case let .unknownParameter(id): "未知参数：\(id)"
+        case let .requiresToggle(id): "切换动作需要开关型参数：\(id)"
+        case let .invalidValue(id): "宏步骤数值无效：\(id)"
+        case let .unknownGroup(group): "未知参数组：\(group)"
+        case .unknownMacro: "未知宏"
+        }
+    }
+}
+
+public struct MacroExecution: Equatable, Sendable {
+    public struct OperationResult: Identifiable, Equatable, Sendable {
+        public enum Outcome: String, Sendable { case applied, rejected }
+        public let id: Int
+        public let outcome: Outcome
+        public let reason: MacroStepRejection?
+    }
+
+    public let macroID: String
+    public let name: String
+    public let steps: [OperationResult]
+    public let effects: [SurfaceEffect]
 }

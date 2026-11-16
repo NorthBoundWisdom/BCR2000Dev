@@ -146,6 +146,7 @@ final class ConsoleViewModel: ObservableObject {
     var canUndo: Bool { deviceWork.session.canUndo }
     var canRedo: Bool { deviceWork.session.canRedo }
     func undo() { deviceWork.undo() }
+    func runMacro(_ id: String) { deviceWork.runMacro(id) }
     func redo() { deviceWork.redo() }
     func captureScene(name: String, overwrite: Bool = false) {
         deviceWork.captureScene(name: name, overwrite: overwrite)

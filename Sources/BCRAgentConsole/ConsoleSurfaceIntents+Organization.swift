@@ -46,3 +46,7 @@ extension ConsoleSurfaceIntents {
         do { try session.highlightGroup(group) } catch { report(error) }
     }
 }
+
+extension ConsoleSurfaceIntents {
+    func runMacro(_ id: String) { session.runMacro(id) }
+}

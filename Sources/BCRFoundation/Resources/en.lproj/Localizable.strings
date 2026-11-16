@@ -1059,3 +1059,9 @@
 "映射不一致" = "Mapping mismatch";
 "输入覆盖审查" = "Input coverage";
 "被动观察 108 个控件并导出带指纹的审查" = "Passively review 108 controls and export fingerprinted evidence";
+"动作" = "Action";
+"最近宏执行结果" = "Latest macro execution";
+"已拒绝" = "Rejected";
+"切换动作需要开关型参数：{0}" = "Toggle requires a toggle parameter: {0}";
+"宏步骤数值无效：{0}" = "Invalid macro step value: {0}";
+"未知参数组：{0}" = "Unknown parameter group: {0}";

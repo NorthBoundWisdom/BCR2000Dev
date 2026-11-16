@@ -468,20 +468,45 @@ public struct SurfaceEngine: Sendable {
         return [.pageChanged] + clearDisplayFeedback(at: now) + feedback(to: removed, at: now) + fullFeedback(at: now)
     }
 
-    public mutating func runMacro(_ id: String, at now: Date = .now) -> [SurfaceEffect] {
-        guard let macro = configuration.macros.first(where: { $0.id == id }) else { return [] }
-        var effects: [SurfaceEffect] = []
-        for action in macro.actions {
-            switch action {
-            case let .set(parameter, value): effects += setParameter(parameter, to: value, at: now)
-            case let .step(parameter, delta):
-                if let current = value(of: parameter), (current + delta).isFinite {
-                    effects += setParameter(parameter, to: current + delta, at: now)
-                }
-            case let .resetGroup(group): effects += resetGroup(group, at: now)
-            }
+    public private(set) var lastMacroExecution: MacroExecution? = nil
+
+    public mutating func runMacro(_ id: String, at now: Date = .now) -> MacroExecution {
+        guard let macro = configuration.macros.first(where: { $0.id == id }) else {
+            let result = MacroExecution(macroID: id, name: id,
+                                        steps: [.init(id: 0, outcome: .rejected, reason: .unknownMacro)], effects: [])
+            lastMacroExecution = result; return result
         }
-        return effects
+        var effects: [SurfaceEffect] = [], results: [MacroExecution.OperationResult] = []
+        for (index, action) in macro.actions.enumerated() {
+            var rejection: MacroStepRejection?
+            switch action {
+            case let .set(parameter, value):
+                if configuration.parameter(parameter) == nil { rejection = .unknownParameter(parameter) }
+                else if !value.isFinite { rejection = .invalidValue(parameter) }
+                else { effects += setParameter(parameter, to: value, at: now) }
+            case let .step(parameter, delta):
+                if let current = value(of: parameter) {
+                    if !delta.isFinite || !(current + delta).isFinite { rejection = .invalidValue(parameter) }
+                    else { effects += setParameter(parameter, to: current + delta, at: now) }
+                } else { rejection = .unknownParameter(parameter) }
+            case let .toggle(parameter):
+                if let definition = configuration.parameter(parameter), let current = value(of: parameter) {
+                    if definition.kind != .toggle { rejection = .requiresToggle(parameter) }
+                    else { effects += setParameter(
+                        parameter,
+                        to: current >= definition.midpoint ? definition.minimum : definition.maximum,
+                        at: now
+                    ) }
+                } else { rejection = .unknownParameter(parameter) }
+            case let .resetGroup(group):
+                if !configuration.parameterGroups.contains(group) { rejection = .unknownGroup(group) }
+                else { effects += resetGroup(group, at: now) }
+            }
+            results.append(.init(id: index, outcome: rejection == nil ? .applied : .rejected, reason: rejection))
+        }
+        let result = MacroExecution(macroID: macro.id, name: macro.name, steps: results, effects: effects)
+        lastMacroExecution = result
+        return result
     }
 
     // MARK: Hardware map / learning
@@ -571,7 +596,7 @@ public struct SurfaceEngine: Sendable {
             return (try? selectPage(id, at: now)) ?? []
         case let .runMacro(id):
             guard isPositive, acceptTrigger(control, at: now) else { return [] }
-            return runMacro(id, at: now)
+            return runMacro(id, at: now).effects
         case let .parameter(id):
             guard let definition = configuration.parameter(id) else {
                 return []

@@ -277,7 +277,21 @@ struct BCRAgentConsoleApp: App {
         let captureData = try captureRows.reduce(Data()) { try $0 + $1.encodedLine() }
         sceneModel.offlineCapture.importData(captureData, name: "offline-preview.jsonl")
         sceneModel.inputReview.source = .mock
+        var macroEngine = SurfaceEngine(hardwareMap: .mockPreset(), configuration: .init(
+            name: "Macro preview", parameters: [.init(id: "x", name: "X")],
+            macros: [.init(
+                id: "preview",
+                name: "Continue after rejection",
+                actions: [.set("x", 20), .toggle("x"), .step("x", 5)]
+            )]
+        ))
+        let macroPreview = macroEngine.runMacro("preview", at: Date(timeIntervalSinceReferenceDate: 0))
         let previews: [(String, AnyView, CGSize)] = [
+            (
+                "macroExecution",
+                AnyView(MacroExecutionResultsView(execution: macroPreview).padding()),
+                CGSize(width: 700, height: 240)
+            ),
             (
                 "inputReview",
                 AnyView(HardwareInputReviewView(controller: sceneModel.inputReview).padding()),
@@ -305,7 +319,7 @@ struct BCRAgentConsoleApp: App {
             ("general", AnyView(GeneralSettingsView(model: model)), SettingsLayout.size)
         ]
         for (name, content, size) in previews {
-            if name == "offline" || name == "inputReview" {
+            if name == "offline" || name == "inputReview" || name == "macroExecution" {
                 // Pure SwiftUI evidence panels render directly; NSView cacheDisplay can omit
                 // their deferred text layers while the transparent window is offscreen.
                 let renderer = ImageRenderer(content: content

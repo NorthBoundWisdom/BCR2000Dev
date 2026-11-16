@@ -50,7 +50,7 @@ final class SimulationTests: XCTestCase {
         let raw = #"{"version":1,"name":"legacy","parameters":[{"id":"arm.enabled","name":"Enable","minimum":0,"maximum":1,"agentWritable":true}],"assignments":[]}"#
         let old = try SurfaceConfigurationCodec.decode(Data(raw.utf8)).migrated()
         XCTAssertTrue(try XCTUnwrap(old.parameter("arm.enabled")).externallyProtected)
-        XCTAssertEqual(old.version, 9)
+        XCTAssertEqual(old.version, 10)
         let ordinary = SurfaceConfiguration(name: "neutral", parameters: [.init(id: "arm.enabled", name: "Ordinary")])
         let decoded = try SurfaceConfigurationCodec.decode(JSONEncoder().encode(ordinary))
         XCTAssertFalse(try XCTUnwrap(decoded.parameter("arm.enabled")).externallyProtected)

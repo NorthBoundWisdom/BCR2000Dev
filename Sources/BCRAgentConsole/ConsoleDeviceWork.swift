@@ -483,6 +483,7 @@ final class ConsoleDeviceWork: ObservableObject {
     func setParameter(_ id: ParameterID, to value: Double) { surfaceIntents.setParameter(id, to: value) }
     func resetGroup(_ group: String) { surfaceIntents.resetGroup(group) }
     func undo() { surfaceIntents.undo() }
+    func runMacro(_ id: String) { surfaceIntents.runMacro(id) }
     func redo() { surfaceIntents.redo() }
     func highlightGroup(_ group: String?) { surfaceIntents.highlightGroup(group) }
     func setParameterColor(_ color: ParameterColor?, for id: ParameterID) { surfaceIntents.setParameterColor(

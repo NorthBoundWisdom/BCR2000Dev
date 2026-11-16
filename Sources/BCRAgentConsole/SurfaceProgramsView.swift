@@ -11,7 +11,8 @@ import SwiftUI
 
 private struct MacroActionDraft: Identifiable {
     let id = UUID()
-    var step = false
+    enum Kind: String, CaseIterable { case set, step, toggle }
+    var kind: Kind = .set
     var parameter: ParameterID
     var value: Double = 0
 }
@@ -64,8 +65,15 @@ struct SurfaceProgramsView: View {
                                 Text(BuiltInNamePresentation.displayName($0.name)).tag($0.id)
                             }
                         }
-                        Toggle(L10n.text("步进"), isOn: $action.step)
-                        TextField(L10n.text("值"), value: $action.value, format: .number).frame(width: 90)
+                        Picker(L10n.text("动作"), selection: $action.kind) {
+                            Text(L10n.text("设为指定值")).tag(MacroActionDraft.Kind.set)
+                            Text(L10n.text("步进")).tag(MacroActionDraft.Kind.step)
+                            Text(L10n.text("切换")).tag(MacroActionDraft.Kind.toggle)
+                        }
+                        .accessibilityIdentifier("macros.action.kind.\(action.id)")
+                        if action.kind != .toggle {
+                            TextField(L10n.text("值"), value: $action.value, format: .number).frame(width: 90)
+                        }
                         Button { actions.removeAll { $0.id == action.id } } label: { Image(systemName: "minus.circle") }
                             .accessibilityLabel(L10n.text("删除操作"))
                     }
@@ -79,11 +87,13 @@ struct SurfaceProgramsView: View {
                     Button(L10n.text("保存宏")) {
                         perform {
                             var next = model.configuration
-                            let mutations = actions
-                                .map { $0.step ? ParameterMutation.step($0.parameter, $0.value) : .set(
-                                    $0.parameter,
-                                    $0.value
-                                ) }
+                            let mutations = actions.map { action -> ParameterMutation in
+                                switch action.kind {
+                                case .set: .set(action.parameter, action.value)
+                                case .step: .step(action.parameter, action.value)
+                                case .toggle: .toggle(action.parameter)
+                                }
+                            }
                             try next.addMacro(.init(name: macroName, actions: mutations))
                             try model.updatePrograms(next)
                             actions = []; macroName = ""
@@ -94,11 +104,18 @@ struct SurfaceProgramsView: View {
                     HStack {
                         Text("\(macro.name) · \(macro.actions.count)")
                         Spacer()
+                        Button(L10n.text("运行")) { model.runMacro(macro.id) }
+                            .accessibilityIdentifier("macros.run.\(macro.id)")
                         Button(L10n.text("删除"), role: .destructive) { deletingMacro = macro }
                     }
                 }
                 Text(L10n.text("从检查器将页面或宏分配给按键。页面共享参数值；宏按顺序执行，最多 64 项。"))
                     .font(.caption)
+            }
+            if let execution = model.engine.lastMacroExecution {
+                Section(L10n.text("最近宏执行结果")) {
+                    MacroExecutionResultsView(execution: execution)
+                }
             }
             if let error { Text(error).foregroundStyle(.red) }
         }

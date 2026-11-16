@@ -89,6 +89,7 @@ public extension SurfaceConfiguration {
                 case let .step(id, delta):
                     invalid = invalid || !delta.isFinite || delta == 0 || parameter(id)
                         .map { !($0.minimum + delta).isFinite || !($0.maximum + delta).isFinite } != false
+                case let .toggle(id): invalid = invalid || parameter(id)?.kind != .toggle
                 case let .resetGroup(group): invalid = invalid || !parameterGroups.contains(group)
                 }
             }

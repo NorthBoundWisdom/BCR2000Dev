@@ -315,7 +315,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 9
+    public static let currentVersion = 10
     public static let basePageID = "__base__"
 
     public var version: Int
@@ -524,7 +524,7 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         for index in pages.indices { pages[index].assignments.removeAll { $0.target.parameterID == id } }
         macros = macros.filter { macro in !macro.actions.contains { action in
             switch action { case let .set(parameter, _),
-                 let .step(parameter, _): parameter == id; case .resetGroup: false }
+                 let .step(parameter, _), let .toggle(parameter): parameter == id; case .resetGroup: false }
         } }
         let macroIDs = Set(macros.map(\.id))
         baseAssignments

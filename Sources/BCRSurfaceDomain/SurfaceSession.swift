@@ -481,6 +481,17 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    @discardableResult
+    public func runMacro(_ id: String) -> MacroExecution {
+        let execution = withParameterHistory {
+            let result = engine.runMacro(id, at: now())
+            perform(result.effects)
+            return result
+        }
+        publishChange()
+        return execution
+    }
+
     public func resetGroup(_ group: String) {
         withParameterHistory { perform(engine.resetGroup(group, at: now())) }
         publishChange()
