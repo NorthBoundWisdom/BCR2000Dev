@@ -71,7 +71,8 @@ final class ConsoleSurfaceIntents: ConsoleDeviceOwner {
     }
 
     func setParameter(_ id: ParameterID, to value: Double) {
-        session.setParameter(id, to: value)
+        do { try session.setAuthorizedParameter(id, to: value) }
+        catch { report(error) }
     }
 
     func resetGroup(_ group: String) {

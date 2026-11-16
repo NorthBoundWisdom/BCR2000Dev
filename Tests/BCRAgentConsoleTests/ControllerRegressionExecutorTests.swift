@@ -560,6 +560,8 @@ private final class RegressionInstance {
                                              "source_id": regressionValue(session.connection.connectedSourceID)])
         case "configure_permissions":
             gateway.permissions.parameterWrite = arguments["display"] as? Bool ?? false
+            session.configureParameterWrites(allowsWrite: arguments["display"] as? Bool ?? false,
+                                             allowsDisplay: arguments["display"] as? Bool ?? false)
             rawAppend("native-permissions", ["remote_parameter_write": gateway.permissions.parameterWrite,
                                              "immutable_gui_hardware_policy": session.hardwareOutput.rawValue])
         case "write_parameter":
@@ -788,22 +790,15 @@ private final class RegressionInstance {
             let accepted = consumeDisplayBudget(); monotonicResults.append(accepted)
             rawAppend("native-budget-result", ["monotonic": clock.monotonic, "wall": clock.wall, "accepted": accepted])
         case "authority_reply":
-            // Existing actual-feedback API is not an authority rejection-to-UI connection.
-            try session.setActualFeedback([ParameterID(regressionString(
-                arguments,
-                "parameter_id"
-            )): regressionNumber(arguments, "actual_value")])
-            authorityMissing = true
-            rawAppend(
-                "missing-product-authority-wiring",
-                [
-                    "actual_feedback": Dictionary(uniqueKeysWithValues: session.engine.actualFeedbackValues.map { (
-                        $0.key.rawValue,
-                        $0.value
-                    ) }),
-                    "notice": regressionValue(context.presentation.notice?.text)
-                ]
-            )
+            let parameter = ParameterID(try regressionString(arguments, "parameter_id"))
+            let actual = try regressionNumber(arguments, "actual_value")
+            let accepted = arguments["accepted"] as? Bool ?? false
+            let reason = try regressionString(arguments, "reason")
+            session.parameterAuthority = { request in
+                guard request.parameter == parameter else { return .accept }
+                return accepted ? .accept : .reject(actual: actual, reason: reason)
+            }
+            rawAppend("native-authority-installed", ["parameter": parameter.rawValue, "accepted": accepted])
         case "receive_unconfigured":
             let element = try regressionString(arguments, "element_id")
             let message = element == "meter" ? MIDIVoiceMessage
@@ -815,18 +810,22 @@ private final class RegressionInstance {
             device.onMessages?([message]); rawAppend("unconfigured-input", ["bytes": message.midi1Bytes])
         case "attach_endpoint":
             let name = try regressionString(arguments, "name")
-            let native = MIDIEndpointDescriptor(id: Int32(endpointRows.count + 10), name: name)
+            let provenance: MIDIEndpointProvenance = try regressionString(arguments, "provenance") == "remote_virtual" ?
+                .remoteVirtual : .physicalUSB
+            let native = MIDIEndpointDescriptor(id: Int32(endpointRows.count + 10), name: name, provenance: provenance)
             device.connection = MIDIConnectionSnapshot(connectedSource: native.name, connectedDestination: native.name)
             device.connection.connectedSourceID = native.id; device.connection.connectedDestinationID = native.id
+            device.connection.sourceEndpoints = [native]; device.connection.destinationEndpoints = [native]
             device.onConnection?(device.connection)
             endpointRows.append([
                 "neutral_endpoint": arguments["endpoint_id"]!,
                 "requested_provenance": arguments["provenance"]!,
                 "native_id": native.id,
                 "native_name": native.name,
-                "native_provenance": regressionNull
+                "native_provenance": device.connection.sourceEndpoints.first?.provenance.rawValue ?? "unknown",
+                "connection_generation": session.connectionGeneration
             ])
-            rawAppend("native-endpoint-without-provenance-field", endpointRows.last!)
+            rawAppend("native-endpoint-provenance", endpointRows.last!)
         case "inspect": break
         default: throw RegressionError.operation(operation)
         }

@@ -20,6 +20,7 @@ public struct MonitorEvent: Identifiable, Equatable, Sendable {
     public let ignored: Bool
     public let origin: SurfaceWriteOrigin
     public let delivery: FeedbackDelivery?
+    public var endpoint: MIDIEndpointSource? = nil
 }
 
 /// Semantic notifications let the app own wording, selection and follow-touch policy.
@@ -47,6 +48,29 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
 /// engine effects, including Agent LEDs. Persistence and Agent execution are injected.
 @MainActor
 public final class SurfaceSession {
+    public private(set) var parameterWriteContext: ParameterWriteContext?
+    public var parameterAuthority: (@MainActor (ParameterAuthorityRequest) throws -> ParameterAuthorityDecision)?
+    public private(set) var connectionGeneration: UInt64 = 0
+
+    /// Explicit host operation; remote role settings do not implicitly revoke local input.
+    public func configureParameterWrites(allowsWrite: Bool, allowsDisplay: Bool,
+                                         identities: Set<ParameterWriteIdentity> = [.local, .remote, .history],
+                                         parameters: Set<ParameterID>? = nil)
+    {
+        parameterWriteContext = .init(source: source, generation: inputEvents.generation,
+                                      mappingRevision: mappingContextRevision, identities: identities,
+                                      parameters: parameters, allowsWrite: allowsWrite, allowsDisplay: allowsDisplay)
+        clearFeedbackQueue()
+    }
+
+    public func authorizeParameterWrite(_ id: ParameterID, identity: ParameterWriteIdentity) throws {
+        guard let context = parameterWriteContext else { return }
+        guard context.source == source, context.generation == inputEvents.generation,
+              context.mappingRevision == mappingContextRevision else { throw ParameterWriteFailure.staleContext }
+        guard context.identities.contains(identity), context.parameters?.contains(id) != false,
+              context.allowsWrite else { throw ParameterWriteFailure.denied }
+    }
+
     public private(set) var source: DeviceSource = .mock
     public private(set) var engine: SurfaceEngine
     /// Whole-configuration replacement resets live values even when definitions compare equal.
@@ -283,8 +307,8 @@ public final class SurfaceSession {
             guard engine.configuration.parameter(id)?.agentWritable == true, !isMCPProtectedParameter(id)
             else { throw ParameterSceneError.protectedParameter(id) }
         }
-        withParameterHistory {
-            for key in changes.keys.sorted() { setParameter(ParameterID(key), to: changes[key]!) }
+        try withParameterHistory {
+            try setAuthorizedParameters(changes.keys.sorted().map { (ParameterID($0), changes[$0]!) }, identity: .local)
         }
         return SceneRecallResult(missingParameters: missing)
     }
@@ -302,11 +326,17 @@ public final class SurfaceSession {
             guard engine.configuration.parameter(id)?.agentWritable == true, !isMCPProtectedParameter(id)
             else { throw ParameterHistoryError(parameter: id) }
         }
+        for id in existing.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
+            try authorizeParameterWrite(id, identity: .history)
+            try checkParameterAuthority(id, value: existing[id]!, identity: .history)
+        }
+        for id in existing.keys { try authorizeParameterWrite(id, identity: .history) }
         let before = engine.parameterValues
         restoringHistory = true
         defer { restoringHistory = false }
         withParameterHistory {
-            for id in existing.keys.sorted(by: { $0.rawValue < $1.rawValue }) { setParameter(id, to: existing[id]!) }
+            let entries = existing.keys.sorted(by: { $0.rawValue < $1.rawValue }).map { ($0, existing[$0]!) }
+            commitAuthorizedBatch(entries)
         }
         if redo { valueHistory.didRedo(actualBefore: before, actualAfter: engine.parameterValues) }
         else { valueHistory.didUndo(actualBefore: before, actualAfter: engine.parameterValues) }
@@ -344,7 +374,16 @@ public final class SurfaceSession {
         mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
         (hardwareDevice as? any SurfaceSysExObserving)?.onSysExObservation = { [weak self] in self?.observeSysEx($0) }
-        hardwareDevice.onMessages = { [weak self] in self?.receive($0, from: .hardware) }
+        hardwareDevice.onMessages = { [weak self] messages in
+            guard let self else { return }
+            let endpoint = self.endpointSource(source: .hardware, direction: .input)
+            self.receive(messages, from: .hardware, endpoint: endpoint)
+        }
+        if let observing = hardwareDevice as? any SurfaceInputObserving {
+            observing.onInputBatch = { [weak self] batch in
+                self?.receive(batch.messages, from: .hardware, endpoint: batch.endpoint)
+            }
+        }
         hardwareDevice.onConnection = { [weak self] in self?.handleConnection($0) }
         mockDevice.onMessages = { [weak self] in self?.receive($0, from: .mock) }
     }
@@ -371,9 +410,15 @@ public final class SurfaceSession {
         guard source == .hardware, feedbackPolicy.enabled else { return }
         let batch = scheduler?.drain(at: now()) ?? []
         for (index, value) in batch.enumerated() {
-            let result = withWriteOrigin(value.origin) { transmitNow(value.message) }
+            let result = withWriteOrigin(value.origin) { transmitNow(value.message, expectedEndpoint: value.endpoint,
+                                                                     expectedMappingRevision: value.mappingRevision) }
             if result == .failed {
-                for remaining in batch[index...] { scheduler?.enqueue(remaining.message, origin: remaining.origin) }
+                for remaining in batch[index...] { scheduler?.enqueue(
+                    remaining.message,
+                    origin: remaining.origin,
+                    endpoint: remaining.endpoint,
+                    mappingRevision: remaining.mappingRevision
+                ) }
                 break
             }
         }
@@ -447,6 +492,7 @@ public final class SurfaceSession {
     }
 
     public func turn(_ control: BCRControlID, by delta: Int) {
+        guard preflightControlWrite(control, delta: delta, pressed: nil) else { return }
         withParameterHistory(key: "control:\(control)") {
             if source == .mock { mockDevice.turn(control, by: delta) }
             else { perform(engine.adjust(control, by: delta, at: now())) }
@@ -455,6 +501,7 @@ public final class SurfaceSession {
     }
 
     public func press(_ control: BCRControlID) {
+        guard preflightControlWrite(control, delta: nil, pressed: true) else { return }
         withParameterHistory {
             if source == .mock { mockDevice.press(control) }
             else { perform(engine.press(control, isDown: true, at: now())) }
@@ -463,6 +510,7 @@ public final class SurfaceSession {
     }
 
     public func release(_ control: BCRControlID) {
+        guard preflightControlWrite(control, delta: nil, pressed: false) else { return }
         withParameterHistory {
             if source == .mock { mockDevice.release(control) }
             else { perform(engine.press(control, isDown: false, at: now())) }
@@ -470,19 +518,122 @@ public final class SurfaceSession {
         publishChange()
     }
 
-    public func setParameter(_ id: ParameterID, to value: Double) {
-        withParameterHistory(key: "parameter:\(id)") {
-            perform(engine.setParameter(id, to: value, at: now()))
+    private func authorizeCandidateValues(_ candidate: SurfaceEngine, identity: ParameterWriteIdentity) throws {
+        let changed = candidate.parameterValues.keys.sorted(by: { $0.rawValue < $1.rawValue })
+            .filter { candidate.value(of: $0) != engine.value(of: $0) }
+        for id in changed {
+            try authorizeParameterWrite(id, identity: identity)
+            try checkParameterAuthority(id, value: candidate.value(of: id)!, identity: identity)
         }
+        for id in changed { try authorizeParameterWrite(id, identity: identity) }
+    }
+
+    private func preflightControlWrite(_ control: BCRControlID, delta: Int?, pressed: Bool?) -> Bool {
+        guard parameterWriteContext != nil || parameterAuthority != nil else { return true }
+        var candidate = engine
+        if let delta { _ = candidate.adjust(control, by: delta, at: now()) }
+        if let pressed { _ = candidate.press(control, isDown: pressed, at: now()) }
+        do {
+            try authorizeCandidateValues(candidate, identity: writeOrigin == .agent ? .remote : .local)
+            return true
+        } catch {
+            onEvent?(.failed(.feedback, error.localizedDescription)); publishChange(); return false
+        }
+    }
+
+    public func setParameter(_ id: ParameterID, to value: Double) {
+        do { try setAuthorizedParameter(id, to: value) }
+        catch { onEvent?(.failed(.feedback, error.localizedDescription)); publishChange() }
+    }
+
+    public func setAuthorizedParameter(_ id: ParameterID, to value: Double,
+                                       identity: ParameterWriteIdentity? = nil) throws
+    {
+        try setAuthorizedParameters([(id, value)], identity: identity ?? (writeOrigin == .agent ? .remote : .local))
+    }
+
+    public func setAuthorizedParameters(_ entries: [(ParameterID, Double)], identity: ParameterWriteIdentity) throws {
+        for (id, value) in entries {
+            try authorizeParameterWrite(id, identity: identity)
+            try checkParameterAuthority(id, value: value, identity: identity)
+        }
+        // An authority callback may revoke the context synchronously; check the whole batch again.
+        for (id, _) in entries { try authorizeParameterWrite(id, identity: identity) }
+        commitAuthorizedBatch(entries)
+    }
+
+    private func commitAuthorizedBatch(_ entries: [(ParameterID, Double)]) {
+        if parameterWriteContext == nil, parameterAuthority == nil {
+            for (id, value) in entries { commitParameter(id, value: value) }
+        } else {
+            // Commit the entire authorized batch before any synchronous device callback can run.
+            var candidate = engine
+            let effects = entries.flatMap { candidate.setParameter($0.0, to: $0.1, at: now()) }
+            withParameterHistory(key: entries.count == 1 ? "parameter:\(entries[0].0)" : nil) {
+                engine = candidate
+                perform(effects)
+                for (id, _) in entries { journalParameterWrite(id) }
+            }
+            publishChange()
+        }
+    }
+
+    private func journalParameterWrite(_ id: ParameterID) {
         inputEvents.append(kind: "parameter.write", payload: .object([
             "parameter_id": .string(id.rawValue), "origin": .string(writeOrigin.rawValue),
             "mapped_value": engine.value(of: id).map(JSONValue.double) ?? .null
         ]))
+    }
+
+    private func commitParameter(_ id: ParameterID, value: Double) {
+        withParameterHistory(key: "parameter:\(id)") {
+            perform(engine.setParameter(id, to: value, at: now()))
+        }
+        journalParameterWrite(id)
         publishChange()
+    }
+
+    private func checkParameterAuthority(_ id: ParameterID, value: Double,
+                                         identity: ParameterWriteIdentity) throws
+    {
+        guard let parameterAuthority else { return }
+        let request = ParameterAuthorityRequest(parameter: id, requestedValue: value, identity: identity,
+                                                source: source, generation: inputEvents.generation,
+                                                mappingRevision: mappingContextRevision)
+        let decision = try parameterAuthority(request)
+        guard request.source == source, request.generation == inputEvents.generation,
+              request.mappingRevision == mappingContextRevision else { throw ParameterWriteFailure.staleContext }
+        if case let .reject(actual, reason) = decision {
+            guard actual.isFinite, let definition = engine.configuration.parameter(id),
+                  definition.clamp(actual) == actual
+            else {
+                throw ParameterWriteFailure.invalidAuthority
+            }
+            // Restore the one authority owner, with no feedback effects, input journal or history entry.
+            _ = engine.setParameter(id, to: actual, at: now())
+            clearFeedbackQueue()
+            publishChange()
+            throw ParameterWriteFailure.authorityRejected(reason)
+        }
     }
 
     @discardableResult
     public func runMacro(_ id: String) -> MacroExecution {
+        if parameterWriteContext != nil || parameterAuthority != nil {
+            var candidate = engine
+            let result = candidate.runMacro(id, at: now())
+            do {
+                try authorizeCandidateValues(candidate, identity: writeOrigin == .agent ? .remote : .local)
+                withParameterHistory { engine = candidate; perform(result.effects) }
+                publishChange()
+                return result
+            } catch {
+                onEvent?(.failed(.feedback, error.localizedDescription)); publishChange()
+                return MacroExecution(macroID: result.macroID, name: result.name,
+                                      steps: result.steps.map { .init(id: $0.id, outcome: .rejected,
+                                                                      reason: .authorizationDenied) }, effects: [])
+            }
+        }
         let execution = withParameterHistory {
             let result = engine.runMacro(id, at: now())
             perform(result.effects)
@@ -493,6 +644,12 @@ public final class SurfaceSession {
     }
 
     public func resetGroup(_ group: String) {
+        if parameterWriteContext != nil || parameterAuthority != nil {
+            let entries = engine.configuration.parameters.filter { $0.group == group }.map { ($0.id, $0.defaultValue) }
+            do { try setAuthorizedParameters(entries, identity: writeOrigin == .agent ? .remote : .local) }
+            catch { onEvent?(.failed(.feedback, error.localizedDescription)); publishChange() }
+            return
+        }
         withParameterHistory { perform(engine.resetGroup(group, at: now())) }
         publishChange()
     }
@@ -758,13 +915,23 @@ public final class SurfaceSession {
         publishChange()
     }
 
-    private func receive(_ messages: [MIDIVoiceMessage], from inputSource: DeviceSource) {
+    private func receive(_ messages: [MIDIVoiceMessage], from inputSource: DeviceSource,
+                         endpoint: MIDIEndpointSource? = nil)
+    {
+        let batchEndpoint = endpoint ?? endpointSource(source: inputSource, direction: .input)
+        let batchGeneration = inputEvents.generation
         for rawMessage in messages {
+            guard batchGeneration == inputEvents.generation else { break }
             let inputGeneration = inputEvents.generation
-            let ignored = inputSource != source || diagnosticReadbackActive
+            let inputEndpoint = batchEndpoint
+            let ignored = inputSource != source || diagnosticReadbackActive ||
+                (inputSource == .hardware && endpoint != nil && endpoint != endpointSource(
+                    source: .hardware,
+                    direction: .input
+                ))
             let map = inputSource == .hardware ? hardwareMap : mock.preset
             let rawControl = map.control(for: rawMessage.controlID)
-            log(.input, rawMessage, source: inputSource, control: rawControl, ignored: ignored)
+            log(.input, rawMessage, source: inputSource, control: rawControl, ignored: ignored, endpoint: inputEndpoint)
             guard !ignored, inputGeneration == inputEvents.generation else { continue }
             var message = rawMessage
             if case let .controlChange(channel, number, _) = rawMessage {
@@ -828,6 +995,14 @@ public final class SurfaceSession {
                 } catch {
                     onEvent?(.failed(.hardwareInput, "Trusted hardware input rejected before commit: \(error)"))
                     continue
+                }
+                engine = candidate
+            } else if inputSource == .mock, parameterWriteContext != nil || parameterAuthority != nil {
+                var candidate = engine
+                effects = candidate.handleInput(message, at: now())
+                do { try authorizeCandidateValues(candidate, identity: writeOrigin == .agent ? .remote : .local) }
+                catch {
+                    onEvent?(.failed(.feedback, error.localizedDescription)); continue
                 }
                 engine = candidate
             } else {
@@ -906,7 +1081,9 @@ public final class SurfaceSession {
         let canCoalesce = source == .hardware && feedbackPolicy.enabled && connection.connectedDestination != nil
         switch FeedbackScheduler.dispatch(plan, canCoalesce: canCoalesce) {
         case .enqueue:
-            scheduler?.enqueue(plan.message, origin: plan.origin)
+            scheduler?.enqueue(plan.message, origin: plan.origin,
+                               endpoint: endpointSource(source: source, direction: .output),
+                               mappingRevision: mappingContextRevision)
             notifyFeedbackQueue()
         case .send:
             _ = withWriteOrigin(plan.origin) { transmitNow(plan.message) }
@@ -914,8 +1091,25 @@ public final class SurfaceSession {
     }
 
     @discardableResult
-    private func transmitNow(_ message: MIDIVoiceMessage) -> FeedbackDelivery {
+    private func transmitNow(_ message: MIDIVoiceMessage, expectedEndpoint: MIDIEndpointSource? = nil,
+                             expectedMappingRevision: UInt64? = nil) -> FeedbackDelivery
+    {
         let device: any SurfaceDevice = source == .mock ? mockDevice : hardwareDevice
+        let endpoint = endpointSource(source: source, direction: .output)
+        if let expectedEndpoint, expectedEndpoint != endpoint {
+            log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
+                ignored: true, delivery: .suppressed, endpoint: expectedEndpoint)
+            return .suppressed
+        }
+        if let context = parameterWriteContext,
+           context.source != source || context.generation != inputEvents.generation ||
+           context.mappingRevision != mappingContextRevision || !context.allowsDisplay
+        {
+            log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
+                ignored: true, delivery: .suppressed, endpoint: endpoint)
+            return .suppressed
+        }
+        if let expectedMappingRevision, expectedMappingRevision != mappingContextRevision { return .suppressed }
         let delivery: FeedbackDelivery
         if device.connection.connectedDestination == nil {
             droppedFeedbackCount += 1
@@ -934,17 +1128,24 @@ public final class SurfaceSession {
             }
         }
         log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
-            ignored: false, delivery: delivery)
+            ignored: false, delivery: delivery, endpoint: endpoint)
         return delivery
     }
 
     private func handleConnection(_ snapshot: MIDIConnectionSnapshot) {
         let wasConnected = connection.isConnected
-        let routeChanged = connection.connectedSourceID != snapshot.connectedSourceID
+        let routeChanged = connection.transportGeneration != snapshot.transportGeneration
+            || connection.connectedSourceID != snapshot.connectedSourceID
             || connection.connectedDestinationID != snapshot.connectedDestinationID
             || connection.connectedSource != snapshot.connectedSource
             || connection.connectedDestination != snapshot.connectedDestination
+            || connection.sourceEndpoints.first(where: { $0.id == connection.connectedSourceID })?.provenance !=
+            snapshot.sourceEndpoints.first(where: { $0.id == snapshot.connectedSourceID })?.provenance
+            || connection.destinationEndpoints.first(where: { $0.id == connection.connectedDestinationID })?
+            .provenance !=
+            snapshot.destinationEndpoints.first(where: { $0.id == snapshot.connectedDestinationID })?.provenance
         if snapshot.isConnected != wasConnected || routeChanged {
+            connectionGeneration = snapshot.transportGeneration.map(UInt64.init) ?? (connectionGeneration &+ 1)
             nrpnAssembler.reset(); diagnosticReadbackActive = false; diagnosticToken = nil
             invalidateInputEpoch("connection_changed")
         }
@@ -963,14 +1164,26 @@ public final class SurfaceSession {
         publishChange()
     }
 
+    private func endpointSource(source: DeviceSource, direction: MIDIObservationDirection) -> MIDIEndpointSource? {
+        let snapshot = source == .mock ? mockDevice.connection : connection
+        let id = direction == .input ? snapshot.connectedSourceID : snapshot.connectedDestinationID
+        let descriptors = direction == .input ? snapshot.sourceEndpoints : snapshot.destinationEndpoints
+        let descriptor = descriptors.first { $0.id == id }
+        return MIDIEndpointSource(endpointID: id.map(String.init) ?? "unknown",
+                                  connectionGeneration: connectionGeneration,
+                                  provenance: source == .mock ? .localVirtual : descriptor?.provenance ?? .unknown)
+    }
+
     private func log(
         _ direction: MIDIObservationDirection, _ message: MIDIVoiceMessage,
-        source: DeviceSource, control: BCRControlID?, ignored: Bool, delivery: FeedbackDelivery? = nil
+        source: DeviceSource, control: BCRControlID?, ignored: Bool, delivery: FeedbackDelivery? = nil,
+        endpoint: MIDIEndpointSource? = nil
     ) {
         nextEventID += 1
         events.append(MonitorEvent(id: nextEventID, time: now(), monotonicTime: historyTime.now(), direction: direction,
                                    source: source, message: message, control: control, ignored: ignored,
-                                   origin: writeOrigin, delivery: delivery))
+                                   origin: writeOrigin, delivery: delivery,
+                                   endpoint: endpoint ?? endpointSource(source: source, direction: direction)))
         let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
         if let event = events.last {
             for observer in Array(monitorObservers.values) { observer(event, echo) }

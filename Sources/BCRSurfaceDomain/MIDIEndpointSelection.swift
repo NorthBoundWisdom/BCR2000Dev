@@ -1,12 +1,32 @@
 import BCRFoundation
 import Foundation
 
+public enum MIDIEndpointProvenance: String, Codable, Sendable {
+    case unknown, physicalUSB, localVirtual, remoteVirtual
+}
+
+public struct MIDIEndpointSource: Codable, Equatable, Sendable {
+    public let endpointID: String
+    public let deviceID: String?
+    public let connectionGeneration: UInt64
+    public let provenance: MIDIEndpointProvenance
+    public init(endpointID: String, deviceID: String? = nil, connectionGeneration: UInt64,
+                provenance: MIDIEndpointProvenance)
+    {
+        self.endpointID = endpointID; self.deviceID = deviceID
+        self.connectionGeneration = connectionGeneration; self.provenance = provenance
+    }
+}
+
 public struct MIDIEndpointDescriptor: Equatable, Identifiable, Sendable {
     public let id: Int32
     public let name: String
     public let availabilityKnown: Bool
-    public init(id: Int32, name: String, availabilityKnown: Bool = true) {
-        self.id = id; self.name = name; self.availabilityKnown = availabilityKnown
+    public let provenance: MIDIEndpointProvenance
+    public init(id: Int32, name: String, availabilityKnown: Bool = true,
+                provenance: MIDIEndpointProvenance = .unknown)
+    {
+        self.id = id; self.name = name; self.availabilityKnown = availabilityKnown; self.provenance = provenance
     }
 }
 

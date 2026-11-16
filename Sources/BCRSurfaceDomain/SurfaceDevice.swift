@@ -21,6 +21,7 @@ public enum HardwareOutputPolicy: String, CaseIterable, Sendable {
 public struct MIDIConnectionSnapshot: Equatable, Sendable {
     public var sourceEndpoints: [MIDIEndpointDescriptor] = []
     public var destinationEndpoints: [MIDIEndpointDescriptor] = []
+    public var transportGeneration: UInt?
     public var connectedSourceID: Int32?
     public var connectedDestinationID: Int32?
     public var sourceNames: [String] = []
@@ -136,4 +137,18 @@ public final class MockSurfaceDevice: SurfaceDevice {
     public func release(_ control: BCRControlID) {
         if let message = model.release(control) { onMessages?([message]) }
     }
+}
+
+/// Transport-stamped input, captured before any actor/queue handoff.
+public struct SurfaceInputBatch: Equatable, Sendable {
+    public let messages: [MIDIVoiceMessage]
+    public let endpoint: MIDIEndpointSource
+    public init(messages: [MIDIVoiceMessage], endpoint: MIDIEndpointSource) {
+        self.messages = messages; self.endpoint = endpoint
+    }
+}
+
+@MainActor
+public protocol SurfaceInputObserving: AnyObject {
+    var onInputBatch: (@MainActor (SurfaceInputBatch) -> Void)? { get set }
 }

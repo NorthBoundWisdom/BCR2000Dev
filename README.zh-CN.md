@@ -341,3 +341,6 @@ git diff --check
 ## Linux 可移植部分
 
 纯 Foundation 值类型、领域状态、Provider 路由、历史/场景、录制证据、离线重播和输入覆盖在 Linux 有独立包目标；GUI、CoreMIDI、Network.framework 宿主仍仅支持 macOS。Linux CI 使用 `swift:6.2-noble`，实际逐例核对与范围见[目标审计](docs/testing/linux-targets.md)。
+
+宿主的可撤销动态授权、受信权威拒绝回滚与内部端点来源见
+[控制器写入边界](docs/controller-write-boundaries.md)。默认 Provider 1.0 线协议不变；这些软件证据不授予实体资格。

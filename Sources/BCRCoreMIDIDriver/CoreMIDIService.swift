@@ -75,13 +75,14 @@ enum CoreMIDIEndpointAvailability {
 /// Main-actor device boundary. The transport only decodes and hands off value batches;
 /// connection state and session callbacks are accessed exclusively on the main actor.
 @MainActor
-public final class CoreMIDIService: MIDIService, SurfaceSysExObserving {
+public final class CoreMIDIService: MIDIService, SurfaceSysExObserving, SurfaceInputObserving {
     public var supportsStartupConfiguration: Bool { true }
     static let snapshotRequest: [UInt8] = [0xF0, 0, 0x20, 0x32, 0x7F, 0x15, 0x43, 0xF7]
     public var supportsSnapshotReadback: Bool { true }
     public private(set) var connection = MIDIConnectionSnapshot()
     public var onSysExObservation: (@MainActor (Data) -> Void)?
     public var onMessages: (@MainActor ([MIDIVoiceMessage]) -> Void)?
+    public var onInputBatch: (@MainActor (SurfaceInputBatch) -> Void)?
     public var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     private var transport: CoreMIDITransport?
     private var transportReady = false
@@ -126,9 +127,9 @@ public final class CoreMIDIService: MIDIService, SurfaceSysExObserving {
     private func makeTransport() -> CoreMIDITransport {
         CoreMIDITransport(
             selection: selection,
-            onMessages: { [weak self] messages, generation, receivedAt in
+            onMessages: { [weak self] messages, generation, receivedAt, endpoint in
                 Task { @MainActor [weak self] in
-                    self?.receive(messages, generation: generation, receivedAt: receivedAt)
+                    self?.receive(messages, generation: generation, receivedAt: receivedAt, endpoint: endpoint)
                 }
             },
             onSysEx: { [weak self] chunks, generation in
@@ -250,10 +251,16 @@ public final class CoreMIDIService: MIDIService, SurfaceSysExObserving {
         }
     }
 
-    private func receive(_ messages: [MIDIVoiceMessage], generation: UInt, receivedAt: Double) {
+    private func receive(_ messages: [MIDIVoiceMessage], generation: UInt, receivedAt: Double,
+                         endpoint: MIDIEndpointSource)
+    {
         guard generation == inputGeneration else { return }
         guard startupID == nil || !holdsInput else { return }
-        guard let id = snapshotID else { onMessages?(messages); return }
+        guard let id = snapshotID else {
+            if let onInputBatch { onInputBatch(.init(messages: messages, endpoint: endpoint)) }
+            else { onMessages?(messages) }
+            return
+        }
         // The quiet window is the device's silence, measured at IO receipt: a busy main actor
         // (sheet dismissal, first layout) must not stretch it by delivering the burst late.
         snapshotActivity = max(snapshotActivity, receivedAt)
@@ -486,7 +493,7 @@ public final class CoreMIDIService: MIDIService, SurfaceSysExObserving {
 /// Owns CoreMIDI objects on a private serial queue. The receive callback only copies/decodes
 /// packet words and immediately hands value types to the application.
 private final class CoreMIDITransport: @unchecked Sendable {
-    typealias MessageHandler = @Sendable ([MIDIVoiceMessage], UInt, Double) -> Void
+    typealias MessageHandler = @Sendable ([MIDIVoiceMessage], UInt, Double, MIDIEndpointSource) -> Void
     typealias ConnectionHandler = @Sendable (MIDIConnectionSnapshot, UInt) -> Void
     typealias SysExHandler = @Sendable ([MIDISysEx7Chunk], UInt) -> Void
 
@@ -504,6 +511,14 @@ private final class CoreMIDITransport: @unchecked Sendable {
     private var isStarted = false
     private var selection: MIDIEndpointSelection
     private var generation: UInt = 0
+    private let routeLock = NSLock()
+    private var inputRoutes: [UInt: MIDIEndpointSource] = [:]
+
+    private func inputRoute(_ generation: UInt) -> MIDIEndpointSource {
+        routeLock.lock(); defer { routeLock.unlock() }
+        return inputRoutes[generation] ?? .init(endpointID: "unknown", connectionGeneration: UInt64(generation),
+                                                provenance: .unknown)
+    }
 
     init(
         selection: MIDIEndpointSelection,
@@ -564,7 +579,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             let (messages, chunks) = Self.decode(eventList)
             let generation = context.map { UInt(bitPattern: $0) } ?? 0
             if !messages.isEmpty {
-                self.messageHandler(messages, generation, receivedAt)
+                self.messageHandler(messages, generation, receivedAt, self.inputRoute(generation))
             }
             if !chunks.isEmpty { self.sysExHandler(chunks, generation) }
         }
@@ -711,6 +726,12 @@ private final class CoreMIDITransport: @unchecked Sendable {
         let selectedSource = resolve(sources, selectedID: selection.sourceID)
         let selectedDestination = resolve(destinations, selectedID: selection.destinationID)
         if let selectedSource {
+            routeLock.lock()
+            inputRoutes[generation] = .init(endpointID: String(selectedSource.id),
+                                            connectionGeneration: UInt64(generation), provenance: .unknown)
+            // Older generations are already rejected by the service. Bound retained metadata.
+            inputRoutes = inputRoutes.filter { $0.key == generation || generation &- $0.key < 64 }
+            routeLock.unlock()
             let status = MIDIPortConnectSource(
                 inputPort,
                 selectedSource.endpoint,
@@ -728,6 +749,7 @@ private final class CoreMIDITransport: @unchecked Sendable {
             connectedSource: connectedSources.isEmpty ? nil : selectedSource?.name,
             connectedDestination: destination == 0 ? nil : selectedDestination?.name, lastError: lastError
         )
+        snapshot.transportGeneration = generation
         snapshot.sourceEndpoints = sources
             .map { .init(id: $0.id, name: $0.name, availabilityKnown: $0.availabilityKnown) }
         snapshot.destinationEndpoints = destinations.map { .init(

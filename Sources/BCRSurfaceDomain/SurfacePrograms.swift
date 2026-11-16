@@ -73,7 +73,7 @@ extension SurfaceMacro {
 
 public enum MacroStepRejection: LocalizedMessageError, Equatable, Sendable {
     case unknownParameter(ParameterID), requiresToggle(ParameterID), invalidValue(ParameterID), unknownGroup(String),
-         unknownMacro
+         unknownMacro, authorizationDenied
     public var localizedMessage: LocalizedMessage {
         switch self {
         case let .unknownParameter(id): "未知参数：\(id)"
@@ -81,6 +81,7 @@ public enum MacroStepRejection: LocalizedMessageError, Equatable, Sendable {
         case let .invalidValue(id): "宏步骤数值无效：\(id)"
         case let .unknownGroup(group): "未知参数组：\(group)"
         case .unknownMacro: "未知宏"
+        case .authorizationDenied: "参数写入已被当前授权撤销"
         }
     }
 }

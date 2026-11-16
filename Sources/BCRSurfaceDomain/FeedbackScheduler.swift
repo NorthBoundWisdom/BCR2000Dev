@@ -75,6 +75,8 @@ enum FeedbackDispatch: Equatable, Sendable { case enqueue, send }
 public struct ScheduledFeedback: Equatable, Sendable {
     public let message: MIDIVoiceMessage
     public let origin: SurfaceWriteOrigin
+    public var endpoint: MIDIEndpointSource? = nil
+    public var mappingRevision: UInt64? = nil
 }
 
 /// Token-bucket scheduler. A pending control retains only its most recent desired value.
@@ -98,9 +100,16 @@ public struct FeedbackScheduler: Sendable {
         canCoalesce && plan.timing == .coalesced ? .enqueue : .send
     }
 
-    public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin) {
+    public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
+                                 endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil)
+    {
         if pending[message.controlID] == nil { order.append(message.controlID) }
-        pending[message.controlID] = ScheduledFeedback(message: message, origin: origin)
+        pending[message.controlID] = ScheduledFeedback(
+            message: message,
+            origin: origin,
+            endpoint: endpoint,
+            mappingRevision: mappingRevision
+        )
     }
 
     public mutating func cancel(_ control: MIDIControlID) {

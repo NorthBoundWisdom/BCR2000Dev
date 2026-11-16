@@ -1072,3 +1072,7 @@
 "本地数据文件超过大小上限" = "Local data file exceeds the size limit";
 "原文件已更改，未覆盖" = "The original file changed and was not replaced";
 "文件版本 v{0} 高于当前支持版本，原文件已保留" = "File version v{0} is newer than supported; the original was preserved";
+"参数写入已被当前授权撤销" = "Parameter writes were revoked by the current authorization";
+"参数写入上下文已失效" = "The parameter write context is stale";
+"外部权威回复无效" = "The external authority reply is invalid";
+"外部权威拒绝写入：{0}" = "External authority rejected the write: {0}";

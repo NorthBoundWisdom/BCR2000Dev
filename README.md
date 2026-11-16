@@ -361,3 +361,7 @@ H 轮状态面板资料：交付包中的 `DISPLAY_TARGETS.md` / `display-target
 ### Portable logic tests
 
 Foundation-based targets, provider routing, value history/scenes, capture evidence, offline replay and input coverage have a Linux package slice. Native GUI, CoreMIDI and Network.framework hosts remain macOS targets. The parallel Linux CI lane uses `swift:6.2-noble`; see [the target audit and test inventory](docs/testing/linux-targets.md) for scope, local rehearsal commands and validation limits.
+
+Revocable host authorization, trusted authority rejection and internal endpoint evidence are documented in
+[controller write boundaries](docs/controller-write-boundaries.md). They preserve the default Provider 1.0
+wire contract and do not grant physical qualification.

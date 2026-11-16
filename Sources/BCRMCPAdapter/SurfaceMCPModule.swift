@@ -251,12 +251,22 @@ extension AgentControlService {
             guard definition.agentWritable,
                   !session.isMCPProtectedParameter(id) else { throw MCPToolFailure(L10n.text("参数不允许 Agent 写入：\(id)")) }
         }
+        for (id, _) in entries { try session.authorizeParameterWrite(id, identity: .remote) }
         try consumeWrites(entries.count)
         // All validation completes before the first synchronous effect. No await can interleave a change.
-        return session.withWriteOrigin(.agent) {
-            session.withParameterHistory(key: entries.count == 1 ? "parameter:\(entries[0].0)" : nil) {
-                entries.map { id, requested in
-                    session.setParameter(id, to: requested)
+        return try session.withWriteOrigin(.agent) {
+            try session.withParameterHistory(key: entries.count == 1 ? "parameter:\(entries[0].0)" : nil) {
+                if session.parameterWriteContext == nil, session.parameterAuthority == nil {
+                    // Preserve Provider 1.0 per-entry result timing under synchronous reentrancy.
+                    return entries.map { id, requested in
+                        session.setParameter(id, to: requested)
+                        let actual = session.engine.value(of: id)!
+                        return .object(["id": .string(id.rawValue), "value": .double(actual),
+                                        "clamped": .bool(actual != requested)])
+                    }
+                }
+                try session.setAuthorizedParameters(entries, identity: .remote)
+                return entries.map { id, requested in
                     let actual = session.engine.value(of: id)!
                     return .object(["id": .string(id.rawValue), "value": .double(actual),
                                     "clamped": .bool(actual != requested)])
