@@ -219,6 +219,7 @@ let package = Package(
                 "BCRPersistenceAdapter",
                 "BCRCodexAdapter",
                 "BCRMCPAdapter",
+                "BCRProviderMCPAdapter",
                 "BCRHTTPTransport",
                 "BCRCoreMIDIDriver",
                 "BCRExamples",
