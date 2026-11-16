@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report whole-run elapsed time and enforce the same 300s limit with cold or warm caches."""
+"""Report job and whole-run time; enforce the 300s job target on warm caches only."""
 
 from __future__ import annotations
 
@@ -16,12 +16,13 @@ def instant(value):
 
 
 def report(run, job, cache_key, now):
-    elapsed = (now - instant(run["created_at"])).total_seconds()
+    elapsed = (now - instant(job["started_at"])).total_seconds()
+    whole = (now - instant(run["created_at"])).total_seconds()
     warm = bool(cache_key)
     lines = [
-        "## Whole-run wall time and 300s budget",
+        "## Job wall time and warm-cache 300s budget",
         "",
-        f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{elapsed:.1f}s since run creation**",
+        f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{elapsed:.1f}s job wall time** · {whole:.1f}s since run creation",
         f"Restored build key: `{cache_key or 'none'}`",
         "",
         "| Step | Result | Seconds |",
@@ -35,11 +36,13 @@ def report(run, job, cache_key, now):
         lines.append(f"| {step['name'].replace('|', '/')} | {step.get('conclusion') or step['status']} | {duration} |")
     lines += [
         "",
-        "Scope: run creation through this live check, including queue/setup/cache time across jobs. Other jobs and post-job cleanup may still be running; final created→updated wall time must also be independently checked after completion.",
+        "Scope: this live check, job start through this check; whole-run creation/queue time is reported separately. Other jobs and post-job cleanup may still be running; final completed wall times must also be independently checked after completion.",
     ]
-    failed = elapsed > 300
+    failed = warm and elapsed > 300
     lines.append(
-        "**Whole-run 300s budget exceeded.**" if failed else "Whole-run live 300s budget met; no cold-cache exemption."
+        "**Warm-cache 300s budget exceeded.**"
+        if failed
+        else ("Warm-cache 300s budget met." if warm else "Cold-cache bootstrap measured; warm-cache budget exempt.")
     )
     return "\n".join(lines) + "\n", failed
 

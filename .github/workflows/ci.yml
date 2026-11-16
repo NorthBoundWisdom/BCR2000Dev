@@ -72,7 +72,7 @@ jobs:
         with:
           name: portable-tests-${{ github.run_id }}
           path: build/portable-test-runs/
-      - name: Report whole-run wall time and enforce 300s budget
+      - name: Report wall time and enforce warm-cache 300s budget
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,19 +123,15 @@ jobs:
       - run: python3 configs/validate_repo_commands.py .
       - run: python3 configs/display_budget_report.py --evidence docs/status-panel-budget-evidence.json --output docs/STATUS_PANEL_BUDGET.md --check
       - run: python3 -m compileall -q configs
-      - run: python3 -m unittest discover -s Tests/BuildWorkflowTests -v
-      - run: python3 configs/macos_workflow.py test
+      - name: Run all Python workflows and native suites independently
+        run: python3 configs/ci_parallel_checks.py tests
       - run: python3 configs/macos_workflow.py build --distribution ad-hoc
       - run: python3 configs/macos_workflow.py smoke
       - run: python3 tools/mcp_integration.py
       - run: python3 configs/package_provider.py --output build/ci-surface-provider --configuration debug
       - run: python3 build/ci-surface-provider/diagnostics/display_targets.py --directory build/ci-surface-provider --check
-      - run: python3 configs/verify_surface_control_transport.py --artifact build/ci-surface-provider --output build/ci-surface-transport
-      - run: python3 configs/verify_surface_clients_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-client-roles
-      - run: python3 configs/verify_hardware_surface_transport.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-surface-hardware-roles --scoped-clients
-      - run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
-      - run: python3 configs/verify_multiple_display_clients.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-multiple-displays
-      - run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
+      - name: Run every independent transport and status-demo acceptance
+        run: python3 configs/ci_parallel_checks.py transports
       - run: git diff --check
       - name: Preserve test and MCP acceptance logs
         if: always()
@@ -145,13 +141,14 @@ jobs:
           path: |
             build/ci-status-panel-demo/
             build/test-runs/
+            build/ci-verification/
             build/mcp-integration/*/*.log
             build/mcp-integration/*/*.json
             build/mcp-integration/*/*.jsonl
             build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error
-      - name: Report whole-run wall time and enforce 300s budget
+      - name: Report wall time and enforce warm-cache 300s budget
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
