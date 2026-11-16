@@ -52,15 +52,16 @@ final class CodexProcessSupervisorTests: XCTestCase {
             try await supervisor.start(executablePath: "/bin/cat", arguments: [])
             XCTFail("Duplicate launch must fail")
         } catch CodexProcessSupervisorError.alreadyRunning {}
-        let received = expectation(description: "stdio round trip")
+        let received = SendableCounter()
         let reader = Task {
             let line = try await supervisor.readLine()
             XCTAssertEqual(line, "hello")
-            received.fulfill()
+            received.increment()
         }
         try await supervisor.sendLine("hello")
-        let completed = await XCTWaiter.fulfillment(of: [received], timeout: 3)
-        XCTAssertEqual(completed, .completed)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while received.value == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(received.value, 1, "The actual stdio round trip must finish within the original 3 seconds")
         await supervisor.stop()
         _ = try await reader.value
         await supervisor.stop()

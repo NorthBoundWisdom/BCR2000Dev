@@ -72,7 +72,7 @@ jobs:
         with:
           name: portable-tests-${{ github.run_id }}
           path: build/portable-test-runs/
-      - name: Report wall time and enforce warm-cache 300s budget
+      - name: Report whole-run wall time and enforce 300s budget
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -151,7 +151,7 @@ jobs:
             build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error
-      - name: Report wall time and enforce warm-cache 300s budget
+      - name: Report whole-run wall time and enforce 300s budget
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}

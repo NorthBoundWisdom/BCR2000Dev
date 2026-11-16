@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report actual GitHub job/step wall times; enforce 300s only with a restored build cache."""
+"""Report whole-run elapsed time and enforce the same 300s limit with cold or warm caches."""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ def instant(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def report(job, cache_key, now):
-    elapsed = (now - instant(job["started_at"])).total_seconds()
+def report(run, job, cache_key, now):
+    elapsed = (now - instant(run["created_at"])).total_seconds()
     warm = bool(cache_key)
     lines = [
-        "## Job wall time and warm-cache budget",
+        "## Whole-run wall time and 300s budget",
         "",
-        f"Job: `{job['name']}` · {'warm build cache' if warm else 'cold-cache bootstrap'} · **{elapsed:.1f}s**",
+        f"Run: `{run['id']}` · job `{job['name']}` · {'warm build cache' if warm else 'cold build cache'} · **{elapsed:.1f}s since run creation**",
         f"Restored build key: `{cache_key or 'none'}`",
         "",
         "| Step | Result | Seconds |",
@@ -35,17 +35,11 @@ def report(job, cache_key, now):
         lines.append(f"| {step['name'].replace('|', '/')} | {step.get('conclusion') or step['status']} | {duration} |")
     lines += [
         "",
-        "Scope: job start through this final check, including setup/cache operations; post-job cleanup is not yet complete.",
+        "Scope: run creation through this live check, including queue/setup/cache time across jobs. Other jobs and post-job cleanup may still be running; final created→updated wall time must also be independently checked after completion.",
     ]
-    failed = warm and elapsed > 300
+    failed = elapsed > 300
     lines.append(
-        "**Warm-cache 300s budget exceeded.**"
-        if failed
-        else (
-            "Cold bootstrap is measured but exempt from the warm-cache budget."
-            if not warm
-            else "Warm-cache 300s budget met."
-        )
+        "**Whole-run 300s budget exceeded.**" if failed else "Whole-run live 300s budget met; no cold-cache exemption."
     )
     return "\n".join(lines) + "\n", failed
 
@@ -55,19 +49,18 @@ def main():
     parser.add_argument("--cache-key", default="")
     args = parser.parse_args()
     env = os.environ
-    url = (
-        f"{env.get('GITHUB_API_URL', 'https://api.github.com')}/repos/{env['GITHUB_REPOSITORY']}/actions/runs/"
-        f"{env['GITHUB_RUN_ID']}/attempts/{env['GITHUB_RUN_ATTEMPT']}/jobs?per_page=100"
-    )
-    request = urllib.request.Request(
-        url, headers={"Authorization": "Bearer " + env["GH_TOKEN"], "Accept": "application/vnd.github+json"}
-    )
+    base = f"{env.get('GITHUB_API_URL', 'https://api.github.com')}/repos/{env['GITHUB_REPOSITORY']}/actions/runs/{env['GITHUB_RUN_ID']}"
+    headers = {"Authorization": "Bearer " + env["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+    request = urllib.request.Request(base, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        run = json.load(response)
+    request = urllib.request.Request(base + f"/attempts/{env['GITHUB_RUN_ATTEMPT']}/jobs?per_page=100", headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         jobs = json.load(response)["jobs"]
     matches = [job for job in jobs if job["name"] == env["GITHUB_JOB"]]
     if len(matches) != 1:
         raise SystemExit("Cannot identify exactly one current job for timing")
-    body, failed = report(matches[0], args.cache_key, datetime.now(timezone.utc))
+    body, failed = report(run, matches[0], args.cache_key, datetime.now(timezone.utc))
     with Path(env["GITHUB_STEP_SUMMARY"]).open("a") as summary:
         summary.write(body)
     print(body)
