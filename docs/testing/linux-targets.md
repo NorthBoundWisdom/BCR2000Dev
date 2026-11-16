@@ -58,10 +58,14 @@ BCR_PORTABLE_BUILD=1 swift test --build-path build/swiftpm-portable --skip-build
 python3 configs/verify_portable_tests.py --inventory build/portable-inventory.txt --log build/portable-tests.log
 ```
 
-Linux CI uses the same commands without the override, in `swift:6.2-noble`, in parallel with the unchanged native product checks. It caches the locked seed and SwiftPM outputs by platform/toolchain, preserves discovery/results, and sets a five-minute budget for each parallel job. Actual hosted wall time and Linux Foundation/runtime behavior remain to be verified after an authorized push. **未在 Linux 上验证**; there is no local container or Linux SDK.
+Linux CI uses the same commands without the override, in `swift:6.2-noble`, in parallel with the unchanged native product checks. It caches the locked seed and SwiftPM outputs by platform/toolchain, preserves discovery/results, and uses a 20-minute hang deadline and measures a 300-second warm-cache budget for each parallel job. Actual hosted wall time and Linux Foundation/runtime behavior remain to be verified after an authorized push. **未在 Linux 上验证**; there is no local container or Linux SDK.
 
 ## Local native CI budget rehearsal
 
 The full cached local macOS CI command sequence completed in **45.991 seconds** with all 18 commands successful. It included native tests, Python workflow tests, ad-hoc app build, three-language offscreen startup, MCP acceptance, provider packaging, display/catalogue checks, simulation transports, explicit Debug hardware doubles, display budgets, multiple displays and the synthetic status demo. No real MIDI ports or actuators were used. Logs and per-command times are in `build/align-b/ci-budget/summary.json` and numbered logs; stdout is `build/align-b/b8-ci-budget.log`.
 
 This is a cached local measurement, not the prior hosted ~230-second baseline. Hosted cold/cache-restored timing and the actual Linux job remain pending an authorized push; no remote success is claimed.
+
+## ALIGN2 CI bootstrap correction
+
+Compilation/discovery is an explicit step in each job. A successful compile is cached immediately, even if subsequent tests fail. A restored build key (including a prefix restore) identifies a warm run; no matching key identifies cold bootstrap. The final, always-run budget step reads this exact run attempt/job from the Actions API, writes job-start-to-check wall time and individual step durations into the job summary, and independently fails only warm runs above 300 seconds. Cold timing is reported without failing the performance target; the 20-minute deadline is only a hang guard. Post-job cleanup has not yet occurred and is explicitly excluded from the summary scope.
