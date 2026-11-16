@@ -4,6 +4,7 @@ import http.server
 import importlib
 import json
 import socket
+import socketserver
 import sys
 import threading
 import urllib.request
@@ -43,7 +44,14 @@ class Proxy(http.server.BaseHTTPRequestHandler):
         self.connection.close()
 
 
-server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+class LoopbackHTTPServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # The literal loopback endpoint needs no reverse DNS; preserve the same TCP bind.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
+
+
+server = LoopbackHTTPServer(("127.0.0.1", 0), Proxy)
 thread = threading.Thread(target=server.serve_forever, daemon=True)
 thread.start()
 client = Client(
