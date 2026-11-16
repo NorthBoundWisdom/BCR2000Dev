@@ -4,6 +4,13 @@ import Foundation
 
 /// Offline conversion of explicitly captured device data; no device writes or source layout contract.
 public enum ProfileConversion {
+    /// Offline metadata source for the packaged simulator display table, never an installed preset.
+    public static func mockMapDescription() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(HardwareMap.mockPreset())
+    }
+
     public static func prepareButtons(capture: URL,
                                       profile: URL) throws -> (mappings: Int, missing: Int, unsupported: Int)
     {

@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from configs.build_environment import load_build_environment  # noqa: E402
+from configs.display_targets import generate as generate_display_targets  # noqa: E402
 from configs.check_handoff_addresses import render as render_handoff_addresses  # noqa: E402
 from configs.surface_plugins_dependency import ensure_dependency  # noqa: E402
 from configs.surface_delivery_index import publish  # noqa: E402
@@ -310,6 +311,11 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         check=True,
         cwd=ROOT,
     )
+    (output / "display-mock-map.json").write_bytes(
+        subprocess.check_output([str(output / "BCRProfileTool"), "--describe-mock-map"], cwd=output)
+    )
+    generate_display_targets(output)
+    shutil.copy2(ROOT / "configs/display_targets.py", output / "diagnostics/display_targets.py")
     shutil.copy2(ROOT / "docs/PROVIDER_API.md", output / "PROVIDER_API.md")
     (output / "adr").mkdir()
     shutil.copy2(

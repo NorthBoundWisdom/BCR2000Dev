@@ -5,9 +5,13 @@ import Foundation
 struct BCRProfileTool {
     static func main() throws {
         let args = CommandLine.arguments
+        if args.count == 2, args[1] == "--describe-mock-map" {
+            print(String(decoding: try ProfileConversion.mockMapDescription(), as: UTF8.self))
+            return
+        }
         if args.count == 2, args[1] == "--help" {
             print(
-                "BCRProfileTool <capture-directory> <profile-directory> | --stage-hardware-candidate <map> <roles> <new-dir> [--configuration PATH] | --verify-hardware-candidate <dir> | --buttons <capture> <profile> | --check-hardware-roles <learned-map.json> <role-request.json> [--configuration PATH] [--hardware-output observe|write] [--allow-surface-feedback]"
+                "BCRProfileTool --describe-mock-map | <capture-directory> <profile-directory> | --stage-hardware-candidate <map> <roles> <new-dir> [--configuration PATH] | --verify-hardware-candidate <dir> | --buttons <capture> <profile> | --check-hardware-roles <learned-map.json> <role-request.json> [--configuration PATH] [--hardware-output observe|write] [--allow-surface-feedback]"
             )
             return
         }
