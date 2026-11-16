@@ -6,9 +6,10 @@ changes a device preset or promotes the candidate. Use only an owned Mock platfo
 
 ## Flow commands and feedback
 
-The learned MIDI identities in the two F tables are checked against the exact packaging map by
-`python3 configs/check_handoff_addresses.py --hardware-map <hardware-map.json>`. Packaging refuses a
-mismatch. The address for `pushEncoder.1.4` corrects the handwritten F text; the frozen F map is unchanged.
+The handwritten reference identities in the two F tables can be checked against the frozen F map by
+`python3 configs/check_handoff_addresses.py --hardware-map <F-hardware-map.json>`. This catches
+mistyped reference addresses. Packaged table addresses are generated from the selected map; missing
+controls are explicitly unavailable. Custom learning maps remain accepted. The address for `pushEncoder.1.4` corrects the handwritten F text; the frozen F map is unchanged.
 
 Recommended **control IDs**, independent of business parameter IDs:
 

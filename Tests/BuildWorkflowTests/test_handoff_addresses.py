@@ -60,3 +60,22 @@ class HandoffAddressTests(unittest.TestCase):
         path.write_text(path.read_text().replace("absolute CC12", "absolute mapped address"))
         with self.assertRaisesRegex(ValueError, "all four"):
             checker.check(self.mapping, self.root)
+
+    def testDuplicateRowCannotHideMissingControl(self):
+        path = self.root / "F_PIPE_HANDOFF.md"
+        text = path.read_text().replace("`pushEncoder.1.2`", "`pushEncoder.1.1`").replace("CC9", "CC8")
+        path.write_text(text)
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            checker.check(self.mapping, self.root)
+
+    def testCustomMapAndAbsentRolesRenderWithoutReferenceRestrictions(self):
+        value = json.loads(self.mapping.read_text())
+        value["entries"][3]["midi"]["number"] = 99
+        value["entries"] = value["entries"][:4]
+        self.mapping.write_text(json.dumps(value))
+        flow = checker.render((self.root / "F_PIPE_HANDOFF.md").read_text(), self.mapping)
+        candidate = checker.render((self.root / "F_CANDIDATE_ATTENDED.md").read_text(), self.mapping)
+        self.assertIn("number 99 (selected map)", flow)
+        self.assertNotIn("CC12", flow)
+        self.assertIn("not present in selected map; unavailable", candidate)
+        self.assertNotIn("CC67", candidate)
