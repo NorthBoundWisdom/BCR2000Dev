@@ -977,7 +977,11 @@ public final class SurfaceSession {
         }
         if !captureObservers.isEmpty, let event = events.last {
             // The record contains validated MIDI values only; no filesystem work runs on this path.
-            publishCapture(MonitorCaptureRecord.event(event, feedbackEcho: echo))
+            publishCapture(MonitorCaptureRecord.event(
+                event,
+                feedbackEcho: echo,
+                hardwareMode: self.source == .hardware
+            ))
         }
         if events.count > 300 { events.removeFirst(events.count - 300) }
         let kind = direction == .input ? "control.raw" : "feedback.\(delivery?.rawValue ?? "generated")"

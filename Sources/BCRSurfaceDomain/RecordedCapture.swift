@@ -2,13 +2,14 @@ import BCRFoundation
 import Foundation
 
 public enum CaptureDocumentError: LocalizedMessageError, Equatable, Sendable {
-    case tooLarge, tooManyEvents, missingContext, invalidRecord
+    case tooLarge, tooManyEvents, missingContext, invalidRecord, foreignDevice(String)
     public var localizedMessage: LocalizedMessage {
         switch self {
         case .tooLarge: "录制文件超过 16 MiB 上限"
         case .tooManyEvents: "录制事件超过 200000 条上限"
         case .missingContext: "录制缺少可验证的 BCR 会话快照，无法重播"
         case .invalidRecord: "录制事件无效，已停止重播"
+        case let .foreignDevice(model): "录制来自其他设备（\(model)），不能在 BCR2000 中重播"
         }
     }
 }
@@ -42,13 +43,19 @@ public struct RecordedCaptureEvent: Equatable, Sendable {
               sequence > 0 else { throw CaptureDocumentError.invalidRecord }
         self.fields = fields; self.sequence = sequence
         monotonicTime = fields["monotonicTimestamp"]?.finiteNumber
-        if let direction = fields["direction"], direction != .string("IN"), direction != .string("OUT") {
+        if let direction = fields["direction"], direction != .null, direction != .string("IN"),
+           direction != .string("OUT")
+        {
             throw CaptureDocumentError.invalidRecord
         }
         if let ignored = fields["ignored"], ignored != .bool(true), ignored != .bool(false) {
             throw CaptureDocumentError.invalidRecord
         }
-        guard let raw = fields["rawMIDI1Bytes"] else {
+        guard let raw = fields["rawMIDI1Bytes"], raw != .null else {
+            if fields["direction"] == nil || fields["direction"] == .null { messages = []; return }
+            if fields["connection"]?.objectValue != nil || fields["nonMotorTest"]?.objectValue != nil {
+                messages = []; return
+            }
             if fields["origin"] == .string("contextChanged"), fields["session"]?.objectValue != nil {
                 messages = []; return
             }
@@ -62,7 +69,7 @@ public struct RecordedCaptureEvent: Equatable, Sendable {
         guard fields["direction"]?.stringValue != nil,
               let source = fields["source"]?.stringValue, ["hardware", "mock", "agent", "application"].contains(source)
         else { throw CaptureDocumentError.invalidRecord }
-        guard let array = raw.arrayValue, !array.isEmpty, array.count <= 12, array.count % 3 == 0 else {
+        guard let array = raw.arrayValue, !array.isEmpty, array.count <= 12 else {
             throw CaptureDocumentError.invalidRecord
         }
         let bytes = try array.map { value -> UInt8 in
@@ -71,15 +78,22 @@ public struct RecordedCaptureEvent: Equatable, Sendable {
             return byte
         }
         var messages: [MIDIVoiceMessage] = []
-        for index in stride(from: 0, to: bytes.count, by: 3) {
-            guard bytes[index + 1] < 128, bytes[index + 2] < 128 else { throw CaptureDocumentError.invalidRecord }
-            let channel = bytes[index] & 15, number = bytes[index + 1], value = bytes[index + 2]
-            switch bytes[index] & 0xF0 {
+        var index = 0
+        while index < bytes.count {
+            let status = bytes[index] & 0xF0
+            guard (0x80 ... 0xE0).contains(status) else { throw CaptureDocumentError.invalidRecord }
+            let size = status == 0xC0 || status == 0xD0 ? 2 : 3
+            guard index + size <= bytes.count, bytes[(index + 1) ..< (index + size)].allSatisfy({ $0 < 128 })
+            else { throw CaptureDocumentError.invalidRecord }
+            let channel = bytes[index] & 15, number = bytes[index + 1]
+            let value = size == 3 ? bytes[index + 2] : 0
+            switch status {
             case 0x80: messages.append(.noteOff(channel: channel, number: number, velocity: value))
             case 0x90: messages.append(.noteOn(channel: channel, number: number, velocity: value))
             case 0xB0: messages.append(.controlChange(channel: channel, number: number, value: value))
-            default: throw CaptureDocumentError.invalidRecord
+            default: break // Preserve valid common bytes; BCR does not interpret other devices' messages.
             }
+            index += size
         }
         self.messages = messages
     }
@@ -94,12 +108,18 @@ public struct RecordedCapture: Equatable, Sendable {
     public let review: CaptureIntegrityReview
     public let sha256: String
     public let byteCount: Int
+    public var deviceModel: String? { header?["session"]?.objectValue?["deviceModel"]?.stringValue }
+    public var isForeignDevice: Bool { deviceModel.map { $0 != "BCR2000" } ?? false }
 
     public init(data: Data) throws {
         guard data.count <= Self.maximumBytes else { throw CaptureDocumentError.tooLarge }
         var review = CaptureIntegrityReview(), header: [String: JSONValue]?
         var events: [RecordedCaptureEvent] = []
         var lastTime: Double?, ended = false, sawEnd = false, eventRows = 0, expectedSequence = 1
+        let audit = ISO8601DateFormatter()
+        audit.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plainAudit = ISO8601DateFormatter()
+        plainAudit.formatOptions = [.withInternetDateTime]
         let lines = data.split(separator: 10, omittingEmptySubsequences: false)
         let completeLines = lines.dropLast() // An unterminated final line is evidence, never an executable event.
         if data.last != 10 { review.truncatedLines = 1 }
@@ -109,7 +129,18 @@ public struct RecordedCapture: Equatable, Sendable {
                   let fields = value.objectValue, let kind = fields["kind"]?.stringValue
             else { review.unparseableLines += 1; continue }
             if ended { review.boundaryErrors += 1 }
-            if let time = fields["monotonicTimestamp"]?.finiteNumber, time >= 0 {
+            let model = (kind == "capture-start" ? fields : header)?["session"]?.objectValue?["deviceModel"]?
+                .stringValue
+            let foreign = model.map { $0 != "BCR2000" } ?? false
+            if foreign {
+                // Audit Date may jump. Validate its syntax when present, never invent a
+                // monotonic clock or compare another process's clock with BCR replay time.
+                if let stamp = fields["timestamp"], stamp != .null {
+                    guard let value = stamp.stringValue,
+                          audit.date(from: value) != nil || plainAudit.date(from: value) != nil
+                    else { review.invalidTimestamps += 1; continue }
+                }
+            } else if let time = fields["monotonicTimestamp"]?.finiteNumber, time >= 0 {
                 if let previous = lastTime, time < previous { review.nonMonotonicTimestamps += 1 }
                 lastTime = time
             } else { review.invalidTimestamps += 1 }
@@ -119,8 +150,10 @@ public struct RecordedCapture: Equatable, Sendable {
                 if fields["schemaVersion"]?.exactIntValue != 1 { review.unsupportedVersions += 1 }
                 if let version = fields["hostFormatVersion"],
                    version.exactIntValue != 1 { review.unsupportedVersions += 1 }
-                do { _ = try RecordedCaptureContext(fields: fields["session"]?.objectValue ?? [:]) }
-                catch { review.contextErrors += 1 }
+                if !foreign {
+                    do { _ = try RecordedCaptureContext(fields: fields["session"]?.objectValue ?? [:]) }
+                    catch { review.contextErrors += 1 }
+                }
                 if header == nil { header = fields }
             case "event":
                 eventRows += 1
@@ -130,7 +163,7 @@ public struct RecordedCapture: Equatable, Sendable {
                 expectedSequence += 1
                 do {
                     let event = try RecordedCaptureEvent(fields: fields)
-                    if event.isContext {
+                    if event.isContext, !foreign {
                         do { _ = try RecordedCaptureContext(fields: fields["session"]?.objectValue ?? [:]) }
                         catch { review.contextErrors += 1 }
                     }

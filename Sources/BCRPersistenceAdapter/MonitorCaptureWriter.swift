@@ -67,6 +67,10 @@ public final class MonitorCaptureWriter: @unchecked Sendable {
     public var snapshot: CaptureWritingSnapshot { lock.withLock { state } }
 
     public func append(_ record: MonitorCaptureRecord) {
+        for part in record.canonicalMIDI1Records { enqueue(part) }
+    }
+
+    private func enqueue(_ record: MonitorCaptureRecord) {
         let updated = lock.withLock { () -> CaptureWritingSnapshot? in
             guard state.acceptsEvents else { return nil }
             guard pending.count < capacity else {

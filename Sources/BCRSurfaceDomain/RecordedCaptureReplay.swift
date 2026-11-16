@@ -28,6 +28,7 @@ public final class RecordedCaptureReplay {
     public var mock: MockBCR2000 { session.mock }
 
     public init(capture: RecordedCapture) throws {
+        if capture.isForeignDevice { throw CaptureDocumentError.foreignDevice(capture.deviceModel!) }
         guard capture.review.unsupportedVersions == 0,
               let header = capture.header, header["schemaVersion"]?.exactIntValue == 1,
               let context = header["session"]?.objectValue,

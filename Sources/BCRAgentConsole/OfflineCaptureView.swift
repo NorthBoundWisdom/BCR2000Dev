@@ -16,6 +16,7 @@ struct OfflineCaptureView: View {
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
             if let capture = controller.loaded {
                 Text(controller.name ?? "").font(.headline)
+                Text(L10n.text("录制设备：\(capture.deviceModel ?? "unknown")"))
                 Text(capture.review.isComplete ? L10n.text("完整") : L10n.text("证据不足"))
                     .foregroundStyle(capture.review.isComplete ? .green : .orange)
                 Text(L10n

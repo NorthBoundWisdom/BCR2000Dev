@@ -53,6 +53,7 @@ final class MonitorCaptureController: ObservableObject {
                 context.fields["kind"] = .string("event")
                 context.fields["schemaVersion"] = nil
                 context.fields["origin"] = .string("contextChanged")
+                context.fields["source"] = .string("application")
                 context.fields["timestamp"] = record.fields["timestamp"]
                 context.fields["monotonicTimestamp"] = record.fields["monotonicTimestamp"]
                 writer.append(context)
