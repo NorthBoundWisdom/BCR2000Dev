@@ -20,10 +20,11 @@ from urllib.parse import urlsplit
 class RecordingProxy(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, url):
+    def __init__(self, url, reply_delay=0):
         endpoint = urlsplit(url)
         self.destination = (endpoint.hostname, endpoint.port)
         self.calls = []
+        self.reply_delay = reply_delay
         super().__init__(("127.0.0.1", 0), ProxyHandler)
 
 
@@ -42,6 +43,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
             connection.request("POST", "/mcp", data, headers)
             response = connection.getresponse()
             body = response.read()
+            if self.server.reply_delay:
+                time.sleep(self.server.reply_delay)
             self.send_response(response.status)
             for name, value in response.getheaders():
                 if name.lower() not in ("content-length", "connection", "transfer-encoding"):
@@ -53,9 +56,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             connection.close()
 
 
-def case(artifact, profiles, output, source, mode, Client, mapping):
+def case(artifact, profiles, output, source, mode, Client, mapping, sdk=None):
     output.mkdir(parents=True, exist_ok=False)
     tokens = {role: secrets.token_hex(32) for role in ("owner", "operator", "display")}
+
+    def sanitized(text):
+        for token in tokens.values():
+            text = text.replace(token, "[REDACTED CREDENTIAL]")
+        return text
+
     environment = {key: value for key, value in os.environ.items() if key != "BCR_PROVIDER_TOKEN"}
     environment["PYTHONPATH"] = str(artifact / "surface-control-sdk-1.4.0.zip")
     arguments = [
@@ -121,92 +130,143 @@ def case(artifact, profiles, output, source, mode, Client, mapping):
             owner = Client(ready["url"], tokens["owner"], "demo", accepted_sources=(source,), protocol="2026-07-28")
             owner.discover(versions=("1.4",) if source == "hardware" else ("1.3",))
             before = owner.snapshot()
-            proxy = RecordingProxy(ready["url"])
+            proxy = RecordingProxy(ready["url"], reply_delay=0.06 if mode == "sdk-progress" else 0)
             worker = threading.Thread(target=proxy.serve_forever, kwargs={"poll_interval": 0.02})
             worker.start()
             try:
-                read_fd, write_fd = os.pipe()
-                os.write(write_fd, tokens["display"].encode())
-                os.close(write_fd)
-                duration = "30" if mode == "sigint" else "3" if mode == "stale" else "1.1"
-                command = [
-                    sys.executable,
-                    "-B",
-                    "-m",
-                    "surface_panel_demo",
-                    "--url",
-                    f"http://127.0.0.1:{proxy.server_port}/mcp",
-                    "--instance-id",
-                    "demo",
-                    "--token-fd",
-                    str(read_fd),
-                    "--mapping",
-                    "bcr",
-                    "--source",
-                    source,
-                    "--hz",
-                    "5",
-                    "--duration",
-                    duration,
-                ]
-                if mode == "stale":
-                    command += ["--source-stops-after", ".2", "--max-age", ".3"]
-                with (output / "demo.stderr.log").open("w") as demo_stderr:
-                    demo = subprocess.Popen(
-                        command,
-                        pass_fds=(read_fd,),
-                        stdout=subprocess.PIPE,
-                        stderr=demo_stderr,
-                        env=environment,
-                        cwd="/tmp",
-                        text=True,
+                if mode == "sdk-progress":
+                    # Control data time only. Every discover/snapshot/feedback still crosses real HTTP,
+                    # including the deliberately slow proxy; neither RPC nor device I/O is simulated.
+                    DisplayClient, run = sdk
+                    data_time = [0.0]
+                    data_sleeps = []
+
+                    def advance_data_time(seconds):
+                        data_sleeps.append(seconds)
+                        data_time[0] += seconds
+
+                    client = DisplayClient(
+                        f"http://127.0.0.1:{proxy.server_port}/mcp",
+                        tokens["display"],
+                        "demo",
+                        accepted_sources=(source,),
+                        protocol="2026-07-28",
                     )
-                    os.close(read_fd)
-                    try:
-                        if mode == "sigint":
-                            deadline = time.monotonic() + 5
-                            while True:
-                                page = owner.call(
-                                    "surface_control_events",
-                                    {
-                                        "instance_id": "demo",
-                                        "epoch": owner.expected["epoch"],
-                                        "after_sequence": "0",
-                                        "limit": 1024,
-                                    },
-                                )
-                                fresh = any(
-                                    e["control_id"] == "button.1.1" and e["value"] == "on" for e in page["events"]
-                                )
-                                joint_values = {
-                                    e["value"] for e in page["events"] if e["control_id"] == "pushEncoder.1.1"
-                                }
-                                if fresh and len(joint_values) > 1:
-                                    break
-                                assert time.monotonic() < deadline and demo.poll() is None, (
-                                    "No active demo before interrupt"
-                                )
-                                time.sleep(0.01)
-                            demo.send_signal(signal.SIGINT)
-                        stdout, _ = demo.communicate(timeout=12)
-                        result = json.loads(stdout)
-                        (output / "demo.stdout.json").write_text(stdout)
-                    finally:
-                        if demo.poll() is None:
-                            demo.terminate()
-                            demo.wait(timeout=5)
+                    result = run(
+                        client, mapping, hz=5, duration=1.1, clock=lambda: data_time[0], sleep=advance_data_time
+                    )
+                    stdout = json.dumps(result)
+                    demo_returncode = result["exit_code"]
+                    (output / "sdk-progress.stdout.json").write_text(stdout + "\n")
+                    (output / "demo.stderr.log").write_text("")
+                    (output / "data-clock.json").write_text(
+                        json.dumps(
+                            {
+                                "clock_scope": "data-only; all HTTP RPC and fake device IO are real",
+                                "elapsed_data_seconds": data_time[0],
+                                "sdk_code_file": run.__code__.co_filename,
+                                "data_sleeps": data_sleeps,
+                                "real_proxy_reply_delay_seconds": proxy.reply_delay,
+                            },
+                            indent=2,
+                        )
+                        + "\n"
+                    )
+                else:
+                    read_fd, write_fd = os.pipe()
+                    os.write(write_fd, tokens["display"].encode())
+                    os.close(write_fd)
+                    duration = "30" if mode == "sigint" else "3" if mode == "stale" else "1.1"
+                    command = [
+                        sys.executable,
+                        "-B",
+                        "-m",
+                        "surface_panel_demo",
+                        "--url",
+                        f"http://127.0.0.1:{proxy.server_port}/mcp",
+                        "--instance-id",
+                        "demo",
+                        "--token-fd",
+                        str(read_fd),
+                        "--mapping",
+                        "bcr",
+                        "--source",
+                        source,
+                        "--hz",
+                        "5",
+                        "--duration",
+                        duration,
+                    ]
+                    if mode == "stale":
+                        command += ["--source-stops-after", ".2", "--max-age", ".3"]
+                    with (output / "demo.stderr.log").open("w") as demo_stderr:
+                        demo = subprocess.Popen(
+                            command,
+                            pass_fds=(read_fd,),
+                            stdout=subprocess.PIPE,
+                            stderr=demo_stderr,
+                            env=environment,
+                            cwd="/tmp",
+                            text=True,
+                        )
+                        os.close(read_fd)
+                        try:
+                            if mode == "sigint":
+                                deadline = time.monotonic() + 5
+                                while True:
+                                    page = owner.call(
+                                        "surface_control_events",
+                                        {
+                                            "instance_id": "demo",
+                                            "epoch": owner.expected["epoch"],
+                                            "after_sequence": "0",
+                                            "limit": 1024,
+                                        },
+                                    )
+                                    fresh = any(
+                                        e["control_id"] == "button.1.1" and e["value"] == "on" for e in page["events"]
+                                    )
+                                    joint_values = {
+                                        e["value"] for e in page["events"] if e["control_id"] == "pushEncoder.1.1"
+                                    }
+                                    if fresh and len(joint_values) > 1:
+                                        break
+                                    assert time.monotonic() < deadline and demo.poll() is None, (
+                                        "No active demo before interrupt"
+                                    )
+                                    time.sleep(0.01)
+                                demo.send_signal(signal.SIGINT)
+                            stdout, _ = demo.communicate(timeout=12)
+                            result = json.loads(stdout)
+                            (output / "demo.stdout.json").write_text(sanitized(stdout))
+                        finally:
+                            if demo.poll() is None:
+                                demo.terminate()
+                                demo.wait(timeout=5)
+                    demo_returncode = demo.returncode
             finally:
                 proxy.shutdown()
                 proxy.server_close()
                 worker.join(timeout=3)
+            demo_stderr_text = (output / "demo.stderr.log").read_text()
+            (output / "demo.stderr.log").write_text(sanitized(demo_stderr_text))
             calls = proxy.calls
-            assert {row["method"] for row in calls} <= {"initialize", "notifications/initialized", "tools/call"}
-            assert {row["tool"] for row in calls if row["tool"]} <= {
-                "surface_control_discover",
-                "surface_control_snapshot",
-                "surface_control_feedback",
-            }
             (output / "rpc-tools.json").write_text(json.dumps(calls, indent=2) + "\n")
+            (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            (output / "execution.json").write_text(
+                json.dumps(
+                    {
+                        "source": source,
+                        "mode": mode,
+                        "entry_point": "packaged SDK run" if mode == "sdk-progress" else "packaged CLI process",
+                        "data_clock": "injected" if mode == "sdk-progress" else "real monotonic",
+                        "return_code": demo_returncode,
+                        "proxy_reply_delay_s": proxy.reply_delay,
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
             snapshot = owner.snapshot()
             page = owner.call(
                 "surface_control_events",
@@ -216,6 +276,12 @@ def case(artifact, profiles, output, source, mode, Client, mapping):
             (output / "events.json").write_text(json.dumps(page, indent=2) + "\n")
             (output / "snapshot.json").write_text(json.dumps(snapshot, indent=2) + "\n")
             (output / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            assert {row["method"] for row in calls} <= {"initialize", "notifications/initialized", "tools/call"}
+            assert {row["tool"] for row in calls if row["tool"]} <= {
+                "surface_control_discover",
+                "surface_control_snapshot",
+                "surface_control_feedback",
+            }
             assert snapshot["latest_input_sequence"] == before["latest_input_sequence"] == "0"
             assert snapshot["inputs"] == before["inputs"]
             assert all(
@@ -223,13 +289,18 @@ def case(artifact, profiles, output, source, mode, Client, mapping):
                 for event in events
             )
             if mode == "default-refused":
-                assert result["reason"] == "unsupported_feedback" and result["exit_code"] == demo.returncode == 1
+                assert result["reason"] == "unsupported_feedback" and result["exit_code"] == demo_returncode == 1
                 assert events == [] and not any(row["tool"] == "surface_control_feedback" for row in calls)
                 assert json.loads((output / "device.json").read_text())["sent"] == []
             else:
-                reason = {"normal": "complete", "stale": "source_stale", "sigint": "interrupted"}[mode]
+                reason = {
+                    "normal": "complete",
+                    "sdk-progress": "complete",
+                    "stale": "source_stale",
+                    "sigint": "interrupted",
+                }[mode]
                 expected_exit = int(mode == "stale")
-                assert result["reason"] == reason and result["exit_code"] == demo.returncode == expected_exit
+                assert result["reason"] == reason and result["exit_code"] == demo_returncode == expected_exit
                 assert result["cleanup_failed"] == 0 and result["cleanup_attempted"] > 0
                 assert len({event["writer_id"] for event in events}) == 1
                 selected = next(row for row in mapping["profiles"] if row["source"] == source)
@@ -241,6 +312,9 @@ def case(artifact, profiles, output, source, mode, Client, mapping):
                 assert cleanup[0]["control_id"] == "button.1.1" and cleanup[0]["value"] == "off"
                 assert len(events) == result["accepted"] + result["ignored"] + result["cleanup_attempted"]
                 if mode == "normal":
+                    assert result["frames"] >= 1
+                    assert result["accepted"] + result["ignored"] > 0
+                if mode == "sdk-progress":
                     assert result["frames"] >= 4
                     active = events[: -result["cleanup_attempted"]]
                     assert len({e["value"] for e in active if e["control_id"] == "pushEncoder.1.1"}) > 1
@@ -266,12 +340,14 @@ def case(artifact, profiles, output, source, mode, Client, mapping):
                 (output / "midi-proof.json").write_text(
                     json.dumps({"expected_words": expected_words, "physical_qualification": False}, indent=2) + "\n"
                 )
-            assert all(token not in stdout + (output / "demo.stderr.log").read_text() for token in tokens.values())
+            assert all(token not in stdout + demo_stderr_text for token in tokens.values())
             return {"name": source + "_" + mode, "passed": True, **result}
         finally:
             provider.terminate()
             provider.wait(timeout=5)
             provider.stdout.close()
+            host_log = output / "host.stderr.log"
+            host_log.write_text(sanitized(host_log.read_text()))
             if source == "hardware" and "expected_words" in locals():
                 assert json.loads((output / "device.json").read_text())["sent"] == expected_words, (
                     "Headless exit sent feedback"
@@ -293,7 +369,7 @@ def main():
     sys.dont_write_bytecode = True
     sys.path.insert(0, str(artifact / "surface-control-sdk-1.4.0.zip"))
     from surface_control import Client
-    from surface_panel_demo import load_mapping
+    from surface_panel_demo import DisplayClient, load_mapping, run
 
     mapping = load_mapping("bcr")
     profiles = artifact
@@ -338,6 +414,21 @@ def main():
         for source in (("simulation",) if args.simulation_only else ("simulation", "hardware"))
         for mode in ("normal", "stale", "sigint")
     ]
+    # Frame/variation coverage uses the same packaged SDK and real RPC for both sources.
+    # Real CLI duration/interrupt/stale coverage above remains independent.
+    results += [
+        case(
+            artifact,
+            profiles,
+            output / (source + "-sdk-progress"),
+            source,
+            "sdk-progress",
+            Client,
+            mapping,
+            sdk=(DisplayClient, run),
+        )
+        for source in (("simulation",) if args.simulation_only else ("simulation", "hardware"))
+    ]
     if not args.simulation_only:
         results.append(
             case(
@@ -351,7 +442,7 @@ def main():
         "cases": results,
         "simulation_only": args.simulation_only,
         "profile_fixture": "artifact" if profiles == artifact else "generated-test-only",
-        "scope": "Packaged CLI and SDK from /tmp; simulation/Debug fake device only, no CoreMIDI qualification",
+        "scope": "Packaged CLI process modes plus separately identified SDK data-clock progress; all RPC real, simulation/Debug fake device only, no CoreMIDI qualification",
     }
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report))

@@ -143,6 +143,7 @@ jobs:
         with:
           name: test-logs-${{ github.run_id }}
           path: |
+            build/ci-status-panel-demo/
             build/test-runs/
             build/mcp-integration/*/*.log
             build/mcp-integration/*/*.json
