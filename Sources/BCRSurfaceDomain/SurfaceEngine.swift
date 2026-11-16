@@ -430,6 +430,9 @@ public struct SurfaceEngine: Sendable {
         return self.feedback(to: removed, at: now)
     }
 
+    /// Scene metadata never generates hardware feedback or changes live parameter values.
+    public mutating func setScenes(_ scenes: [ParameterScene]?) throws { try configuration.setScenes(scenes) }
+
     public mutating func updatePrograms(_ candidate: SurfaceConfiguration,
                                         at now: Date = .now) throws -> [SurfaceEffect]
     {

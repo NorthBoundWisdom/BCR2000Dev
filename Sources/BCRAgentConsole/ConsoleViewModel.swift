@@ -133,6 +133,13 @@ final class ConsoleViewModel: ObservableObject {
     var canRedo: Bool { deviceWork.session.canRedo }
     func undo() { deviceWork.undo() }
     func redo() { deviceWork.redo() }
+    func captureScene(name: String, overwrite: Bool = false) {
+        deviceWork.captureScene(name: name, overwrite: overwrite)
+    }
+
+    func renameScene(_ id: String, to name: String) { deviceWork.renameScene(id, to: name) }
+    func deleteScene(_ id: String) { deviceWork.deleteScene(id) }
+    func recallScene(_ id: String) { deviceWork.recallScene(id) }
     @discardableResult
     func createParameter(assigningTo control: BCRControlID? = nil) -> ParameterID? { deviceWork
         .createParameter(assigningTo: control)

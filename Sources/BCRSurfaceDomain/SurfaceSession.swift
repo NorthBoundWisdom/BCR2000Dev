@@ -189,6 +189,54 @@ public final class SurfaceSession {
         return try operation()
     }
 
+    public func captureScene(id: String, name: String, overwrite: Bool = false) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var scenes = engine.configuration.scenes ?? []
+        let existing = scenes.firstIndex { $0.id == id || $0.name == name }
+        if existing != nil, !overwrite { throw ParameterSceneError.overwriteRequiresConfirmation }
+        let scene = ParameterScene(id: existing.map { scenes[$0].id } ?? id, name: name,
+                                   values: Dictionary(uniqueKeysWithValues: engine.parameterValues.map {
+                                       ($0.key.rawValue, $0.value)
+                                   }))
+        if let existing { scenes[existing] = scene } else { scenes.append(scene) }
+        try engine.setScenes(scenes)
+        persistConfiguration(); publishChange()
+    }
+
+    public func renameScene(_ id: String, to name: String) throws {
+        var scenes = engine.configuration.scenes ?? []
+        guard let index = scenes.firstIndex(where: { $0.id == id }) else { throw ParameterSceneError.unknownScene }
+        scenes[index].name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        try engine.setScenes(scenes)
+        persistConfiguration(); publishChange()
+    }
+
+    public func deleteScene(_ id: String) throws {
+        guard let scenes = engine.configuration.scenes, scenes.contains(where: { $0.id == id })
+        else { throw ParameterSceneError.unknownScene }
+        try engine.setScenes(scenes.filter { $0.id != id })
+        persistConfiguration(); publishChange()
+    }
+
+    @discardableResult
+    public func recallScene(_ id: String) throws -> SceneRecallResult {
+        guard let scene = engine.configuration.scenes?.first(where: { $0.id == id })
+        else { throw ParameterSceneError.unknownScene }
+        let missing = scene.values.keys.filter { engine.configuration.parameter(ParameterID($0)) == nil }.sorted()
+        let changes = scene.values.filter { key, value in
+            engine.configuration.parameter(ParameterID(key)) != nil && engine.value(of: ParameterID(key)) != value
+        }
+        for key in changes.keys {
+            let id = ParameterID(key)
+            guard engine.configuration.parameter(id)?.agentWritable == true, !isMCPProtectedParameter(id)
+            else { throw ParameterSceneError.protectedParameter(id) }
+        }
+        withParameterHistory {
+            for key in changes.keys.sorted() { setParameter(ParameterID(key), to: changes[key]!) }
+        }
+        return SceneRecallResult(missingParameters: missing)
+    }
+
     public func endParameterHistoryGroup() { valueHistory.endGroup() }
     public func undo() throws { try restoreParameterHistory(redo: false) }
     public func redo() throws { try restoreParameterHistory(redo: true) }

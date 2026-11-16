@@ -5,7 +5,7 @@ public struct SurfaceValidationIssue: Equatable, Sendable {
     public enum Code: String, Equatable, Sendable {
         case unsupportedVersion, emptyName, invalidParameter, duplicateParameter, duplicateAssignment
         case unknownParameter, encoderTrigger, invalidAgentSlot, unknownGroup, invalidFunction
-        case invalidEncoderMode, conflictingNRPNChannel, duplicateControlBinding, duplicateMIDIBinding,
+        case invalidScene, invalidEncoderMode, conflictingNRPNChannel, duplicateControlBinding, duplicateMIDIBinding,
              encoderMessageKind
     }
 
@@ -93,6 +93,16 @@ public extension SurfaceConfiguration {
                 }
             }
             if invalid { issues.append(.init(.invalidFunction, subject: macro.id, detail: L10n.text("宏定义无效"))) }
+        }
+        let storedScenes = scenes ?? []
+        if storedScenes.count > 128 || Set(storedScenes.map(\.id)).count != storedScenes.count ||
+            Set(storedScenes.map(\.name)).count != storedScenes.count
+        {
+            issues.append(.init(.invalidScene, subject: name, detail: L10n.text("场景定义无效：\(name)")))
+        }
+        for scene in storedScenes {
+            do { try scene.validate() }
+            catch { issues.append(.init(.invalidScene, subject: scene.id, detail: error.localizedDescription)) }
         }
         for assignments in allAssignmentSets {
             var controls = Set<BCRControlID>()

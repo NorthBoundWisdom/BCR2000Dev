@@ -25,6 +25,7 @@ public enum SimulationSurfaceConfiguration {
     static let targetFields: Set<String> = ["parameter"]
     static let parameterTargetFields: Set<String> = ["_0"]
 
+    // This strict provider subset is frozen at v7; GUI profile additions do not change its contract.
     public static func decode(_ data: Data) throws -> SurfaceConfiguration {
         func object(_ value: Any, keys: Set<String>, path: String) throws -> [String: Any] {
             guard let value = value as? [String: Any] else {
@@ -40,8 +41,8 @@ public enum SimulationSurfaceConfiguration {
                               keys: configurationFields,
                               path: "configuration")
         guard let version = root["version"] as? NSNumber,
-              CFGetTypeID(version) != CFBooleanGetTypeID(), version.intValue == SurfaceConfiguration.currentVersion,
-              version.doubleValue == Double(SurfaceConfiguration.currentVersion)
+              CFGetTypeID(version) != CFBooleanGetTypeID(), version.intValue == 7,
+              version.doubleValue == 7
         else {
             throw ValidationError(reason: "configuration.version: simulation requires SurfaceConfiguration version 7")
         }

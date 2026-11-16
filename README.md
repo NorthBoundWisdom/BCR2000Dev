@@ -127,6 +127,8 @@ Enable panels from the **Panels** menu to the right of the workspace tabs. Selec
 
 Parameter value changes support Undo/Redo (⌘Z / ⇧⌘Z) from the Edit menu and Parameters workspace. Continuous input is grouped within 400 ms; local and MCP batches are undoable, with current parameter protections and output safety still applied.
 
+Named scenes in the Parameters workspace save and recall parameter values as one undoable batch. Scenes travel with exported profiles and the configuration library; missing parameters are reported and current protections still apply.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.

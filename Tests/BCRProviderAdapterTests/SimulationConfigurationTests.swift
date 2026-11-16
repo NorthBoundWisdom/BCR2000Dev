@@ -20,7 +20,12 @@ final class SimulationConfigurationTests: XCTestCase {
         let assignment = ControlAssignment(control: .encoder(row: 1, 1), target: .parameter(parameter.id),
                                            buttonBehavior: .momentary, inverted: true,
                                            encoderMode: .relative1, encoderStep: 2)
-        let configuration = SurfaceConfiguration(name: "All fields", parameters: [parameter], assignments: [assignment])
+        let configuration = SurfaceConfiguration(
+            version: 7,
+            name: "All fields",
+            parameters: [parameter],
+            assignments: [assignment]
+        )
         let data = try JSONEncoder().encode(configuration)
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let encodedParameter = try XCTUnwrap((root["parameters"] as? [[String: Any]])?.first)
@@ -84,6 +89,8 @@ final class SimulationConfigurationTests: XCTestCase {
         let mutations: [(inout [String: Any]) -> Void] = [
             { $0["unexpected"] = true },
             { $0["version"] = 6 },
+            { $0["version"] = 8 },
+            { $0["scenes"] = [] },
             { $0["version"] = true },
             { $0["pages"] = [["id": "page"]] },
             { row in var p = row["parameters"] as! [[String: Any]]; p[0]["unknown"] = 1; row["parameters"] = p },

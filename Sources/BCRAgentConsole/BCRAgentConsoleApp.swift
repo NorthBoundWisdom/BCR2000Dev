@@ -255,7 +255,12 @@ struct BCRAgentConsoleApp: App {
     @MainActor
     func renderNativeUISnapshots(model: ConsoleViewModel, directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let sceneModel = ConsoleViewModel(stores: .temporary(), startsMIDI: false, initialPreset: .robotArm,
+                                          automaticallyAdvancesMock: false, timing: .immediate)
+        sceneModel.setParameter("arm.j1", to: 74)
+        sceneModel.captureScene(name: "Intro")
         let previews: [(String, AnyView, CGSize)] = [
+            ("scenes", AnyView(ParameterScenesView(model: sceneModel).padding()), CGSize(width: 680, height: 260)),
             ("approval", AnyView(CodexApprovalReviewView(controller: model.codex, approval: .init(
                 id: .number(101), slotID: AgentSlotID(1),
                 detail: "swift test --build-path build/swiftpm\n/offline-fixture/workspace\nReview the requested test execution before deciding.",

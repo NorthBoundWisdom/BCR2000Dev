@@ -310,7 +310,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 7
+    public static let currentVersion = 8
     public static let basePageID = "__base__"
 
     public var version: Int
@@ -319,6 +319,7 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     private var baseAssignments: [ControlAssignment]
     public private(set) var pages: [AssignmentPage]
     public private(set) var macros: [SurfaceMacro]
+    public internal(set) var scenes: [ParameterScene]?
     public private(set) var activePageID: String?
     public var allAssignmentSets: [[ControlAssignment]] { [baseAssignments] + pages.map(\.assignments) }
     public private(set) var assignments: [ControlAssignment] {
@@ -335,7 +336,8 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         name: String,
         parameters: [ParameterDefinition] = [],
         assignments: [ControlAssignment] = [],
-        pages: [AssignmentPage] = [], macros: [SurfaceMacro] = [], activePageID: String? = nil
+        pages: [AssignmentPage] = [], macros: [SurfaceMacro] = [], activePageID: String? = nil,
+        scenes: [ParameterScene]? = nil
     ) {
         self.version = version
         self.name = name
@@ -343,11 +345,12 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         self.baseAssignments = assignments.sorted { $0.control < $1.control }
         self.pages = pages
         self.macros = macros
+        self.scenes = scenes
         self.activePageID = activePageID
     }
 
     private enum CodingKeys: String,
-        CodingKey { case version, name, parameters, assignments, pages, macros, activePageID }
+        CodingKey { case version, name, parameters, assignments, pages, macros, activePageID, scenes }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -365,7 +368,8 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
             assignments: try container.decode([ControlAssignment].self, forKey: .assignments),
             pages: container.contains(.pages) ? try container.decode([AssignmentPage].self, forKey: .pages) : [],
             macros: container.contains(.macros) ? try container.decode([SurfaceMacro].self, forKey: .macros) : [],
-            activePageID: version < 6 ? try container.decodeIfPresent(String.self, forKey: .activePageID) : nil
+            activePageID: version < 6 ? try container.decodeIfPresent(String.self, forKey: .activePageID) : nil,
+            scenes: try container.decodeIfPresent([ParameterScene].self, forKey: .scenes)
         )
         try validate()
     }
@@ -378,6 +382,7 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         try c.encode(baseAssignments, forKey: .assignments)
         try c.encode(pages, forKey: .pages)
         try c.encode(macros, forKey: .macros)
+        try c.encodeIfPresent(scenes, forKey: .scenes)
         // activePageID is session state; exported/durable configurations always open on the base page.
     }
 

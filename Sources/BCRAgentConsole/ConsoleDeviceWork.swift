@@ -484,6 +484,13 @@ final class ConsoleDeviceWork: ObservableObject {
     func resetGroup(_ group: String) { surfaceIntents.resetGroup(group) }
     func undo() { surfaceIntents.undo() }
     func redo() { surfaceIntents.redo() }
+    func recallScene(_ id: String) { surfaceIntents.recallScene(id) }
+    func deleteScene(_ id: String) { surfaceIntents.deleteScene(id) }
+    func renameScene(_ id: String, to name: String) { surfaceIntents.renameScene(id, to: name) }
+    func captureScene(name: String, overwrite: Bool = false) { surfaceIntents.captureScene(
+        name: name,
+        overwrite: overwrite
+    ) }
     @discardableResult
     func createParameter(assigningTo control: BCRControlID? = nil) -> ParameterID? { surfaceIntents
         .createParameter(assigningTo: control)
