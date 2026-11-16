@@ -129,6 +129,12 @@ final class ConsoleViewModel: ObservableObject {
     func touch(_ control: BCRControlID) { deviceWork.touch(control) }
     func setParameter(_ id: ParameterID, to value: Double) { deviceWork.setParameter(id, to: value) }
     func resetGroup(_ group: String) { deviceWork.resetGroup(group) }
+    var highlightedGroup: String? { deviceWork.session.highlightedGroup }
+    func highlightGroup(_ group: String?) { deviceWork.highlightGroup(group) }
+    func setParameterColor(_ color: ParameterColor?, for id: ParameterID) {
+        deviceWork.setParameterColor(color, for: id)
+    }
+
     var canUndo: Bool { deviceWork.session.canUndo }
     var canRedo: Bool { deviceWork.session.canRedo }
     func undo() { deviceWork.undo() }

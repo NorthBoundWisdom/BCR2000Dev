@@ -430,6 +430,13 @@ public struct SurfaceEngine: Sendable {
         return self.feedback(to: removed, at: now)
     }
 
+    /// Pure metadata update: unlike range/value edits, it never emits feedback effects.
+    public mutating func setParameterColor(_ color: ParameterColor?, for id: ParameterID) throws {
+        guard var definition = configuration.parameter(id) else { throw ParameterDefinitionError.unknownParameter(id) }
+        definition.color = color
+        try configuration.updateParameter(definition)
+    }
+
     /// Scene metadata never generates hardware feedback or changes live parameter values.
     public mutating func setScenes(_ scenes: [ParameterScene]?) throws { try configuration.setScenes(scenes) }
 

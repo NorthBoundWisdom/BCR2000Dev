@@ -50,6 +50,7 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
     public var agentWritable: Bool
     public var externallyProtected: Bool
     public var step: Double?
+    public var color: ParameterColor?
 
     public init(
         id: ParameterID,
@@ -62,7 +63,8 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         kind: ParameterKind = .continuous,
         agentWritable: Bool = true,
         externallyProtected: Bool = false,
-        step: Double? = nil
+        step: Double? = nil,
+        color: ParameterColor? = nil
     ) {
         self.id = id
         self.name = name
@@ -75,10 +77,12 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
         self.agentWritable = agentWritable
         self.externallyProtected = externallyProtected
         self.step = step
+        self.color = color
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, group, unit, minimum, maximum, defaultValue, kind, agentWritable, externallyProtected, step
+        case id, name, group, unit, minimum, maximum, defaultValue, kind, agentWritable, externallyProtected, step,
+             color
     }
 
     public init(from decoder: any Decoder) throws {
@@ -99,7 +103,8 @@ public struct ParameterDefinition: Identifiable, Codable, Equatable, Sendable {
             kind: try field(ParameterKind.self, .kind, .continuous),
             agentWritable: try field(Bool.self, .agentWritable, !legacyProtected),
             externallyProtected: try field(Bool.self, .externallyProtected, legacyProtected),
-            step: try c.decodeIfPresent(Double.self, forKey: .step)
+            step: try c.decodeIfPresent(Double.self, forKey: .step),
+            color: try c.decodeIfPresent(ParameterColor.self, forKey: .color)
         )
     }
 
@@ -310,7 +315,7 @@ public enum ControlAssignmentError: Error, Equatable, LocalizedError, Sendable {
 /// User-editable function layer: parameter definitions plus what every physical control does.
 /// It contains no MIDI identities, so it can be shared between the mock and real devices.
 public struct SurfaceConfiguration: Codable, Equatable, Sendable {
-    public static let currentVersion = 8
+    public static let currentVersion = 9
     public static let basePageID = "__base__"
 
     public var version: Int

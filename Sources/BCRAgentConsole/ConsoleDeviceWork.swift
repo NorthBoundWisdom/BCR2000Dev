@@ -484,6 +484,11 @@ final class ConsoleDeviceWork: ObservableObject {
     func resetGroup(_ group: String) { surfaceIntents.resetGroup(group) }
     func undo() { surfaceIntents.undo() }
     func redo() { surfaceIntents.redo() }
+    func highlightGroup(_ group: String?) { surfaceIntents.highlightGroup(group) }
+    func setParameterColor(_ color: ParameterColor?, for id: ParameterID) { surfaceIntents.setParameterColor(
+        color,
+        for: id
+    ) }
     func recallScene(_ id: String) { surfaceIntents.recallScene(id) }
     func deleteScene(_ id: String) { surfaceIntents.deleteScene(id) }
     func renameScene(_ id: String, to name: String) { surfaceIntents.renameScene(id, to: name) }

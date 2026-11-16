@@ -1015,3 +1015,14 @@
 "覆盖" = "Overwrite";
 "删除场景？" = "Delete scene?";
 "场景包含当前受保护的数值变化：{0}" = "Scene includes a change to a currently protected value: {0}";
+"红色" = "Red";
+"橙色" = "Orange";
+"黄色" = "Yellow";
+"绿色" = "Green";
+"青色" = "Teal";
+"蓝色" = "Blue";
+"紫色" = "Purple";
+"粉色" = "Pink";
+"分组高亮" = "Highlight group";
+"颜色标签" = "Color tag";
+"无颜色" = "No color";

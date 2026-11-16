@@ -129,6 +129,8 @@ Parameter value changes support Undo/Redo (⌘Z / ⇧⌘Z) from the Edit menu an
 
 Named scenes in the Parameters workspace save and recall parameter values as one undoable batch. Scenes travel with exported profiles and the configuration library; missing parameters are reported and current protections still apply.
 
+Parameters also support eight software color tags and per-group panel highlighting. Tags persist with profiles; highlights are session-only and send no MIDI.
+
 ### Interface language
 
 The app follows the preferred macOS language by default, supports Simplified Chinese, Traditional Chinese, and English, and falls back to English for other languages.

@@ -36,3 +36,13 @@ extension ConsoleSurfaceIntents {
         } catch { report(error) }
     }
 }
+
+extension ConsoleSurfaceIntents {
+    func setParameterColor(_ color: ParameterColor?, for id: ParameterID) {
+        do { try session.setParameterColor(color, for: id) } catch { report(error) }
+    }
+
+    func highlightGroup(_ group: String?) {
+        do { try session.highlightGroup(group) } catch { report(error) }
+    }
+}

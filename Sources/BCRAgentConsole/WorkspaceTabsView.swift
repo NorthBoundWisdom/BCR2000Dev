@@ -135,6 +135,13 @@ private struct ParameterListView: View {
                         Text(group.isEmpty ? L10n.text("未分组") : BuiltInNamePresentation.displayName(group))
                             .font(.subheadline.bold())
                         Spacer()
+                        Button {
+                            model.highlightGroup(model.highlightedGroup == group ? nil : group)
+                        } label: {
+                            Label(L10n.text("分组高亮"), systemImage: model.highlightedGroup == group ? "eye.fill" : "eye")
+                        }
+                        .accessibilityIdentifier("parameters.highlight.\(group)")
+                        .controlSize(.small)
                         Button(L10n.text("复位到默认")) { model.resetGroup(group) }
                             .controlSize(.small)
                     }
@@ -222,7 +229,13 @@ private struct ParameterRow: View {
     }
 
     private var name: some View {
-        Text(BuiltInNamePresentation.displayName(definition.name)).lineLimit(1)
+        HStack(spacing: 4) {
+            if let color = definition.color {
+                Image(systemName: "tag.fill").foregroundStyle(Theme.tag(color))
+                    .accessibilityLabel(color.title)
+            }
+            Text(BuiltInNamePresentation.displayName(definition.name)).lineLimit(1)
+        }
     }
 
     private var valueText: some View {

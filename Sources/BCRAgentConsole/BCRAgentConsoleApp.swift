@@ -259,7 +259,10 @@ struct BCRAgentConsoleApp: App {
                                           automaticallyAdvancesMock: false, timing: .immediate)
         sceneModel.setParameter("arm.j1", to: 74)
         sceneModel.captureScene(name: "Intro")
+        sceneModel.setParameterColor(.purple, for: "arm.j1")
+        sceneModel.highlightGroup(sceneModel.configuration.parameters[0].group)
         let previews: [(String, AnyView, CGSize)] = [
+            ("colors", AnyView(SurfacePanelView(model: sceneModel)), CGSize(width: 820, height: 780)),
             ("scenes", AnyView(ParameterScenesView(model: sceneModel).padding()), CGSize(width: 680, height: 260)),
             ("approval", AnyView(CodexApprovalReviewView(controller: model.codex, approval: .init(
                 id: .number(101), slotID: AgentSlotID(1),

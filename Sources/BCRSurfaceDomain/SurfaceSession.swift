@@ -166,6 +166,7 @@ public final class SurfaceSession {
     private func clearFeedbackQueue() { scheduler?.clear(); notifyFeedbackQueue() }
     private var writeOrigin: SurfaceWriteOrigin = .software
     public private(set) var valueHistory = ParameterValueHistory()
+    public private(set) var highlightedGroup: String?
     private var valueTransactionDepth = 0
     private var restoringHistory = false
     public var canUndo: Bool { valueHistory.canUndo }
@@ -187,6 +188,18 @@ public final class SurfaceSession {
             }
         }
         return try operation()
+    }
+
+    public func setParameterColor(_ color: ParameterColor?, for id: ParameterID) throws {
+        try engine.setParameterColor(color, for: id)
+        persistConfiguration(); publishChange()
+    }
+
+    public func highlightGroup(_ group: String?) throws {
+        guard group == nil || engine.configuration.parameterGroups.contains(group!)
+        else { throw MotionSafetyError(L10n.text("未知参数组")) }
+        highlightedGroup = group
+        publishChange()
     }
 
     public func captureScene(id: String, name: String, overwrite: Bool = false) throws {
@@ -499,6 +512,7 @@ public final class SurfaceSession {
         let clearedFeedback = engine.replaceConfiguration(configuration, at: now())
         clearFeedbackQueue()
         configurationRevision &+= 1
+        highlightedGroup = nil
         valueHistory.clear()
         noteMappingContextChanged()
         mockDevice.configureModes(configuration)

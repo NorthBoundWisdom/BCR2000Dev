@@ -11,6 +11,19 @@ import enum AgentPlugin.AgentRunState
 import SwiftUI
 
 enum Theme {
+    static func tag(_ color: ParameterColor) -> Color {
+        switch color {
+        case .red: .red
+        case .orange: .orange
+        case .yellow: .yellow
+        case .green: .green
+        case .teal: .teal
+        case .blue: .blue
+        case .purple: .purple
+        case .pink: .pink
+        }
+    }
+
     static let background = Color(red: 0.055, green: 0.06, blue: 0.072)
     static let surface = Color.white.opacity(0.045)
     static let stroke = Color.white.opacity(0.08)

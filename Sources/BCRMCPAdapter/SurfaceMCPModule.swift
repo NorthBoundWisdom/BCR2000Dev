@@ -206,12 +206,13 @@ extension AgentControlService {
             return try .encoded(assignment)
         case "create_parameter", "update_parameter":
             try requireConfigurationWrite()
-            let definition = try args["definition"]!.decoded(ParameterDefinition.self)
+            var definition = try args["definition"]!.decoded(ParameterDefinition.self)
             try definition.validate()
             guard !session.isMCPProtectedParameter(definition.id) else {
                 throw MCPToolFailure(L10n.text("MCP 不允许修改使能参数定义：\(definition.id)"))
             }
             if name == "update_parameter", let previous = session.engine.configuration.parameter(definition.id) {
+                definition.color = previous.color // Legacy callers cannot edit local presentation metadata.
                 guard previous.agentWritable
                 else { throw MCPToolFailure(L10n.text("MCP 不允许修改不可写参数定义：\(definition.id)")) }
                 guard previous.agentWritable == definition.agentWritable,
@@ -271,6 +272,7 @@ extension AgentControlService {
         else {
             throw MCPToolFailure(L10n.text("未知参数：\(id)"))
         }
+        info["color"] = nil // Local presentation metadata is outside the frozen Provider 1.0 schema.
         info["value"] = .double(value)
         info["actualValue"] = session.engine.actualFeedbackValues[id].map(JSONValue.double) ?? .null
         info["outputValue"] = session.motionSafety?.outputs[id].map(JSONValue.double) ?? .null

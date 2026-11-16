@@ -463,6 +463,8 @@ private struct ParameterEditor: View {
                 }
             }
 
+            ParameterColorPicker(model: model, definition: definition)
+
             if let conflict = draftState.conflict {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.text("参数已在其他位置修改，请处理草稿冲突。")).foregroundStyle(.orange)

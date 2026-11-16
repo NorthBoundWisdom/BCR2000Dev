@@ -21,6 +21,12 @@ struct ControlPresentation {
     let isBound: Bool
     let isSelected: Bool
     let isLearnTarget: Bool
+    let color: ParameterColor?
+    let isHighlighted: Bool
+    var accessibilitySummary: String {
+        [control.description, label ?? L10n.text("未分配"), color?.title,
+         isHighlighted ? L10n.text("分组高亮") : nil].compactMap { $0 }.joined(separator: " · ")
+    }
 }
 
 extension ConsoleViewModel {
@@ -66,6 +72,8 @@ extension ConsoleViewModel {
         case nil:
             break
         }
+        let parameter = assignment?.target.parameterID.flatMap { configuration.parameter($0) }
+        let highlighted = highlightedGroup.map { $0 == parameter?.group } ?? false
         return ControlPresentation(
             control: control,
             value: displayValue(of: control),
@@ -78,7 +86,9 @@ extension ConsoleViewModel {
             accent: accent,
             isBound: engine.hardwareMap.midi(for: control) != nil,
             isSelected: selectedControl == control,
-            isLearnTarget: engine.learnTarget == control
+            isLearnTarget: engine.learnTarget == control,
+            color: parameter?.color,
+            isHighlighted: highlighted
         )
     }
 }
@@ -528,7 +538,7 @@ private struct UserKeyCell: View {
             "\(presentation.control.description) · \(presentation.label ?? L10n.text("未分配")) · \(presentation.detail ?? "\(presentation.value)")"
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
+        .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
             onPress()
@@ -546,15 +556,18 @@ private struct CellChrome: ViewModifier {
             .frame(width: m(74))
             .padding(.vertical, m(5))
             .background(
-                presentation.isSelected ? Theme.selection.opacity(0.14) : Color.black.opacity(0.18),
+                presentation.isHighlighted ? Theme.selection.opacity(0.22) :
+                    (presentation.isSelected ? Theme.selection.opacity(0.14) : Color.black.opacity(0.18)),
                 in: RoundedRectangle(cornerRadius: m(9))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: m(9))
                     .stroke(
                         presentation.isLearnTarget ? Theme.learn
-                            : (presentation.isSelected ? Theme.selection : Color.white.opacity(0.04)),
-                        lineWidth: presentation.isLearnTarget ? 2 : 1
+                            :
+                            (presentation.isSelected || presentation.isHighlighted ? Theme.selection : Color.white
+                                .opacity(0.04)),
+                        lineWidth: presentation.isLearnTarget || presentation.isHighlighted ? 2 : 1
                     )
             }
             .overlay(alignment: .topTrailing) {
@@ -575,9 +588,15 @@ private struct CellLabels: View {
 
     var body: some View {
         VStack(spacing: 1) {
-            Text(presentation.control.shortName)
-                .font(m.font(8.5, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.tertiary)
+            HStack(spacing: m(2)) {
+                if let color = presentation.color {
+                    Image(systemName: "tag.fill").foregroundStyle(Theme.tag(color))
+                        .accessibilityLabel(color.title)
+                }
+                Text(presentation.control.shortName).foregroundStyle(.tertiary)
+                if presentation.isHighlighted { Image(systemName: "eye.fill").foregroundStyle(Theme.selection) }
+            }
+            .font(m.font(8.5, weight: .semibold, design: .monospaced))
             Text(presentation.label ?? L10n.text("未分配"))
                 .font(m.font(10, weight: .semibold))
                 .foregroundStyle(presentation
@@ -629,7 +648,7 @@ private struct KnobCell: View {
         }
         .modifier(CellChrome(presentation: presentation))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
+        .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityValue(presentation.detail ?? "\(presentation.value)")
         .accessibilityAdjustableAction { direction in
             onTurn(direction == .increment ? 1 : -1)
@@ -723,7 +742,7 @@ private struct PadCell: View {
         }
         .modifier(CellChrome(presentation: presentation))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(presentation.control.description) \(presentation.label ?? L10n.text("未分配"))")
+        .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityAddTraits(.isButton)
         .help(L10n.text("操作 \(presentation.control.shortName)"))
         .accessibilityAction {
@@ -742,6 +761,8 @@ private struct PushButtonCell: View {
 
     var body: some View {
         HStack(spacing: m(3)) {
+            if let color = presentation.color { Image(systemName: "tag.fill").foregroundStyle(Theme.tag(color)) }
+            if presentation.isHighlighted { Image(systemName: "eye.fill").foregroundStyle(Theme.selection) }
             Image(systemName: "arrow.down.to.line.compact")
                 .font(m.font(8, weight: .bold))
             Text(presentation.label ?? "PUSH")
@@ -759,13 +780,15 @@ private struct PushButtonCell: View {
         .overlay {
             Capsule().stroke(
                 presentation.isLearnTarget ? Theme.learn
-                    : (presentation.isSelected ? Theme.selection : Color.white.opacity(0.06)),
+                    :
+                    (presentation.isSelected || presentation.isHighlighted ? Theme.selection : Color.white
+                        .opacity(0.06)),
                 lineWidth: presentation.isLearnTarget ? 2 : 1
             )
         }
         .modifier(PressGesture(isDown: $isDown, onPress: onPress, onRelease: onRelease))
-        .help(presentation.control.description)
-        .accessibilityLabel(presentation.control.description)
+        .help(presentation.accessibilitySummary)
+        .accessibilityLabel(presentation.accessibilitySummary)
         .accessibilityAddTraits(.isButton)
     }
 }
