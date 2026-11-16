@@ -196,6 +196,7 @@ let package = Package(
         .testTarget(
             name: "BCRAgentCoreTests",
             dependencies: [
+                "BCRProviderMCPAdapter",
                 .product(name: "SurfaceDeviceContracts", package: "ControlSurfaceKit"),
                 .product(name: "SurfaceDeviceConformance", package: "ControlSurfaceKit"),
                 "BCRFoundation",

@@ -8,6 +8,8 @@ import SurfacePluginContracts
 /// Optional hardware-only journal. The engine remains the sole parameter authority.
 @MainActor
 public final class BCRHardwareSurfaceControlAdapter {
+    public enum Mode: Sendable { case physical, ownedVirtualRehearsal }
+    private let mode: Mode
     private let surface: SurfaceSession
     private let permissions: BCRSurfaceControlAdapter.Permissions
     private let principals: SurfaceControlPrincipals
@@ -36,7 +38,9 @@ public final class BCRHardwareSurfaceControlAdapter {
         }
     }
 
-    public static func profile(_ surface: SurfaceSession, inputEventCapacity: Int? = nil) throws -> ControlProfile {
+    public static func profile(_ surface: SurfaceSession, inputEventCapacity: Int? = nil,
+                               mode: Mode = .physical) throws -> ControlProfile
+    {
         let controls = surface.learnedHardwareMap.entries.compactMap { entry -> ControlDescriptor? in
             let control = entry.control
             let assignment = surface.engine.configuration.assignment(for: control)
@@ -74,15 +78,22 @@ public final class BCRHardwareSurfaceControlAdapter {
             capabilities.append("feedback." + kind.rawValue)
         }
         if inputEventCapacity != nil { capabilities.append("events.input_retention") }
-        return ControlProfile(id: "bcr2000.hardware", version: inputEventCapacity == nil ? "1.4" : "1.5",
-                              controls: controls, capabilities: capabilities)
+        if mode == .ownedVirtualRehearsal { capabilities.append("session.owned_virtual_rehearsal") }
+        return ControlProfile(
+            id: mode == .ownedVirtualRehearsal ? "bcr2000.owned-virtual-rehearsal" : "bcr2000.hardware",
+            version: inputEventCapacity == nil && mode == .physical ? "1.4" : "1.5",
+            controls: controls,
+            capabilities: capabilities
+        )
     }
 
-    public static func publishedContract(surface: SurfaceSession, inputEventCapacity: Int? = nil) throws -> JSONValue {
+    public static func publishedContract(surface: SurfaceSession, inputEventCapacity: Int? = nil,
+                                         mode: Mode = .physical) throws -> JSONValue
+    {
         let core = try SurfaceControlSession(
             instanceID: "example.hardware",
             epoch: "discovery-only",
-            profile: try profile(surface, inputEventCapacity: inputEventCapacity),
+            profile: try profile(surface, inputEventCapacity: inputEventCapacity, mode: mode),
             inputEventCapacity: inputEventCapacity
         )
         return try .object(["discovery": .encoded(core.discovery()),
@@ -96,17 +107,18 @@ public final class BCRHardwareSurfaceControlAdapter {
 
     public init(surface: SurfaceSession, instanceID: String, permissions: BCRSurfaceControlAdapter.Permissions,
                 principals: SurfaceControlPrincipals = .init(), eventCapacity: Int = 1024,
-                inputEventCapacity: Int? = nil,
+                inputEventCapacity: Int? = nil, mode: Mode = .physical,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
+        self.mode = mode
         self.epochFactory = epochFactory
         self.surface = surface; self.permissions = permissions; self.principals = principals; self.monotonic = monotonic
         context = surface.mappingContextRevision; generation = surface.inputEvents.generation; source = surface.source
         core = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: epochFactory(),
-            profile: try Self.profile(surface, inputEventCapacity: inputEventCapacity),
+            profile: try Self.profile(surface, inputEventCapacity: inputEventCapacity, mode: mode),
             eventCapacity: eventCapacity, inputEventCapacity: inputEventCapacity
         )
         try core.transitionHardware(
@@ -127,7 +139,11 @@ public final class BCRHardwareSurfaceControlAdapter {
         try next.transitionHardware(epoch: epochFactory(),
                                     linkState: surface.source == .hardware && surface.connection
                                         .isConnected ? .connected : .disconnected,
-                                    profile: try Self.profile(surface, inputEventCapacity: core.inputEventCapacity),
+                                    profile: try Self.profile(
+                                        surface,
+                                        inputEventCapacity: core.inputEventCapacity,
+                                        mode: mode
+                                    ),
                                     at: monotonic())
         core = next; context = surface.mappingContextRevision; generation = surface.inputEvents
             .generation; source = surface.source

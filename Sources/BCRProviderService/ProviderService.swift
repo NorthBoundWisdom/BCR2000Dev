@@ -33,6 +33,8 @@ private struct Options {
     var surfaceClientTokensStdin = false
     var simulationProfile = false
     var hardwareProfile = false
+    var ownedVirtualRehearsal = false
+    var ownedVirtualPeerFD: Int32?
     var simulationConfiguration: URL?
     var usesSimulationConfiguration: Bool { simulationProfile || simulationConfiguration != nil }
     var describeSurface = false
@@ -80,6 +82,15 @@ private struct Options {
                 guard !result.surfaceClientTokensStdin
                 else { throw BootError(reason: "Repeated surface client option") }
                 result.surfaceClientTokensStdin = true
+            case "--owned-virtual-rehearsal":
+                guard !result.ownedVirtualRehearsal
+                else { throw BootError(reason: "Repeated owned virtual rehearsal option") }
+                result.ownedVirtualRehearsal = true
+            case "--owned-virtual-rehearsal-input-fd":
+                guard result.ownedVirtualPeerFD == nil, let fd = Int32(try value()), fd > STDERR_FILENO else {
+                    throw BootError(reason: "Invalid or repeated private rehearsal input FD")
+                }
+                result.ownedVirtualPeerFD = fd
             case "--hardware-profile": result.hardwareProfile = true
             case "--simulation-profile": result.simulationProfile = true
             case "--simulation-configuration": result.simulationConfiguration = URL(fileURLWithPath: try value())
@@ -189,6 +200,22 @@ private struct Options {
                 reason: "Surface input event capacity requires an explicit simulation configuration/profile or hardware profile"
             )
         }
+        guard !result
+            .ownedVirtualRehearsal || (result.console && result.source == .hardware && result.hardwareProfile &&
+                !result.usesSimulationConfiguration && result.dataDirectory == nil)
+        else {
+            throw BootError(
+                reason: "Owned virtual rehearsal requires --source hardware --hardware-profile, an explicit map and memory-only state"
+            )
+        }
+        guard result.ownedVirtualPeerFD == nil || result.ownedVirtualRehearsal else {
+            throw BootError(reason: "Private rehearsal input FD requires owned virtual rehearsal")
+        }
+        if result.ownedVirtualRehearsal,
+           ProcessInfo.processInfo.environment.keys.contains(where: { $0.hasPrefix("BCR_PROVIDER_TEST_HARDWARE") })
+        {
+            throw BootError(reason: "Owned virtual rehearsal conflicts with Debug hardware test settings")
+        }
         return result
     }
 }
@@ -287,6 +314,9 @@ private struct BCRProviderService {
     --hardware-profile            Contract 1.4 hardware input journal; explicit learned map required
                                   Display requires BOTH --hardware-output write and --allow-surface-feedback
     --describe-surface            Print the selected profile's published control contract (JSON), then exit
+    --owned-virtual-rehearsal      Explicit nonphysical Release rehearsal; only process-owned virtual MIDI refs
+                                  Requires --source hardware --hardware-profile and a map; never real-device evidence
+    --owned-virtual-rehearsal-input-fd N  Private inherited FIFO for typed peer actions; no remote input API
     --surface-instance-id ID      Stable consumer-pinned simulation instance identity
     --surface-input-event-capacity N  Explicit independent input history (1...65536); selected profile opts into 1.5
     --surface-client-tokens-stdin  Private owner/operator/display JSON pipe; optional displays array adds up to seven displays
@@ -336,7 +366,8 @@ private struct BCRProviderService {
                         .encode(options.hardwareProfile ? BCRHardwareSurfaceControlAdapter
                             .publishedContract(
                                 surface: session,
-                                inputEventCapacity: options.surfaceInputEventCapacity
+                                inputEventCapacity: options.surfaceInputEventCapacity,
+                                mode: options.ownedVirtualRehearsal ? .ownedVirtualRehearsal : .physical
                             ) :
                             BCRSurfaceControlAdapter.publishedContract(
                                 surface: session,
@@ -420,9 +451,34 @@ private struct BCRProviderService {
                 var testDevice: TestOnlyHardwareDevice?
             #endif
             var usesTestDouble = false
+            var nativeFactoryCalls = 0
+            var ownedFactoryCalls = 0
+            var rehearsal: OwnedVirtualRehearsalDevice?
+            var rehearsalStopped = false
+            defer {
+                if let rehearsal, !rehearsalStopped {
+                    _ = rehearsal.stop()
+                    if let text = try? rehearsal.audit.jsonText { fputs(text + "\n", stderr) }
+                }
+            }
             var native: CoreMIDIService?
             let hardware: any SurfaceDevice
-            if options.console && options.source == .hardware {
+            if options.ownedVirtualRehearsal {
+                if let fd = options.ownedVirtualPeerFD {
+                    var info = stat()
+                    guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFIFO,
+                          fcntl(fd, F_GETFL) & O_ACCMODE != O_WRONLY
+                    else {
+                        throw BootError(reason: "Private rehearsal input requires a readable inherited pipe")
+                    }
+                }
+                ownedFactoryCalls += 1
+                let owned = try OwnedVirtualRehearsalDevice(map: map, configuration: profile) { value in
+                    do { try FileHandle.standardError.write(contentsOf: Data((try value.jsonText + "\n").utf8)) }
+                    catch { fatalError("Owned rehearsal audit output failed") }
+                }
+                rehearsal = owned; hardware = owned
+            } else if options.console && options.source == .hardware {
                 let environment = ProcessInfo.processInfo.environment
                 if let flag = environment["BCR_PROVIDER_TEST_HARDWARE"] {
                     #if DEBUG
@@ -447,6 +503,7 @@ private struct BCRProviderService {
                         )
                     #endif
                 } else {
+                    nativeFactoryCalls += 1
                     let driver = CoreMIDIService(); try driver.start(); native = driver; hardware = driver
                     let deadline = ProcessInfo.processInfo.systemUptime + 3
                     while !driver.connection.isConnected && ProcessInfo.processInfo.systemUptime < deadline {
@@ -472,6 +529,13 @@ private struct BCRProviderService {
                                                 includeDeviceAdministration: false)
             gateway.onSelectSource = { source in
                 guard let session else { throw ProviderDomainError("unsupported", "The console is disabled") }
+                if options.ownedVirtualRehearsal {
+                    guard source == .hardware else { throw ProviderDomainError(
+                        "permission_denied",
+                        "Rehearsal source is permanently hardware-contract virtual IO"
+                    ) }
+                    return
+                }
                 if source == .hardware && native == nil && !usesTestDouble { throw ProviderDomainError(
                     "unsupported",
                     "Restart with --source hardware to open the native driver"
@@ -490,8 +554,11 @@ private struct BCRProviderService {
                                           surfaceInstanceID: options.surfaceInstanceID,
                                           surfacePermissions: options.surfacePermissions, surfacePrincipals: principals,
                                           surfaceWriteLimits: options.surfaceWriteLimits,
-                                          surfaceInputEventCapacity: options.surfaceInputEventCapacity)
+                                          surfaceInputEventCapacity: options.surfaceInputEventCapacity,
+                                          surfaceHardwareMode: options
+                                              .ownedVirtualRehearsal ? .ownedVirtualRehearsal : .physical)
             try ProviderMCPModule.installShared(on: gateway, application: application)
+            if let rehearsal { try await rehearsal.start() }
             let server = MCPHTTPServer(
                 router: MCPRouter(service: gateway),
                 providerID: application.providerID,
@@ -509,7 +576,7 @@ private struct BCRProviderService {
                 displayWriteLimit: options.displayWriteLimit
             )
             application.start()
-            let ready: JSONValue = .object([
+            var readyFields: [String: JSONValue] = [
                 "event": .string("provider.ready"), "contract_version": .string("1.0"),
                 "provider_id": .string(application.providerID),
                 "url": .string("http://127.0.0.1:\(port)/mcp"), "pid": .number(Int(getpid())),
@@ -519,9 +586,23 @@ private struct BCRProviderService {
                 "robot": .bool(options.robot), "chassis": .bool(options.chassis),
                 "clock": .string(options.clock.rawValue),
                 "persistence": .string(options.dataDirectory == nil ? "memory" : "owned_profile_directory")
-            ])
+            ]
+            if options.ownedVirtualRehearsal {
+                readyFields["owned_virtual_rehearsal"] = .bool(true)
+                readyFields["physical_evidence"] = .bool(false)
+                readyFields["factory_usage"] = .object([
+                    "owned": .number(ownedFactoryCalls),
+                    "native": .number(nativeFactoryCalls)
+                ])
+                let discovered = gateway.call("surface_control_discover")
+                guard !discovered.isError
+                else { throw BootError(reason: "Owned rehearsal contract initialization failed") }
+                readyFields["surface_control"] = discovered.value
+            }
+            let ready = JSONValue.object(readyFields)
             print(try ready.jsonText)
             fflush(stdout)
+            if let fd = options.ownedVirtualPeerFD { try rehearsal?.startPeer(fd: fd) }
             #if DEBUG
                 testDevice?.start()
             #endif
@@ -530,6 +611,12 @@ private struct BCRProviderService {
                 testDevice?.stop()
             #endif
             server.stop(); application.stopClock()
+            if let rehearsal {
+                let failures = rehearsal.stop(); rehearsalStopped = true
+                try FileHandle.standardError.write(contentsOf: Data((try rehearsal.audit.jsonText + "\n").utf8))
+                guard failures.isEmpty
+                else { throw BootError(reason: "Owned rehearsal cleanup failed; see nonphysical audit") }
+            }
             print("{\"event\":\"provider.stopped\"}")
         } catch {
             let message = (error as? ProviderDomainError)?.message ?? (error as? BootError)?

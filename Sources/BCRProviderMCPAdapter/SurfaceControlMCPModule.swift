@@ -58,6 +58,7 @@ public enum SurfaceControlMCPModule {
     public static func installHardware(on gateway: MCPApplicationGateway, instanceID: String,
                                        permissions: BCRSurfaceControlAdapter.Permissions = .init(),
                                        inputEventCapacity: Int? = nil,
+                                       hardwareMode: BCRHardwareSurfaceControlAdapter.Mode = .physical,
                                        principals: SurfaceControlPrincipals = .init(),
                                        monotonic: @escaping @MainActor ()
                                            -> Double = { ProcessInfo.processInfo.systemUptime },
@@ -66,10 +67,13 @@ public enum SurfaceControlMCPModule {
         guard let surface = gateway.surfaceSession else { throw ControlContractError("unsupported_source") }
         let adapter = try BCRHardwareSurfaceControlAdapter(surface: surface, instanceID: instanceID,
                                                            permissions: permissions, principals: principals,
-                                                           inputEventCapacity: inputEventCapacity, monotonic: monotonic,
+                                                           inputEventCapacity: inputEventCapacity, mode: hardwareMode,
+                                                           monotonic: monotonic,
                                                            epochFactory: epochFactory)
         let tools = SurfaceControlTools.descriptors(source: .hardware).map { descriptor in JSONValue.object([
-            "name": .string(descriptor.name), "description": .string("Hardware surface control 1.4"),
+            "name": .string(descriptor.name),
+            "description": .string(hardwareMode == .physical ? "Hardware surface control 1.4" :
+                "Owned virtual rehearsal surface control 1.5; no physical evidence"),
             "inputSchema": descriptor.inputSchema, "outputSchema": descriptor.outputSchema,
             "annotations": .object(["readOnlyHint": .bool(!descriptor.isMutation), "openWorldHint": .bool(false)])
         ]) } + retainedInputTools(source: .hardware, enabled: inputEventCapacity != nil)

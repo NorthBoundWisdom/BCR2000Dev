@@ -317,6 +317,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     for name in (
         "PROVIDER_TOOL_COMPATIBILITY.md",
         "SURFACE_CLIENTS.md",
+        "OWNED_VIRTUAL_REHEARSAL.md",
         "F_PIPE_HANDOFF.md",
         "F_CANDIDATE_ATTENDED.md",
         "STATUS_PANEL_BUDGET.md",

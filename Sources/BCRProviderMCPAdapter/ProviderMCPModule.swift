@@ -124,7 +124,8 @@ public enum ProviderMCPModule {
                                surfacePermissions: BCRSurfaceControlAdapter.Permissions = .init(),
                                surfacePrincipals: SurfaceControlPrincipals = .init(),
                                surfaceWriteLimits: BCRSurfaceControlAdapter.WriteLimits? = nil,
-                               surfaceInputEventCapacity: Int? = nil) throws
+                               surfaceInputEventCapacity: Int? = nil,
+                               surfaceHardwareMode: BCRHardwareSurfaceControlAdapter.Mode = .physical) throws
     {
         try service.registerModule(
             id: "bcr.provider.1.0",
@@ -253,7 +254,7 @@ public enum ProviderMCPModule {
                 on: service,
                 instanceID: surfaceInstanceID ?? application.providerID,
                 permissions: surfacePermissions, inputEventCapacity: surfaceInputEventCapacity,
-                principals: surfacePrincipals
+                hardwareMode: surfaceHardwareMode, principals: surfacePrincipals
             )
         } else if enableSurfaceControl {
             try SurfaceControlMCPModule.install(on: service, instanceID: surfaceInstanceID ?? application.providerID,

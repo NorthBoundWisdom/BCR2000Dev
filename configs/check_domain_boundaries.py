@@ -245,6 +245,9 @@ def check():
     resource = ROOT / "Sources/BCRFoundation/Resources/provider.schema.json"
     if canonical.read_bytes() != resource.read_bytes():
         errors.append("Published and bundled contract schemas differ")
+    from configs.check_owned_virtual_boundary import check as check_owned_virtual
+
+    errors.extend(check_owned_virtual(ROOT))
     return errors
 
 
