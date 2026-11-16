@@ -55,3 +55,11 @@ class CIJobBudgetTests(unittest.TestCase):
         linux, native = text.split("  checks:\n")
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("Save compiled native"), native.index("configs/macos_workflow.py test"))
+
+    def test_compilation_does_not_execute_discovery_and_cold_measurement_only_skips_restore(self):
+        text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
+        self.assertEqual(text.count("--build-tests"), 2)
+        self.assertNotIn("id: compile\n        run: swift test", text)
+        self.assertIn("list --skip-build", text)
+        self.assertEqual(text.count("inputs.cold_build != true"), 2)
+        self.assertIn("Run and reconcile every portable XCTest once", text)

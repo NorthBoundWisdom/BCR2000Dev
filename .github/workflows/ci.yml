@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      cold_build:
+        description: Measure cold compilation without restoring project build caches
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -34,6 +40,7 @@ jobs:
           key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
       - name: Restore the latest portable SwiftPM build
         id: build-cache
+        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm-linux
@@ -42,11 +49,11 @@ jobs:
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/check_portable_targets.py
       - run: python3 configs/check_domain_boundaries.py
-      - name: Compile and discover portable tests
+      - name: Compile portable targets and tests
         id: compile
         run: |
           mkdir -p build/portable-test-runs
-          swift test --build-path build/swiftpm-linux list > build/portable-test-runs/inventory.txt
+          swift build --build-path build/swiftpm-linux --build-tests
       - name: Save compiled portable cache even if later tests fail
         if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -56,6 +63,7 @@ jobs:
       - name: Run and reconcile every portable XCTest once
         run: |
           set -o pipefail
+          swift test --build-path build/swiftpm-linux list --skip-build > build/portable-test-runs/inventory.txt
           swift test --build-path build/swiftpm-linux --skip-build 2>&1 | tee build/portable-test-runs/swift-test.log
           python3 configs/verify_portable_tests.py --inventory build/portable-test-runs/inventory.txt --log build/portable-test-runs/swift-test.log
       - name: Preserve portable discovery and results
@@ -94,6 +102,7 @@ jobs:
           key: seed-${{ hashFiles('configs/surface_plugins.lock.json') }}
       - name: Restore the latest SwiftPM build
         id: build-cache
+        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
@@ -101,9 +110,9 @@ jobs:
           restore-keys: swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/check_domain_boundaries.py
-      - name: Compile and discover native tests
+      - name: Compile native targets and tests
         id: compile
-        run: swift test --build-path build/swiftpm list > build/ci-native-inventory.txt
+        run: swift build --build-path build/swiftpm --build-tests
       - name: Save compiled native cache even if later tests fail
         if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
