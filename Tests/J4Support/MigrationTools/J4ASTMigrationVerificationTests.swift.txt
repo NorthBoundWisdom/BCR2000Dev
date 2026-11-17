@@ -1,0 +1,138 @@
+import Foundation
+import XCTest
+import SurfaceDeviceConformance
+
+final class J4ASTMigrationVerificationTests: XCTestCase {
+    func testExactScalarEncodingAndStrictRawAdmission() throws {
+        for token in [
+            "-0",
+            "-0.0",
+            "0e-4000",
+            "-0e-4000",
+            "5e-324",
+            "1e-309",
+            "-0.004144001900805731",
+            "1.7976931348623157e308",
+            "true",
+            "false",
+            "null",
+            #""18446744073709551615""#,
+            #""e\u0301""#,
+            #""\u00e9""#,
+            #""控制台🚀""#
+        ] {
+            let raw =
+                Data(
+                    (#"{"schema_version":1,"owner":"scalar-proof","ordinal":"1","operation":"initialize","arguments":{"rate":{"kind":"unlimited"}},"context":{"value":"# +
+                        token + "}}").utf8
+                )
+            let old = try SchedulerTraceCodec.encodeInput(SchedulerTraceCodec.decodeInput(raw))
+            let new = try SchedulerTraceCodec.encodeInput(J4PayloadCodec.envelope(raw))
+            XCTAssertEqual(new, old, token)
+        }
+        for invalid in [
+            #"{"a":true,"a":1}"#,
+            #"{"v":1e309}"#,
+            #"{"v":1e-400}"#,
+            #"{"v":2.4703282292062327e-324}"#,
+            #"{"v":1,}"#,
+            "{\"\u{e9}\":1,\"e\u{301}\":2}"
+        ] {
+            XCTAssertThrowsError(try J4PayloadCodec.payload(Data(invalid.utf8)))
+        }
+        XCTAssertThrowsError(try J4PayloadCodec.payload(Data([123, 34, 118, 34, 58, 34, 255, 34, 125])))
+    }
+
+    func testEveryPreservedOriginalRecordMatchesFullOld49adBytes() throws {
+        guard let oldRoot = ProcessInfo.processInfo.environment["BCR_J4_OLD_ORACLE_ROOT"],
+              let resultPath = ProcessInfo.processInfo.environment["BCR_J4_NEW_AST_RESULT"]
+        else {
+            let raw = Data(#"{"v":[true,1,null,"unknown","e\u0301",-0]}"#.utf8)
+            let old = try JSONDecoder().decode(ScenarioPayload.self, from: raw)
+            let new = try J4PayloadCodec.payload(raw)
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            XCTAssertEqual(try encoder.encode(new), try encoder.encode(old))
+            return
+        }
+        let root = URL(fileURLWithPath: oldRoot), result = URL(fileURLWithPath: resultPath)
+        guard !FileManager.default.fileExists(atPath: result.path)
+        else { throw SchedulerCandidateError.invalid("reused AST migration evidence") }
+        try FileManager.default.createDirectory(at: result, withIntermediateDirectories: false)
+        let manifest = try JSONSerialization
+            .jsonObject(with: Data(contentsOf: root.appending(path: "indexed-manifest.json"))) as! [String: Any]
+        let jobs = manifest["files"] as! [[String: Any]]
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        var reports: [[String: Any]] = []
+        for (jobIndex, job) in jobs.enumerated() {
+            let source = URL(fileURLWithPath: job["source"] as! String)
+            let old = root.appending(path: "results/" + (job["output"] as! String))
+            let rawRows = try Data(contentsOf: source).split(separator: 10),
+                oldRows = try Data(contentsOf: old).split(separator: 10)
+            guard rawRows.count == oldRows.count,
+                  rawRows.count == job["records"] as! Int
+            else { throw SchedulerCandidateError.invalid("migration row coverage") }
+            let output = result.appending(path: String(jobIndex) + ".new.jsonl")
+            FileManager.default.createFile(atPath: output.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: output)
+            for index in rawRows.indices {
+                try j4Pool {
+                    let raw = Data(rawRows[index])
+                    let bytes = job["kind"] as! String == "raw-scenario-payload"
+                        ? try encoder.encode(J4PayloadCodec.payload(raw))
+                        : try SchedulerTraceCodec.encodeInput(J4PayloadCodec.envelope(raw))
+                    guard bytes == Data(oldRows[index]) else {
+                        try Data(rawRows[index]).write(to: result.appending(path: "mismatch-input.json"))
+                        try Data(oldRows[index]).write(to: result.appending(path: "mismatch-old.json"))
+                        try bytes.write(to: result.appending(path: "mismatch-new.json"))
+                        throw SchedulerCandidateError
+                            .invalid("full canonical byte mismatch job\(jobIndex) row\(index + 1)")
+                    }
+                    var line = bytes; line.append(10); try handle.write(contentsOf: line)
+                }
+            }
+            try handle.close()
+            reports.append([
+                "source": source.path,
+                "kind": job["kind"]!,
+                "records": rawRows.count,
+                "new_output": output.lastPathComponent,
+                "full_bytes_equal_to_old49ad": true,
+                "raw_order_preserved": true
+            ])
+        }
+        if let anyRoot = ProcessInfo.processInfo.environment["BCR_J4_OLD_ANY_ROOT"] {
+            let any = URL(fileURLWithPath: anyRoot)
+            let input = try Data(contentsOf: any.appending(path: "results/original-any-input.jsonl"))
+                .split(separator: 10)
+            let old = try Data(contentsOf: any.appending(path: "results/old-any-result.jsonl")).split(separator: 10)
+            guard input.count == old.count else { throw SchedulerCandidateError.invalid("any coverage") }
+            let output = result.appending(path: "any.new.jsonl"); FileManager.default.createFile(
+                atPath: output.path,
+                contents: nil
+            )
+            let handle = try FileHandle(forWritingTo: output)
+            for index in input.indices {
+                try j4Pool {
+                    let bytes = try encoder.encode(J4PayloadCodec.payload(Data(input[index])))
+                    guard bytes == Data(old[index])
+                    else { throw SchedulerCandidateError.invalid("any full bytes mismatch row\(index + 1)") }
+                    var line = bytes; line.append(10); try handle.write(contentsOf: line)
+                }
+            }
+            try handle.close()
+            reports.append([
+                "kind": "original-any-native-scope-projection",
+                "records": input.count,
+                "new_output": output.lastPathComponent,
+                "full_bytes_equal_to_old49ad": true,
+                "raw_order_preserved": true
+            ])
+        }
+        try JSONSerialization.data(
+            withJSONObject: ["comparison": "every actual complete encoded Data byte, not typed==/hash", "jobs": reports,
+                             "new_path": "decodePayload(raw) then decodeInput(payload:) for envelopes",
+                             "fallback_used": false],
+            options: [.sortedKeys, .prettyPrinted]
+        ).write(to: result.appending(path: "report.json"))
+    }
+}

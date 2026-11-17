@@ -29,8 +29,8 @@ final class J4SchedulerArchiveReplayTests: XCTestCase {
             // once after all primary native workers complete, never a partial concurrently written file.
             var candidate = SchedulerCandidate()
             let event = SchedulerEnvelope(owner: "format-negative", ordinal: 1, input: .initialize(.unlimited))
-            let step = try candidate.apply(SchedulerTraceCodec.decodeInput(SchedulerTraceCodec.encodeInput(event)))
-            XCTAssertThrowsError(try SchedulerTraceCodec.decodeInput(SchedulerTraceCodec.encodeStep(step)))
+            let step = try candidate.apply(J4PayloadCodec.envelope(SchedulerTraceCodec.encodeInput(event)))
+            XCTAssertThrowsError(try J4PayloadCodec.envelope(SchedulerTraceCodec.encodeStep(step)))
             XCTAssertThrowsError(try candidate.apply(.init(owner: "format-negative", ordinal: 3, input: .clear)))
             return
         }
@@ -64,8 +64,9 @@ final class J4SchedulerArchiveReplayTests: XCTestCase {
             var projections: [String: ScenarioPayload] = [:]
             let data = try Data(contentsOf: inputFile)
             for line in data.split(separator: 10) {
-                let envelope = try SchedulerTraceCodec.decodeInput(Data(line))
-                let raw = try object(JSONDecoder().decode(ScenarioPayload.self, from: Data(line)))
+                let payload = try J4PayloadCodec.payload(Data(line))
+                let envelope = try J4PayloadCodec.envelope(payload: payload)
+                let raw = try object(payload)
                 operationCounts[try text(raw["operation"]), default: 0] += 1
                 var instance = candidates[envelope.owner] ?? SchedulerCandidate()
                 let step = try instance.apply(envelope); candidates[envelope.owner] = instance
@@ -74,7 +75,7 @@ final class J4SchedulerArchiveReplayTests: XCTestCase {
                 try canonical.write(contentsOf: canonicalBytes)
                 var independent = cold[envelope.owner] ?? SchedulerCandidate()
                 let second = try independent
-                    .apply(SchedulerTraceCodec.decodeInput(canonicalBytes)); cold[envelope.owner] = independent
+                    .apply(J4PayloadCodec.envelope(canonicalBytes)); cold[envelope.owner] = independent
                 XCTAssertEqual(step,
                                second) // Full typed equality, including every opaque field/order, no hash or JSON normalization.
                 var complete = try SchedulerTraceCodec.encodeStep(step); complete.append(10); try candidateLog
@@ -97,7 +98,7 @@ final class J4SchedulerArchiveReplayTests: XCTestCase {
             let nativeData = try Data(contentsOf: nativeFile)
             var compared = Set<String>()
             for line in nativeData.split(separator: 10) {
-                let raw = try object(JSONDecoder().decode(ScenarioPayload.self, from: Data(line)))
+                let raw = try object(J4PayloadCodec.payload(Data(line)))
                 guard Set(raw.keys) == ["schema_version", "owner", "ordinal", "output"],
                       raw["schema_version"] == .scalar(.number(1))
                 else { throw SchedulerCandidateError.invalid("native envelope fields") }

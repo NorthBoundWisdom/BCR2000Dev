@@ -1,0 +1,88 @@
+import BCRFoundation
+@testable import BCRSurfaceDomain
+import Foundation
+import XCTest
+import SurfaceDeviceConformance
+
+final class J4AnyMigrationExportTests: XCTestCase {
+    func testExportOriginalAnyScopeSerialization() throws {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        guard let source = ProcessInfo.processInfo.environment["BCR_J4_ANY_EXPORT_SOURCE"],
+              let destination = ProcessInfo.processInfo.environment["BCR_J4_ANY_EXPORT_ROOT"]
+        else {
+            let raw = try JSONSerialization
+                .data(withJSONObject: ["flag": true, "number": 1, "nil": NSNull()] as [String: Any])
+            let decoded = try JSONDecoder().decode(ScenarioPayload.self, from: raw)
+            XCTAssertEqual(try encoder.encode(decoded), Data(#"{"flag":true,"nil":null,"number":1}"#.utf8))
+            return
+        }
+        let output = URL(fileURLWithPath: destination)
+        guard !FileManager.default.fileExists(atPath: output.path)
+        else { throw SchedulerCandidateError.invalid("reused any export") }
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        let inputURL = output.appending(path: "original-any-input.jsonl"),
+            resultURL = output.appending(path: "old-any-result.jsonl"),
+            indexURL = output.appending(path: "records.jsonl")
+        for file in [inputURL, resultURL, indexURL] { guard FileManager.default.createFile(
+            atPath: file.path,
+            contents: nil
+        ) else { throw SchedulerCandidateError.invalid("any file") } }
+        let inputs = try FileHandle(forWritingTo: inputURL), results = try FileHandle(forWritingTo: resultURL),
+            indices = try FileHandle(forWritingTo: indexURL)
+        defer { try? inputs.close(); try? results.close(); try? indices.close() }
+        let files = try FileManager.default.contentsOfDirectory(
+            at: URL(fileURLWithPath: source),
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix("session-input-") }.sorted { $0.path < $1.path }
+        var count = 0
+        for file in files {
+            for (line, data) in try Data(contentsOf: file).split(separator: 10).enumerated() {
+                try j4Pool {
+                    let raw = try JSONSerialization.jsonObject(with: Data(data)) as! [String: Any]
+                    let arguments = raw["arguments"] as! [String: Any]
+                    for field in ["evidence", "captured_evidence", "current_evidence"] {
+                        guard let evidence = arguments[field] as? [String: Any] else { continue }
+                        let context = evidence["context"] as! [String: Any]
+                        let endpoint: MIDIEndpointSource?
+                        if let value = evidence["endpoint"] as? [String: Any] {
+                            endpoint = MIDIEndpointSource(endpointID: value["endpoint_id"] as! String,
+                                                          deviceID: value["device_id"] as? String,
+                                                          connectionGeneration: UInt64(
+                                                              value["connection_generation"] as! String
+                                                          )!,
+                                                          provenance: MIDIEndpointProvenance(
+                                                              rawValue: value["provenance"] as! String
+                                                          )!)
+                        } else { endpoint = nil }
+                        let scope = BCRKernelProjection.scope(
+                            source: BCRSurfaceDomain.DeviceSource(rawValue: evidence["source"] as! String)!,
+                            generation: context["generation"] as! String,
+                            mapping: UInt64(context["mapping_generation"] as! String)!,
+                            endpoint: endpoint
+                        )
+                        let originalAny = FeedbackRuntime.value(scope)
+                        var bytes = try JSONSerialization.data(withJSONObject: originalAny)
+                        let payload = try JSONDecoder().decode(ScenarioPayload.self, from: bytes)
+                        var canonical = try encoder.encode(payload)
+                        bytes.append(10); canonical.append(10)
+                        try inputs.write(contentsOf: bytes); try results.write(contentsOf: canonical)
+                        count += 1
+                        var index = try JSONSerialization.data(
+                            withJSONObject: ["record": count, "source": file.path,
+                                             "source_row": line + 1, "field": field,
+                                             "owner": raw["owner"]!,
+                                             "ordinal": raw["ordinal"]!],
+                            options: [.sortedKeys]
+                        ); index.append(10); try indices.write(contentsOf: index)
+                    }
+                }
+            }
+        }
+        try JSONSerialization.data(
+            withJSONObject: ["records": count,
+                             "path": "actual original J4P.any JSONSerialization+old49ad ScenarioPayload decode on native scope projections reconstructed from each source evidence field",
+                             "new_path_used": false],
+            options: [.sortedKeys]
+        ).write(to: output.appending(path: "manifest.json"))
+    }
+}

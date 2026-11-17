@@ -44,10 +44,7 @@ private enum J4P {
         .outputFormatting = [.sortedKeys]; return try e.encode(value)
     }
 
-    static func any(_ value: Any) throws -> ScenarioPayload { try JSONDecoder().decode(
-        ScenarioPayload.self,
-        from: JSONSerialization.data(withJSONObject: value)
-    ) }
+    static func any(_ value: Any) throws -> ScenarioPayload { try J4PayloadCodec.any(value) }
     static func ref(_ value: ScenarioPayload?) throws -> String? {
         guard let present = try nullable(value) else { return nil }; let fields = try object(present)
         return try text(fields["owner"]) + ":" + String(uint(fields["ordinal"]))
@@ -199,7 +196,7 @@ private final class J4SessionReplay {
         let step = try timing.measure("current_candidate_apply") { try candidate.apply(envelope) }
         // Fresh independent reducer gets only canonical input bytes, never the first state/output.
         var cold = coldCandidates[owner] ?? SchedulerCandidate()
-        let decoded = try timing.measure("cold_canonical_input_decode") { try SchedulerTraceCodec.decodeInput(bytes) }
+        let decoded = try timing.measure("cold_canonical_input_decode") { try J4PayloadCodec.envelope(bytes) }
         let repeated = try timing.measure("cold_candidate_apply") { try cold.apply(decoded) }
         guard timing.measure("complete_typed_step_compare", { repeated == step })
         else { throw SchedulerCandidateError.invalid("input-only cold replay not reproduced") }
@@ -744,8 +741,8 @@ final class J4SessionSchedulerArchiveReplayTests: XCTestCase {
             let replay = J4SessionReplay(archive: archive)
             for (_, queue, bytes) in events {
                 try j4Pool {
-                    if queue { try replay.scheduler(SchedulerTraceCodec.decodeInput(bytes)) }
-                    else { try replay.session(JSONDecoder().decode(ScenarioPayload.self, from: bytes)) }
+                    if queue { try replay.scheduler(J4PayloadCodec.envelope(bytes)) }
+                    else { try replay.session(J4PayloadCodec.payload(bytes)) }
                 }
             }
             guard replay.admissions.isEmpty
@@ -755,7 +752,7 @@ final class J4SessionSchedulerArchiveReplayTests: XCTestCase {
             let nativeQueue = root.appending(path: "scheduler-native-" + suffix)
             for line in try Data(contentsOf: nativeQueue).split(separator: 10) {
                 try j4Pool {
-                    let native = try J4P.object(JSONDecoder().decode(ScenarioPayload.self, from: Data(line)))
+                    let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
                     let owner = try J4P.text(native["owner"]),
                         key = owner + ":" + String(try J4P.uint(native["ordinal"]))
                     guard let candidate = replay.queueComparisons[key],
@@ -792,7 +789,7 @@ final class J4SessionSchedulerArchiveReplayTests: XCTestCase {
             let nativeSession = root.appending(path: "session-native-" + suffix)
             for line in try Data(contentsOf: nativeSession).split(separator: 10) {
                 try j4Pool {
-                    let native = try J4P.object(JSONDecoder().decode(ScenarioPayload.self, from: Data(line)))
+                    let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
                     let key = try J4P.text(native["owner"]) + ":" + String(J4P.uint(native["ordinal"]))
                     guard let intent = replay.intents[key]
                     else { throw SchedulerCandidateError.invalid("missing original intent for native disposition") }

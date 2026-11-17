@@ -1,0 +1,88 @@
+import Foundation
+import XCTest
+import SurfaceDeviceConformance
+
+/// One-time migration oracle. Kept out of the default CI hot path; no new parser is invoked here.
+final class J4OldCodecMigrationExportTests: XCTestCase {
+    func testExportLocked49adOriginalDataResults() throws {
+        guard let source = ProcessInfo.processInfo.environment["BCR_J4_OLD_EXPORT_SOURCE"],
+              let destination = ProcessInfo.processInfo.environment["BCR_J4_OLD_EXPORT_ROOT"]
+        else {
+            let value = SchedulerEnvelope(
+                owner: "default-oracle-format-probe",
+                ordinal: 1,
+                input: .initialize(.unlimited)
+            )
+            let bytes = try SchedulerTraceCodec.encodeInput(value)
+            XCTAssertEqual(try SchedulerTraceCodec.encodeInput(SchedulerTraceCodec.decodeInput(bytes)), bytes)
+            return
+        }
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let lock = try JSONSerialization
+            .jsonObject(with: Data(contentsOf: repository
+                    .appending(path: "configs/control_surface_kit.lock.json"))) as! [String: Any]
+        guard lock["revision"] as? String == "49ad4a7b8aa1160b9369733f0c8681647a41cd51" else {
+            throw SchedulerCandidateError.invalid("old oracle exporter only runs against original49ad lock")
+        }
+        let root = URL(fileURLWithPath: source), output = URL(fileURLWithPath: destination)
+        guard !FileManager.default.fileExists(atPath: output.path)
+        else { throw SchedulerCandidateError.invalid("reused migration export") }
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+        let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        var reports: [[String: Any]] = []
+        var jobs: [(URL, String)] = []
+        for path in files
+            where path.lastPathComponent.hasPrefix("scheduler-input-") && path.pathExtension == "jsonl"
+        { jobs.append((
+            path,
+            "scheduler-envelope"
+        )) }
+        for path in files where path.lastPathComponent.hasPrefix("session-candidate-") {
+            for input in try FileManager.default.contentsOfDirectory(at: path, includingPropertiesForKeys: nil)
+                where input.lastPathComponent.hasPrefix("inputs-") && input.pathExtension == "jsonl"
+            { jobs.append((
+                input,
+                "canonical-envelope"
+            )) }
+        }
+        for path in files
+            where ["session-input-", "session-native-", "scheduler-native-"]
+            .contains(where: { path.lastPathComponent.hasPrefix($0) }) && path.pathExtension == "jsonl"
+        { jobs.append((
+            path,
+            "raw-scenario-payload"
+        )) }
+        for (index, job) in jobs.sorted(by: { $0.0.path < $1.0.path }).enumerated() {
+            let (file, kind) = job
+            let name = String(index) + ".canonical.jsonl"
+            let path = output.appending(path: name)
+            guard FileManager.default.createFile(atPath: path.path, contents: nil)
+            else { throw SchedulerCandidateError.invalid("export path") }
+            let handle = try FileHandle(forWritingTo: path)
+            var records = 0
+            for line in try Data(contentsOf: file).split(separator: 10) {
+                try j4Pool {
+                    let raw = Data(line)
+                    let canonical: Data
+                    if kind == "raw-scenario-payload" {
+                        canonical = try encoder.encode(JSONDecoder().decode(ScenarioPayload.self, from: raw))
+                    } else {
+                        canonical = try SchedulerTraceCodec.encodeInput(SchedulerTraceCodec.decodeInput(raw))
+                    }
+                    var record = canonical; record.append(10); try handle.write(contentsOf: record)
+                    records += 1
+                }
+            }
+            try handle.close()
+            reports.append(["source": file.path, "kind": kind, "records": records, "output": name,
+                            "result": "old49ad actual Data decode then complete canonical encode; same row order"])
+        }
+        try JSONSerialization.data(
+            withJSONObject: ["kit_revision": lock["revision"]!, "jobs": reports,
+                             "source_mutated": false, "new_path_used": false],
+            options: [.prettyPrinted, .sortedKeys]
+        ).write(to: output.appending(path: "manifest.json"))
+    }
+}

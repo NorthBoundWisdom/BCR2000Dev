@@ -307,10 +307,9 @@ struct J4CatalogExpander {
         else { throw SchedulerCandidateError.invalid("missing complete state field/ordinal") }
         states[owner] = state; ordinals[owner] = ordinal
         var complete: [String: ScenarioPayload] = ["artifact": .scalar(.text("scheduler_candidate_output_v1")),
-                                                   "input": try JSONDecoder().decode(
-                                                       ScenarioPayload.self,
-                                                       from: SchedulerTraceCodec.encodeInput(input)
-                                                   ), "state": .object(state)]
+                                                   "input": try J4PayloadCodec
+                                                       .payload(SchedulerTraceCodec.encodeInput(input)),
+                                                   "state": .object(state)]
         for key in [
             "proposals",
             "removed_keys",
