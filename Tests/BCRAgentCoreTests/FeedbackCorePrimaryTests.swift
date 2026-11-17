@@ -18,7 +18,7 @@ final class FeedbackCorePrimaryTests: XCTestCase {
         func send(_ message: MIDIVoiceMessage) throws { sent.append(message) }
     }
 
-    func testOldNegativeEnvironmentCannotMutateActualPrimaryOutputOrParameter() throws {
+    func testOldNegativeEnvironmentCannotMutateActualPrimaryOutputOrParameter() async throws {
         let prior = ProcessInfo.processInfo.environment["BCR_J4_NEGATIVE_PHASE"]
         defer {
             if let prior { setenv("BCR_J4_NEGATIVE_PHASE", prior, 1) }
