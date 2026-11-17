@@ -18,6 +18,29 @@ final class J4LosslessCatalogTests: XCTestCase {
         guard case let .object(value) = value else { throw SchedulerCandidateError.invalid("object") }; return value
     }
 
+    func testPreparedInputRejectsDifferentEnvelopeDataAndCanonicallyEqualText() throws {
+        let a = SchedulerEnvelope(owner: "owner", ordinal: 2, input: .requestDirect(try .init(
+            key: "key", value: s("é"), scope: null
+        )), context: null)
+        let b = SchedulerEnvelope(owner: "owner", ordinal: 2, input: .requestDirect(try .init(
+            key: "key", value: s("e\u{301}"), scope: null
+        )), context: null)
+        XCTAssertEqual(a, b) // Domain equality is deliberately insufficient for the audit binding.
+        let prepared = try J4PreparedInput(a)
+        var first = SchedulerCandidate(), second = SchedulerCandidate()
+        let initialize = SchedulerEnvelope(owner: "owner", ordinal: 1, input: .initialize(.unlimited), context: null)
+        _ = try first.apply(initialize); _ = try second.apply(initialize)
+        let actual = try first.apply(a), different = try second.apply(b)
+        XCTAssertNoThrow(try prepared.validate(actual))
+        XCTAssertThrowsError(try prepared.validate(different))
+        let differentOrdinal = SchedulerEnvelope(owner: "owner", ordinal: 3, input: a.input, context: null)
+        XCTAssertThrowsError(try J4PreparedInput(differentOrdinal).validate(actual))
+        let otherData = try J4PreparedInput(b).data
+        XCTAssertNotEqual(prepared.data, otherData)
+        XCTAssertThrowsError(try J4PreparedInput(a, canonicalData: otherData))
+        XCTAssertNoThrow(try J4PreparedInput(a, canonicalData: prepared.data))
+    }
+
     func testCompleteCatalogExpandsEveryRealStateAndRejectsMissingOrConflictingData() throws {
         let requested = ProcessInfo.processInfo.environment["BCR_J4_CATALOG_TEST_ROOT"]
         let root = requested.map { URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory
@@ -137,6 +160,8 @@ final class J4LosslessCatalogTests: XCTestCase {
                 from: SchedulerTraceCodec.encodeStep(expected[index])
             )
             XCTAssertEqual(restored, canonical, "Full original49ad encodeStep at ordinal \(index + 1)")
+            let exactEncoder = JSONEncoder(); exactEncoder.outputFormatting = [.sortedKeys]
+            XCTAssertEqual(try exactEncoder.encode(restored), try SchedulerTraceCodec.encodeStep(expected[index]))
             let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
                 .deletingLastPathComponent()
             let process = Process(), diagnostics = Pipe(),
@@ -163,6 +188,7 @@ final class J4LosslessCatalogTests: XCTestCase {
                 String(decoding: diagnostics.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             )
             let cliResult = try JSONDecoder().decode(ScenarioPayload.self, from: Data(contentsOf: expanded))
+            XCTAssertEqual(try exactEncoder.encode(cliResult), try SchedulerTraceCodec.encodeStep(expected[index]))
             XCTAssertEqual(
                 cliResult,
                 canonical,
@@ -190,5 +216,59 @@ final class J4LosslessCatalogTests: XCTestCase {
         ]); broken["state_delta"] =
             .object(delta)
         var missingRef = try fresh(); XCTAssertThrowsError(try missingRef.step(.object(broken), input: inputs[0]))
+    }
+
+    func testCatalogExactRecursiveNodesAndEnvelopeOwnerIdentity() throws {
+        let first: ScenarioPayload = .object(["é": .array([.scalar(.flag(true)), .scalar(.number(0)), null,
+                                                           .object(["s": s("é")])])])
+        let second: ScenarioPayload = .object(["e\u{301}": .array([.scalar(.flag(true)), .scalar(.number(-0.0)), null,
+                                                                   .object(["s": s("e\u{301}")])])])
+        XCTAssertEqual(first, second)
+        XCTAssertFalse(J4ExactJSON.same(first, second))
+        XCTAssertFalse(J4ExactJSON.same(.scalar(.flag(true)), .scalar(.number(1))))
+        XCTAssertFalse(J4ExactJSON.same(.array([s("a"), s("b")]), .array([s("b"), s("a")])))
+        try checkExactDesiredTransition(first, second)
+        let a = SchedulerEnvelope(owner: "é", ordinal: 1, input: .clear)
+        let b = SchedulerEnvelope(owner: "e\u{301}", ordinal: 1, input: .clear)
+        XCTAssertEqual(a, b)
+        XCTAssertFalse(J4ExactJSON.envelope(a, b))
+        XCTAssertNotEqual(J4ExactJSON.identifier(owner: a.owner, ordinal: 1),
+                          J4ExactJSON.identifier(owner: b.owner, ordinal: 1))
+    }
+
+    private func checkExactDesiredTransition(_ first: ScenarioPayload, _ second: ScenarioPayload) throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "catalog-exact-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var reducer = SchedulerCandidate(), steps: [SchedulerStep] = []
+        var archive: J4LosslessCatalog? = try .init(directory: root, suffix: "exact.jsonl")
+        let inputs: [SchedulerInput] = [.initialize(.unlimited),
+                                        .requestDirect(try SchedulerItem(key: "same", value: first, scope: null)),
+                                        .requestDirect(try SchedulerItem(key: "same", value: second, scope: null))]
+        for (index, input) in inputs.enumerated() {
+            let step = try reducer.apply(.init(owner: "exact-owner", ordinal: UInt64(index + 1), input: input))
+            steps.append(step); try archive!.append(step.input, step: step)
+        }
+        archive = nil
+        var expand = J4CatalogExpander()
+        for row in try read(root.appending(path: "catalog-exact.jsonl")) { try expand.add(row) }
+        let output = try read(root.appending(path: "candidate-catalog-exact.jsonl"))
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        for index in steps.indices {
+            let actual = try expand.step(output[index], input: steps[index].input)
+            XCTAssertEqual(try encoder.encode(actual), try SchedulerTraceCodec.encodeStep(steps[index]),
+                           "Complete bytes, including desired/output/input at step \(index + 1)")
+        }
+    }
+
+    func testCatalogPreservesNFCToNFDDesiredBytes() throws {
+        try checkExactDesiredTransition(.object(["text": s("\u{e9}")]), .object(["text": s("e\u{301}")]))
+    }
+
+    func testCatalogPreservesPositiveToNegativeZeroDesiredBits() throws {
+        try checkExactDesiredTransition(
+            .object(["number": .scalar(.number(0.0))]),
+            .object(["number": .scalar(.number(-0.0))])
+        )
     }
 }

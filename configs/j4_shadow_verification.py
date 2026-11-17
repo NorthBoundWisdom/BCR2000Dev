@@ -60,37 +60,41 @@ def _load(line):
     )
 
 
+def _validate_session_row(row):
+    """All original Session envelope checks, applied to the same strictly parsed row."""
+    expected = {"schema_version", "owner", "ordinal", "operation", "arguments", "context"}
+    if type(row) is not dict or row.keys() != expected:
+        raise RuntimeError("Invalid Session native input top-level fields")
+    if type(row["schema_version"]) is not int or row["schema_version"] != 1:
+        raise RuntimeError("Invalid Session native input schema version/type")
+    if type(row["owner"]) is not str or not row["owner"] or type(row["ordinal"]) is not str:
+        raise RuntimeError("Invalid Session native input identity")
+    ordinal = row["ordinal"]
+    if not re.fullmatch(r"[1-9][0-9]*", ordinal) or int(ordinal) > 2**64 - 1:
+        raise RuntimeError("Invalid Session native input ordinal")
+    if (
+        type(row["operation"]) is not str
+        or row["operation"]
+        not in {
+            "attach_scheduler",
+            "clear_queue",
+            "message_intent",
+            "dispatch_environment",
+            "actual_boundary_result",
+            "admission_completed",
+        }
+        or type(row["arguments"]) is not dict
+        or type(row["context"]) is not dict
+    ):
+        raise RuntimeError("Invalid Session native input operation/objects")
+
+
 def validate_session_input(path: Path):
     """Validate the actual six-field native writer envelope before any lossy Foundation parse."""
     count = 0
     with path.open() as source:
         for line in source:
-            row = _load(line)  # object_pairs_hook rejects duplicates, including escaped equal keys.
-            expected = {"schema_version", "owner", "ordinal", "operation", "arguments", "context"}
-            if type(row) is not dict or row.keys() != expected:
-                raise RuntimeError("Invalid Session native input top-level fields")
-            if type(row["schema_version"]) is not int or row["schema_version"] != 1:
-                raise RuntimeError("Invalid Session native input schema version/type")
-            if type(row["owner"]) is not str or not row["owner"] or type(row["ordinal"]) is not str:
-                raise RuntimeError("Invalid Session native input identity")
-            ordinal = row["ordinal"]
-            if not re.fullmatch(r"[1-9][0-9]*", ordinal) or int(ordinal) > 2**64 - 1:
-                raise RuntimeError("Invalid Session native input ordinal")
-            if (
-                type(row["operation"]) is not str
-                or row["operation"]
-                not in {
-                    "attach_scheduler",
-                    "clear_queue",
-                    "message_intent",
-                    "dispatch_environment",
-                    "actual_boundary_result",
-                    "admission_completed",
-                }
-                or type(row["arguments"]) is not dict
-                or type(row["context"]) is not dict
-            ):
-                raise RuntimeError("Invalid Session native input operation/objects")
+            _validate_session_row(_load(line))
             count += 1
     return count
 
@@ -117,7 +121,6 @@ def _process_source_paths(session):
 def validate_process_inputs(session: Path):
     # Recorder.sessionOrdinals and Recorder.ordinals are separate per-owner namespaces;
     # Recorder.causalOrdinal is one shared cursor across these two input families only.
-    validate_session_input(session)
     paths = _process_source_paths(session)
     causal = set()
     summary = {}
@@ -126,6 +129,8 @@ def validate_process_inputs(session: Path):
         with paths[family].open() as source:
             for line in source:
                 row = _load(line)
+                if family == "session-input":
+                    _validate_session_row(row)
                 if type(row) is not dict or set(row) != {
                     "schema_version",
                     "owner",

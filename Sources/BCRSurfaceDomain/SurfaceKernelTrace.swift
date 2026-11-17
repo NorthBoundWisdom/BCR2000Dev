@@ -13,6 +13,18 @@ enum SurfaceKernelTrace {
             recorder.record(operation, owner: owner, input: input, actual: actual)
         }
 
+        /// Prepared once from immutable diagnostic facts; wire schema and expansion are unchanged.
+        final class Catalogue: @unchecked Sendable {
+            let value: Any
+            let bytes: Data
+            fileprivate var identifier: String?
+            init(_ value: Any) {
+                self.value = value
+                do { bytes = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) }
+                catch { fatalError("Cannot prepare J3 catalogue: \(error)") }
+            }
+        }
+
         private final class Recorder: @unchecked Sendable {
             private let lock = NSLock()
             private let file: FileHandle?
@@ -42,16 +54,22 @@ enum SurfaceKernelTrace {
                     var recordedInput = input
                     for key in ["ordered_assignments", "ordered_controls", "entries"] {
                         guard let value = input[key] else { continue }
-                        let content = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
+                        let prepared = value as? Catalogue
+                        let content = try prepared?.bytes ?? JSONSerialization.data(
+                            withJSONObject: value,
+                            options: [.sortedKeys]
+                        )
                         let identifier: String
-                        if let existing = catalogues[content] { identifier = existing }
+                        if let existing = prepared?.identifier { identifier = existing }
+                        else if let existing = catalogues[content] { identifier = existing }
                         else {
                             identifier = "catalogue.\(catalogues.count)"
                             catalogues[content] = identifier
                             sequence += 1
                             try write(["sequence": sequence, "record_kind": "catalogue",
-                                       "catalogue_id": identifier, "value": value])
+                                       "catalogue_id": identifier, "value": prepared?.value ?? value])
                         }
+                        prepared?.identifier = identifier
                         recordedInput[key] = ["$catalogue": identifier]
                     }
                     sequence += 1
@@ -61,6 +79,14 @@ enum SurfaceKernelTrace {
             }
 
             private func write(_ record: [String: Any]) throws {
+                #if canImport(ObjectiveC)
+                    try autoreleasepool { try writeBytes(record) }
+                #else
+                    try writeBytes(record)
+                #endif
+            }
+
+            private func writeBytes(_ record: [String: Any]) throws {
                 var bytes = try JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
                 bytes.append(10)
                 try file?.write(contentsOf: bytes)

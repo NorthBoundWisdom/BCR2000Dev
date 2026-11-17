@@ -100,6 +100,47 @@ class J4WorkflowIntegrityTests(unittest.TestCase):
                     with self.assertRaises(RuntimeError):
                         gate.validate_session_input(path)
 
+    def test_merged_session_row_checks_match_independent_entry_and_fail_closed(self):
+        row = {
+            "schema_version": 1,
+            "owner": "owner",
+            "ordinal": "1",
+            "operation": "clear_queue",
+            "arguments": {},
+            "context": {"causal_ordinal": "1"},
+        }
+        variants = [{**row, "schema_version": value} for value in [True, 1.0, 2, "1", None]]
+        variants += [
+            {**row, "operation": "unknown"},
+            {**row, "arguments": []},
+            {**row, "context": []},
+            {**row, "owner": ""},
+            {**row, "ordinal": "01"},
+            {**row, "extra": None},
+        ]
+        missing = dict(row)
+        del missing["arguments"]
+        variants.append(missing)
+        invalid = [json.dumps(value) for value in variants]
+        invalid += [
+            '{"schema_version":1,' + json.dumps(row)[1:],
+            '{"schema_vers\\u0069on":1,' + json.dumps(row)[1:],
+            json.dumps(row).replace('"arguments": {}', '"arguments": {"v":1e309}'),
+        ]
+        with tempfile.TemporaryDirectory() as base:
+            path = Path(base) / "session-input-123.jsonl"
+            (Path(base) / "scheduler-input-123.jsonl").write_text("")
+            path.write_text(json.dumps(row) + "\n")
+            self.assertEqual(gate.validate_session_input(path), 1)
+            self.assertEqual(gate.validate_process_inputs(path)["shared_causal_records"], 1)
+            for raw in invalid:
+                with self.subTest(raw=raw):
+                    path.write_text(raw + "\n")
+                    with self.assertRaises(RuntimeError):
+                        gate.validate_session_input(path)
+                    with self.assertRaises(RuntimeError):
+                        gate.validate_process_inputs(path)
+
     def test_original_source_namespaces_causal_union_and_unique_output_coverage(self):
         with tempfile.TemporaryDirectory() as base:
             root = Path(base)

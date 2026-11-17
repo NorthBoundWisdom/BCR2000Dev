@@ -18,12 +18,13 @@ final class J4LosslessCatalog {
     private let input: FileHandle, output: FileHandle, differences: FileHandle, catalog: FileHandle
     private let encoder: JSONEncoder
     private var next = 0
-    private var items: [String: [(SchedulerItem, String)]] = [:]
-    private var plans: [String: (SchedulerTracePlan, String)] = [:]
-    private var proposals: [String: (SchedulerProposal, String)] = [:]
-    private var strings: [String: String] = [:]
-    private var states: [String: [String: ScenarioPayload]] = [:]
-    private var ordinals: [String: UInt64] = [:]
+    private var items: [Data: String] = [:]
+    private var plans: [Data: (UInt64, String)] = [:]
+    private var proposals: [Data: (UInt64, String)] = [:]
+    private var exactNodes = J4ExactNodeIndex()
+    private var strings: [Data: String] = [:]
+    private var states: [Data: [String: ScenarioPayload]] = [:]
+    private var ordinals: [Data: UInt64] = [:]
     private(set) var stepCount = 0, differenceCount = 0, catalogCount = 0
     private let null = ScenarioPayload.scalar(.null)
     private func s(_ value: String) -> ScenarioPayload { .scalar(.text(value)) }
@@ -56,52 +57,57 @@ final class J4LosslessCatalog {
 
     private func reference(_ id: String) -> ScenarioPayload { .object(["$catalog": s(id)]) }
     private func item(_ value: SchedulerItem) throws -> ScenarioPayload {
-        if let found = items[value.key]?.first(where: { $0.0 == value }) { return reference(found.1) }
+        let key = exactNodes.itemKey(value)
+        if let id = items[key] { return reference(id) }
         let ref = try intern(SchedulerTraceCodec.itemPayload(value))
         guard case let .object(raw) = ref,
               case let .scalar(.text(id)) = raw["$catalog"]
         else { throw SchedulerCandidateError.invalid("catalog reference") }
-        items[value.key, default: []].append((value, id)); return ref
+        items[key] = id; return ref
     }
 
     private func proposal(_ value: SchedulerProposal, owner: String) throws -> ScenarioPayload {
-        let key = owner + ":" + String(value.ordinal)
+        let key = J4ExactJSON.identifier(owner: owner, ordinal: value.ordinal)
+        let itemRef = try item(value.item)
+        let content = ScenarioPayload.object([
+            "ordinal": s(String(value.ordinal)), "cause_ordinal": s(String(value.causeOrdinal)),
+            "cause": s(value.cause.rawValue), "item": itemRef
+        ])
+        let node = exactNodes.node(content)
         if let old = proposals[key] {
-            guard old.0 == value
-            else { throw SchedulerCandidateError.invalid("conflicting immutable proposal")
-            }; return reference(old.1)
+            guard old.0 == node else { throw SchedulerCandidateError.invalid("conflicting immutable proposal") }
+            return reference(old.1)
         }
-        let ref = try intern(
-            .object(["ordinal": s(String(value.ordinal)), "cause_ordinal": s(String(value.causeOrdinal)),
-                     "cause": s(value.cause.rawValue), "item": item(value.item)]),
-            composite: true
-        )
+        let ref = try intern(content, composite: true)
         guard case let .object(raw) = ref,
               case let .scalar(.text(id)) = raw["$catalog"]
         else { throw SchedulerCandidateError.invalid("catalog reference") }
-        proposals[key] = (value, id); return ref
+        proposals[key] = (node, id); return ref
     }
 
     private func plan(_ value: SchedulerTracePlan, owner: String, proposalOrdinal: UInt64) throws -> ScenarioPayload {
-        let key = owner + ":" + String(proposalOrdinal)
+        let key = J4ExactJSON.identifier(owner: owner, ordinal: proposalOrdinal)
+        let content = SchedulerTraceCodec.planPayload(value)
+        let node = exactNodes.node(content)
         if let old = plans[key] {
-            guard old.0 == value
-            else { throw SchedulerCandidateError.invalid("conflicting immutable plan") }; return reference(old.1)
+            guard old.0 == node else { throw SchedulerCandidateError.invalid("conflicting immutable plan") }
+            return reference(old.1)
         }
-        let ref = try intern(SchedulerTraceCodec.planPayload(value))
+        let ref = try intern(content)
         guard case let .object(raw) = ref,
               case let .scalar(.text(id)) = raw["$catalog"]
         else { throw SchedulerCandidateError.invalid("catalog reference") }
-        plans[key] = (value, id); return ref
+        plans[key] = (node, id); return ref
     }
 
     private func textRef(_ value: String) throws -> ScenarioPayload {
-        if let id = strings[value] { return reference(id) }
+        let key = Data(value.utf8)
+        if let id = strings[key] { return reference(id) }
         let ref = try intern(s(value))
         guard case let .object(raw) = ref,
               case let .scalar(.text(id)) = raw["$catalog"]
         else { throw SchedulerCandidateError.invalid("catalog reference") }
-        strings[value] = id; return ref
+        strings[key] = id; return ref
     }
 
     private func rate(_ value: SchedulerRate?) -> ScenarioPayload {
@@ -147,9 +153,9 @@ final class J4LosslessCatalog {
 
     private func delta(_ current: [String: ScenarioPayload], previous: [String: ScenarioPayload]) -> ScenarioPayload {
         var changes: [String: ScenarioPayload] = [:]
-        for (key, value) in current where previous[key] != value {
+        for (key, value) in current where previous[key].map({ !J4ExactJSON.same($0, value) }) ?? true {
             if case let .array(new) = value, case let .array(old) = previous[key], new.count >= old.count,
-               Array(new.prefix(old.count)) == old
+               zip(new.prefix(old.count), old).allSatisfy({ J4ExactJSON.same($0, $1) })
             {
                 changes[key] = .object(["append": .array(Array(new.dropFirst(old.count)))])
             } else { changes[key] = .object(["replace": value]) }
@@ -158,10 +164,16 @@ final class J4LosslessCatalog {
     }
 
     func append(_ envelope: SchedulerEnvelope, step: SchedulerStep) throws {
-        guard envelope.ordinal == ordinals[envelope.owner, default: 0] + 1,
+        try append(J4PreparedInput(envelope), step: step)
+    }
+
+    func append(_ prepared: J4PreparedInput, step: SchedulerStep) throws {
+        let envelope = prepared.envelope
+        guard envelope.ordinal == ordinals[Data(envelope.owner.utf8), default: 0] + 1,
               step.input == envelope else { throw SchedulerCandidateError.ordinalMismatch }
-        ordinals[envelope.owner] = envelope.ordinal
-        var data = try SchedulerTraceCodec.encodeInput(envelope); data.append(10); try input.write(contentsOf: data)
+        try prepared.validate(step)
+        ordinals[Data(envelope.owner.utf8)] = envelope.ordinal
+        var data = prepared.data; data.append(10); try input.write(contentsOf: data)
         let snapshot = step.snapshot, owner = envelope.owner
         let state: [String: ScenarioPayload] = [
             "owner": snapshot.owner.map(s) ?? null, "input_ordinal": s(String(snapshot.inputOrdinal)),
@@ -178,7 +190,7 @@ final class J4LosslessCatalog {
             "retry_after": snapshot.retryAfter.map(n) ?? null,
             "persistent_alignment_differences": .array(try snapshot.persistentAlignmentDifferences.map(textRef))
         ]
-        let previous = states[owner] ?? [:]; states[owner] = state
+        let previous = states[Data(owner.utf8)] ?? [:]; states[Data(owner.utf8)] = state
         let receipts: [ScenarioPayload] = try step.receipts.map { association in
             // Unmatched actual receipts have no candidate proposal ordinal. Catalog them as whole
             // immutable native outcome values, without claiming or manufacturing a candidate plan.
@@ -219,8 +231,8 @@ final class J4LosslessCatalog {
 /// Exact diagnostic expansion. Reject missing/duplicate/conflicting catalog IDs and cursor gaps.
 struct J4CatalogExpander {
     private var values: [String: (ScenarioPayload, Bool)] = [:]
-    private var states: [String: [String: ScenarioPayload]] = [:]
-    private var ordinals: [String: UInt64] = [:]
+    private var states: [Data: [String: ScenarioPayload]] = [:]
+    private var ordinals: [Data: UInt64] = [:]
     private let null = ScenarioPayload.scalar(.null)
     private func object(_ value: ScenarioPayload) throws
         -> [String: ScenarioPayload]
@@ -263,7 +275,7 @@ struct J4CatalogExpander {
     mutating func step(_ row: ScenarioPayload, input: SchedulerEnvelope) throws -> ScenarioPayload {
         let row = try object(row), owner = try text(row["owner"]), rawOrdinal = try text(row["ordinal"])
         guard let ordinal = UInt64(rawOrdinal), String(ordinal) == rawOrdinal,
-              ordinal == ordinals[owner, default: 0] + 1,
+              ordinal == ordinals[Data(owner.utf8), default: 0] + 1,
               owner == input.owner, ordinal == input.ordinal,
               row["artifact"] == .scalar(.text("scheduler_candidate_catalog_output_v1")),
               Set(row.keys) == [
@@ -279,7 +291,7 @@ struct J4CatalogExpander {
                   "receipts",
                   "alignment_differences"
               ] else { throw SchedulerCandidateError.ordinalMismatch }
-        var state = states[owner] ?? [:]
+        var state = states[Data(owner.utf8)] ?? [:]
         for (key, patch) in try object(row["state_delta"]!) {
             let patch = try object(patch)
             if Set(patch.keys) == ["replace"] { state[key] = patch["replace"]! }
@@ -305,7 +317,7 @@ struct J4CatalogExpander {
         guard Set(state.keys) == fields, state["owner"] == .scalar(.text(owner)),
               state["input_ordinal"] == .scalar(.text(rawOrdinal))
         else { throw SchedulerCandidateError.invalid("missing complete state field/ordinal") }
-        states[owner] = state; ordinals[owner] = ordinal
+        states[Data(owner.utf8)] = state; ordinals[Data(owner.utf8)] = ordinal
         var complete: [String: ScenarioPayload] = ["artifact": .scalar(.text("scheduler_candidate_output_v1")),
                                                    "input": try J4PayloadCodec
                                                        .payload(SchedulerTraceCodec.encodeInput(input)),

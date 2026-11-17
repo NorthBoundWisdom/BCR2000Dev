@@ -1,3 +1,8 @@
+#if os(Linux)
+    import Glibc
+#else
+    import Darwin
+#endif
 import Foundation
 import Dispatch
 import XCTest
@@ -114,9 +119,30 @@ private enum J4P {
 
 private final class J4ReplayTiming {
     private(set) var seconds: [String: Double] = [:]
+    private(set) var cpuSeconds: [String: Double] = [:]
+    private let includeChildren: Bool
+    init(includeChildren: Bool = false) { self.includeChildren = includeChildren }
+    private func childCPU() -> Double {
+        guard includeChildren else { return 0 }
+        var usage = rusage()
+        #if os(Linux)
+            let who = Int32(RUSAGE_CHILDREN.rawValue)
+        #else
+            let who = RUSAGE_CHILDREN
+        #endif
+        precondition(getrusage(who, &usage) == 0, "Cannot observe validator child CPU")
+        return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) +
+            Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
+    }
+
     func measure<T>(_ name: String, _ operation: () throws -> T) rethrows -> T {
         let start = DispatchTime.now().uptimeNanoseconds
-        defer { seconds[name, default: 0] += Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000 }
+        let cpuStart = clock(), childStart = childCPU()
+        defer {
+            seconds[name, default: 0] += Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+            cpuSeconds[name, default: 0] += Double(clock() - cpuStart) / Double(CLOCKS_PER_SEC) + childCPU() -
+                childStart
+        }
         return try operation()
     }
 }
@@ -191,7 +217,8 @@ private final class J4SessionReplay {
     func apply(owner: String, _ input: SchedulerInput, context: ScenarioPayload) throws -> SchedulerStep {
         let ordinal = ordinals[owner, default: 0] + 1
         let envelope = SchedulerEnvelope(owner: owner, ordinal: ordinal, input: input, context: context)
-        let bytes = try timing.measure("canonical_input_encode") { try SchedulerTraceCodec.encodeInput(envelope) }
+        let prepared = try timing.measure("canonical_input_encode") { try J4PreparedInput(envelope) }
+        let bytes = prepared.data
         var candidate = candidates[owner] ?? SchedulerCandidate()
         let step = try timing.measure("current_candidate_apply") { try candidate.apply(envelope) }
         // Fresh independent reducer gets only canonical input bytes, never the first state/output.
@@ -203,7 +230,7 @@ private final class J4SessionReplay {
         coldCandidates[owner] = cold; coldSteps += 1
         candidates[owner] = candidate; ordinals[owner] = ordinal
         try timing
-            .measure("lossless_catalog_encode_write") { try archive.append(envelope, step: step) }; inputCount += 1
+            .measure("lossless_catalog_encode_write") { try archive.append(prepared, step: step) }; inputCount += 1
         return step
     }
 
@@ -717,98 +744,110 @@ final class J4SessionSchedulerArchiveReplayTests: XCTestCase {
         guard !sessionFiles.isEmpty else { throw SchedulerCandidateError.invalid("missing session inputs") }
         var reports: [[String: Any]] = []
         for file in sessionFiles.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            let sourceInputIntegrity = try validateOriginalSources(file, outputs: false)
+            let majorTiming = J4ReplayTiming(includeChildren: true)
+            let sourceInputIntegrity = try majorTiming.measure("original_input_integrity") {
+                try validateOriginalSources(file, outputs: false)
+            }
             let suffix = file.lastPathComponent.dropFirst("session-input-".count)
             let queueFile = root.appending(path: "scheduler-input-" + suffix)
             var events: [(UInt64, Bool, Data)] = []
-            for (input, queue) in [(file, false), (queueFile, true)] {
-                for line in try Data(contentsOf: input).split(separator: 10) {
-                    let event = try j4Pool { () -> (UInt64, Bool, Data) in
-                        let bytes = Data(line)
-                        guard let raw = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-                              let context = raw["context"] as? [String: Any],
-                              let text = context["causal_ordinal"] as? String,
-                              let ordinal = UInt64(text),
-                              String(ordinal) == text else { throw SchedulerCandidateError.ordinalMismatch }
-                        return (ordinal, queue, bytes)
+            try majorTiming.measure("original_causal_header_collection") {
+                for (input, queue) in [(file, false), (queueFile, true)] {
+                    for line in try Data(contentsOf: input).split(separator: 10) {
+                        let event = try j4Pool { () -> (UInt64, Bool, Data) in
+                            let bytes = Data(line)
+                            guard let raw = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+                                  let context = raw["context"] as? [String: Any],
+                                  let text = context["causal_ordinal"] as? String,
+                                  let ordinal = UInt64(text),
+                                  String(ordinal) == text else { throw SchedulerCandidateError.ordinalMismatch }
+                            return (ordinal, queue, bytes)
+                        }
+                        events.append(event)
                     }
-                    events.append(event)
                 }
             }
             events.sort { $0.0 < $1.0 } // Global causal input cursor only; no native item/queue reordering.
             guard Set(events.map(\.0)).count == events.count else { throw SchedulerCandidateError.ordinalMismatch }
             let archive = try J4LosslessCatalog(directory: output, suffix: String(suffix))
             let replay = J4SessionReplay(archive: archive)
-            for (_, queue, bytes) in events {
-                try j4Pool {
-                    if queue { try replay.scheduler(J4PayloadCodec.envelope(bytes)) }
-                    else { try replay.session(J4PayloadCodec.payload(bytes)) }
+            try majorTiming.measure("original_event_replay_inclusive") {
+                for (_, queue, bytes) in events {
+                    try j4Pool {
+                        if queue { try replay.scheduler(J4PayloadCodec.envelope(bytes)) }
+                        else { try replay.session(J4PayloadCodec.payload(bytes)) }
+                    }
                 }
             }
             guard replay.admissions.isEmpty
             else { throw SchedulerCandidateError.invalid("unfinished original admission") }
             // Only now open native result files as comparison references, never as candidate inputs.
-            let sourceOutputIntegrity = try validateOriginalSources(file, outputs: true)
-            let nativeQueue = root.appending(path: "scheduler-native-" + suffix)
-            for line in try Data(contentsOf: nativeQueue).split(separator: 10) {
-                try j4Pool {
-                    let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
-                    let owner = try J4P.text(native["owner"]),
-                        key = owner + ":" + String(try J4P.uint(native["ordinal"]))
-                    guard let candidate = replay.queueComparisons[key],
-                          let output = native["output"]
-                    else {
-                        throw SchedulerCandidateError.invalid("missing per-ordinal whole-system queue comparison")
-                    }
-                    for delta in SchedulerTraceDiff.compare(reference: output, candidate: candidate) {
-                        try replay.difference(
-                            "queue_policy_or_downstream_alignment_requires_root_classification",
-                            ["association": J4P.s(key),
-                             "path": J4P
-                                 .s(delta
-                                     .path),
-                             "native": delta
-                                 .reference ??
-                                 J4P
-                                 .null,
-                             "candidate": delta
-                                 .candidate ??
-                                 J4P
-                                 .null,
-                             "native_present": .scalar(.flag(delta
-                                     .reference !=
-                                     nil)),
-                             "candidate_present": .scalar(.flag(delta
-                                     .candidate !=
-                                     nil)),
-                             "causal_policy_history": .array(replay.queuePolicyCauses[key, default: []])]
-                        )
+            let sourceOutputIntegrity = try majorTiming.measure("original_output_integrity") {
+                try validateOriginalSources(file, outputs: true)
+            }
+            try majorTiming.measure("native_output_reference_comparison") {
+                let nativeQueue = root.appending(path: "scheduler-native-" + suffix)
+                for line in try Data(contentsOf: nativeQueue).split(separator: 10) {
+                    try j4Pool {
+                        let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
+                        let owner = try J4P.text(native["owner"]),
+                            key = owner + ":" + String(try J4P.uint(native["ordinal"]))
+                        guard let candidate = replay.queueComparisons[key],
+                              let output = native["output"]
+                        else {
+                            throw SchedulerCandidateError.invalid("missing per-ordinal whole-system queue comparison")
+                        }
+                        for delta in SchedulerTraceDiff.compare(reference: output, candidate: candidate) {
+                            try replay.difference(
+                                "queue_policy_or_downstream_alignment_requires_root_classification",
+                                ["association": J4P.s(key),
+                                 "path": J4P
+                                     .s(delta
+                                         .path),
+                                 "native": delta
+                                     .reference ??
+                                     J4P
+                                     .null,
+                                 "candidate": delta
+                                     .candidate ??
+                                     J4P
+                                     .null,
+                                 "native_present": .scalar(.flag(delta
+                                         .reference !=
+                                         nil)),
+                                 "candidate_present": .scalar(.flag(delta
+                                         .candidate !=
+                                         nil)),
+                                 "causal_policy_history": .array(replay.queuePolicyCauses[key, default: []])]
+                            )
+                        }
                     }
                 }
-            }
-            let nativeSession = root.appending(path: "session-native-" + suffix)
-            for line in try Data(contentsOf: nativeSession).split(separator: 10) {
-                try j4Pool {
-                    let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
-                    let key = try J4P.text(native["owner"]) + ":" + String(J4P.uint(native["ordinal"]))
-                    guard let intent = replay.intents[key]
-                    else { throw SchedulerCandidateError.invalid("missing original intent for native disposition") }
-                    let output = try J4P.object(native["output"]!), disposition = try J4P.text(output["disposition"])
-                    let ownDisposition = intent
-                        .queued ? "enqueue" : (intent.proposals.isEmpty ? "deduplicated" : "send")
-                    if disposition != ownDisposition {
-                        try replay.difference(
-                            disposition == "suppressed_observe" ? "native_device_policy_withdrawal" :
-                                "accepted_cache_direct_dedup",
-                            [
-                                "association": J4P.s(key),
-                                "original_input_reference": J4P.s(key),
-                                "native_disposition": J4P.s(disposition),
-                                "candidate_disposition": J4P.s(ownDisposition),
-                                "own_pre_gate_proposals": .array(intent.proposals
-                                    .map { SchedulerTraceCodec.itemPayload($0.item) })
-                            ]
-                        )
+                let nativeSession = root.appending(path: "session-native-" + suffix)
+                for line in try Data(contentsOf: nativeSession).split(separator: 10) {
+                    try j4Pool {
+                        let native = try J4P.object(J4PayloadCodec.payload(Data(line)))
+                        let key = try J4P.text(native["owner"]) + ":" + String(J4P.uint(native["ordinal"]))
+                        guard let intent = replay.intents[key]
+                        else { throw SchedulerCandidateError.invalid("missing original intent for native disposition") }
+                        let output = try J4P.object(native["output"]!),
+                            disposition = try J4P.text(output["disposition"])
+                        let ownDisposition = intent
+                            .queued ? "enqueue" : (intent.proposals.isEmpty ? "deduplicated" : "send")
+                        if disposition != ownDisposition {
+                            try replay.difference(
+                                disposition == "suppressed_observe" ? "native_device_policy_withdrawal" :
+                                    "accepted_cache_direct_dedup",
+                                [
+                                    "association": J4P.s(key),
+                                    "original_input_reference": J4P.s(key),
+                                    "native_disposition": J4P.s(disposition),
+                                    "candidate_disposition": J4P.s(ownDisposition),
+                                    "own_pre_gate_proposals": .array(intent.proposals
+                                        .map { SchedulerTraceCodec.itemPayload($0.item) })
+                                ]
+                            )
+                        }
                     }
                 }
             }
@@ -840,7 +879,12 @@ final class J4SessionSchedulerArchiveReplayTests: XCTestCase {
                 "catalog_entries": archive.catalogCount,
                 "input_only_cold_replay": true,
                 "native_output_used_as_state": false,
+                "major_stage_seconds": majorTiming.seconds,
+                "major_stage_cpu_seconds": majorTiming.cpuSeconds,
+                "major_clock_definition": "wall seconds; parent+validator child CPU seconds. event_replay includes nested stage_seconds; do not sum both levels",
                 "stage_seconds": replay.timing.seconds,
+                "stage_cpu_seconds": replay.timing.cpuSeconds,
+                "stage_clock_definition": "wall=monotonic seconds; cpu=process CPU seconds (clock/CLOCKS_PER_SEC)",
                 "original_input_integrity": sourceInputIntegrity,
                 "original_output_integrity": sourceOutputIntegrity
             ])

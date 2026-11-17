@@ -181,8 +181,40 @@ extension FeedbackJ4Trace {
     }
 
     static func hardwareMap(_ map: HardwareMap) -> Any {
-        try! JSONSerialization.jsonObject(with: JSONEncoder().encode(map))
+        #if DEBUG
+            guard enabled else { return NSNull() }
+            return hardwareMapMemo.value(map)
+        #else
+            return NSNull()
+        #endif
     }
+
+    #if DEBUG
+        private static let hardwareMapMemo = HardwareMapMemo()
+        static var hardwareMapMemoStatistics: (hits: Int, misses: Int, entries: Int) {
+            guard enabled else { return (0, 0, 0) }
+            return hardwareMapMemo.statistics
+        }
+
+        private final class HardwareMapMemo: @unchecked Sendable {
+            private let lock = NSLock()
+            private var values: [Data: Any] = [:]
+            private var hits = 0, misses = 0
+            var statistics: (Int, Int, Int) { lock.withLock { (hits, misses, values.count) } }
+            func value(_ map: HardwareMap) -> Any {
+                // Whole original serialized bytes, never domain Equatable/hash-only identity.
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                let bytes = try! encoder.encode(map)
+                return lock.withLock {
+                    if let value = values[bytes] { hits += 1; return value }
+                    misses += 1
+                    let value = try! JSONSerialization.jsonObject(with: bytes)
+                    if values.count < 16 { values[bytes] = value }
+                    return value
+                }
+            }
+        }
+    #endif
 
     static func policy(_ policy: FeedbackPolicy) -> [String: Any] {
         ["enabled": policy.enabled, "messages_per_second": policy.messagesPerSecond,

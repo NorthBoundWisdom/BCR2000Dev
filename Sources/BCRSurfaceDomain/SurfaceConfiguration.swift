@@ -340,10 +340,18 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     // in the active native assignment array; value copies own their own index.
     private var kernelBindingLookup: BindingContext
     private(set) var kernelBindingIndexBuildCount: UInt64 = 1
+    #if DEBUG
+        private var bindingDiagnosticCache: BindingDiagnosticCache?
+        var bindingDiagnosticPreparationCount: Int { bindingDiagnosticCache?.preparationCount ?? 0 }
+    #endif
 
     private mutating func rebuildBindingLookup() {
         kernelBindingLookup = BCRKernelProjection.bindings(assignments)
         kernelBindingIndexBuildCount &+= 1
+        #if DEBUG
+            bindingDiagnosticCache = SurfaceKernelTrace.enabled
+                ? BindingDiagnosticCache(assignments: assignments, bindings: kernelBindingLookup) : nil
+        #endif
     }
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -384,6 +392,10 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         let activeAssignments = activePageID
             .flatMap { id in pages.first { $0.id == id }?.assignments } ?? orderedAssignments
         self.kernelBindingLookup = BCRKernelProjection.bindings(activeAssignments)
+        #if DEBUG
+            self.bindingDiagnosticCache = SurfaceKernelTrace.enabled
+                ? BindingDiagnosticCache(assignments: activeAssignments, bindings: kernelBindingLookup) : nil
+        #endif
     }
 
     private enum CodingKeys: String,
@@ -500,18 +512,19 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
     public func assignment(for control: BCRControlID) -> ControlAssignment? {
         let reference = kernelAssignmentIndex(for: control)
         let result = reference.map { assignments[$0] }
-        if SurfaceKernelTrace.enabled {
-            SurfaceKernelTrace.record(
-                "binding.lookup", input: ["control": BCRKernelProjection.controlValue(control),
-                                          "ordered_controls": assignments
-                                              .map { BCRKernelProjection.controlValue($0.control) },
-                                          "ordered_assignments": assignments.map { String(reflecting: $0) },
-                                          "entries": kernelBindingLookup.controlEntries.map { String(reflecting: $0) },
-                                          "cache_build_count": kernelBindingIndexBuildCount],
-                actual: ["reference": reference.map { $0 as Any } ?? NSNull(),
-                         "result": result.map { String(reflecting: $0) as Any } ?? NSNull()]
-            )
-        }
+        #if DEBUG
+            if SurfaceKernelTrace.enabled, let cache = bindingDiagnosticCache {
+                let facts = cache.facts(reference: reference, result: result)
+                SurfaceKernelTrace.record(
+                    "binding.lookup", input: ["control": BCRKernelProjection.controlValue(control),
+                                              "ordered_controls": facts.controls,
+                                              "ordered_assignments": facts.assignments,
+                                              "entries": facts.entries,
+                                              "cache_build_count": kernelBindingIndexBuildCount],
+                    actual: ["reference": reference.map { $0 as Any } ?? NSNull(), "result": facts.result]
+                )
+            }
+        #endif
         return result
     }
 
@@ -601,3 +614,56 @@ public struct SurfaceConfiguration: Codable, Equatable, Sendable {
         return ParameterID("\(prefix).\(counter)")
     }
 }
+
+#if DEBUG
+    /// Diagnostic-only memo. Copies share immutable source facts; mutation replaces the owner.
+    private final class BindingDiagnosticCache: @unchecked Sendable {
+        struct Facts {
+            let controls: SurfaceKernelTrace.Catalogue
+            let assignments: SurfaceKernelTrace.Catalogue
+            let entries: SurfaceKernelTrace.Catalogue
+            let descriptions: [String]
+            let result: Any
+            func withResult(_ result: Any) -> Self {
+                .init(controls: controls, assignments: assignments, entries: entries,
+                      descriptions: descriptions, result: result)
+            }
+        }
+
+        private let source: [ControlAssignment]
+        private let bindings: BindingContext
+        private let lock = NSLock()
+        private var cached: (L10n.DiagnosticLanguageSnapshot, Facts)?
+        private var preparations = 0
+        var preparationCount: Int { lock.withLock { preparations } }
+        init(assignments: [ControlAssignment], bindings: BindingContext) {
+            source = assignments; self.bindings = bindings
+        }
+
+        func facts(reference: Int?, result: ControlAssignment?) -> Facts {
+            let before = L10n.diagnosticLanguageSnapshot
+            if before.revision != nil,
+               let hit = lock.withLock({ cached }), hit.0 == before
+            {
+                let selected: Any = reference.map { hit.1.descriptions[$0] as Any } ?? NSNull()
+                // Original reflection of any assignment reads this observable language key.
+                // Empty assignment/entry lists did not do so; do not introduce that dependency.
+                if !source.isEmpty { _ = L10n.language }
+                if L10n.diagnosticLanguageSnapshot == before { return hit.1.withResult(selected) }
+            }
+            // One live formatting pass, with no L10n lock held and no unbounded retry.
+            let descriptions = source.map { String(reflecting: $0) }
+            let live = Facts(controls: .init(source.map { BCRKernelProjection.controlValue($0.control) }),
+                             assignments: .init(descriptions),
+                             entries: .init(bindings.controlEntries.map { String(reflecting: $0) }),
+                             descriptions: descriptions,
+                             result: result.map { String(reflecting: $0) as Any } ?? NSNull())
+            let after = L10n.diagnosticLanguageSnapshot
+            lock.withLock {
+                preparations += 1
+                cached = before.revision != nil && before == after ? (after, live) : nil
+            }
+            return live
+        }
+    }
+#endif
