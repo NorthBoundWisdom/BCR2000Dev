@@ -31,6 +31,7 @@ final class OutputTransportRouter: MonotonicOutputTransport {
     private var kind: OutputTransportKind = .osc
     private var generation = UUID()
     init(factory: (@MainActor (OutputTransportKind) -> any OutputTransport)? = nil) {
+        ConsoleConstructionAudit.note("output_router_factory")
         let make: @MainActor (OutputTransportKind) -> any OutputTransport = factory ?? { kind in
             switch kind {
             case .osc: OSCParameterAdapter()

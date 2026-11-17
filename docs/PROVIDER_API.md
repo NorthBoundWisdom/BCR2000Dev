@@ -131,6 +131,10 @@ Physical encoder-group selection is unknown until an input identifies a specific
 Only learned 7-bit absolute continuous controls and learned buttons are described. Relative and
 NRPN controls remain excluded until separately qualified, with reasons in `--describe-surface`.
 Visualization-only learned buttons remain observable as ignored input; they have no feedback.
+The shared indicator contract and Mock can render button lamps. Hardware declarations depend on the
+selected learned map; a missing or visualization-only entry has no writable lamp declaration.
+An offline candidate or readiness result does not grant physical qualification. Inspect that instance's
+discovery/readiness reasons; display writes still require both write policy and display permission.
 Consumers must not infer a functional held-enable from ignored inputs or guess a release.
 Hardware input/renew/reset return permission_denied/unsupported_hold/unsupported_tool and consume
 no journal sequence. Display feedback requires both `--hardware-output write` and

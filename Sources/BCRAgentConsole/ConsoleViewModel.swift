@@ -86,6 +86,7 @@ final class ConsoleViewModel: ObservableObject {
     var canDiscardPresetRestore: Bool { deviceWork.canDiscardPresetRestore }
     var canRevealPresetBackups: Bool { deviceWork.canRevealPresetBackups }
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
+         runtimeMode: ConsoleRuntimeMode = .normal,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter,
@@ -95,13 +96,21 @@ final class ConsoleViewModel: ObservableObject {
          automaticallyAdvancesMock: Bool = true,
          timing: ConsoleTiming = .init())
     {
-        let work = ConsoleDeviceWork(stores: stores, startsMIDI: startsMIDI, mcpCredentials: mcpCredentials,
-                                     integrationTest: integrationTest, midiService: midiService,
-                                     outputTransport: outputTransport,
-                                     initialPreset: initialPreset, codexFactory: codexFactory,
-                                     providerConfiguration: providerConfiguration,
-                                     mockClock: mockClock, automaticallyAdvancesMock: automaticallyAdvancesMock,
-                                     timing: timing)
+        let work = ConsoleDeviceWork(
+            stores: stores,
+            startsMIDI: startsMIDI,
+            runtimeMode: runtimeMode,
+            mcpCredentials: mcpCredentials,
+            integrationTest: integrationTest,
+            midiService: midiService,
+            outputTransport: outputTransport,
+            initialPreset: initialPreset,
+            codexFactory: codexFactory,
+            providerConfiguration: providerConfiguration,
+            mockClock: mockClock,
+            automaticallyAdvancesMock: automaticallyAdvancesMock,
+            timing: timing
+        )
         deviceWork = work
         inputReview = InputReviewController(session: work.session, now: timing.intentNow)
         monitorCapture = MonitorCaptureController(session: work.session,

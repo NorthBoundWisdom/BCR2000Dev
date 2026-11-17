@@ -103,6 +103,7 @@ public final class MCPApplicationGateway {
     public init(session: SurfaceSession? = nil, permissions: MCPPermissions = MCPPermissions(),
                 now: @escaping @MainActor () -> Date = { .now },
                 displayMonotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
+                includeBuiltInTools: Bool = true,
                 includeAgent: Bool = true,
                 includeDeviceAdministration: Bool = true)
     {
@@ -110,7 +111,7 @@ public final class MCPApplicationGateway {
         self.permissions = permissions
         self.now = now
         self.displayMonotonic = displayMonotonic
-        for definition in MCPToolCatalog.tools {
+        for definition in includeBuiltInTools ? MCPToolCatalog.tools : [] {
             guard let name = definition.objectValue?["name"]?.stringValue else { continue }
             if !includeDeviceAdministration, Self.deviceAdministrationTools.contains(name) { continue }
             if AgentMCPModule.names.contains(name) { if !includeAgent { continue } }

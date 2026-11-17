@@ -76,6 +76,7 @@ final class ConsoleConnectionWork: ObservableObject, ConsoleDeviceOwner {
     }
 
     func start() {
+        do { try session.requireHardwareAccess("gui_midi_start") } catch { report(error); return }
         midi.selectEndpoints(endpointSelection)
         startMIDIWithoutBlockingWindow()
     }
@@ -88,6 +89,7 @@ final class ConsoleConnectionWork: ObservableObject, ConsoleDeviceOwner {
     }
 
     private func startMIDIWithoutBlockingWindow() {
+        do { try session.requireHardwareAccess("gui_midi_start") } catch { report(error); return }
         guard midiInitializationTask == nil else { return }
         startingMIDI = true
         let progress = ConsoleNotice(level: .info, message: "正在启动 MIDI 服务；界面可继续使用，请等待设备就绪。")
@@ -117,6 +119,7 @@ final class ConsoleConnectionWork: ObservableObject, ConsoleDeviceOwner {
     }
 
     func commitEndpointSelection(_ selection: MIDIEndpointSelection) throws {
+        try session.requireHardwareAccess("gui_endpoint_commit")
         try selection.validate()
         try endpointStore.save(selection)
         endpointSettingsNeedRepair = false
@@ -129,6 +132,8 @@ final class ConsoleConnectionWork: ObservableObject, ConsoleDeviceOwner {
     }
 
     func selectSource(_ newSource: DeviceSource) {
+        if newSource ==
+            .hardware { do { try session.requireHardwareAccess("gui_source") } catch { report(error); return } }
         guard !presetSourceSwitchBlocked else {
             notice = ConsoleNotice(level: .warning, message: "预设操作尚未结束，暂不能切换设备来源。")
             return
@@ -198,6 +203,7 @@ final class ConsoleConnectionWork: ObservableObject, ConsoleDeviceOwner {
     }
 
     func connectHardware(_ id: UUID, mode: HardwareConnectionPrompt.Mode) {
+        do { try session.requireHardwareAccess("gui_connect_hardware") } catch { report(error); return }
         guard let prompt = pendingHardwareConnection, prompt.id == id,
               source == .mock, connection.isConnected, connection.hasSameRoute(as: prompt.route) else { return }
         if mode == .read, !prompt.canRead { return }

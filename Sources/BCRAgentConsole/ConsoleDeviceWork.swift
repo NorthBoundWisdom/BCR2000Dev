@@ -22,6 +22,8 @@ final class ConsoleDeviceWork: ObservableObject {
     private var ownerUpdates: [AnyCancellable] = []
     private let timing: ConsoleTiming
     let session: SurfaceSession
+    let runtimeMode: ConsoleRuntimeMode
+    let guiVirtualSurface: GUIVirtualSurfaceController?
     let connectionWork: ConsoleConnectionWork
     let presetWork: ConsolePresetWork
     let recoveryWork: ConsoleRecoveryWork
@@ -194,6 +196,7 @@ final class ConsoleDeviceWork: ObservableObject {
     }
 
     init(stores: ConsoleStores = .standard, startsMIDI: Bool = true,
+         runtimeMode: ConsoleRuntimeMode = .normal,
          mcpCredentials: (any MCPCredentialStore)? = nil, integrationTest: Bool = false,
          midiService: (any MIDIService)? = nil, outputTransport: (any OutputTransport)? = nil,
          initialPreset: ConfigurationPreset = .starter,
@@ -203,6 +206,12 @@ final class ConsoleDeviceWork: ObservableObject {
          automaticallyAdvancesMock: Bool = true,
          timing: ConsoleTiming = .init())
     {
+        self.runtimeMode = runtimeMode
+        if let virtual = runtimeMode.context {
+            precondition(midiService == nil && mcpCredentials == nil && outputTransport == nil)
+            precondition(stores.hardwareMap.fileURL == virtual.stores.hardwareMap.fileURL &&
+                stores.configuration.fileURL == virtual.stores.configuration.fileURL)
+        }
         let ui = ConsolePresentationState(timing: timing, workspacePanelStore: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "workspace-panels.json")))
         presentation = ui
@@ -247,11 +256,24 @@ final class ConsoleDeviceWork: ObservableObject {
         var panelError: LocalizedMessage?
         do { if let stored = try workspacePanelStore.load() { ui.workspacePanels = stored } }
         catch { panelError = "面板设置读取失败，专业面板保持隐藏：\(error: error)" }
-        let midi = midiService ?? CoreMIDIService(selection: savedSelection)
+        let midi: any MIDIService
+        let credentials: any MCPCredentialStore
+        let transport: any OutputTransport
+        switch runtimeMode {
+        case let .guiVirtual(context):
+            midi = context.midi; credentials = context.legacyCredential; transport = context.output
+        case .normal:
+            if let midiService { midi = midiService }
+            else {
+                ConsoleConstructionAudit.note("native_midi_factory"); midi = CoreMIDIService(selection: savedSelection)
+            }
+            credentials = mcpCredentials ?? KeychainMCPCredentialStore()
+            transport = outputTransport ?? OutputTransportRouter()
+        }
         session = SurfaceSession(
             hardwareDevice: midi, hardwareMap: loadedMap, configuration: configuration,
             pluginBindings: AgentBindingTranslation.bindings,
-            requiresHardwareConfirmation: true,
+            requiresHardwareConfirmation: true, permitsHardwareSource: !runtimeMode.isVirtual,
             now: timing.intentNow, historyTime: timing.work,
             saveHardwareMap: { try hardwareFile.save($0) },
             saveConfiguration: { try configurationFile.save($0) }
@@ -261,13 +283,23 @@ final class ConsoleDeviceWork: ObservableObject {
                                                           .appending(path: "feedback-policy.json"))
         mcp = MCPController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "mcp-settings.json")),
-        credentials: mcpCredentials ?? KeychainMCPCredentialStore(),
-        integrationTest: integrationTest, provider: provider)
+        credentials: credentials,
+        integrationTest: integrationTest, provider: provider,
+        permanentlyDisabled: runtimeMode.isVirtual)
         output = OutputController(session: session, store: JSONFileStore(fileURL:
             stores.configuration.fileURL.deletingLastPathComponent().appending(path: "output-settings.json")),
-        adapter: outputTransport ?? OutputTransportRouter(), runtime: provider.runtime)
+        adapter: transport, runtime: provider.runtime,
+        permanentlyDisabled: runtimeMode.isVirtual)
         let context = ConsoleDeviceContext(session: session, midi: midi, presentation: ui,
-                                           timing: timing, canConfigureMIDI: startsMIDI, hardwareFile: hardwareFile)
+                                           timing: timing, canConfigureMIDI: startsMIDI && !runtimeMode.isVirtual,
+                                           hardwareFile: hardwareFile)
+        if let virtual = runtimeMode.context {
+            guiVirtualSurface = GUIVirtualSurfaceController(
+                surface: session,
+                context: virtual,
+                providerID: provider.providerID
+            )
+        } else { guiVirtualSurface = nil }
         let gate = ConsolePresetOperationGate()
         let recoveryStore = ConsoleRecoveryStore(directory: supportDirectory)
         let presetWork = ConsolePresetWork(context: context, gate: gate, recoveryStore: recoveryStore,
@@ -283,6 +315,9 @@ final class ConsoleDeviceWork: ObservableObject {
         self.presetWork = presetWork; self.recoveryWork = recoveryWork
         self.connectionWork = connectionWork; self.buttonFeedbackWork = buttonFeedbackWork
         self.surfaceIntents = surfaceIntents
+        guiVirtualSurface?.awaitPresentation = { [weak ui] in
+            if let task = ui?.uiPublishTask { await task.value }
+        }
         presetWork.recovery = recoveryWork
         presetWork.isConnecting = { [weak connectionWork] in connectionWork?.connectingHardware ?? false }
         presetWork.isStarting = { [weak connectionWork] in connectionWork?.startingMIDI ?? false }
@@ -414,6 +449,9 @@ final class ConsoleDeviceWork: ObservableObject {
         } catch { report(error) }
         do { try ProviderMCPModule.installShared(on: mcp.service, application: provider) }
         catch { report(error) }
+        if let virtual = runtimeMode.context {
+            session.onHardwareAccessDenied = { [weak virtual] in virtual?.deny($0) }
+        }
         session.synchronize()
         Task { @MainActor [weak mcp] in await mcp?.restore() }
         Task { @MainActor [weak output] in output?.restore() }
@@ -426,7 +464,7 @@ final class ConsoleDeviceWork: ObservableObject {
         if let point = presetRestorePoint, point != point.bounded() {
             do { try recoveryStore.saveRestorePoint(point) } catch { report(error) }
         }
-        guard startsMIDI else { return }
+        guard startsMIDI, !runtimeMode.isVirtual else { return }
         connectionWork.start()
     }
 

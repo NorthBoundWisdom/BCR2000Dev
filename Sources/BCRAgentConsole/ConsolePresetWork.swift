@@ -147,6 +147,7 @@ final class ConsolePresetWork: ObservableObject, ConsoleDeviceOwner, ConsolePres
     }
 
     func refreshDisplayFromDevice() {
+        do { try session.requireHardwareAccess("gui_preset") } catch { report(error); return }
         guard canConfigureMIDI, midi.supportsStartupConfiguration, source == .hardware, connection.isConnected,
               presetAlignment?.phase.isBusy != true, pendingPresetRestore == nil else { return }
         let previous = displayReadTask
@@ -292,6 +293,7 @@ final class ConsolePresetWork: ObservableObject, ConsoleDeviceOwner, ConsolePres
     }
 
     func requestPresetNumberConfirmation() {
+        do { try session.requireHardwareAccess("gui_preset") } catch { report(error); return }
         guard canCheckDisplayPresetNumber else { return }
         pendingPresetNumberConfirmation = nil; selectedPresetNumber = nil
         let previous = displayReadTask
@@ -377,6 +379,7 @@ final class ConsolePresetWork: ObservableObject, ConsoleDeviceOwner, ConsolePres
     }
 
     func beginPresetAlignment(options: BCRPresetAlignment.Options = .init()) {
+        do { try session.requireHardwareAccess("gui_preset") } catch { report(error); return }
         guard canAlignPreset else {
             notice = ConsoleNotice(level: .warning, message: "请先在实体模式下连接 BCR2000，并停止学习。")
             return
@@ -444,6 +447,7 @@ final class ConsolePresetWork: ObservableObject, ConsoleDeviceOwner, ConsolePres
     }
 
     func applyPresetAlignment() {
+        do { try session.requireHardwareAccess("gui_preset") } catch { report(error); return }
         guard var state = presetAlignment, state.phase == .preview, let plan = state.plan, !plan.isEmpty,
               canAlignPreset, let route = presetPreviewRoute, let before = presetDump, let backup = state.backup,
               presetPreviewMap == session.learnedHardwareMap, presetPreviewConfiguration == configuration

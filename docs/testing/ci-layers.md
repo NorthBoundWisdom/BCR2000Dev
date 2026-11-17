@@ -112,3 +112,19 @@
 | `BCRProviderAdapterTests.FeedbackPathGoldenTests/testRecordedProviderAndHardwareDisplaySequences` | 0.070 |
 
 原件索引：工作区 `build/j-finish/b/f1/failed-run.json`、`failed-run.log`；此前同 run 选取且校 CRC 的原 artifact 小日志在 `build/j-main-cont/b/j4-ci-isolation/ci-297-selected/`，只读引用，不重跑。
+
+## F-1 首次分层提交的实际结果
+
+`d0c67195f95d86775e51b24e4bbdba6045cffcce` 的正常 run `44136715224` 为 failure，
+created `2026-11-17T17:24:54Z` → updated `17:39:55Z`，整套 **901 秒**。
+Linux 成功；macOS checks 的全部功能步骤成功，只有整套 300 秒预算失败。
+delivery 没取得 hosted runner，steps 为空而被取消；GitHub 原注释是
+“The job was not acquired by Runner of type hosted even after multiple attempts”，并提示 macOS arm64 容量限制。
+它没有执行交付验收，不能称该 job 功能通过。
+
+新命名空间首次 seed/SwiftPM 都明确 cache miss；native 编译命令 135.953 秒、
+全部回归加固定代表证明 84.450 秒、Python 38.782 秒（与原生并行）。
+这次是冷编译，不能据它证明后续 incremental cache 的实际收益。
+独立自动 proof run `44136715097` 也因未取得 hosted runner 被取消，未执行原完整证明。
+按本轮规则，不继续性能优化循环；F-2 切换和 F-5 交付不放行。
+同 SHA 另行手动触发的证明及后续提交的精确终态记录在工作区 `reports/B.md`，不以新 run 回填上述失败。

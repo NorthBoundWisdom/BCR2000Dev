@@ -35,10 +35,12 @@ final class PipedMCPCredentialStore: MCPCredentialStore {
 
 @MainActor
 final class KeychainMCPCredentialStore: MCPCredentialStore {
+    init() { ConsoleConstructionAudit.note("keychain_factory") }
     private let service = "dev.bcragentconsole.mcp"
     private let account = "loopback-bearer"
 
     func loadOrCreate() async throws -> String {
+        ConsoleConstructionAudit.note("keychain_load")
         let service = self.service, account = self.account
         return try await Task.detached(priority: .userInitiated) {
             try Self.readOrCreate(service: service, account: account)
@@ -111,11 +113,13 @@ final class MCPController: ObservableObject {
     private let store: JSONFileStore<MCPSettings>
     private let credentials: any MCPCredentialStore
     let integrationTest: Bool
+    private let permanentlyDisabled: Bool
 
     init(session: SurfaceSession, store: JSONFileStore<MCPSettings>,
          credentials: any MCPCredentialStore = KeychainMCPCredentialStore(), integrationTest: Bool = false,
-         provider: ProviderApplication? = nil)
+         provider: ProviderApplication? = nil, permanentlyDisabled: Bool = false)
     {
+        self.permanentlyDisabled = permanentlyDisabled
         self.store = store
         self.credentials = credentials
         self.integrationTest = integrationTest
@@ -132,7 +136,8 @@ final class MCPController: ObservableObject {
         do {
             if let loaded = try store.load() { try loaded.validate(); settings = loaded }
         } catch { self.error = L10n.text("MCP 设置读取失败：\(error.localizedDescription)") }
-        service.permissions = settings.permissions
+        if permanentlyDisabled { settings.enabled = false }
+        service.permissions = permanentlyDisabled ? .init(parameterWrite: false) : settings.permissions
         service.onRestrictConfigurationWrite = { [weak self] in
             guard let self else { throw MCPHTTPParseError(reason: L10n.text("MCP 服务不可用")) }
             var restricted = self.settings
@@ -170,10 +175,12 @@ final class MCPController: ObservableObject {
     var endpoint: String { "http://127.0.0.1:\(settings.port)/mcp" }
 
     func restore() async {
+        guard !permanentlyDisabled else { return }
         if settings.enabled { await start() }
     }
 
     func setEnabled(_ enabled: Bool) async {
+        guard !permanentlyDisabled else { error = L10n.text("此虚拟控制台仅提供独立的显示接口。"); return }
         generation = UUID()
         isStarting = false
         error = nil
@@ -185,6 +192,7 @@ final class MCPController: ObservableObject {
     }
 
     func apply(_ draft: MCPSettings) async {
+        guard !permanentlyDisabled else { error = L10n.text("此虚拟控制台仅提供独立的显示接口。"); return }
         var candidate = draft
         candidate.enabled = settings.enabled
         do {
@@ -211,6 +219,7 @@ final class MCPController: ObservableObject {
     }
 
     func copyToken() async {
+        guard !permanentlyDisabled else { error = L10n.text("此虚拟控制台仅提供独立的显示接口。"); return }
         do {
             guard settings.enabled,
                   !isStarting else { throw MCPHTTPParseError(reason: L10n.text("请先启用 MCP 服务并等待启动完成")) }
@@ -223,6 +232,7 @@ final class MCPController: ObservableObject {
     }
 
     func copyConnectionCommand() async {
+        guard !permanentlyDisabled else { error = L10n.text("此虚拟控制台仅提供独立的显示接口。"); return }
         do {
             guard settings.enabled,
                   !isStarting else { throw MCPHTTPParseError(reason: L10n.text("请先启用 MCP 服务并等待启动完成")) }
@@ -243,6 +253,7 @@ final class MCPController: ObservableObject {
     }
 
     private func start() async {
+        guard !permanentlyDisabled else { error = L10n.text("此虚拟控制台仅提供独立的显示接口。"); return }
         if integrationTest { IntegrationStartupLog.write("mcp.start.begin") }
         let requestGeneration = generation
         isStarting = true

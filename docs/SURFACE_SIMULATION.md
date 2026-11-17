@@ -203,7 +203,9 @@ old context. No input is replayed after reset/restart or an event gap.
 Provider assets (`bcr-provider-sdk-1.0.0.zip`, Provider 1.0 schema) and the optional Surface 1.3
 delivery. Surface files sit at the delivery root under the same names as the XTouch delivery,
 copied byte for byte from the materialized `build/seed/SurfacePlugins`:
-`surface-control-sdk-1.3.0.zip` (`surface_control/__init__.py`), `control-tools.json`,
+`surface-control-sdk-1.5.0.zip`（`surface_control`、`surface_conformance`、
+`surface_control_diagnostics`、`surface_panel_demo` 四个 runtime package；测试替身位于独立的
+`TEST-ONLY-surface-control-testing-1.5.0.zip`，不在 runtime ZIP 中）, `control-tools.json`,
 `surface-control-scenario.schema.json`, `surface-control-software-v1.json`,
 `surface-control-software-v1.1.json`, `surface-control-software-v1.2.json`, `surface-control-software-v1.3.json`, `surface-control.md` and `surface-control-scenarios.md`.
 `control-contract.json` is the static published discovery and tool descriptors of the
@@ -312,7 +314,7 @@ declares `accepts_input: false`. Run the bundled checker against an isolated del
 with input, feedback and reset permission, using a private token file:
 
 ```sh
-PYTHONPATH=surface-control-sdk-1.3.0.zip python3 -m surface_conformance \
+PYTHONPATH=surface-control-sdk-1.5.0.zip python3 -m surface_conformance \
   --url http://127.0.0.1:PORT/mcp --token-file /private/token \
   --instance-id trial-A --fixture surface-control-software-v1.3.json \
   --roles conformance-roles.json --report /tmp/conformance-v1.3.json
@@ -360,3 +362,10 @@ verified by reconstructing its historical button hold declarations and removing 
 Button holds were introduced in contract 1.1; input declarations and unsequenced feedback were
 introduced in 1.2. The public delivery previously carried the optional Surface 1.2 assets.
 The current sections describe the cumulative 1.3 behavior.
+
+## GUI 虚拟控制台
+
+普通 GUI 默认不开放 shared-control endpoint。显式 `--gui-virtual-surface` 使用实际窗口的
+同一 Session、独立 display-only 凭据与永久 Mock-only 路径；档案为 `bcr2000.gui.virtual`，
+来源 simulation，默认合同仍为 1.3，只有显式输入保留容量才为 1.5。
+启动和实际 SDK CLI 命令见 [GUI_VIRTUAL_SURFACE.md](GUI_VIRTUAL_SURFACE.md)。

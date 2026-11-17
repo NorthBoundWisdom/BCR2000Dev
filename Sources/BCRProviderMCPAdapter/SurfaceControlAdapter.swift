@@ -8,6 +8,8 @@ import SurfacePluginContracts
 /// Optional software control contract. Neither the Provider 1.0 inventory nor hardware is its source.
 @MainActor
 public final class BCRSurfaceControlAdapter {
+    public enum Mode: Sendable { case standalone, guiVirtual }
+    private let mode: Mode
     public struct Permissions: Sendable {
         public var input: Bool
         public var feedback: Bool
@@ -92,6 +94,7 @@ public final class BCRSurfaceControlAdapter {
     public private(set) var diagnosticCount = 0
 
     public init(surface: SurfaceSession, instanceID: String, permissions: Permissions = .init(),
+                mode: Mode = .standalone,
                 eventCapacity: Int = 1024, inputEventCapacity: Int? = nil,
                 monotonic: @escaping @MainActor () -> Double = { ProcessInfo.processInfo.systemUptime },
                 diagnostic: @escaping @MainActor (Diagnostic) -> Void = { _ in },
@@ -100,7 +103,7 @@ public final class BCRSurfaceControlAdapter {
                 principals: SurfaceControlPrincipals = .init(), writeLimits: ControlWriteLimits? = nil,
                 epochFactory: @escaping @MainActor () -> String = { UUID().uuidString }) throws
     {
-        self.principals = principals; self.writeLimits = writeLimits
+        self.principals = principals; self.writeLimits = writeLimits; self.mode = mode
         self.epochFactory = epochFactory
         self.surface = surface; self.permissions = permissions; self.monotonic = monotonic
         diagnose = diagnostic; scheduler = holdScheduler; self.automaticHoldExpiry = automaticHoldExpiry
@@ -110,7 +113,12 @@ public final class BCRSurfaceControlAdapter {
             SurfaceControlSession(
                 instanceID: instanceID,
                 epoch: epochFactory(),
-                profile: Self.profile(surface, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity),
+                profile: Self.profile(
+                    surface,
+                    writeLimits: writeLimits,
+                    inputEventCapacity: inputEventCapacity,
+                    mode: mode
+                ),
                 eventCapacity: eventCapacity, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity
             ),
             surface: surface,
@@ -137,14 +145,14 @@ public final class BCRSurfaceControlAdapter {
     /// revision) plus the tool descriptors. The instance and epoch are placeholders; a live
     /// instance is always pinned through `surface_control_discover`. Opens no device.
     public static func publishedContract(surface: SurfaceSession, instanceID: String = "example.simulation",
-                                         epoch: String = "discovery-only",
+                                         epoch: String = "discovery-only", mode: Mode = .standalone,
                                          writeLimits: ControlWriteLimits? = nil,
                                          inputEventCapacity: Int? = nil) throws -> JSONValue
     {
         let session = try SurfaceControlSession(
             instanceID: instanceID,
             epoch: epoch,
-            profile: profile(surface, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity),
+            profile: profile(surface, writeLimits: writeLimits, inputEventCapacity: inputEventCapacity, mode: mode),
             writeLimits: writeLimits, inputEventCapacity: inputEventCapacity
         )
         return try .object(["discovery": .encoded(session.discovery()),
@@ -159,7 +167,7 @@ public final class BCRSurfaceControlAdapter {
     }
 
     private static func profile(_ surface: SurfaceSession, writeLimits: ControlWriteLimits? = nil,
-                                inputEventCapacity: Int? = nil) -> ControlProfile
+                                inputEventCapacity: Int? = nil, mode: Mode = .standalone) -> ControlProfile
     {
         let controls = BCRLayout.allControls.map { control -> ControlDescriptor in
             let assignment = surface.engine.configuration.assignment(for: control)
@@ -186,7 +194,8 @@ public final class BCRSurfaceControlAdapter {
                 feedbackKinds: control.isContinuous ? [.value] : [.indicator],
                 mapping: mapping,
                 // A lease is truthful only when release restores the accepted input's effect.
-                hold: !control.isContinuous && acceptsInput && assignment?.buttonBehavior == .momentary ?
+                hold: mode == .standalone && !control.isContinuous && acceptsInput && assignment?
+                    .buttonBehavior == .momentary ?
                     ControlHold(restValue: .bool(false), maxHoldSeconds: maximumButtonHoldSeconds) : nil,
                 acceptsInput: acceptsInput
             )
@@ -195,6 +204,7 @@ public final class BCRSurfaceControlAdapter {
                             "input.independent_sequence", "events.writer_id"]
         if writeLimits != nil { capabilities.append("writes.independent_limits") }
         if inputEventCapacity != nil { capabilities.append("events.input_retention") }
+        if mode == .guiVirtual { capabilities.append("x.bcr.gui_virtual") }
         let inputs = Set(controls.map(\.input_kind))
         for kind in [ControlInputKind.absolute, .relative, .button] where inputs.contains(kind) {
             capabilities.append("input." + kind.rawValue)
@@ -207,8 +217,8 @@ public final class BCRSurfaceControlAdapter {
         capabilities += ["x.bcr.display_only_feedback", "x.bcr.explicit_input_permissions",
                          "x.bcr.indicator_blink_static"]
         return ControlProfile(
-            id: "bcr2000.mock",
-            version: inputEventCapacity == nil ? "1.3" : "1.5",
+            id: mode == .guiVirtual ? "bcr2000.gui.virtual" : "bcr2000.mock",
+            version: mode == .guiVirtual ? "1" : (inputEventCapacity == nil ? "1.3" : "1.5"),
             controls: controls,
             capabilities: capabilities
         )
@@ -254,7 +264,12 @@ public final class BCRSurfaceControlAdapter {
             expected: next.expected,
             expectedSequence: next.discovery().latest_sequence,
             epoch: epochFactory(),
-            profile: Self.profile(surface, writeLimits: writeLimits, inputEventCapacity: core.inputEventCapacity),
+            profile: Self.profile(
+                surface,
+                writeLimits: writeLimits,
+                inputEventCapacity: core.inputEventCapacity,
+                mode: mode
+            ),
             at: now
         )
         if surface.source == .mock {
@@ -351,6 +366,9 @@ public final class BCRSurfaceControlAdapter {
         if diagnostics.count > 64 { diagnostics.removeFirst(diagnostics.count - 64) }
         diagnose(diagnostic)
     }
+
+    /// Host-owned endpoint revocation. This is not a registered remote operation.
+    public func invalidateContext(reason: String) throws { failClosed(reason); try refresh() }
 
     public func discovery() throws -> ControlDiscovery { try refresh(); return core.discovery() }
     private func requireMock() throws {

@@ -10,6 +10,7 @@ public enum SurfaceControlMCPModule {
     @discardableResult
     public static func install(on gateway: MCPApplicationGateway, instanceID: String,
                                permissions: BCRSurfaceControlAdapter.Permissions = .init(), eventCapacity: Int = 1024,
+                               mode: BCRSurfaceControlAdapter.Mode = .standalone,
                                inputEventCapacity: Int? = nil,
                                principals: SurfaceControlPrincipals = .init(),
                                writeLimits: BCRSurfaceControlAdapter.WriteLimits? = nil,
@@ -22,7 +23,7 @@ public enum SurfaceControlMCPModule {
     {
         guard let surface = gateway.surfaceSession else { return nil }
         let adapter = try BCRSurfaceControlAdapter(
-            surface: surface, instanceID: instanceID, permissions: permissions,
+            surface: surface, instanceID: instanceID, permissions: permissions, mode: mode,
             eventCapacity: eventCapacity, inputEventCapacity: inputEventCapacity, monotonic: monotonic,
             diagnostic: { [weak gateway] value in
                 // Existing audit trail; the context itself is revoked by the adapter (fail closed).

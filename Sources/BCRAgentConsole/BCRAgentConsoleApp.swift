@@ -14,6 +14,29 @@ import SwiftUI
 
 @MainActor
 final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
+    var guiVirtualContext: GUIVirtualContext?
+    weak var guiVirtualController: GUIVirtualSurfaceController?
+    private var virtualSignals: [DispatchSourceSignal] = []
+    private var terminationPending = false
+    private var signalTerminationScheduled = false
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if guiVirtualContext != nil { fputs("gui_virtual.termination_requested\n", stderr) }
+        guard let context = guiVirtualContext else { return .terminateNow }
+        guard !terminationPending else { return .terminateLater }
+        terminationPending = true
+        Task { @MainActor in
+            let failures: [String]
+            if let controller = self.guiVirtualController { failures = await controller.finish() }
+            else { failures = await context.finishWithoutController() }
+            if failures.isEmpty { sender.reply(toApplicationShouldTerminate: true) }
+            else {
+                FileHandle.standardError.write(Data("GUI virtual cleanup was not confirmed.\n".utf8))
+                Darwin.exit(2)
+            }
+        }
+        return .terminateLater
+    }
+
     #if DEBUG
         var snapshotModel: ConsoleViewModel?
     #endif
@@ -27,6 +50,23 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         IntegrationStartupLog.write("application.didFinishLaunching")
+        if guiVirtualContext != nil {
+            for number in [SIGTERM, SIGINT] {
+                signal(number, SIG_IGN)
+                let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+                source.setEventHandler { [weak self] in
+                    guard let self, !self.signalTerminationScheduled, !self.terminationPending else { return }
+                    self.signalTerminationScheduled = true
+                    fputs("gui_virtual.termination_signal\n", stderr)
+                    // Leave the GCD main-queue drain before AppKit enters its termination loop.
+                    // Otherwise a terminateLater MainActor cleanup cannot run in that nested loop.
+                    RunLoop.main.perform(inModes: [.common, .modalPanel, .eventTracking]) {
+                        MainActor.assumeIsolated { NSApp.terminate(nil) }
+                    }
+                }
+                source.resume(); virtualSignals.append(source)
+            }
+        }
         NSApp.setActivationPolicy(OffscreenPresentation.isEnabled ? .accessory : .regular)
         OffscreenPresentation.install()
         IntegrationStartupLog.write("application.presentationInstalled")
@@ -129,11 +169,30 @@ final class ConsoleAppDelegate: NSObject, NSApplicationDelegate {
 struct BCRAgentConsoleApp: App {
     @NSApplicationDelegateAdaptor(ConsoleAppDelegate.self) private var appDelegate
     @StateObject private var model: ConsoleViewModel
-    @StateObject private var language = LanguageSettings.shared
+    @StateObject private var language: LanguageSettings
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        do {
+            if let options = try GUIVirtualOptions.parse(CommandLine.arguments) {
+                let context = try GUIVirtualContext(options)
+                _language = StateObject(wrappedValue: LanguageSettings(
+                    defaults: context.preferences,
+                    initialSelection: .system
+                ))
+                _model = StateObject(wrappedValue: ConsoleViewModel(
+                    stores: context.stores, startsMIDI: false, runtimeMode: .guiVirtual(context),
+                    initialPreset: .robotArm, automaticallyAdvancesMock: false
+                ))
+                appDelegate.guiVirtualContext = context
+                return
+            }
+        } catch {
+            FileHandle.standardError.write(Data("Invalid GUI virtual launch.\n".utf8))
+            Darwin.exit(2)
+        }
+        _language = StateObject(wrappedValue: LanguageSettings.shared)
         if CommandLine.arguments.contains("--startup-smoke=headless") {
             do {
                 guard NSApp?.windows.isEmpty != false else { throw CocoaError(.coderInvalidValue) }
@@ -213,8 +272,31 @@ struct BCRAgentConsoleApp: App {
     var body: some Scene {
         WindowGroup(id: "console") {
             ContentView(model: model)
+                .background {
+                    if let controller = model.deviceWork.guiVirtualSurface {
+                        GUIVirtualWindowAttachment(controller: controller)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if model.deviceWork.runtimeMode.isVirtual {
+                        Text(L10n.text("虚拟控制台 · 模拟显示"))
+                            .font(.caption).padding(8).background(.ultraThinMaterial)
+                            .accessibilityIdentifier("gui.virtual.surface.mode")
+                    }
+                }
                 .onAppear {
                     language.refreshSystemLanguage()
+                    if let controller = model.deviceWork.guiVirtualSurface {
+                        appDelegate.guiVirtualController = controller
+                        Task { @MainActor in
+                            do { try await controller.start() }
+                            catch {
+                                _ = await controller.finish()
+                                FileHandle.standardError.write(Data("GUI virtual endpoint startup failed.\n".utf8))
+                                Darwin.exit(2)
+                            }
+                        }
+                    }
                     #if DEBUG
                         appDelegate.snapshotModel = model
                     #endif
@@ -262,6 +344,20 @@ struct BCRAgentConsoleApp: App {
                 }
         }
     }
+}
+
+private struct GUIVirtualWindowAttachment: NSViewRepresentable {
+    let controller: GUIVirtualSurfaceController
+    func makeNSView(context: Context) -> GUIVirtualWindowMarker {
+        let view = GUIVirtualWindowMarker(); view.controller = controller; return view
+    }
+
+    func updateNSView(_ nsView: GUIVirtualWindowMarker, context: Context) { nsView.controller = controller }
+}
+
+private final class GUIVirtualWindowMarker: NSView {
+    weak var controller: GUIVirtualSurfaceController?
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); controller?.attachWindow(window) }
 }
 
 #if DEBUG

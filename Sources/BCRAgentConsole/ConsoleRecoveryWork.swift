@@ -124,6 +124,7 @@ final class ConsoleRecoveryWork: ObservableObject, ConsoleDeviceOwner, ConsoleCo
     }
 
     func restorePresetBeforeAlignment() {
+        do { try session.requireHardwareAccess("gui_restore") } catch { report(error); return }
         guard canRestorePreset, let point = presetRestorePoint else {
             notice = ConsoleNotice(level: .warning, message: restoreUnavailableMessage ?? "没有可用的恢复点。")
             return
@@ -164,6 +165,7 @@ final class ConsoleRecoveryWork: ObservableObject, ConsoleDeviceOwner, ConsoleCo
     }
 
     func confirmPresetRestoreReplacingLearning() {
+        do { try session.requireHardwareAccess("gui_restore") } catch { report(error); return }
         guard let context = pendingPresetRestore else { return }
         pendingPresetRestore = nil
         let id = beginPresetWork(route: context.route)

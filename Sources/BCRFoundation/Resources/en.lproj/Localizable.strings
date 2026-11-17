@@ -1076,3 +1076,9 @@
 "参数写入上下文已失效" = "The parameter write context is stale";
 "外部权威回复无效" = "The external authority reply is invalid";
 "外部权威拒绝写入：{0}" = "External authority rejected the write: {0}";
+
+"虚拟控制台 · 模拟显示" = "Virtual console · Simulation display";
+
+"此虚拟控制台仅提供独立的显示接口。" = "This virtual console provides only its separate display endpoint.";
+
+"虚拟控制台不提供外部输出。" = "External output is unavailable in the virtual console.";

@@ -100,6 +100,7 @@ final class OutputController: ObservableObject {
     private var isStopping = false
     private let time: HostTime
     private let automaticallyTicks: Bool
+    private let permanentlyDisabled: Bool
     private let now: @MainActor () -> Date
 
     private static func makeOutputPlugin(limits: [MotionLimit], heartbeatTimeout: TimeInterval = 0.3,
@@ -121,8 +122,10 @@ final class OutputController: ObservableObject {
         automaticallyTicks: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
         runtime: BCRPluginRuntime? = nil,
-        time: HostTime = .live
+        time: HostTime = .live,
+        permanentlyDisabled: Bool = false
     ) {
+        self.permanentlyDisabled = permanentlyDisabled
         self.time = time
         self.session = session; self.store = store; self.adapter = adapter; self.now = now
         let productionClock = (adapter as? any MonotonicOutputTransport)?.supportsMonotonicReceipts == true
@@ -206,6 +209,7 @@ final class OutputController: ObservableObject {
     }
 
     func restore() {
+        guard !permanentlyDisabled else { error = L10n.text("虚拟控制台不提供外部输出。"); return }
         // Restoring saved settings never reconnects an actuator or resumes motion.
         if settings.enabled {
             settings.enabled = false
@@ -216,6 +220,7 @@ final class OutputController: ObservableObject {
     }
 
     func start() {
+        guard !permanentlyDisabled else { error = L10n.text("虚拟控制台不提供外部输出。"); return }
         do {
             try settings.validate(configuration: session.engine.configuration)
             let gate = try Self.makeOutputPlugin(
@@ -276,6 +281,7 @@ final class OutputController: ObservableObject {
     }
 
     func apply(_ candidate: OutputSettings) {
+        guard !permanentlyDisabled else { error = L10n.text("虚拟控制台不提供外部输出。"); return }
         do {
             try candidate.validate(configuration: session.engine.configuration)
             let restart = settings.enabled

@@ -355,8 +355,11 @@ H 轮状态面板资料：交付包中的 `DISPLAY_TARGETS.md` / `display-target
 状态面板演示已随共享 SDK 打包：`python3 -B -m surface_panel_demo`，映射名 `bcr`，
 以独立匿名 FD 接收显示凭据。它播放参考机械臂/底盘模拟器的合成实际值，只调用发现、快照和显示；
 正常结束、SIGINT 或失鲜会先熄灭新鲜灯，再把尝试写过的目标归静止。见交付包 `status-panel-demo.md`。
-默认实体 map 没有可灭按钮反馈，演示会在任何写入前拒绝；现有显式候选只能用于有相应前提的演示，未授实机资格。
-默认 GUI 不开放这组可选合同工具，CLI 的入口是独立无界面宿主；GUI 同 Session 的灯环/按键渲染路径另有测试与截图证据。
+共享 indicator 合同与 Mock 已支持按键灯；每个实体实例只按它所选的学习 map 声明反馈。
+未学习或 visualization-only 按钮没有可写灯声明；候选与离线 readiness 不授实机资格。
+检查该实例 discover/readiness 的原因，实体显示仍须 write 策略与 display 权限。
+普通 GUI 默认不开放这组可选合同工具。显式 `--gui-virtual-surface` 可让 SDK 显示演示直连
+实际图形应用的同一 Session，来源固定 simulation；见 [GUI 虚拟控制台](docs/GUI_VIRTUAL_SURFACE.md)。
 
 ### Portable logic tests
 

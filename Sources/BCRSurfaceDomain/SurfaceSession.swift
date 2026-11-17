@@ -63,6 +63,15 @@ public enum SurfaceSessionEvent: Equatable, Sendable {
 /// engine effects, including Agent LEDs. Persistence and Agent execution are injected.
 @MainActor
 public final class SurfaceSession {
+    public let permitsHardwareSource: Bool
+    public var onHardwareAccessDenied: (@MainActor (String) -> Void)?
+    public func requireHardwareAccess(_ operation: String) throws {
+        guard permitsHardwareSource else {
+            onHardwareAccessDenied?(operation)
+            throw ProviderDomainError("permission_denied", "This session is permanently simulation-only")
+        }
+    }
+
     public private(set) var parameterWriteContext: ParameterWriteContext?
     public var parameterAuthority: (@MainActor (ParameterAuthorityRequest) throws -> ParameterAuthorityDecision)?
     public var connectionGeneration: UInt64 { kernelConnection.generation }
@@ -439,6 +448,7 @@ public final class SurfaceSession {
         configuration: SurfaceConfiguration = .neutral(),
         pluginBindings: SurfacePluginBindings = .init(),
         requiresHardwareConfirmation: Bool = false,
+        permitsHardwareSource: Bool = true,
         hardwareOutput: HardwareOutputPolicy = .write,
         hardwareLifecycleFeedback: Bool = true,
         now: @escaping @MainActor () -> Date = { .now },
@@ -449,6 +459,7 @@ public final class SurfaceSession {
     ) {
         self.inputEvents = ProviderEventJournal(source: .mock, generationFactory: generationFactory)
         self.hardwareDevice = hardwareDevice
+        self.permitsHardwareSource = permitsHardwareSource
         self.requiresHardwareConfirmation = requiresHardwareConfirmation
         self.hardwareOutput = hardwareOutput
         self.hardwareLifecycleFeedback = hardwareLifecycleFeedback
@@ -560,6 +571,7 @@ public final class SurfaceSession {
 
     /// GUI startup adopts a complete hardware observation before enabling the hardware source.
     public func adoptHardwareSnapshot(_ messages: [MIDIVoiceMessage]) throws {
+        try requireHardwareAccess("adopt_hardware_snapshot")
         guard source == .mock, connection.isConnected, engine.learnTarget == nil,
               motionSafety == nil || motionSafety?.status == .disconnected else { throw HardwareSnapshotError.invalid }
         var candidate = engine
@@ -585,6 +597,9 @@ public final class SurfaceSession {
     }
 
     public func selectSource(_ newSource: DeviceSource) {
+        if newSource == .hardware {
+            do { try requireHardwareAccess("select_hardware_source") } catch { return }
+        }
         guard newSource != source else { return }
         clearFeedbackQueue()
         _ = engine.clearDisplayFeedback(at: now())
