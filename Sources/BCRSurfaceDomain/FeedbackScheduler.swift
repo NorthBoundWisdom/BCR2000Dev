@@ -1,6 +1,7 @@
 import BCRFoundation
 import Foundation
 import SurfaceBindingContext
+import SurfaceFeedbackPlanning
 
 public struct FeedbackPolicy: Codable, Equatable, Sendable {
     public var enabled: Bool
@@ -36,12 +37,6 @@ public struct FeedbackPolicy: Codable, Equatable, Sendable {
 /// Delivery timing belongs to the immutable effect plan, never to mutable session state.
 /// Synchronous display requests preserve their existing transport-acknowledgement contract.
 enum FeedbackTiming: Equatable, Sendable { case coalesced, synchronous }
-struct FeedbackPlan: Equatable, Sendable {
-    let message: MIDIVoiceMessage
-    let origin: SurfaceWriteOrigin
-    let timing: FeedbackTiming
-}
-
 /// One validated effect batch. Nested synchronous callbacks create child message plans
 /// under the same delivery policy, while retaining their own current write origin.
 struct FeedbackBatchPlan: Sendable {
@@ -63,30 +58,27 @@ final class FeedbackPlanner {
         return try operation()
     }
 
-    func message(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
-                 requestedTiming: FeedbackTiming?) -> FeedbackPlan
-    {
-        FeedbackPlan(message: message, origin: origin,
-                     timing: requestedTiming ?? activeBatch?.timing ?? .coalesced)
+    func resolvedTiming(requested: FeedbackTiming?) -> FeedbackTiming {
+        requested ?? activeBatch?.timing ?? .coalesced
     }
 }
 
 /// Invocation-local receipt. Nested operations never inherit or overwrite this collector.
 @MainActor
 final class FeedbackReceipt {
-    var deliveries: [FeedbackDelivery?] = []
+    private var records: [(fact: FeedbackReceiptFact<BCRFeedbackPlan>, delivery: FeedbackDelivery?)] = []
+    var deliveries: [FeedbackDelivery?] { records.map(\.delivery) }
+    var summary: FeedbackReceiptSummary { FeedbackReceiptSummary(records.map { $0.fact.result }) }
     var completionError: (any Error)?
     let accepted: (@MainActor () throws -> Void)?
     init(accepted: (@MainActor () throws -> Void)? = nil) { self.accepted = accepted }
-    func record(_ delivery: FeedbackDelivery?) {
-        deliveries.append(delivery)
-        if delivery == .sent {
+    func record(_ fact: FeedbackReceiptFact<BCRFeedbackPlan>, delivery: FeedbackDelivery?) {
+        records.append((fact, delivery))
+        if fact.successfulSend {
             do { try accepted?() } catch { completionError = error }
         }
     }
 }
-
-enum FeedbackDispatch: Equatable, Sendable { case enqueue, send }
 
 public struct ScheduledFeedback: Equatable, Sendable {
     public let message: MIDIVoiceMessage
@@ -106,6 +98,8 @@ public struct FeedbackScheduler: Sendable {
     private var tokens: Double
     private var lastRefill: Date?
     private var retryAfter: Date?
+    private(set) var j4LastDrainOrdinal: UInt64?
+    var j4Owner: String { kernelTraceID }
     public var count: Int { kernelIndex.count }
     public var pendingItems: [ScheduledFeedback] { kernelIndex.orderedIDs.compactMap { pending[$0] } }
     public init(policy: FeedbackPolicy) throws {
@@ -113,6 +107,24 @@ public struct FeedbackScheduler: Sendable {
         self.policy = policy
         tokens = Double(policy.burst)
         if SurfaceKernelTrace.enabled { traceIndex("index.init", input: [:]) }
+        let ordinal = FeedbackJ4Trace.schedulerInput(
+            owner: kernelTraceID,
+            operation: "initialize",
+            context: ["native_policy": FeedbackJ4Trace.policy(policy)]
+        ) {
+            ["rate": ["kind": "bucket", "per_second": Double(policy.messagesPerSecond),
+                      "burst": policy.burst, "error_cooldown": policy.errorCooldown]]
+        }
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() }
+    }
+
+    private func j4Output(drained: [ScheduledFeedback] = [], removed: [String] = [],
+                          replaced: [String] = []) -> [String: Any]
+    {
+        ["pending": pendingItems.map(FeedbackJ4Trace.entry), "drained": drained.map(FeedbackJ4Trace.entry),
+         "removed_keys": removed, "replaced_keys": replaced,
+         "tokens": tokens, "refill": lastRefill.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull(),
+         "retry": retryAfter.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull()]
     }
 
     private func traceIndex(_ operation: String, input: [String: Any], removed: [MIDIControlID] = []) {
@@ -125,16 +137,28 @@ public struct FeedbackScheduler: Sendable {
         )
     }
 
-    /// Shared routing decision for normal and acknowledged display plans. A synchronous
-    /// plan leaves the token bucket and any earlier queued value untouched, as before.
-    static func dispatch(_ plan: FeedbackPlan, canCoalesce: Bool) -> FeedbackDispatch {
-        canCoalesce && plan.timing == .coalesced ? .enqueue : .send
-    }
-
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
                                  endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil,
-                                 source: DeviceSource? = nil, context: SurfaceEventContext? = nil)
+                                 source: DeviceSource? = nil, context: SurfaceEventContext? = nil,
+                                 callerRequeueCauseOrdinal: UInt64? = nil, parentIntent: UInt64? = nil,
+                                 parentSession: String? = nil)
     {
+        let argument = ScheduledFeedback(message: message, origin: origin, endpoint: endpoint,
+                                         mappingRevision: mappingRevision, source: source, context: context)
+        let ordinal = FeedbackJ4Trace.schedulerInput(
+            owner: kernelTraceID,
+            operation: "enqueue",
+            context: ["parent_intent": parentSession
+                .map { FeedbackJ4Trace.reference(owner: $0, ordinal: parentIntent) } ?? NSNull()]
+        ) {
+            ["item": FeedbackJ4Trace.entry(argument), "ingress": callerRequeueCauseOrdinal.map {
+                ["kind": "derived_caller_requeue", "cause_ordinal": String($0)]
+            } ?? ["kind": "external_request"]]
+        }
+        let replaced = pending[message.controlID] == nil ? [] : [FeedbackJ4Trace.key(message.controlID)]
+        defer {
+            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(replaced: replaced) }
+        }
         pending[message.controlID] = ScheduledFeedback(
             message: message,
             origin: origin,
@@ -152,7 +176,14 @@ public struct FeedbackScheduler: Sendable {
     }
 
     public mutating func cancel(_ control: MIDIControlID) {
+        let ordinal = FeedbackJ4Trace
+            .schedulerInput(owner: kernelTraceID, operation: "cancel") { ["key": FeedbackJ4Trace.key(control)] }
+        var removedKeys: [String] = []
+        defer {
+            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(removed: removedKeys) }
+        }
         let removed = kernelIndex.remove(control) ? [control] : []
+        removedKeys = removed.map(FeedbackJ4Trace.key)
         pending[control] = nil
         if SurfaceKernelTrace.enabled {
             traceIndex("index.remove", input: ["id": BCRKernelProjection.midiValue(control)], removed: removed)
@@ -160,6 +191,15 @@ public struct FeedbackScheduler: Sendable {
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
+        let ordinal = FeedbackJ4Trace
+            .schedulerInput(owner: kernelTraceID, operation: "drain") { ["at": now.timeIntervalSinceReferenceDate] }
+        j4LastDrainOrdinal = ordinal.map(UInt64.init)
+        var result: [ScheduledFeedback] = []
+        var removedKeys: [String] = []
+        defer { FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(
+            drained: result,
+            removed: removedKeys
+        ) } }
         if let previous = lastRefill {
             let elapsed = now.timeIntervalSince(previous)
             tokens = elapsed < 0 ? 0 : min(Double(policy.burst), tokens + elapsed * Double(policy.messagesPerSecond))
@@ -168,7 +208,7 @@ public struct FeedbackScheduler: Sendable {
         if let retryAfter, now < retryAfter { return [] }
         let amount = min(Int(tokens), kernelIndex.count)
         let removed = try! kernelIndex.removeFirst(amount)
-        var result: [ScheduledFeedback] = []
+        removedKeys = removed.map(FeedbackJ4Trace.key)
         for id in removed { if let value = pending.removeValue(forKey: id) { result.append(value) } }
         tokens -= Double(result.count)
         if SurfaceKernelTrace.enabled {
@@ -178,9 +218,21 @@ public struct FeedbackScheduler: Sendable {
         return result
     }
 
-    public mutating func noteFailure(at now: Date) { retryAfter = now.addingTimeInterval(policy.errorCooldown) }
+    public mutating func noteFailure(at now: Date) {
+        let ordinal = FeedbackJ4Trace
+            .schedulerInput(owner: kernelTraceID, operation: "failure") { ["at": now.timeIntervalSinceReferenceDate] }
+        defer { FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() } }
+        retryAfter = now.addingTimeInterval(policy.errorCooldown)
+    }
+
     public mutating func clear() {
+        let ordinal = FeedbackJ4Trace.schedulerInput(owner: kernelTraceID, operation: "clear") { [:] }
+        var removedKeys: [String] = []
+        defer {
+            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(removed: removedKeys) }
+        }
         let removed = kernelIndex.removeAll()
+        removedKeys = removed.map(FeedbackJ4Trace.key)
         pending.removeAll(); lastRefill = nil; retryAfter = nil; tokens = Double(policy.burst)
         if SurfaceKernelTrace.enabled { traceIndex("index.removeAll", input: [:], removed: removed) }
     }

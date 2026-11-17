@@ -1,16 +1,20 @@
 # ControlSurfaceKit adapter field map and shadow boundary
 
-The managed Kit pin is `655f443abb2a3977e6c30deb1fe6d20a97d47191` from
+The managed Kit pin is `49ad4a7b8aa1160b9369733f0c8681647a41cd51` from
 `https://github.com/NorthBoundWisdom/ControlSurfaceKit.git`. Source overrides acquire committed objects only;
 compilation always uses the clean manager-owned `build/seed/ControlSurfaceKit`. The companion shared pin is
-`12ba0edbc1f2c46eea5311f9b8f982d563c55b75`. Production imports only `SurfaceDeviceContracts`; conformance
-format/assertions/comparison are test support and forbidden in production targets.
+`5ffbac79699505a76298172e8e6f28f7de3df88b`. Production imports SurfaceDeviceContracts,
+SurfaceBindingContext, SurfaceConnectionState and SurfaceFeedbackPlanning; conformance
+format/assertions/comparison/scheduler candidates remain Tests-only.
 
-The primary conformance runner now consumes the Kit ScenarioCatalog/ScenarioAction and AssertionEvaluator;
-legacy dictionary driving/assertions remain only as the independent native shadow reference oracle.
-J-2 defines and projects values. The native Session, codec, mapping, history, lifecycle, feedback planner,
-scheduler, device safety and transport remain the original owners. Shadow comparisons do not establish that
-J-3/J-4 runtime behavior has been extracted. The typed ScenarioAction entry is confined to the device test
+J3 owns actual ordered binding lookup, connection transition/generation and resource identity.
+J4 owns immutable feedback plans, dispatch choice, exact direction checks, full fresh preflight,
+receipt eligibility and nonempty aggregation. Native Session owns business values, timing/batch
+policy, sparse queued attribution, token bucket/refill/cooldown/requeue, device gates and IO.
+The independent original feedback leaves are frozen from3b5725b in Tests/J4Support; no old
+algorithm or negative mutation runs in production. Default-off Debug records original facts and
+actual Core results for mandatory replay; its diagnostic switch cannot disable a safety decision.
+The typed ScenarioAction entry is confined to the device test
 adapter; it calls existing native APIs and never exposes a new hardware-input RPC. The production neutral
 input port is an output-only observer of accepted transport/simulator input. Public neutral values are not
 input authorization.
@@ -56,11 +60,11 @@ The parameter/plugin authority stays in the existing host/shared owners, never i
 | MIDIConnectionSnapshot.connectedSource/connectedDestination | UI labels/readiness stay adapter; neutral context identifies opaque route, not name |
 | SurfaceSession.mappingContextRevision / inputEvents.generation | belong to opaque DeviceContext.generation, not a content hash; DeviceContext.mappingRevision stays nil unless content revision is independently proved |
 | MIDIConnectionSnapshot.lastError | adapter diagnostic; failing trace may use reason, no global mutable Kit error owner |
-| MIDIConnectionSnapshot.isConnected | adapter determines lifecycle fact; J2 does not introduce connection reducer |
-| MIDIConnectionSnapshot.hasSameRoute | adapter route comparison; J3 separately audits old-generation invalidation |
+| MIDIConnectionSnapshot.isConnected | native snapshot supplies status; Core ConnectionState computes actual transition/generation |
+| MIDIConnectionSnapshot.hasSameRoute | native route identity projection feeds Core ConnectionState; native callback publication order remains |
 | SurfaceDevice.connection | adapter port state; native object lifetime never in Kit |
 | SurfaceDevice.onMessages | adapter callback only; decode → immutable DeviceInputEvent at host boundary |
-| SurfaceDevice.onConnection | adapter callback only; J3 value reducer later, not J2 |
+| SurfaceDevice.onConnection | adapter callback owner/publishing remains; Core ConnectionState computes transition facts |
 | SurfaceDevice.send | adapter IO only; EffectDescriptor + TransmissionEvidence describe before/after without doing IO |
 | MockSurfaceDevice.model | simulation device model stays adapter, not business authority in Kit |
 | MockSurfaceDevice.connection | neutral source simulation; missing native endpoint ID stays nil while separately known localVirtual origin is retained; no synthetic ID is invented |
@@ -236,3 +240,30 @@ The seven migrated fixture/schema/validator files retain their original byte has
 quantization, plugins and control-session semantics remain in SurfacePlugins. Three G-6 output sequences and
 all old behavior-trace fixtures retain exact bytes; the accompanying old-IO source/expiry fixes are reported
 separately with failing-before/passing-after evidence.
+
+
+## Adding a device after J4
+
+Supply immutable protocol payload/origin, real lifecycle/binding scope and richer full native
+CapturedEvidence; preserve nil/unknown, qualification and names rather than substituting the
+semantic scope for proof freshness. Derive classification/affected physical roles and the full
+side-effect union only from trusted device knowledge. Capture timing at the existing host policy
+boundary; Core chooses dispatch but does not own synchronous batch inheritance or rate policy.
+
+Provide the original stage-specific authorization facts, then actual native safety facts after
+the final device checks. Use explicit FeedbackProof and FeedbackPreflight immediately before IO;
+no source/virtual-endpoint label grants a direction. Keep the actual transport pin mandatory and
+translate a real send return/throw into FeedbackReceiptFact. Current semantic scope eligibility
+is recomputed at the original bookkeeping boundary; accepted old IO remains accepted evidence,
+not current observation. Native business accepted hooks/rollback/error handling remain separate.
+
+Core ReceiptSummary decides nonempty transport aggregation. The adapter still owns callback
+order, completion errors, retained display intent and cleanup. Simulation/GUI permanent Mock
+and owned-virtual hardware rehearsal are distinct domains; localVirtual does not authorize a
+motor or management/context command. Do not copy dispatch/preflight/receipt algorithms into a
+new device adapter. Unknown protocol modes/press behavior and physical qualification still need
+device documentation or attended evidence. This is an integration recipe, not J5/physical acceptance.
+
+See Tests/J4Support/ORACLE_MAPPING.md for the independent native reference and mandatory
+actual-only replay. The scheduling candidate report deliberately preserves native-policy
+alignment/dedup differences; the native scheduler has not been replaced.

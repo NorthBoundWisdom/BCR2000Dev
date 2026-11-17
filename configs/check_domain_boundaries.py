@@ -98,6 +98,7 @@ ALLOWED = {
         "SurfaceDeviceContracts",
         "SurfaceBindingContext",
         "SurfaceConnectionState",
+        "SurfaceFeedbackPlanning",
     },
 }
 PURE = {"BCRProviderApplication", "BCRFoundation", "BCRSurfaceDomain", "BCRPluginRuntime"}
