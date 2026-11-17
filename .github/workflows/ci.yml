@@ -37,17 +37,18 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
+          key: seed-inputs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest portable SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm-linux
-          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
-          restore-keys: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-
+          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
+          restore-keys: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/control_surface_kit_dependency.py ensure
+      - run: python3 configs/ci_prepare_inputs.py
       - run: python3 configs/check_portable_targets.py
       - run: python3 configs/check_domain_boundaries.py
       - name: Compile portable targets and tests
@@ -60,7 +61,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm-linux
-          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ github.sha }}
+          key: portable-${{ runner.os }}-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
       - name: Run and reconcile every portable XCTest once
         run: |
           set -o pipefail
@@ -100,17 +101,18 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
+          key: seed-inputs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
-          restore-keys: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
+          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
+          restore-keys: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/control_surface_kit_dependency.py ensure
+      - run: python3 configs/ci_prepare_inputs.py
       - name: Restore the matching audit helper binaries
         id: audit-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
@@ -128,7 +130,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
       - name: Save original audit helpers before any GUI runs
         if: always() && steps.compile.outputs.audit_helpers_succeeded == 'true' && github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -148,6 +150,8 @@ jobs:
       - run: python3 -m compileall -q configs
       - name: Run all Python workflows and precompiled native suites independently
         if: ${{ !cancelled() && steps.compile.outputs.native_build_succeeded == 'true' && steps.compile.outputs.audit_helpers_succeeded == 'true' && steps.boundaries.outcome == 'success' }}
+        env:
+          BCR_CI_NATIVE_LAYERS: representative
         run: python3 configs/ci_parallel_checks.py tests --native-precompiled
       - run: python3 configs/macos_workflow.py build --distribution ad-hoc
       - run: python3 configs/macos_workflow.py smoke
@@ -198,19 +202,20 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/seed
-          key: seed-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
+          key: seed-inputs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
       - name: Restore the latest SwiftPM build
         id: build-cache
         if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
           restore-keys: |
-            swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
-            delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-
+            swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
+            delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/control_surface_kit_dependency.py ensure
+      - run: python3 configs/ci_prepare_inputs.py
       - name: Compile provider and offline profile products
         id: compile
         run: |
@@ -221,7 +226,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ github.sha }}
+          key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
       - name: Validate delivery boundaries before running products
         id: boundaries
         if: ${{ !cancelled() && steps.compile.outcome == 'success' }}

@@ -128,12 +128,21 @@ def run(
     timeout: float,
     *,
     precompiled: bool = False,
+    selected_cases: tuple[str, ...] | None = None,
 ) -> tuple[Path, int]:
     """Build/list once, run each selected class exactly once, then emit native per-case xunit."""
     started = time.monotonic()
     deadline = started + timeout
     discovery = command + ["list"] + (["--skip-build"] if precompiled else [])
     cases = inventory(_checked(discovery, root, directory / "discovery.log", deadline), modules)
+    discovered_cases = cases
+    if selected_cases is not None:
+        if not selected_cases or len(selected_cases) != len(set(selected_cases)):
+            raise RuntimeError("Explicit native selection must be nonempty and unique")
+        missing = set(selected_cases) - set(discovered_cases)
+        if missing:
+            raise RuntimeError("Explicit native selection was not discovered: " + ", ".join(sorted(missing)))
+        cases = [case for case in discovered_cases if case in set(selected_cases)]
     binary = Path(
         _checked([command[0], "build", *command[2:], "--show-bin-path"], root, directory / "binary-path.log", deadline)
     )
@@ -144,6 +153,8 @@ def run(
     bundles = test_bundles(binary, modules, package[1] if package else None)
     plan = {
         "workers": workers,
+        "discovered_cases": discovered_cases,
+        "selected_cases": selected_cases,
         "cases": cases,
         "batches": [{"module": batch.module, "classes": batch.classes, "cases": batch.cases} for batch in jobs],
     }
@@ -165,7 +176,12 @@ def run(
         with path.open("w", encoding="utf-8") as log:
             # Each owned process group includes its subprocess fixtures. A timeout kills that group.
             with subprocess.Popen(
-                [executable, "-XCTest", ",".join(batch.classes), str(bundles[batch.module])],
+                [
+                    executable,
+                    "-XCTest",
+                    ",".join(batch.cases if selected_cases is not None else batch.classes),
+                    str(bundles[batch.module]),
+                ],
                 cwd=root,
                 stdout=log,
                 stderr=subprocess.STDOUT,

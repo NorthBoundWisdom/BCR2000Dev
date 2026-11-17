@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -50,17 +51,28 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("group", choices=["tests", "transports"])
     parser.add_argument("--native-precompiled", action="store_true")
+    parser.add_argument(
+        "--ci-layers", action="store_true", default=os.environ.get("BCR_CI_NATIVE_LAYERS") == "representative"
+    )
     args = parser.parse_args()
+    if os.environ.get("BCR_CI_NATIVE_LAYERS") not in (None, "representative"):
+        parser.error("BCR_CI_NATIVE_LAYERS must be representative when explicitly supplied")
     if args.native_precompiled and args.group != "tests":
         parser.error("Precompiled discovery applies only to the native test group")
+    if args.ci_layers and (args.group != "tests" or not args.native_precompiled):
+        parser.error("CI layers require the precompiled native test group")
     py = sys.executable
     if args.group == "tests":
         specs = [
             ("python-workflows", [py, "configs/run_python_workflow_tests.py"]),
             (
                 "native-suites",
-                [py, "configs/macos_workflow.py", "test"]
-                + (["--precompiled-tests"] if args.native_precompiled else []),
+                (
+                    [py, "configs/ci_native_layers.py"]
+                    if args.ci_layers
+                    else [py, "configs/macos_workflow.py", "test"]
+                    + (["--precompiled-tests"] if args.native_precompiled else [])
+                ),
             ),
         ]
     else:
@@ -113,8 +125,6 @@ def main():
             ),
         ]
     rows = execute(specs, Path("build/ci-verification") / args.group, workers=3 if args.group == "tests" else 1)
-    import os
-
     if path := os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(path).open("a") as summary:
             summary.write(
