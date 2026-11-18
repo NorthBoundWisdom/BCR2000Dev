@@ -8,6 +8,7 @@
 @testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import BCRTestSupport
+import BCRTimingTestSupport
 import XCTest
 @testable import BCRAgentConsole
 

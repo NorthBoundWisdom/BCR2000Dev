@@ -100,6 +100,9 @@ REQUIRED_TEST_MODULES = frozenset(
         "BCRPluginHostTests",
         "BCRAgentCoreTests",
         "BCRAgentConsoleTests",
+        "BCRCodexAdapterTests",
+        "BCRSurfaceDomainTests",
+        "BCRNativeTransportTests",
         "BCRProviderDomainTests",
         "BCRProviderAdapterTests",
     }

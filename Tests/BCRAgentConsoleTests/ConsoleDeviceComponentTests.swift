@@ -5,6 +5,7 @@ import BCRFoundation
 import BCRPersistenceAdapter
 import BCRSurfaceDomain
 import BCRTestSupport
+import BCRTimingTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole

@@ -51,6 +51,8 @@ let package = Package(
     targets: [
         .target(name: "BCRTestSupport", dependencies: ["BCRSurfaceDomain", "BCRCoreMIDIDriver"],
                 path: "Tests/Support/BCRTestSupport"),
+        .target(name: "BCRTimingTestSupport", dependencies: ["BCRFoundation"],
+                path: "Tests/Support/BCRTimingTestSupport"),
         .target(name: "BCRPluginRuntime", dependencies: [
             .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
             .product(name: "RemoteToolContracts", package: "SurfacePlugins")
@@ -195,6 +197,25 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "BCRCodexAdapterTests",
+            dependencies: ["BCRFoundation", "BCRCodexAdapter", "BCRTimingTestSupport"],
+            exclude: ["Fixtures"]
+        ),
+        .testTarget(
+            name: "BCRSurfaceDomainTests",
+            dependencies: [
+                "BCRFoundation",
+                "BCRSurfaceDomain",
+                .product(name: "SurfaceBindingContext", package: "ControlSurfaceKit"),
+                .product(name: "SurfaceDeviceContracts", package: "ControlSurfaceKit"),
+                .product(name: "SurfaceFeedbackPlanning", package: "ControlSurfaceKit")
+            ]
+        ),
+        .testTarget(
+            name: "BCRNativeTransportTests",
+            dependencies: ["BCRCoreMIDIDriver", "BCRHTTPTransport"]
+        ),
+        .testTarget(
             name: "BCRAgentCoreTests",
             dependencies: [
                 "BCRProviderMCPAdapter",
@@ -210,14 +231,14 @@ let package = Package(
                 "BCRCoreMIDIDriver",
                 "BCRPersistenceAdapter",
                 "BCRTestSupport",
+                "BCRTimingTestSupport",
                 .product(name: "ParameterOutputPlugin", package: "SurfacePlugins"),
                 .product(name: "AgentPlugin", package: "SurfacePlugins"),
                 .product(name: "SurfacePluginContracts", package: "SurfacePlugins"),
                 .product(name: "SimulationContracts", package: "SurfacePlugins"),
                 .product(name: "RobotPlugin", package: "SurfacePlugins"),
                 .product(name: "ChassisPlugin", package: "SurfacePlugins")
-            ],
-            exclude: ["Fixtures"]
+            ]
         ),
         .testTarget(
             name: "BCRAgentConsoleTests",
@@ -226,6 +247,7 @@ let package = Package(
                 .product(name: "SurfaceDeviceConformance", package: "ControlSurfaceKit"),
                 "BCRAgentConsole",
                 "BCRTestSupport",
+                "BCRTimingTestSupport",
                 "BCRFoundation",
                 "BCRSurfaceDomain",
                 "BCRConfigurationAdapter",
@@ -263,6 +285,7 @@ let package = Package(
             dependencies: [
                 "BCRPluginRuntime",
                 "BCRTestSupport",
+                "BCRTimingTestSupport",
                 .product(name: "AgentPlugin", package: "SurfacePlugins"),
                 .product(name: "AgentRemoteBinding", package: "SurfacePlugins"),
                 .product(name: "RemoteToolContracts", package: "SurfacePlugins"),
@@ -291,7 +314,7 @@ let package = Package(
 #endif
 if portableBuild {
     let nativeTargets: Set<String> = ["BCRAgentConsole", "BCRProviderService", "BCRCoreMIDIDriver",
-                                      "BCRHTTPTransport", "BCRAgentConsoleTests"]
+                                      "BCRHTTPTransport", "BCRAgentConsoleTests", "BCRNativeTransportTests"]
     package.products.removeAll { nativeTargets.contains($0.name) }
     package.targets.removeAll { nativeTargets.contains($0.name) }
     for target in package.targets {

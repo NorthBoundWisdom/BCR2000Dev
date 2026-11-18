@@ -9,6 +9,7 @@
 @testable import BCRPersistenceAdapter
 import enum AgentPlugin.AgentRunState
 import BCRTestSupport
+import BCRTimingTestSupport
 import XCTest
 @testable import BCRAgentConsole
 

@@ -4,7 +4,7 @@ import BCRProviderMCPAdapter
 import BCRSurfaceDomain
 import Foundation
 import SurfaceControlContracts
-import BCRTestSupport
+import BCRTimingTestSupport
 import XCTest
 
 /// Contract 1.1 adoption in the BCR host (P2-B): vocabulary, deterministic revision, hold/renew/expiry.

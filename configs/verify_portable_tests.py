@@ -15,7 +15,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from configs.xctest_runner import inventory  # noqa: E402
 
-MODULES = ["BCRAgentCoreTests", "BCRPluginHostTests", "BCRProviderDomainTests", "BCRProviderAdapterTests"]
+MODULES = [
+    "BCRAgentCoreTests",
+    "BCRCodexAdapterTests",
+    "BCRSurfaceDomainTests",
+    "BCRPluginHostTests",
+    "BCRProviderDomainTests",
+    "BCRProviderAdapterTests",
+]
 MAC = re.compile(r"Test Case '-\[([^ ]+) ([^]]+)\]' (started|passed|failed|skipped)(?:\.| \(.*)")
 CORELIBS = re.compile(r"Test Case '([^']+)' (started|passed|failed|skipped)(?: at .*| \(.*|\.)")
 

@@ -2,7 +2,7 @@ import BCRFoundation
 import BCRConfigurationAdapter
 import BCRSurfaceDomain
 import BCRCoreMIDIDriver
-import BCRTestSupport
+import BCRTimingTestSupport
 import struct ParameterOutputPlugin.ParameterOutputFrame
 import Foundation
 import XCTest

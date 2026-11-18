@@ -20,7 +20,7 @@ final class SurfaceAgentIntentTests: XCTestCase {
         let stores = ConsoleStores.temporary()
         return ConsoleViewModel(stores: stores, startsMIDI: false, codexFactory: {
             let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-                .deletingLastPathComponent().appending(path: "BCRAgentCoreTests/Fixtures/mock_app_server.py")
+                .deletingLastPathComponent().appending(path: "BCRCodexAdapterTests/Fixtures/mock_app_server.py")
             let process = CodexProcessSupervisor()
             try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
             return CodexSessionCoordinator(transport: process, modelCatalogStore: CodexModelCatalogStore(

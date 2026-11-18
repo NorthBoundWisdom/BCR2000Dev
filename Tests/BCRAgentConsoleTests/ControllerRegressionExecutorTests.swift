@@ -7,6 +7,7 @@ import BCRPersistenceAdapter
 import BCRProviderMCPAdapter
 import BCRSurfaceDomain
 import BCRTestSupport
+import BCRTimingTestSupport
 import CryptoKit
 import Foundation
 import XCTest

@@ -1,7 +1,7 @@
 import BCRFoundation
 import BCRSurfaceDomain
 import BCRCoreMIDIDriver
-import BCRTestSupport
+import BCRTimingTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole

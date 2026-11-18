@@ -7,7 +7,7 @@
 @testable import BCRHTTPTransport
 @testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
-import BCRTestSupport
+import BCRTimingTestSupport
 import Combine
 import Foundation
 import XCTest

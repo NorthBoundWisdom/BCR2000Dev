@@ -95,7 +95,7 @@ def main():
     modules = [
         target["name"]
         for target in package["targets"]
-        if target["type"] == "regular" and target["name"] != "BCRTestSupport"
+        if target["type"] == "regular" and target["name"] not in {"BCRTestSupport", "BCRTimingTestSupport"}
     ] + SHARED_MODULES
     combined = [binary / (name + ".o") for name in modules]
     if all(path.is_file() for path in combined):

@@ -1,10 +1,5 @@
 @testable import BCRFoundation
 @testable import BCRCodexAdapter
-@testable import BCRSurfaceDomain
-@testable import BCRExamples
-@testable import BCRConfigurationAdapter
-@testable import BCRMCPAdapter
-@testable import BCRPersistenceAdapter
 import Foundation
 import XCTest
 

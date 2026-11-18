@@ -1,8 +1,6 @@
 import CoreMIDI
 import XCTest
-@testable import BCRAgentConsole
 @testable import BCRCoreMIDIDriver
-@testable import BCRHTTPTransport
 
 final class CoreMIDIAvailabilityTests: XCTestCase {
     func testExplicitlyOfflineEndpointsAreExcluded() {

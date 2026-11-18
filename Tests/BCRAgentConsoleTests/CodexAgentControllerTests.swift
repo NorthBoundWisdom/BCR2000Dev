@@ -8,7 +8,7 @@
 @testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import enum AgentPlugin.AgentRunState
-import BCRTestSupport
+import BCRTimingTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole
@@ -18,7 +18,7 @@ final class CodexAgentControllerTests: XCTestCase {
     private func controller(directory: URL) -> CodexAgentController {
         CodexAgentController(directory: directory) {
             let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-                .deletingLastPathComponent().appending(path: "BCRAgentCoreTests/Fixtures/mock_app_server.py")
+                .deletingLastPathComponent().appending(path: "BCRCodexAdapterTests/Fixtures/mock_app_server.py")
             let process = CodexProcessSupervisor()
             try await process.start(executablePath: "/usr/bin/python3", arguments: ["-u", fixture.path])
             return CodexSessionCoordinator(transport: process,

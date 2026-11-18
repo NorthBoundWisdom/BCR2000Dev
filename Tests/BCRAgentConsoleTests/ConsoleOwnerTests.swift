@@ -2,7 +2,7 @@ import BCRFoundation
 import BCRSurfaceDomain
 import BCRPersistenceAdapter
 import BCRCoreMIDIDriver
-import BCRTestSupport
+import BCRTimingTestSupport
 import Combine
 import Foundation
 import XCTest

@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 MACOS_ONLY = {"BCRAgentConsole", "BCRProviderService", "BCRCoreMIDIDriver", "BCRHTTPTransport"}
+TEST_SUPPORT = {"BCRTestSupport", "BCRTimingTestSupport"}
 PORTABLE_BUILD = sys.platform != "darwin" or os.environ.get("BCR_PORTABLE_BUILD") == "1"
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,7 +151,7 @@ def check_layers(targets, root=ROOT):
     """Pure checker entry point: tests can supply a temporary source tree and manifest."""
     errors = []
     production = {
-        name: target for name, target in targets.items() if target.get("type") != "test" and name != "BCRTestSupport"
+        name: target for name, target in targets.items() if target.get("type") != "test" and name not in TEST_SUPPORT
     }
     for name, target in production.items():
         if name not in LAYERS:
@@ -158,6 +159,8 @@ def check_layers(targets, root=ROOT):
             continue
         layer = LAYERS[name]
         for dependency in target_dependencies(target):
+            if dependency in TEST_SUPPORT:
+                errors.append(f"Test-only support dependency in production: {name} -> {dependency}")
             if dependency == "SurfaceDeviceConformance":
                 errors.append(f"Test-only conformance dependency in production: {name}")
             if dependency in production and LAYERS.get(dependency) not in LAYER_DEPENDENCIES[layer]:

@@ -1,4 +1,4 @@
-import BCRTestSupport
+import BCRTimingTestSupport
 import BCRFoundation
 import BCRSurfaceDomain
 import BCRProviderApplication

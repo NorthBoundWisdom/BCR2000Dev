@@ -8,7 +8,7 @@
 @testable import BCRCoreMIDIDriver
 @testable import BCRPersistenceAdapter
 import struct ParameterOutputPlugin.ParameterOutputFrame
-import BCRTestSupport
+import BCRTimingTestSupport
 import Foundation
 import XCTest
 @testable import BCRAgentConsole

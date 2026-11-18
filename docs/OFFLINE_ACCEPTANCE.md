@@ -47,7 +47,7 @@ python3 tools/mcp_integration.py --script tools/verify_stdio_bridge.py
 ```
 
 30 分钟 soak 的普通入口见 CODEX.md；执行期间 SwiftPM 持有构建锁，若还要继续编译，使用复制的 XCTest
-产物通过 `xcrun xctest -XCTest BCRAgentCoreTests.CodexSessionIntegrationTests/testProtocolAndStateMachineSoak <bundle>` 运行，
+产物通过 `xcrun xctest -XCTest BCRCodexAdapterTests.CodexSessionIntegrationTests/testProtocolAndStateMachineSoak <bundle>` 运行，
 并设置 `BCR_CODEX_SOAK_SECONDS=1800`。该测试完全离线，不读取用户凭据、不执行外部工具任务。
 
 硬件相关余项仍在 TODO.md：R1、按实测修正、D3 真机参数校准、macOS 14 真机安装、独立停机评审。

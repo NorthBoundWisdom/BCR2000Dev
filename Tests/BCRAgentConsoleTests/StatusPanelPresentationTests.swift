@@ -5,7 +5,7 @@ import BCRCoreMIDIDriver
 import BCRSurfaceDomain
 import BCRMCPAdapter
 import BCRProviderMCPAdapter
-import BCRTestSupport
+import BCRTimingTestSupport
 import SwiftUI
 import XCTest
 @testable import BCRAgentConsole

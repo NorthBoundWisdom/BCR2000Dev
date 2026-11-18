@@ -9,7 +9,14 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-NATIVE = {"BCRAgentConsole", "BCRProviderService", "BCRCoreMIDIDriver", "BCRHTTPTransport", "BCRAgentConsoleTests"}
+NATIVE = {
+    "BCRAgentConsole",
+    "BCRProviderService",
+    "BCRCoreMIDIDriver",
+    "BCRHTTPTransport",
+    "BCRAgentConsoleTests",
+    "BCRNativeTransportTests",
+}
 REQUIRED = {
     "BCRFoundation",
     "BCRSurfaceDomain",
@@ -24,7 +31,10 @@ REQUIRED = {
     "BCRCodexAdapter",
     "BCRProfileTool",
     "BCRTestSupport",
+    "BCRTimingTestSupport",
     "BCRAgentCoreTests",
+    "BCRCodexAdapterTests",
+    "BCRSurfaceDomainTests",
     "BCRPluginHostTests",
     "BCRProviderDomainTests",
     "BCRProviderAdapterTests",
