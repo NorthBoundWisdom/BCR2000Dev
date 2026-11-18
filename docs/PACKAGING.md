@@ -123,7 +123,7 @@ python3 configs/macos_workflow.py check-package \
 - `release.yml`：手动输入版本可生成 Universal ZIP/DMG、记录和校验和，不发布 Release。
   显式推送版本 tag 时，以固定 ad-hoc 构建验证后发布 GitHub Release；
   构建号采用 workflow run number。不读取证书、签署 Secrets 或公证凭证。
-- 打包后在新的 `macos-15`（ARM）runner 上验证 ZIP 与 DMG。runner 没有构建目录，应用从临时安装目录运行。
+- 打包后在新的 `macos-26`（ARM）runner 上验证 ZIP 与 DMG。runner 没有构建目录，应用从临时安装目录运行。
 - 最后验证所有记录的 Git commit、干净工作区、版本、架构及 SHA-256，再生成统一
   `SHA256SUMS`。缺件、混入旧包、记录或哈希不一致均阻止发布。
 - 手动与 tag 产物都注明 ad-hoc、未经公证，当前只含主程序，不含 DriverKit 配套工具。
@@ -171,4 +171,4 @@ Package 默认 DMG + ZIP，保留原 `release-zip` ID，并新增 Developer ID �
 
 手动触发 `release.yml` 只构建和验证，不发布；发布任务仍要求显式推送版本标签。本轮不创建标签或 Release。无界面 Provider 的交付布局和 `package_provider.py` 不在此改动范围。
 
-按用户当前要求，最终安装包启动验收仅使用 ARM `macos-15` runner，不配置 Intel runner。Universal 包继续包含 `arm64` 与 `x86_64` 切片并核对结构；Intel 切片不在本流程中进行原生启动验收。稀疏 checkout 显式包括 `Support/NativeDiagnostics`，用于现有安装包校验器的间接导入。
+按用户当前要求，最终安装包启动验收仅使用 ARM `macos-26` runner，不配置 Intel runner。Universal 包继续包含 `arm64` 与 `x86_64` 切片并核对结构；Intel 切片不在本流程中进行原生启动验收。稀疏 checkout 显式包括 `Support/NativeDiagnostics`，用于现有安装包校验器的间接导入。

@@ -157,7 +157,7 @@ class NativePackageEvidenceTests(unittest.TestCase):
     def test_arm_package_runner_includes_runtime_diagnostics_without_an_intel_runner(self):
         source = (workflow.REPO_ROOT / ".github/workflows/release.yml").read_text()
         smoke = source.split("  package-smoke:", 1)[1].split("  verify:", 1)[0]
-        self.assertIn("runs-on: macos-15", smoke)
+        self.assertIn("runs-on: macos-26", smoke)
         self.assertNotIn("matrix:", smoke)
         self.assertNotIn("macos-15-intel", source)
         self.assertNotIn("macos-26-intel", source)

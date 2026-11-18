@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   package:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -57,7 +57,7 @@ jobs:
           compression-level: 0
   package-smoke:
     needs: package
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -87,7 +87,7 @@ jobs:
           PY
   verify:
     needs: [package, package-smoke]
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -115,7 +115,7 @@ jobs:
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: [verify]
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 10
     permissions:
       contents: write
