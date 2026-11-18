@@ -119,12 +119,11 @@ python3 configs/macos_workflow.py check-package \
 
 ## GitHub Actions
 
-- `ci.yml`：main push/PR 时检查插件清单、Python 工作流测试、Swift 测试、Debug 构建与启动。
+- `ci.yml`：main push/PR 时在 `macos-26`（ARM）运行原生回归、Provider 交付和 GUI 验收。
 - `release.yml`：手动输入版本可生成 Universal ZIP/DMG、记录和校验和，不发布 Release。
   显式推送版本 tag 时，以固定 ad-hoc 构建验证后发布 GitHub Release；
   构建号采用 workflow run number。不读取证书、签署 Secrets 或公证凭证。
-- 打包后分别在新的 `macos-15`（ARM）和 `macos-15-intel` runner 上验证 ZIP 与 DMG。
-  runner 没有构建目录，应用从临时安装目录运行。
+- 打包后在新的 `macos-15`（ARM）runner 上验证 ZIP 与 DMG。runner 没有构建目录，应用从临时安装目录运行。
 - 最后验证所有记录的 Git commit、干净工作区、版本、架构及 SHA-256，再生成统一
   `SHA256SUMS`。缺件、混入旧包、记录或哈希不一致均阻止发布。
 - 手动与 tag 产物都注明 ad-hoc、未经公证，当前只含主程序，不含 DriverKit 配套工具。

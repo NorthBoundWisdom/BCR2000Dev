@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tempfile
 import threading
@@ -68,19 +69,19 @@ class IndependentCIChecksTests(unittest.TestCase):
         self.assertNotIn("verify_display_budget.py", source)
         self.assertNotIn("verify_status_panel_demo.py", source)
         workflow = (root / ".github/workflows/ci.yml").read_text()
-        native, intel = workflow.split("  delivery:\n")
-        delivery, gui = intel.split("  gui:\n")
+        native, acceptance = workflow.split("  delivery:\n")
+        delivery, gui = acceptance.split("  gui:\n")
         self.assertNotIn("ci_parallel_checks.py transports", native)
         self.assertIn("Isolated display budget latency", delivery)
         self.assertIn("Isolated real-time synthetic status", delivery)
         self.assertNotIn("needs:", workflow)
-        self.assertEqual(workflow.count("runs-on: macos-26\n"), 1)
-        self.assertEqual(workflow.count("runs-on: macos-26-intel\n"), 2)
+        self.assertEqual(re.findall(r"^\s+runs-on: (.+)$", workflow, re.MULTILINE), ["macos-26"] * 3)
         self.assertLess(
             native.index("ci_parallel_checks.py tests"), native.index("Confirm native and isolated MCP products exited")
         )
         gui_checks = (
             "macos_workflow.py build --distribution ad-hoc",
+            "check_domain_boundaries.py",
             "macos_workflow.py smoke",
             "tools/mcp_integration.py",
             "git diff --check",
@@ -90,7 +91,6 @@ class IndependentCIChecksTests(unittest.TestCase):
         self.assertEqual(gui_positions, sorted(gui_positions))
         self.assertNotIn("verify_status_panel_demo.py", gui)
         self.assertNotIn("tools/mcp_integration.py", delivery)
-        self.assertLess(gui.index("check_domain_boundaries.py"), gui_positions[0])
         self.assertLess(gui_positions[-1], gui.index("Preserve GUI and MCP acceptance evidence"))
         self.assertIn("if: ${{ !cancelled() }}", gui[gui_positions[-1] :])
         self.assertLess(
@@ -135,8 +135,8 @@ class IndependentCIChecksTests(unittest.TestCase):
         for command in commands:
             with self.subTest(command=command):
                 self.assertEqual(macos.count("run: " + command + "\n"), 1)
-        native, intel = macos.split("  delivery:\n")
-        delivery, gui = intel.split("  gui:\n")
+        native, acceptance = macos.split("  delivery:\n")
+        delivery, gui = acceptance.split("  gui:\n")
         for job in (native, delivery, gui):
             self.assertEqual(job.count("run: git diff --check\n"), 1)
         self.assertIn("name: test-logs-${{ github.run_id }}", macos)

@@ -28,7 +28,7 @@
 | 方面 | 状态 |
 | --- | --- |
 | Mock 与软件功能 | 参数、撤销/重做、场景、颜色标签、宏 toggle 与逐步结果、JSONL 录制/离线审查、输入覆盖、学习、预设对齐、Agent（Mock / Codex）、MCP、输出安全门、Provider 与 Surface 模拟均有非硬件回归测试。 |
-| 语言与可移植核心 | English、简体中文、繁体中文；Linux CI 执行纯 Foundation/领域/应用层部分。原生 GUI、MIDI 与 HTTP 宿主仍仅支持 macOS。 |
+| 语言与可移植核心 | English、简体中文、繁体中文。CI 在 Apple Silicon Mac 上运行，Foundation、领域及应用层目标可在 Linux 上单独测试。 |
 | 实体设备 | 固件 1.10、USB 模式 U-1、Preset 8，已接回开发机。身份查询、108 条 CC 快照和临时预设只读回读通过；56 个旋钮位置已实测学习，GUI 启动可读回 56/56 当前值。 |
 | 连接与写入实测 | 连接确认、读硬件、暂不连接、拔插、按住拔线、受控写入与恢复已在现场通过。业务按键与锁图标只做了样本验证；Agent 按键灯、显示屏节奏和其余灯环模式仍待实测。 |
 | USB 双向通讯 | 部分 Mac 需要开发签署的 DriverKit 修复才能写设备。本机已验证可用；另一台 Mac 的驱动签署仍受阻。 |
@@ -340,7 +340,7 @@ git diff --check
 
 ## Linux 可移植部分
 
-纯 Foundation 值类型、领域状态、Provider 路由、历史/场景、录制证据、离线重播和输入覆盖在 Linux 有独立包目标；GUI、CoreMIDI、Network.framework 宿主仍仅支持 macOS。Linux CI 使用 `swift:6.2-noble`，实际逐例核对与范围见[目标审计](docs/testing/linux-targets.md)。
+纯 Foundation 值类型、领域状态、Provider 路由、历史/场景、录制证据、离线重播和输入覆盖在 Linux 有独立包目标；GUI、CoreMIDI、Network.framework 宿主仍仅支持 macOS。可移植目标的范围与本地验证命令见[目标审计](docs/testing/linux-targets.md)。
 
 宿主的可撤销动态授权、受信权威拒绝回滚与内部端点来源见
 [控制器写入边界](docs/controller-write-boundaries.md)。默认 Provider 1.0 线协议不变；这些软件证据不授予实体资格。

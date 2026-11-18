@@ -1,4 +1,8 @@
-# CI coverage after W-2 scheduler proof retirement
+# CI coverage
+
+The regular `checks`, `delivery`, and `gui` jobs run independently on Apple Silicon (`macos-26`). They run native and Python regressions, provider delivery acceptance, and GUI startup and MCP integration, respectively. The regular workflow enforces the 300-second whole-run budget. The release workflow uses Apple Silicon (`macos-15`) and verifies both slices of the universal packages. [Local commands for the portable targets](linux-targets.md) remain available.
+
+## Historical W-2 scheduler proof retirement
 
 Cutover `9006a8cc5856f7bcbfdc4e696cf1c090fe800e8f` completed normal run `44236847568` with all functions passing and a final elapsed 302 seconds. Its separate complete proof `44236847593` succeeded in 489 seconds. The live budget guard remained active. The independent pre-cut native comparison on `34fe9af` covered 744 operations across 216 queue owners with zero differences. The cutover proof covered 771 operations across 220 owners with zero differences.
 

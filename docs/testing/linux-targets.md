@@ -47,7 +47,7 @@ The one added macOS case checks active-output metadata neutrality (B-3/B-4 follo
 
 Trace audit: BCR's byte-for-byte BehaviorTrace assertion uses JSONEncoder, while the cited X-Touch issue used JSONSerialization. Existing byte assertions and fixture bytes remain unchanged; other JSONSerialization-based fixture checks already compare parsed values. No whitespace-specific assertion was weakened.
 
-## Commands and CI
+## Local verification
 
 ```bash
 python3 configs/surface_plugins_dependency.py ensure
@@ -58,7 +58,7 @@ BCR_PORTABLE_BUILD=1 swift test --build-path build/swiftpm-portable --skip-build
 python3 configs/verify_portable_tests.py --inventory build/portable-inventory.txt --log build/portable-tests.log
 ```
 
-Linux CI uses the same commands without the override, in `swift:6.2-noble`, in parallel with the unchanged native product checks. It caches the locked seed and SwiftPM outputs by platform/toolchain, preserves discovery/results, and uses a 20-minute hang guard and enforces the same 300-second whole-run budget for cold and warm caches. Actual Linux CI has since passed; see the exact-commit evidence below. There is still no local Linux container or SDK.
+Run the same commands on Linux with Swift 6.2, where `BCR_PORTABLE_BUILD` can be omitted. Automated CI runs on macOS arm64. The hosted Linux runs below record the earlier CI configuration.
 
 ## Local native CI budget rehearsal
 

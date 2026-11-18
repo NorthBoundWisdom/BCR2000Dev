@@ -28,7 +28,7 @@ As of 2026-11-16 (software); hardware rows retain their previously recorded qual
 | Area | Status |
 | --- | --- |
 | Mock and software features | Parameters, Undo/Redo, scenes, color tags, macro toggle and per-step results, JSONL recording/offline review, input coverage, learning, preset alignment, agents (Mock / Codex), MCP, output safety gates, Provider, and Surface simulation have non-hardware regression tests. |
-| Languages and portable core | English, Simplified Chinese and Traditional Chinese; Linux CI executes the pure Foundation/domain/application slice. Native GUI, MIDI and HTTP hosts remain macOS-only. |
+| Languages and portable core | English, Simplified Chinese and Traditional Chinese. CI runs on Apple Silicon Macs, and the Foundation/domain/application targets can be tested separately on Linux. |
 | Physical device | Firmware 1.10, USB mode U-1, Preset 8; connected to the development Mac again. Identity queries, a 108-CC snapshot, and read-only temporary-preset readback passed. All 56 logical knob positions have been learned on hardware, and GUI startup reads back 56/56 current values. |
 | Connection and write validation | Connection confirmation, reading hardware, deferring connection, unplug/replug, unplugging while holding a button, controlled writes, and restoration passed on site. Assigned button actions and lock icons have only been spot-checked; agent button LEDs, display timing, and remaining LED ring modes still need hardware validation. |
 | Bidirectional USB communication | Some Macs need a development-signed DriverKit fix to write to the device. It works on this Mac; driver signing on another Mac remains blocked. |
@@ -363,7 +363,7 @@ H 轮状态面板资料：交付包中的 `DISPLAY_TARGETS.md` / `display-target
 
 ### Portable logic tests
 
-Foundation-based targets, provider routing, value history/scenes, capture evidence, offline replay and input coverage have a Linux package slice. Native GUI, CoreMIDI and Network.framework hosts remain macOS targets. The parallel Linux CI lane uses `swift:6.2-noble`; see [the target audit and test inventory](docs/testing/linux-targets.md) for scope, local rehearsal commands and validation limits.
+Foundation-based targets, provider routing, value history/scenes, capture evidence, offline replay and input coverage have a Linux package slice. Native GUI, CoreMIDI and Network.framework hosts remain macOS targets. See the scope and local verification commands in [the target audit and test inventory](docs/testing/linux-targets.md).
 
 Revocable host authorization, trusted authority rejection and internal endpoint evidence are documented in
 [controller write boundaries](docs/controller-write-boundaries.md). They preserve the default Provider 1.0
