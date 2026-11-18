@@ -83,20 +83,6 @@ struct BCRConnectionRuntime: Sendable {
     mutating func publish(_ next: MIDIConnectionSnapshot) { snapshot = BCRKernelProjection.connection(next) }
 }
 
-/// Captured metadata only; scheduled MIDI payloads remain in FeedbackScheduler.pending.
-struct BCRFeedbackQueueScope: Equatable, Sendable {
-    let origin: SurfaceWriteOrigin
-    let endpoint: MIDIEndpointSource?
-    let mappingRevision: UInt64?
-    let source: DeviceSource?
-    let context: SurfaceEventContext?
-
-    init(_ value: ScheduledFeedback) {
-        origin = value.origin; endpoint = value.endpoint; mappingRevision = value.mappingRevision
-        source = value.source; context = value.context
-    }
-}
-
 // Temporary O-4 scheduler I/O archive projection; removed with FeedbackJ4Trace.
 extension BCRKernelProjection {
     static func controlValue(_ value: BCRControlID) -> [String: Any] {

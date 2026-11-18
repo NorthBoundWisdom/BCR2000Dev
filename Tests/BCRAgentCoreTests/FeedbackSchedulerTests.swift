@@ -6,6 +6,7 @@
 @testable import BCRMCPAdapter
 @testable import BCRPersistenceAdapter
 import Foundation
+import enum SurfaceFeedbackPlanning.FeedbackQueueError
 import XCTest
 
 final class FeedbackSchedulerTests: XCTestCase {
@@ -35,6 +36,36 @@ final class FeedbackSchedulerTests: XCTestCase {
         XCTAssertTrue(scheduler.drain(at: now.addingTimeInterval(-1)).isEmpty)
         scheduler.clear()
         XCTAssertTrue(scheduler.drain(at: now.addingTimeInterval(100)).isEmpty)
+    }
+
+    func testInvalidDrainDoesNotSpendOrWithdrawQueuedFeedback() throws {
+        var scheduler = try FeedbackScheduler(policy: .init(enabled: true, burst: 1))
+        let invalid = Date(timeIntervalSinceReferenceDate: .infinity)
+        let finite = Date(timeIntervalSinceReferenceDate: -1)
+        let message = MIDIVoiceMessage.controlChange(channel: 1, number: 1, value: 1)
+        scheduler.enqueue(message, origin: .software)
+        XCTAssertTrue(scheduler.drain(at: invalid).isEmpty)
+        XCTAssertEqual(scheduler.clockIssue as? FeedbackQueueError, .nonfiniteTime)
+        XCTAssertEqual(scheduler.pendingItems.map(\.message), [message])
+        XCTAssertEqual(scheduler.drain(at: finite).map(\.message), [message])
+        XCTAssertNil(scheduler.clockIssue)
+    }
+
+    func testInvalidFailureKeepsQueueSuspendedUntilClear() throws {
+        var scheduler = try FeedbackScheduler(policy: .init(enabled: true, burst: 1))
+        let invalid = Date(timeIntervalSinceReferenceDate: .infinity)
+        let finite = Date(timeIntervalSinceReferenceDate: 1)
+        let message = MIDIVoiceMessage.controlChange(channel: 1, number: 1, value: 1)
+        scheduler.enqueue(message, origin: .software)
+        scheduler.noteFailure(at: invalid)
+        XCTAssertTrue(scheduler.drain(at: finite).isEmpty)
+        XCTAssertEqual(scheduler.clockIssue as? FeedbackQueueError, .nonfiniteTime)
+        XCTAssertEqual(scheduler.pendingItems.map(\.message), [message])
+        scheduler.clear()
+        XCTAssertNil(scheduler.clockIssue)
+        XCTAssertTrue(scheduler.pendingItems.isEmpty)
+        scheduler.enqueue(message, origin: .software)
+        XCTAssertEqual(scheduler.drain(at: finite).map(\.message), [message])
     }
 
     func testInvalidPolicyFails() {

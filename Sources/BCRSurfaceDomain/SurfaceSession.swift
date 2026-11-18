@@ -288,6 +288,8 @@ public final class SurfaceSession {
     private let feedbackPlanner = FeedbackPlanner()
     public var pendingFeedbackItems: [ScheduledFeedback] { scheduler?.pendingItems ?? [] }
     public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
+    /// The last coalesced-feedback clock failure, cleared at recovery or queue invalidation.
+    var feedbackClockIssue: (any Error)? { scheduler?.clockIssue }
     private var feedbackObservers: [UUID: @MainActor (Int) -> Void] = [:]
     public func observeFeedbackQueue(_ observer: @escaping @MainActor (Int) -> Void) -> UUID {
         let token = UUID(); feedbackObservers[token] = observer; return token

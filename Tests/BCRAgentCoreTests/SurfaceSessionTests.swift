@@ -7,6 +7,7 @@
 @testable import BCRPersistenceAdapter
 import enum AgentPlugin.AgentRunState
 import Foundation
+import enum SurfaceFeedbackPlanning.FeedbackQueueError
 import XCTest
 
 @MainActor
@@ -16,8 +17,10 @@ private final class FakeSurfaceDevice: SurfaceDevice {
     var onConnection: (@MainActor (MIDIConnectionSnapshot) -> Void)?
     var sent: [MIDIVoiceMessage] = []
     var failsSend = false
+    var beforeSend: (() -> Void)?
 
     func send(_ message: MIDIVoiceMessage) throws {
+        beforeSend?()
         if failsSend { throw SessionTestError.unavailable }
         sent.append(message)
     }
@@ -52,7 +55,7 @@ private final class SessionFixture {
         let state = FixtureState()
         session = SurfaceSession(
             hardwareDevice: device, mockDevice: mockDevice, hardwareMap: map, configuration: configuration,
-            hardwareOutput: hardwareOutput, now: { state.time },
+            hardwareOutput: hardwareOutput, now: { state.readTime() },
             saveHardwareMap: {
                 if state.failsSave { throw SessionTestError.unavailable }
                 state.maps.append($0)
@@ -73,9 +76,15 @@ private final class SessionFixture {
 @MainActor
 private final class FixtureState {
     var time = Date(timeIntervalSinceReferenceDate: 1_000)
+    var nextTime: Date?
     var maps: [HardwareMap] = []
     var configurations: [SurfaceConfiguration] = []
     var failsSave = false
+
+    func readTime() -> Date {
+        defer { nextTime = nil }
+        return nextTime ?? time
+    }
 }
 
 @MainActor
@@ -151,6 +160,93 @@ final class SurfaceSessionTests: XCTestCase {
         f.session.setParameter("j", to: 90)
         f.device.connect(false)
         XCTAssertEqual(f.session.pendingFeedbackCount, 0)
+    }
+
+    func testInvalidQueueClockSuppressesFlushUntilFiniteTimeReturns() async throws {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        try f.session.configureFeedback(.init(enabled: true, burst: 128))
+        f.device.sent.removeAll()
+        f.session.setParameter("j", to: 70)
+        let pending = f.session.pendingFeedbackItems
+        XCTAssertFalse(pending.isEmpty)
+        let finite = f.state.time
+        f.state.time = Date(timeIntervalSinceReferenceDate: .infinity)
+        f.session.flushFeedback()
+        XCTAssertTrue(f.device.sent.isEmpty)
+        XCTAssertEqual(f.session.pendingFeedbackItems, pending)
+        XCTAssertEqual(f.session.feedbackClockIssue as? FeedbackQueueError, .nonfiniteTime)
+        f.state.time = finite
+        f.session.flushFeedback()
+        XCTAssertEqual(f.device.sent, pending.map(\.message))
+        XCTAssertNil(f.session.feedbackClockIssue)
+    }
+
+    func testInvalidFailureClockKeepsTransportReceiptAndSuspendsOnlyCoalescedFeedback() async throws {
+        let f = SessionFixture(configuration: mirroredConfiguration())
+        defer { f.session.onEvent = nil; f.device.beforeSend = nil }
+        f.device.connect(true)
+        f.session.selectSource(.hardware)
+        try f.session.configureFeedback(.init(enabled: true, burst: 128))
+        f.session.setParameter("j", to: 70)
+        let pending = f.session.pendingFeedbackItems
+        XCTAssertFalse(pending.isEmpty)
+        let generation = f.session.inputEvents.generation
+        let failure = SessionTestError.unavailable.localizedDescription
+        let previouslyFailed = f.session.events.count { $0.delivery == .failed }
+        var order: [String] = []
+        f.device.sent.removeAll()
+        f.device.failsSend = true
+        f.device.beforeSend = {
+            order.append("send")
+            // Only failure bookkeeping gets the invalid time. Event recording remains on the fixture clock.
+            f.state.nextTime = Date(timeIntervalSinceReferenceDate: .infinity)
+        }
+        f.session.onEvent = { event in
+            guard event == .failed(.feedback, failure) else { return }
+            order.append("failure")
+            XCTAssertEqual(f.session.connection.lastError, failure)
+            XCTAssertEqual(f.session.feedbackClockIssue as? FeedbackQueueError, .nonfiniteTime)
+            XCTAssertEqual(f.session.events.count { $0.delivery == .failed }, previouslyFailed)
+        }
+        XCTAssertThrowsError(try f.session.setHardwareDisplayFeedback(a, rawValue: 51) {
+            order.append("accepted")
+        }) {
+            XCTAssertEqual(($0 as? ProviderDomainError)?.code, "delivery_failed")
+        }
+        XCTAssertEqual(order, ["send", "failure"])
+        XCTAssertNil(f.state.nextTime)
+        let failed = try XCTUnwrap(f.session.events.last { $0.delivery == .failed })
+        XCTAssertEqual(failed.source, .hardware)
+        XCTAssertEqual(failed.context?.generation, generation)
+
+        f.device.failsSend = false
+        f.device.beforeSend = nil
+        f.session.flushFeedback()
+        XCTAssertTrue(f.device.sent.isEmpty)
+        XCTAssertEqual(f.session.pendingFeedbackItems, pending)
+        let previouslySent = f.session.events.count { $0.delivery == .sent }
+        try f.session.setHardwareDisplayFeedback(a, rawValue: 52) {
+            order.append("accepted")
+            XCTAssertEqual(f.device.sent.count, 1)
+            XCTAssertEqual(f.session.events.count { $0.delivery == .sent }, previouslySent)
+        }
+        XCTAssertEqual(order, ["send", "failure", "accepted"])
+        XCTAssertEqual(f.session.events.count { $0.delivery == .sent }, previouslySent + 1)
+        XCTAssertEqual(f.session.feedbackClockIssue as? FeedbackQueueError, .nonfiniteTime)
+
+        f.device.connect(false)
+        XCTAssertTrue(f.session.pendingFeedbackItems.isEmpty)
+        XCTAssertNil(f.session.feedbackClockIssue)
+        XCTAssertNotEqual(f.session.inputEvents.generation, generation)
+        f.device.connect(true)
+        f.device.sent.removeAll()
+        f.session.setParameter("j", to: 81)
+        let fresh = f.session.pendingFeedbackItems
+        XCTAssertFalse(fresh.isEmpty)
+        f.session.flushFeedback()
+        XCTAssertEqual(f.device.sent, fresh.map(\.message))
     }
 
     func testPhysicalInputCancelsOlderQueuedOriginFeedback() async throws {

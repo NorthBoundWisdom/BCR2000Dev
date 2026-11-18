@@ -1,6 +1,5 @@
 import BCRFoundation
 import Foundation
-import SurfaceBindingContext
 import SurfaceFeedbackPlanning
 
 public struct FeedbackPolicy: Codable, Equatable, Sendable {
@@ -92,20 +91,30 @@ public struct ScheduledFeedback: Equatable, Sendable {
 /// Token-bucket scheduler. A pending control retains only its most recent desired value.
 public struct FeedbackScheduler: Sendable {
     public let policy: FeedbackPolicy
-    private var pending: [MIDIControlID: ScheduledFeedback] = [:]
-    private var kernelIndex = ContextResourceIndex<MIDIControlID, BCRFeedbackQueueScope>()
+    private var queue: FeedbackQueue<MIDIControlID, ScheduledFeedback>
     private let kernelTraceID = UUID().uuidString
-    private var tokens: Double
-    private var lastRefill: Date?
-    private var retryAfter: Date?
+    private enum ClockFault: Sendable {
+        case drain(any Error)
+        case failure(any Error)
+
+        var error: any Error {
+            switch self {
+            case let .drain(error), let .failure(error): error
+            }
+        }
+    }
+
+    private var clockFault: ClockFault?
+    var clockIssue: (any Error)? { clockFault?.error }
     private(set) var j4LastDrainOrdinal: UInt64?
     var j4Owner: String { kernelTraceID }
-    public var count: Int { kernelIndex.count }
-    public var pendingItems: [ScheduledFeedback] { kernelIndex.orderedIDs.compactMap { pending[$0] } }
+    public var count: Int { queue.count }
+    public var pendingItems: [ScheduledFeedback] { queue.orderedEntries.map(\.item) }
     public init(policy: FeedbackPolicy) throws {
         try policy.validate()
         self.policy = policy
-        tokens = Double(policy.burst)
+        queue = try FeedbackQueue(rate: .bucket(perSecond: Double(policy.messagesPerSecond), burst: policy.burst,
+                                                failureCooldown: policy.errorCooldown))
         let ordinal = FeedbackJ4Trace.schedulerInput(
             owner: kernelTraceID,
             operation: "initialize",
@@ -122,8 +131,8 @@ public struct FeedbackScheduler: Sendable {
     {
         ["pending": pendingItems.map(FeedbackJ4Trace.entry), "drained": drained.map(FeedbackJ4Trace.entry),
          "removed_keys": removed, "replaced_keys": replaced,
-         "tokens": tokens, "refill": lastRefill.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull(),
-         "retry": retryAfter.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull()]
+         "tokens": queue.tokens as Any? ?? NSNull(), "refill": queue.lastRefill as Any? ?? NSNull(),
+         "retry": queue.retryAfter as Any? ?? NSNull()]
     }
 
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
@@ -144,74 +153,66 @@ public struct FeedbackScheduler: Sendable {
                 ["kind": "derived_caller_requeue", "cause_ordinal": String($0)]
             } ?? ["kind": "external_request"]]
         }
-        let replaced = pending[message.controlID] == nil ? [] : [FeedbackJ4Trace.key(message.controlID)]
-        defer {
-            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(replaced: replaced) }
+        let previous = queue.enqueue(argument, for: message.controlID)
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
+            j4Output(replaced: previous.map { [FeedbackJ4Trace.key($0.message.controlID)] } ?? [])
         }
-        pending[message.controlID] = ScheduledFeedback(
-            message: message,
-            origin: origin,
-            endpoint: endpoint,
-            mappingRevision: mappingRevision,
-            source: source,
-            context: context
-        )
-        let scope = BCRFeedbackQueueScope(pending[message.controlID]!)
-        kernelIndex.upsert(message.controlID, scope: scope)
     }
 
     public mutating func cancel(_ control: MIDIControlID) {
         let ordinal = FeedbackJ4Trace
             .schedulerInput(owner: kernelTraceID, operation: "cancel") { ["key": FeedbackJ4Trace.key(control)] }
-        var removedKeys: [String] = []
-        defer {
-            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(removed: removedKeys) }
+        let previous = queue.cancel(control)
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
+            j4Output(removed: previous.map { [FeedbackJ4Trace.key($0.message.controlID)] } ?? [])
         }
-        let removed = kernelIndex.remove(control) ? [control] : []
-        removedKeys = removed.map(FeedbackJ4Trace.key)
-        pending[control] = nil
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
-        let ordinal = FeedbackJ4Trace
-            .schedulerInput(owner: kernelTraceID, operation: "drain") { ["at": now.timeIntervalSinceReferenceDate] }
-        j4LastDrainOrdinal = ordinal.map(UInt64.init)
-        var result: [ScheduledFeedback] = []
-        var removedKeys: [String] = []
-        defer { FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(
-            drained: result,
-            removed: removedKeys
-        ) } }
-        if let previous = lastRefill {
-            let elapsed = now.timeIntervalSince(previous)
-            tokens = elapsed < 0 ? 0 : min(Double(policy.burst), tokens + elapsed * Double(policy.messagesPerSecond))
+        j4LastDrainOrdinal = nil
+        if case .failure? = clockFault { return [] }
+        let instant = now.timeIntervalSinceReferenceDate
+        let drained: [FeedbackQueueEntry<MIDIControlID, ScheduledFeedback>]
+        do {
+            drained = try queue.drain(at: instant)
+            clockFault = nil
+        } catch {
+            clockFault = .drain(error)
+            return []
         }
-        lastRefill = now
-        if let retryAfter, now < retryAfter { return [] }
-        let amount = min(Int(tokens), kernelIndex.count)
-        let removed = try! kernelIndex.removeFirst(amount)
-        removedKeys = removed.map(FeedbackJ4Trace.key)
-        for id in removed { if let value = pending.removeValue(forKey: id) { result.append(value) } }
-        tokens -= Double(result.count)
+        let ordinal = FeedbackJ4Trace
+            .schedulerInput(owner: kernelTraceID, operation: "drain") { ["at": instant] }
+        j4LastDrainOrdinal = ordinal.map(UInt64.init)
+        let result = drained.map(\.item)
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
+            j4Output(drained: result, removed: drained.map { FeedbackJ4Trace.key($0.key) })
+        }
         return result
     }
 
     public mutating func noteFailure(at now: Date) {
+        if case .failure? = clockFault { return }
+        let instant = now.timeIntervalSinceReferenceDate
+        do {
+            try queue.noteFailure(at: instant)
+            clockFault = nil
+        } catch {
+            // An invalid failure time cannot establish a cooldown deadline.
+            clockFault = .failure(error)
+            return
+        }
         let ordinal = FeedbackJ4Trace
-            .schedulerInput(owner: kernelTraceID, operation: "failure") { ["at": now.timeIntervalSinceReferenceDate] }
-        defer { FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() } }
-        retryAfter = now.addingTimeInterval(policy.errorCooldown)
+            .schedulerInput(owner: kernelTraceID, operation: "failure") { ["at": instant] }
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() }
     }
 
     public mutating func clear() {
         let ordinal = FeedbackJ4Trace.schedulerInput(owner: kernelTraceID, operation: "clear") { [:] }
-        var removedKeys: [String] = []
-        defer {
-            FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output(removed: removedKeys) }
+        let removed = queue.clear()
+        clockFault = nil
+        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
+            j4Output(removed: removed.map(FeedbackJ4Trace.key))
         }
-        let removed = kernelIndex.removeAll()
-        removedKeys = removed.map(FeedbackJ4Trace.key)
-        pending.removeAll(); lastRefill = nil; retryAfter = nil; tokens = Double(policy.burst)
     }
 }
 
