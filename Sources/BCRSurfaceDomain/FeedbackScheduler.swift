@@ -169,8 +169,12 @@ public struct FeedbackScheduler: Sendable {
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
+        drainForFlush(at: now).items
+    }
+
+    mutating func drainForFlush(at now: Date) -> (items: [ScheduledFeedback], failure: (any Error)?) {
         j4LastDrainOrdinal = nil
-        if case .failure? = clockFault { return [] }
+        if case .failure? = clockFault { return ([], nil) }
         let instant = now.timeIntervalSinceReferenceDate
         let drained: [FeedbackQueueEntry<MIDIControlID, ScheduledFeedback>]
         do {
@@ -178,7 +182,7 @@ public struct FeedbackScheduler: Sendable {
             clockFault = nil
         } catch {
             clockFault = .drain(error)
-            return []
+            return ([], error)
         }
         let ordinal = FeedbackJ4Trace
             .schedulerInput(owner: kernelTraceID, operation: "drain") { ["at": instant] }
@@ -187,7 +191,7 @@ public struct FeedbackScheduler: Sendable {
         FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
             j4Output(drained: result, removed: drained.map { FeedbackJ4Trace.key($0.key) })
         }
-        return result
+        return (result, nil)
     }
 
     public mutating func noteFailure(at now: Date) {

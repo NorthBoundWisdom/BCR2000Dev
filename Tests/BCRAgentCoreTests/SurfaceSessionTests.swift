@@ -172,8 +172,20 @@ final class SurfaceSessionTests: XCTestCase {
         let pending = f.session.pendingFeedbackItems
         XCTAssertFalse(pending.isEmpty)
         let finite = f.state.time
+        var callbacks: [String] = []
+        let observer = f.session.observeFeedbackQueue { callbacks.append("queue:\($0)") }
+        f.session.onEvent = { event in
+            guard case let .failed(.feedback, reason) = event else { return }
+            XCTAssertEqual(reason, FeedbackQueueError.nonfiniteTime.localizedDescription)
+            callbacks.append("failure")
+            XCTAssertTrue(f.device.sent.isEmpty)
+            XCTAssertEqual(f.session.pendingFeedbackItems, pending)
+            if callbacks.count == 1 { f.session.flushFeedback() }
+        }
+        defer { f.session.removeFeedbackObserver(observer); f.session.onEvent = nil }
         f.state.time = Date(timeIntervalSinceReferenceDate: .infinity)
         f.session.flushFeedback()
+        XCTAssertEqual(callbacks, ["failure", "queue:\(pending.count)", "queue:\(pending.count)"])
         XCTAssertTrue(f.device.sent.isEmpty)
         XCTAssertEqual(f.session.pendingFeedbackItems, pending)
         XCTAssertEqual(f.session.feedbackClockIssue as? FeedbackQueueError, .nonfiniteTime)
@@ -181,6 +193,9 @@ final class SurfaceSessionTests: XCTestCase {
         f.session.flushFeedback()
         XCTAssertEqual(f.device.sent, pending.map(\.message))
         XCTAssertNil(f.session.feedbackClockIssue)
+        f.session.flushFeedback()
+        XCTAssertEqual(f.device.sent, pending.map(\.message))
+        XCTAssertEqual(callbacks, ["failure", "queue:\(pending.count)", "queue:\(pending.count)", "queue:0", "queue:0"])
     }
 
     func testInvalidFailureClockKeepsTransportReceiptAndSuspendsOnlyCoalescedFeedback() async throws {
@@ -204,8 +219,9 @@ final class SurfaceSessionTests: XCTestCase {
             f.state.nextTime = Date(timeIntervalSinceReferenceDate: .infinity)
         }
         f.session.onEvent = { event in
-            guard event == .failed(.feedback, failure) else { return }
+            guard case let .failed(.feedback, reason) = event else { return }
             order.append("failure")
+            XCTAssertEqual(reason, failure)
             XCTAssertEqual(f.session.connection.lastError, failure)
             XCTAssertEqual(f.session.feedbackClockIssue as? FeedbackQueueError, .nonfiniteTime)
             XCTAssertEqual(f.session.events.count { $0.delivery == .failed }, previouslyFailed)
@@ -224,6 +240,7 @@ final class SurfaceSessionTests: XCTestCase {
         f.device.failsSend = false
         f.device.beforeSend = nil
         f.session.flushFeedback()
+        XCTAssertEqual(order, ["send", "failure"])
         XCTAssertTrue(f.device.sent.isEmpty)
         XCTAssertEqual(f.session.pendingFeedbackItems, pending)
         let previouslySent = f.session.events.count { $0.delivery == .sent }

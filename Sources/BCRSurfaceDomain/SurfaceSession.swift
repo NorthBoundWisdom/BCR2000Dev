@@ -290,6 +290,7 @@ public final class SurfaceSession {
     public var pendingFeedbackCount: Int { scheduler?.count ?? 0 }
     /// The last coalesced-feedback clock failure, cleared at recovery or queue invalidation.
     var feedbackClockIssue: (any Error)? { scheduler?.clockIssue }
+    private var reportingFeedbackDrainFailure = false
     private var feedbackObservers: [UUID: @MainActor (Int) -> Void] = [:]
     public func observeFeedbackQueue(_ observer: @escaping @MainActor (Int) -> Void) -> UUID {
         let token = UUID(); feedbackObservers[token] = observer; return token
@@ -508,8 +509,14 @@ public final class SurfaceSession {
         let originalMapping = mappingContextRevision
         let originalEndpoint = endpointSource(source: source, direction: .output)
         let j4OriginScheduler = scheduler?.j4Owner
-        let batch = scheduler?.drain(at: now()) ?? []
+        let (batch, drainFailure) = scheduler?.drainForFlush(at: now()) ?? ([], nil)
         let j4DrainOrdinal = scheduler?.j4LastDrainOrdinal
+        if let drainFailure, !reportingFeedbackDrainFailure {
+            // A synchronous event observer can flush again before this call has notified the queue observers.
+            reportingFeedbackDrainFailure = true
+            defer { reportingFeedbackDrainFailure = false }
+            onEvent?(.failed(.feedback, drainFailure.localizedDescription))
+        }
         for (index, value) in batch.enumerated() {
             let result = withWriteOrigin(value.origin) { transmitNow(
                 value.message,
