@@ -68,13 +68,14 @@ class IndependentCIChecksTests(unittest.TestCase):
         self.assertNotIn("verify_display_budget.py", source)
         self.assertNotIn("verify_status_panel_demo.py", source)
         workflow = (root / ".github/workflows/ci.yml").read_text()
-        native, delivery = workflow.split("  delivery:\n")
+        native, intel = workflow.split("  delivery:\n")
+        delivery, gui = intel.split("  gui:\n")
         self.assertNotIn("ci_parallel_checks.py transports", native)
         self.assertIn("Isolated display budget latency", delivery)
         self.assertIn("Isolated real-time synthetic status", delivery)
         self.assertNotIn("needs:", workflow)
         self.assertEqual(workflow.count("runs-on: macos-26\n"), 1)
-        self.assertEqual(workflow.count("runs-on: macos-26-intel\n"), 1)
+        self.assertEqual(workflow.count("runs-on: macos-26-intel\n"), 2)
         self.assertLess(
             native.index("ci_parallel_checks.py tests"), native.index("Confirm native and isolated MCP products exited")
         )
@@ -85,15 +86,20 @@ class IndependentCIChecksTests(unittest.TestCase):
             "git diff --check",
             "Confirm GUI smoke and isolated MCP products exited",
         )
-        gui_positions = [delivery.index(check) for check in gui_checks]
+        gui_positions = [gui.index(check) for check in gui_checks]
         self.assertEqual(gui_positions, sorted(gui_positions))
-        self.assertLess(delivery.index("verify_status_panel_demo.py"), gui_positions[0])
-        self.assertLess(gui_positions[-1], delivery.index("Preserve delivery, GUI and timing evidence"))
-        self.assertIn("if: ${{ !cancelled() }}", delivery[gui_positions[-1] :])
+        self.assertNotIn("verify_status_panel_demo.py", gui)
+        self.assertNotIn("tools/mcp_integration.py", delivery)
+        self.assertLess(gui.index("check_domain_boundaries.py"), gui_positions[0])
+        self.assertLess(gui_positions[-1], gui.index("Preserve GUI and MCP acceptance evidence"))
+        self.assertIn("if: ${{ !cancelled() }}", gui[gui_positions[-1] :])
+        self.assertLess(
+            delivery.index("verify_status_panel_demo.py"), delivery.index("Confirm delivery acceptance products exited")
+        )
         for extension in ("log", "json", "jsonl", "txt"):
             path = f"build/mcp-integration/*/*.{extension}\n"
-            self.assertNotIn(path, native)
-            self.assertIn(path, delivery)
+            self.assertNotIn(path, native + delivery)
+            self.assertIn(path, gui)
         self.assertIn("assert_ci_processes_exited.py", delivery)
         self.assertLess(delivery.index("package_provider.py"), delivery.index("assert_ci_processes_exited.py"))
         self.assertLess(
@@ -129,9 +135,12 @@ class IndependentCIChecksTests(unittest.TestCase):
         for command in commands:
             with self.subTest(command=command):
                 self.assertEqual(macos.count("run: " + command + "\n"), 1)
-        for job in macos.split("  delivery:\n"):
+        native, intel = macos.split("  delivery:\n")
+        delivery, gui = intel.split("  gui:\n")
+        for job in (native, delivery, gui):
             self.assertEqual(job.count("run: git diff --check\n"), 1)
         self.assertIn("name: test-logs-${{ github.run_id }}", macos)
         self.assertIn("name: delivery-checks-${{ github.run_id }}", macos)
-        self.assertEqual(macos.count("Report whole-run wall time and enforce 300s budget"), 2)
+        self.assertIn("name: gui-checks-${{ github.run_id }}", macos)
+        self.assertEqual(macos.count("Report whole-run wall time and enforce 300s budget"), 3)
         self.assertLess(macos.index("verify_status_panel_demo.py"), macos.rindex("Report whole-run wall time"))

@@ -213,8 +213,8 @@ jobs:
         run: |
           swift build --build-path build/swiftpm --product BCRProviderService
           swift build --build-path build/swiftpm --product BCRProfileTool
-      - name: Save compiled delivery products before acceptance
-        if: always() && steps.compile.outcome == 'success' && github.event_name == 'push'
+      - name: Save compiled delivery products on a same-lock cache miss
+        if: always() && steps.compile.outcome == 'success' && github.event_name == 'push' && steps.build-cache.outputs.cache-matched-key == ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
@@ -236,14 +236,11 @@ jobs:
         run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - name: Isolated real-time synthetic status demo acceptance
         run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
-      - run: python3 configs/macos_workflow.py build --distribution ad-hoc
-      - run: python3 configs/macos_workflow.py smoke
-      - run: python3 tools/mcp_integration.py
       - run: git diff --check
-      - name: Confirm GUI smoke and isolated MCP products exited
+      - name: Confirm delivery acceptance products exited
         if: ${{ !cancelled() }}
-        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/native-processes-exited.json
-      - name: Preserve delivery, GUI and timing evidence
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/delivery-acceptance-processes-exited.json
+      - name: Preserve delivery and timing evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -256,6 +253,63 @@ jobs:
             build/ci-surface-client-roles/
             build/ci-surface-hardware-roles/
             build/ci-multiple-displays/
+      - name: Report whole-run wall time and enforce 300s budget
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESTORED_BUILD_KEY: ${{ steps.build-cache.outputs.cache-matched-key }}
+        run: python3 configs/ci_job_budget.py --cache-key "$RESTORED_BUILD_KEY"
+
+  gui:
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Full history: every tracked file gets its last commit time (below).
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      # SwiftPM rebuilds any input whose mtime changed. Commit times keep a restored build incremental:
+      # files untouched since the cached build look unchanged, changed files rebuild.
+      - run: python3 configs/restore_git_mtimes.py
+      - name: Identify the Swift toolchain for the build cache
+        run: python3 -c "import hashlib, subprocess; v = subprocess.run(['swift', '--version'], capture_output=True); print('SWIFT_ID=' + hashlib.sha256(v.stdout + v.stderr).hexdigest()[:16])" >> "$GITHUB_ENV"
+      - name: Restore the locked dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/seed
+          key: seed-inputs-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}
+      - name: Restore a compatible Intel SwiftPM build
+        id: build-cache
+        if: github.event_name != 'workflow_dispatch' || inputs.cold_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/swiftpm
+          key: delivery-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
+            delivery-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
+      - run: python3 configs/surface_plugins_dependency.py ensure
+      - run: python3 configs/control_surface_kit_dependency.py ensure
+      - run: python3 configs/ci_prepare_inputs.py
+      - run: python3 configs/check_domain_boundaries.py
+      - run: python3 configs/macos_workflow.py build --distribution ad-hoc
+      - run: python3 configs/macos_workflow.py smoke
+      - run: python3 tools/mcp_integration.py
+      - run: git diff --check
+      - name: Confirm GUI smoke and isolated MCP products exited
+        if: ${{ !cancelled() }}
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/gui-processes-exited.json
+      - name: Preserve GUI and MCP acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gui-checks-${{ github.run_id }}
+          path: |
+            build/ci-verification/gui-processes-exited.json
             build/mcp-integration/*/*.log
             build/mcp-integration/*/*.json
             build/mcp-integration/*/*.jsonl

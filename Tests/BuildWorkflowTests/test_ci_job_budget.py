@@ -69,10 +69,14 @@ class CIJobBudgetTests(unittest.TestCase):
 
     def test_both_jobs_save_after_compile_before_tests_independently_of_test_success(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
-        self.assertEqual(text.count("timeout-minutes: 20"), 3)
-        self.assertEqual(text.count("Report whole-run wall time and enforce 300s budget"), 3)
+        self.assertEqual(text.count("timeout-minutes: 20"), 4)
+        self.assertEqual(text.count("Report whole-run wall time and enforce 300s budget"), 4)
         linux, tail = text.split("  checks:\n")
-        native, delivery = tail.split("  delivery:\n")
+        native, intel = tail.split("  delivery:\n")
+        delivery, gui = intel.split("  gui:\n")
+        self.assertNotIn("actions/cache/save", gui)
+        self.assertNotIn("uses: actions/cache@", gui)
+        self.assertIn("steps.build-cache.outputs.cache-matched-key == ''", delivery)
         self.assertLess(linux.index("Compile portable"), linux.index("Save compiled portable"))
         self.assertLess(linux.index("Save compiled portable"), linux.index("Run and reconcile"))
         self.assertLess(native.index("run: python3 configs/ci_native_compile.py"), native.index("Save compiled native"))
@@ -95,10 +99,11 @@ class CIJobBudgetTests(unittest.TestCase):
         self.assertNotIn("id: compile\n        run: swift test", text)
         self.assertIn("list --skip-build", text)
         self.assertIn("tests --native-precompiled", text)
-        self.assertEqual(text.count("inputs.cold_build != true"), 4)
+        self.assertEqual(text.count("inputs.cold_build != true"), 5)
         self.assertIn("Run and reconcile every portable XCTest once", text)
-        native, delivery = text.split("  checks:\n")[1].split("  delivery:\n")
-        self.assertNotIn("--build-tests", delivery)
+        native, intel = text.split("  checks:\n")[1].split("  delivery:\n")
+        delivery, gui = intel.split("  gui:\n")
+        self.assertNotIn("--build-tests", delivery + gui)
         self.assertIn("--product BCRProviderService", delivery)
         self.assertIn("--product BCRProfileTool", delivery)
         self.assertLess(
@@ -112,16 +117,20 @@ class CIJobBudgetTests(unittest.TestCase):
 
     def test_native_binary_cache_is_scoped_to_selected_runner_image(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
-        native, delivery = text.split("  checks:\n")[1].split("  delivery:\n")
+        native, intel = text.split("  checks:\n")[1].split("  delivery:\n")
+        delivery, gui = intel.split("  gui:\n")
         self.assertIn("runs-on: macos-26\n", native)
         self.assertIn("runs-on: macos-26-intel\n", delivery)
+        self.assertIn("runs-on: macos-26-intel\n", gui)
         self.assertEqual(native.count("swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}"), 3)
         self.assertEqual(native.count("native-audit-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}"), 2)
         self.assertNotIn("macos-26-intel", native)
         self.assertNotIn("swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}", text)
         self.assertIn("swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-", delivery)
         self.assertIn("key: delivery-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}", delivery)
-        self.assertNotIn("key: swiftpm-", delivery)
+        self.assertNotIn("key: swiftpm-", delivery + gui)
+        self.assertIn("swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-", gui)
+        self.assertIn("key: delivery-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}", gui)
         for recipe in (
             "tools/desktop_audit.swift",
             "tools/desktop_focus_host.swift",
