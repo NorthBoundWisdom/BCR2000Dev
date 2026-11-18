@@ -81,8 +81,8 @@ jobs:
           RESTORED_BUILD_KEY: ${{ steps.build-cache.outputs.cache-matched-key }}
         run: python3 configs/ci_job_budget.py --cache-key "$RESTORED_BUILD_KEY"
   checks:
-    # Both push jobs use the Intel pool; the independent proof still covers arm64.
-    runs-on: macos-26-intel
+    # Keep the native test and GUI critical path on arm64; delivery runs independently on Intel.
+    runs-on: macos-26
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,8 +109,8 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
-          restore-keys: swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
+          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
+          restore-keys: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-
       - run: python3 configs/surface_plugins_dependency.py ensure
       - run: python3 configs/control_surface_kit_dependency.py ensure
       - run: python3 configs/ci_prepare_inputs.py
@@ -122,7 +122,7 @@ jobs:
           path: |
             build/tools/desktop_audit
             build/tools/desktop_focus_host
-          key: native-audit-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
+          key: native-audit-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
       - name: Compile native targets, tests and original audit helpers concurrently
         id: compile
         run: python3 configs/ci_native_compile.py
@@ -131,7 +131,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/swiftpm
-          key: swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
+          key: swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('configs/surface_plugins.lock.json', 'configs/control_surface_kit.lock.json') }}-${{ github.sha }}
       - name: Save original audit helpers before any GUI runs
         if: always() && steps.compile.outputs.audit_helpers_succeeded == 'true' && github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -139,7 +139,7 @@ jobs:
           path: |
             build/tools/desktop_audit
             build/tools/desktop_focus_host
-          key: native-audit-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
+          key: native-audit-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-${{ hashFiles('tools/desktop_audit.swift', 'tools/desktop_focus_host.swift', 'tools/native_ui.py', 'configs/ci_native_compile.py') }}
       - name: Validate boundaries using the same compiled manifest scratch
         id: boundaries
         if: ${{ !cancelled() && steps.compile.outputs.native_build_succeeded == 'true' }}

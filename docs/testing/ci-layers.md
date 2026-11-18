@@ -1,6 +1,8 @@
 # CI coverage after O-2 retirement
 
-Baseline `acf86040f61665f3446e0f226ac9d88fcbcdbc93`: normal run `44218823842` succeeded in **281 seconds** (created→updated, including queue). New commit cloud result remains pending.
+Baseline `acf86040f61665f3446e0f226ac9d88fcbcdbc93`: normal run `44218823842` succeeded in **281 seconds**. Retirement commit `a2558a121b797f05c74ea91958198bb106c114ef`: normal run `44223143648` took **340 seconds**, failing the whole-run budget after all functional steps succeeded. Its independent complete-proof run `44223143693` succeeded in **385 seconds**. These times run from creation to completion and include queue time.
+
+On that retirement commit, the native checks job spent 129.988 seconds compiling, 94.619 seconds on regressions and fixed representative verification, and 30.194 seconds on concurrent Python workflows. The complete proof on arm64 compiled the native targets and tests in 87 seconds as measured by the workflow step. The regular `checks` job now uses `macos-26` (arm64), with matching arm64 SwiftPM and audit-helper cache keys. `delivery` stays on `macos-26-intel` and the complete proof stays on `macos-26`. Commands, test scope, acceptance thresholds, and time budgets are unchanged.
 
 ## Removal and unique-coverage review
 
