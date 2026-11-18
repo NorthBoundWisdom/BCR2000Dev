@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -33,7 +35,23 @@ REPRESENTATIVE_CASES = (
 )
 
 
-def execute(representative: bool):
+@dataclass(frozen=True)
+class CapturedProof:
+    directory: Path
+    started: float
+    legacy: Path | None
+    feedback: Path | None
+
+    def verify(self):
+        def remaining():
+            return macos_workflow.TEST_TIMEOUT_S - (time.monotonic() - self.started)
+
+        j3_legacy_verification.verify(ROOT, self.directory, self.legacy, remaining())
+        j4_shadow_verification.verify(ROOT, self.directory, self.feedback, remaining())
+        write_evidence(self.directory, self.started, representative=True)
+
+
+def execute(representative: bool) -> CapturedProof | None:
     modules = re.findall(r'\.testTarget\(\s*name:\s*"([^"]+)"', (ROOT / "Package.swift").read_text())
     if not modules or not macos_workflow.REQUIRED_TEST_MODULES <= set(modules):
         raise RuntimeError("Native layer requires all original test modules")
@@ -63,13 +81,13 @@ def execute(representative: bool):
         expected = sorted({case.split(".", 1)[0] for case in REPRESENTATIVE_CASES}) if representative else modules
         if not macos_workflow.summarize_xunit([report], expected, code):
             raise RuntimeError("Native layer failed: " + str(directory))
-        if representative:
+    if representative:
+        return CapturedProof(directory, started, trace, feedback)
+    write_evidence(directory, started, representative=False)
+    return None
 
-            def remaining():
-                return macos_workflow.TEST_TIMEOUT_S - (time.monotonic() - started)
 
-            j3_legacy_verification.verify(ROOT, directory, trace, remaining())
-            j4_shadow_verification.verify(ROOT, directory, feedback, remaining())
+def write_evidence(directory: Path, started: float, *, representative: bool):
     (directory / "ci-layer.json").write_text(
         json.dumps(
             {
@@ -88,8 +106,22 @@ def main():
     with use_build_environment(ROOT):
         macos_workflow.ensure_dependency(ROOT)
         macos_workflow.ensure_kit_dependency(ROOT)
-        execute(False)
-        execute(True)
+        proof = execute(True)
+        if proof is None:
+            raise RuntimeError("Representative capture did not produce a proof to verify")
+        # The capture context has exited. Replay reads only its own evidence and launches
+        # independent diagnostic processes, while the uninstrumented suite runs normally.
+        failures = []
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            regressions = pool.submit(execute, False)
+            comparison = pool.submit(proof.verify)
+            for future in (regressions, comparison):
+                try:
+                    future.result()
+                except Exception as error:
+                    failures.append(error)
+        if failures:
+            raise ExceptionGroup("Native CI layers failed", failures)
 
 
 if __name__ == "__main__":
