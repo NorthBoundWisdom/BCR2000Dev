@@ -17,7 +17,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from configs import j3_legacy_verification, j4_shadow_verification, macos_workflow, xctest_runner  # noqa: E402
+from configs import j4_shadow_verification, macos_workflow, xctest_runner  # noqa: E402
 from configs.build_environment import use_build_environment  # noqa: E402
 
 # Explicit native identifiers: never a random sample or a prefix-based omission of regression cases.
@@ -39,14 +39,12 @@ REPRESENTATIVE_CASES = (
 class CapturedProof:
     directory: Path
     started: float
-    legacy: Path | None
     feedback: Path | None
 
     def verify(self):
         def remaining():
             return macos_workflow.TEST_TIMEOUT_S - (time.monotonic() - self.started)
 
-        j3_legacy_verification.verify(ROOT, self.directory, self.legacy, remaining())
         j4_shadow_verification.verify(ROOT, self.directory, self.feedback, remaining())
         write_evidence(self.directory, self.started, representative=True)
 
@@ -60,11 +58,10 @@ def execute(representative: bool) -> CapturedProof | None:
     directory = Path(tempfile.mkdtemp(prefix="representative-" if representative else "regression-", dir=runs))
     started = time.monotonic()
     with ExitStack() as contexts:
-        trace = feedback = None
+        feedback = None
         if representative:
-            trace = contexts.enter_context(j3_legacy_verification.capture(ROOT, directory))
             feedback = contexts.enter_context(j4_shadow_verification.capture(ROOT, directory))
-        elif any(key in os.environ for key in (j3_legacy_verification.TRACE_ENV, j4_shadow_verification.TRACE_ENV)):
+        elif any(key in os.environ for key in ("BCR_J3_SHADOW_ROOT", j4_shadow_verification.TRACE_ENV)):
             raise RuntimeError("All-regression CI layer refuses inherited global proof capture")
         options = {"precompiled": True}
         if representative:
@@ -82,7 +79,7 @@ def execute(representative: bool) -> CapturedProof | None:
         if not macos_workflow.summarize_xunit([report], expected, code):
             raise RuntimeError("Native layer failed: " + str(directory))
     if representative:
-        return CapturedProof(directory, started, trace, feedback)
+        return CapturedProof(directory, started, feedback)
     write_evidence(directory, started, representative=False)
     return None
 

@@ -129,15 +129,6 @@ public enum L10n {
         state.update(selection.resolved(preferredLanguages: preferredLanguages))
     }
 
-    #if DEBUG
-        package struct DiagnosticLanguageSnapshot: Equatable, Sendable {
-            package let language: AppLanguage
-            package let revision: UInt64?
-        }
-
-        package static var diagnosticLanguageSnapshot: DiagnosticLanguageSnapshot { state.diagnosticSnapshot }
-    #endif
-
     private static let englishBundle = localizedBundle(.english)
     private static let chineseBundle = localizedBundle(.chinese)
     private static let traditionalChineseBundle = localizedBundle(.traditionalChinese)
@@ -191,13 +182,6 @@ private final class LocalizationLanguageState: Observable, @unchecked Sendable {
     private let lock = NSLock()
     private var value = AppLanguage.system.resolved(preferredLanguages: Locale.preferredLanguages)
 
-    #if DEBUG
-        private var diagnosticRevision: UInt64? = 0
-        var diagnosticSnapshot: L10n.DiagnosticLanguageSnapshot {
-            lock.withLock { .init(language: value, revision: diagnosticRevision) }
-        }
-    #endif
-
     var language: AppLanguage {
         registrar.access(self, keyPath: \.language)
         return lock.withLock { value }
@@ -210,11 +194,6 @@ private final class LocalizationLanguageState: Observable, @unchecked Sendable {
         registrar.withMutation(of: self, keyPath: \.language) {
             lock.withLock {
                 value = language
-                #if DEBUG
-                    if let revision = diagnosticRevision {
-                        diagnosticRevision = revision == UInt64.max ? nil : revision + 1
-                    }
-                #endif
             }
         }
     }

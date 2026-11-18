@@ -114,22 +114,6 @@ public final class SurfaceSession {
         let current = BCRKernelProjection.scope(source: source, generation: inputEvents.generation,
                                                 mapping: mappingContextRevision, endpoint: currentEndpoint)
         let matches = current.matches(captured) && (queue == nil || queue == feedbackQueueGeneration)
-        if SurfaceKernelTrace.enabled {
-            SurfaceKernelTrace.record(
-                "scope." + operation, owner: kernelTraceID,
-                input: ["captured_source": capturedSource.rawValue, "captured_epoch": generation,
-                        "captured_mapping": mapping, "captured_endpoint": BCRKernelProjection.endpointValue(endpoint),
-                        "current_source": source.rawValue, "current_epoch": inputEvents.generation,
-                        "current_mapping": mappingContextRevision,
-                        "current_endpoint": BCRKernelProjection.endpointValue(currentEndpoint),
-                        "checks_endpoint": checksEndpoint,
-                        "captured_queue": queue.map { $0 as Any } ?? NSNull(),
-                        "current_queue": feedbackQueueGeneration,
-                        "captured_projection": String(reflecting: captured),
-                        "current_projection": String(reflecting: current)],
-                actual: ["matches": matches]
-            )
-        }
         return matches
     }
 
@@ -476,17 +460,6 @@ public final class SurfaceSession {
         publishedValues = engine.parameterValues
         mockDevice.configureModes(configuration)
         engine.echoWindow = 0 // Mock never echoes feedback; real-device suppression is restored on source switch.
-        if SurfaceKernelTrace.enabled {
-            SurfaceKernelTrace.record(
-                "connection.init", owner: kernelTraceID,
-                input: [
-                    "snapshot": BCRKernelProjection.connectionValue(connection),
-                    "generation": connectionGeneration
-                ],
-                actual: ["snapshot": BCRKernelProjection.connectionProjectionValue(kernelConnection.snapshot),
-                         "generation": kernelConnection.generation]
-            )
-        }
         (hardwareDevice as? any SurfaceSysExObserving)?.onSysExObservation = { [weak self] in self?.observeSysEx($0) }
         hardwareDevice.onMessages = { [weak self] messages in
             guard let self else { return }
@@ -1429,31 +1402,6 @@ public final class SurfaceSession {
         }
     }
 
-    /// Read-only J3 trace of the actual Core receipt eligibility. No second scope decision.
-    private func recordReceiptScope(_ operation: String, plan: BCRFeedbackPlan,
-                                    currentScope: ContextScope, currentEndpoint: MIDIEndpointSource?, matches: Bool)
-    {
-        guard SurfaceKernelTrace.enabled else { return }
-        let captured = plan.capturedEvidence
-        SurfaceKernelTrace.record("scope." + operation, owner: kernelTraceID,
-                                  input: [
-                                      "captured_source": captured.source.rawValue,
-                                      "captured_epoch": captured.context.generation,
-                                      "captured_mapping": captured.context.mappingGeneration,
-                                      "captured_endpoint": BCRKernelProjection.endpointValue(captured.endpoint),
-                                      "current_source": source.rawValue,
-                                      "current_epoch": inputEvents.generation,
-                                      "current_mapping": mappingContextRevision,
-                                      "current_endpoint": BCRKernelProjection.endpointValue(currentEndpoint),
-                                      "checks_endpoint": true,
-                                      "captured_queue": NSNull(),
-                                      "current_queue": feedbackQueueGeneration,
-                                      "captured_projection": String(reflecting: plan.scope),
-                                      "current_projection": String(reflecting: currentScope)
-                                  ],
-                                  actual: ["matches": matches])
-    }
-
     @discardableResult
     private func transmitNow(_ message: MIDIVoiceMessage, expectedEndpoint: MIDIEndpointSource? = nil,
                              expectedMappingRevision: UInt64? = nil, receipt: FeedbackReceipt? = nil,
@@ -1607,13 +1555,6 @@ public final class SurfaceSession {
                     mappingGeneration: mappingContextRevision,
                     knownDeviceContextID: source == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
                 ), endpoint: currentEndpoint)
-                recordReceiptScope(
-                    "transport.accepted",
-                    plan: plan,
-                    currentScope: acceptedScope,
-                    currentEndpoint: currentEndpoint,
-                    matches: current
-                )
                 j4BoundaryResult(
                     message: message,
                     origin: sendOrigin,
@@ -1644,13 +1585,6 @@ public final class SurfaceSession {
                     mappingGeneration: mappingContextRevision,
                     knownDeviceContextID: source == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
                 ), endpoint: currentEndpoint)
-                recordReceiptScope(
-                    "transport.failed",
-                    plan: plan,
-                    currentScope: failureScope,
-                    currentEndpoint: currentEndpoint,
-                    matches: current
-                )
                 if current {
                     droppedFeedbackCount += 1; connection.lastError = error.localizedDescription
                     if feedbackQueueGeneration == sendQueueGeneration { scheduler?.noteFailure(at: now()) }
@@ -1692,20 +1626,6 @@ public final class SurfaceSession {
             if unpublishedConnectionRevision == revision { unpublishedConnectionRevision = nil }
         }
         let transition = kernelConnection.begin(snapshot)
-        if SurfaceKernelTrace.enabled {
-            SurfaceKernelTrace.record(
-                "connection.transition", owner: kernelTraceID,
-                input: ["previous_native_snapshot": BCRKernelProjection.connectionValue(connection),
-                        "previous_kernel_snapshot": BCRKernelProjection.connectionProjectionValue(transition.previous),
-                        "next_native_snapshot": BCRKernelProjection.connectionValue(snapshot),
-                        "native_cache_ids": engine.transportEvidenceIDsForTrace],
-                actual: ["route_changed": transition.routeChanged, "status_changed": transition.statusChanged,
-                         "invalidates_scope": transition.invalidatesScope, "clear_pending": transition.clearPending,
-                         "became_available": transition.becameAvailable,
-                         "previous_generation": transition.previousGeneration,
-                         "current_generation": transition.currentGeneration]
-            )
-        }
         if transition.invalidatesScope {
             connectionScopeRevision &+= 1
             if source == .hardware { engine.invalidateTransportEvidence() }
@@ -1719,15 +1639,6 @@ public final class SurfaceSession {
         }
         connection = snapshot
         kernelConnection.publish(snapshot)
-        if SurfaceKernelTrace.enabled {
-            SurfaceKernelTrace.record(
-                "connection.publish", owner: kernelTraceID,
-                input: ["native_cache_ids": engine.transportEvidenceIDsForTrace,
-                        "snapshot": BCRKernelProjection.connectionValue(snapshot)],
-                actual: ["snapshot": BCRKernelProjection.connectionProjectionValue(kernelConnection.snapshot),
-                         "generation": kernelConnection.generation]
-            )
-        }
         if unpublishedConnectionRevision == revision { unpublishedConnectionRevision = nil }
         let scopeRevision = connectionScopeRevision
         if requiresHardwareConfirmation, source == .hardware, transition.clearPending {

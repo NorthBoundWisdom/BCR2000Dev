@@ -106,7 +106,6 @@ public struct FeedbackScheduler: Sendable {
         try policy.validate()
         self.policy = policy
         tokens = Double(policy.burst)
-        if SurfaceKernelTrace.enabled { traceIndex("index.init", input: [:]) }
         let ordinal = FeedbackJ4Trace.schedulerInput(
             owner: kernelTraceID,
             operation: "initialize",
@@ -125,16 +124,6 @@ public struct FeedbackScheduler: Sendable {
          "removed_keys": removed, "replaced_keys": replaced,
          "tokens": tokens, "refill": lastRefill.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull(),
          "retry": retryAfter.map { $0.timeIntervalSinceReferenceDate } as Any? ?? NSNull()]
-    }
-
-    private func traceIndex(_ operation: String, input: [String: Any], removed: [MIDIControlID] = []) {
-        SurfaceKernelTrace.record(
-            operation, owner: kernelTraceID, input: input,
-            actual: ["ids": kernelIndex.orderedIDs.map(BCRKernelProjection.midiValue), "count": kernelIndex.count,
-                     "scopes": kernelIndex.orderedIDs
-                         .map { BCRKernelProjection.queueScopeValue(kernelIndex.scope(for: $0)!) },
-                     "removed": removed.map(BCRKernelProjection.midiValue)]
-        )
     }
 
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
@@ -169,10 +158,6 @@ public struct FeedbackScheduler: Sendable {
         )
         let scope = BCRFeedbackQueueScope(pending[message.controlID]!)
         kernelIndex.upsert(message.controlID, scope: scope)
-        if SurfaceKernelTrace.enabled {
-            traceIndex("index.upsert", input: ["id": BCRKernelProjection.midiValue(message.controlID),
-                                               "scope": BCRKernelProjection.queueScopeValue(scope)])
-        }
     }
 
     public mutating func cancel(_ control: MIDIControlID) {
@@ -185,9 +170,6 @@ public struct FeedbackScheduler: Sendable {
         let removed = kernelIndex.remove(control) ? [control] : []
         removedKeys = removed.map(FeedbackJ4Trace.key)
         pending[control] = nil
-        if SurfaceKernelTrace.enabled {
-            traceIndex("index.remove", input: ["id": BCRKernelProjection.midiValue(control)], removed: removed)
-        }
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
@@ -211,10 +193,6 @@ public struct FeedbackScheduler: Sendable {
         removedKeys = removed.map(FeedbackJ4Trace.key)
         for id in removed { if let value = pending.removeValue(forKey: id) { result.append(value) } }
         tokens -= Double(result.count)
-        if SurfaceKernelTrace.enabled {
-            traceIndex("index.removeFirst", input: ["amount": amount, "at": now.timeIntervalSinceReferenceDate],
-                       removed: removed)
-        }
         return result
     }
 
@@ -234,7 +212,6 @@ public struct FeedbackScheduler: Sendable {
         let removed = kernelIndex.removeAll()
         removedKeys = removed.map(FeedbackJ4Trace.key)
         pending.removeAll(); lastRefill = nil; retryAfter = nil; tokens = Double(policy.burst)
-        if SurfaceKernelTrace.enabled { traceIndex("index.removeAll", input: [:], removed: removed) }
     }
 }
 

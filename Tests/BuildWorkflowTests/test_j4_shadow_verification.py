@@ -16,7 +16,6 @@ class J4WorkflowIntegrityTests(unittest.TestCase):
         for name in [
             "Sources/BCRSurfaceDomain/FeedbackJ4Trace.swift",
             "Sources/BCRSurfaceDomain/FeedbackRuntime.swift",
-            "Tests/J4Support/verify_feedback_runtime.py",
             "Tests/BCRAgentCoreTests/J4SchedulerArchiveReplayTests.swift",
             "Tests/BCRAgentCoreTests/J4SessionSchedulerArchiveReplayTests.swift",
         ]:
@@ -52,24 +51,6 @@ class J4WorkflowIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "requires actual hooks"):
                 with gate.capture(root, run):
                     pass
-
-    def test_empty_or_missing_phase_cannot_be_called_zero_diff(self):
-        with tempfile.TemporaryDirectory() as base:
-            root = Path(base)
-            with self.assertRaisesRegex(RuntimeError, "missed actual"):
-                gate.validate_plans(root)
-            row = {
-                "schema_version": 1,
-                "owner": "actual-owner",
-                "ordinal": "1",
-                "operation": "dispatch",
-                "input": {},
-                "native": {},
-                "candidate": {},
-            }
-            (root / "plans-1.jsonl").write_text(json.dumps(row) + "\n")
-            with self.assertRaisesRegex(RuntimeError, "fields missing"):
-                gate.validate_plans(root)
 
     def test_original_session_envelope_rejects_version_type_missing_extra_and_duplicate_keys(self):
         row = {
@@ -192,47 +173,12 @@ class J4WorkflowIntegrityTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Missing"):
                 gate.validate_process_outputs(path)
 
-    def test_plan_original_pid_cursor_version_and_unknown_operations_fail_closed(self):
-        row = {
-            "schema_version": 1,
-            "owner": "actual-owner",
-            "ordinal": "1",
-            "operation": "dispatch",
-            "input": {},
-            "native": {"decision": "send"},
-            "candidate": {"decision": "send"},
-        }
-        with tempfile.TemporaryDirectory() as base:
-            path = Path(base) / "plans-123.jsonl"
-            invalid = [
-                [{**row, "schema_version": True}],
-                [{**row, "schema_version": 1.0}],
-                [{**row, "ordinal": "2"}],
-                [row, row],
-                [{**row, "ordinal": "2"}, row],
-                [{**row, "operation": "boundary_unknown"}],
-                [{**row, "operation": "capture_unknown"}],
-            ]
-            for rows in invalid:
-                path.write_text("".join(json.dumps(v) + "\n" for v in rows))
-                with self.subTest(rows=rows):
-                    with self.assertRaisesRegex(RuntimeError, "version/type|cursor|Unknown"):
-                        gate.validate_plans(Path(base))
-
-    def test_duplicate_nonfinite_null_missing_and_bool_number_stay_distinct(self):
+    def test_duplicate_and_nonfinite_scheduler_source_json_is_rejected(self):
         for raw in ['{"a":1,"a":2}', '{"a":NaN}', '{"a":Infinity}', '{"a":1e309}']:
             with self.assertRaises(RuntimeError):
                 gate._load(raw)
-        self.assertFalse(gate._same(True, 1))
-        self.assertFalse(gate._same({"nested": [True]}, {"nested": [1]}))
-        self.assertFalse(gate._same({"value": float("inf")}, {"value": float("inf")}))
-        self.assertFalse(gate._same(10**400, 10**400))
         with self.assertRaises(RuntimeError):
             gate._load('{"value":' + "1" + "0" * 400 + "}")
-        self.assertTrue(gate._same({"value": 1}, {"value": 1.0}))
-        self.assertFalse(gate._same({"optional": None}, {}))
-        self.assertFalse(gate._same(["first", "second"], ["second", "first"]))
-        self.assertTrue(gate._same({"time": 1.25}, {"time": 1.25}))
 
 
 if __name__ == "__main__":

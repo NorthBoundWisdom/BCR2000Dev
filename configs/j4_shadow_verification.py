@@ -1,4 +1,4 @@
-"""Mandatory Debug J4 fact/typed-gate checks and Tests-only scheduler archive executor."""
+"""Temporary input-only scheduler comparison, retained until O-4 cutover."""
 
 from __future__ import annotations
 
@@ -17,10 +17,6 @@ TRACE_ENV = "BCR_J4_SHADOW_ROOT"
 REPLAY_ENV = "BCR_J4_REPLAY_ARCHIVE"
 REPLAY_CASE = "BCRAgentCoreTests.J4SchedulerArchiveReplayTests/testReplayRecordedNativeSchedulerInputs"
 SESSION_REPLAY_CASE = "BCRAgentCoreTests.J4SessionSchedulerArchiveReplayTests/testReplayRecordedSessionInputs"
-NEGATIVE_CASE = (
-    "BCRProviderAdapterTests.DisplayTransactionReentrancyTests/testHardwareInputCommittedDuringDisplayIsNotLost"
-)
-PHASES = ("capture", "dispatch", "authorization", "preflight", "receipt", "summary")
 
 
 def _object(pairs):
@@ -233,23 +229,6 @@ def validate_process_outputs(session: Path):
     return summary
 
 
-def _same(left, right):
-    if isinstance(left, bool) or isinstance(right, bool):
-        return type(left) is type(right) and left == right
-    if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(_same(left[key], right[key]) for key in left)
-    if isinstance(left, list) and isinstance(right, list):
-        return len(left) == len(right) and all(_same(a, b) for a, b in zip(left, right))
-    if type(left) in (int, float) or type(right) in (int, float):
-        if type(left) not in (int, float) or type(right) not in (int, float):
-            return False
-        try:
-            return math.isfinite(left) and math.isfinite(right) and left == right
-        except OverflowError:
-            return False
-    return type(left) is type(right) and left == right
-
-
 @contextmanager
 def capture(root: Path, directory: Path):
     manifest = (root / "Package.swift").read_text()
@@ -259,7 +238,6 @@ def capture(root: Path, directory: Path):
     required = [
         "Sources/BCRSurfaceDomain/FeedbackJ4Trace.swift",
         "Sources/BCRSurfaceDomain/FeedbackRuntime.swift",
-        "Tests/J4Support/verify_feedback_runtime.py",
         "Tests/BCRAgentCoreTests/J4SchedulerArchiveReplayTests.swift",
         "Tests/BCRAgentCoreTests/J4SessionSchedulerArchiveReplayTests.swift",
     ]
@@ -287,151 +265,6 @@ def capture(root: Path, directory: Path):
             os.environ.pop(TRACE_ENV, None)
         else:
             os.environ[TRACE_ENV] = previous
-
-
-def validate_plans(trace: Path):
-    counts, compared, observed = {}, 0, 0
-    for path in sorted(trace.glob("plans-*.jsonl")):
-        plan_ordinal = 0  # One Recorder.planOrdinal per PID, across all Session owners.
-        for line in path.read_text().splitlines():
-            row = _load(line)
-            if (
-                set(row) != {"schema_version", "owner", "ordinal", "operation", "input", "native", "candidate"}
-                or type(row["schema_version"]) is not int
-                or row["schema_version"] != 1
-            ):
-                raise RuntimeError("Invalid J4 plan envelope version/type/fields")
-            _source_cursor(row)
-            if row["ordinal"] != str(plan_ordinal + 1):
-                raise RuntimeError("Original per-PID plan cursor gap/duplicate/reorder")
-            plan_ordinal += 1
-            operation = row["operation"]
-            if operation not in {
-                "capture_generation",
-                "capture_dispatch",
-                "dispatch",
-                "authorization",
-                "preflight",
-                "receipt",
-                "summary",
-                "boundary_before_receipt_hook",
-                "boundary_after_receipt_hook",
-                "native_gate_rejected_before_full_preflight",
-            }:
-                raise RuntimeError("Unknown J4 plan operation")
-            counts[operation] = counts.get(operation, 0) + 1
-            expected_fields = {
-                "dispatch": ({"decision"}, {"decision"}),
-                "authorization": ({"allowed"}, {"allowed"}),
-                "preflight": ({"allowed"}, {"allowed", "result"}),
-                "receipt": (
-                    {"attempted", "successful", "current", "accepted_in_current_scope"},
-                    {"attempted", "successful", "current", "accepted_in_current_scope"},
-                ),
-                "summary": (
-                    {
-                        "all_accepted",
-                        "any_accepted",
-                        "attempt_count",
-                        "accepted_count",
-                        "rejected_count",
-                        "not_attempted_count",
-                    },
-                    {
-                        "all_accepted",
-                        "any_accepted",
-                        "attempt_count",
-                        "accepted_count",
-                        "rejected_count",
-                        "not_attempted_count",
-                    },
-                ),
-            }
-            if (
-                operation in expected_fields
-                and (set(row["native"]), set(row["candidate"])) != expected_fields[operation]
-            ):
-                raise RuntimeError("J4 phase output fields missing/unknown: " + operation)
-            if operation.startswith("capture_"):
-                fields = {
-                    "reference",
-                    "payload",
-                    "origin",
-                    "scope",
-                    "source",
-                    "endpoint_evidence",
-                    "captured_evidence",
-                    "target_id",
-                    "affected_elements",
-                    "classification",
-                    "side_effects",
-                    "required_directions",
-                    "delivery_mode",
-                }
-                if set(row["native"]) != fields or set(row["candidate"]) != fields:
-                    raise RuntimeError("Incomplete J4 full plan projection")
-                if not _same(row["native"], row["candidate"]):
-                    raise RuntimeError("J4 complete plan mismatch")
-                compared += 1
-            elif operation in ("dispatch", "authorization", "preflight", "receipt", "summary"):
-                if any(
-                    key not in row["candidate"] or not _same(value, row["candidate"][key])
-                    for key, value in row["native"].items()
-                ):
-                    raise RuntimeError("J4 strict phase mismatch: " + operation)
-                if operation == "preflight" and set(row["input"]) != {
-                    "plan",
-                    "proof_plan",
-                    "native_snapshot",
-                    "authorization",
-                    "native_safety",
-                    "required_directions",
-                    "current_scope",
-                    "current_native_snapshot",
-                }:
-                    raise RuntimeError("Incomplete J4 full preflight facts")
-                if operation == "receipt" and (
-                    row["input"].get("attempt_layer") != "SurfaceDevice.send admission call"
-                    or row["input"].get("underlying_native_transport_attempt", "missing") is not None
-                    or row["input"].get("physical_bytes_written", "missing") is not None
-                    or row["input"].get("actual_observation") is not False
-                ):
-                    raise RuntimeError("J4 receipt omitted its actual boundary/unknown physical layer")
-                compared += 1
-            elif operation.startswith("boundary_") or operation == "native_gate_rejected_before_full_preflight":
-                observed += 1  # Observations never inflate algorithm zero-diff counts.
-            else:
-                raise RuntimeError("Unknown J4 plan operation")
-    required = {
-        "capture_generation",
-        "capture_dispatch",
-        "dispatch",
-        "authorization",
-        "preflight",
-        "receipt",
-        "summary",
-    }
-    if required - counts.keys() or compared == 0:
-        raise RuntimeError("J4 verification missed actual plan/receipt families")
-    io = 0
-    for path in trace.glob("native-io-*.jsonl"):
-        for line in path.read_text().splitlines():
-            _load(line)
-            io += 1
-    if io == 0:
-        raise RuntimeError("J4 verification missed actual native IO observations")
-    # This validation also rejects duplicates/nonfinite native output before the test comparator reads it.
-    for family in ("scheduler-input", "scheduler-native"):
-        for path in trace.glob(family + "-*.jsonl"):
-            for line in path.read_text().splitlines():
-                _load(line)
-    return {
-        "plan_operation_counts": counts,
-        "algorithm_comparison_rows": compared,
-        "observation_rows": observed,
-        "native_io_rows": io,
-        "strict_plan_differences": 0,
-    }
 
 
 def measured_child(argv, *, root, environment, log_path, timeout, memory_limit_kib=2 * 1024 * 1024):
@@ -492,10 +325,7 @@ def verify(root: Path, directory: Path, trace: Path | None, remaining: float):
     marker = _load((directory / "feedback-verification.json").read_text())
     if marker != _load((trace / "run-marker.json").read_text()):
         raise RuntimeError("J4 evidence marker does not belong to this run")
-    from Tests.J4Support.verify_feedback_runtime import verify as verify_actual_feedback
-
-    proof = verify_actual_feedback(trace, directory / "feedback-native-legacy")
-    proof["strict_plan_differences"] = proof.pop("differences")
+    proof = {"scope": "temporary scheduler input-only current/cold comparison"}
     # Pure scheduler worker processes still have an empty Session file; their shared causal
     # cursor must not evade source integrity simply because there is no Session intent.
     empty_session_sources = [path for path in trace.glob("session-input-*.jsonl") if not path.stat().st_size]
@@ -575,75 +405,16 @@ def verify(root: Path, directory: Path, trace: Path | None, remaining: float):
         "processes": processes,
     }
     (directory / "feedback-session-replay-report.json").write_text(json.dumps(session_report, indent=2) + "\n")
-    # The real primary operation is unmodified. Six wrong-result children mutate only Tests copies.
-    import sys
-
-    positive = trace / "expected-negative" / "positive"
-    positive.mkdir(parents=True, exist_ok=False)
-    env = environment.copy()
-    env.pop(REPLAY_ENV, None)
-    env[TRACE_ENV] = str(positive / "raw")
-    command = [executable, "-XCTest", NEGATIVE_CASE, str(_bundle(binary, "BCRProviderAdapterTests"))]
-    with (positive / "child.log").open("w") as log:
-        run = subprocess.run(
-            command,
-            cwd=root,
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            timeout=max(0.001, remaining - (time.monotonic() - began)),
-        )
-    if run.returncode:
-        raise RuntimeError("Unmodified primary feedback negative-control fixture failed")
-    verify_actual_feedback(positive / "raw", positive / "legacy")
-    negative = [{"phase": "positive", "argv": command, "exit_code": run.returncode, "gate_observed": True}]
-    for phase in PHASES:
-        child = trace / "expected-negative" / phase
-        child.mkdir(parents=True, exist_ok=False)
-        command = [
-            sys.executable,
-            str(root / "Tests/J4Support/verify_feedback_runtime.py"),
-            "--trace",
-            str(positive / "raw"),
-            "--output",
-            str(child / "comparison"),
-            "--mutate",
-            phase,
-        ]
-        with (child / "child.log").open("w") as log:
-            run = subprocess.run(
-                command,
-                cwd=root,
-                env=environment,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                timeout=max(0.001, remaining - (time.monotonic() - began)),
-            )
-        text = (child / "child.log").read_text()
-        expected = run.returncode != 0 and "Independent native3b feedback mismatch" in text
-        negative.append(
-            {
-                "phase": phase,
-                "argv": command,
-                "exit_code": run.returncode,
-                "gate_observed": expected,
-                "mutation_layer": "Tests-only result copy; primary input/output untouched",
-            }
-        )
-        if not expected:
-            raise RuntimeError("Independent feedback comparison missed wrong actual fact: " + phase)
     proof.update(
         {
             "bucket_candidate": report,
-            "negative_controls": negative,
             "scheduler_full_direct_gate_receipt_candidate": session_report,
             "remaining_original_deadline_s": remaining - (time.monotonic() - began),
         }
     )
     (directory / "feedback-shadow-proof.json").write_text(json.dumps(proof, indent=2) + "\n")
     print(
-        "Verified Core-primary feedback against independent native3b leaves and scheduler input-only replay: "
-        + str(directory / "feedback-shadow-proof.json"),
+        "Verified temporary scheduler input-only current/cold replay: " + str(directory / "feedback-shadow-proof.json"),
         flush=True,
     )
 

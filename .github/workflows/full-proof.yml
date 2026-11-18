@@ -45,7 +45,7 @@ jobs:
       - run: python3 configs/control_surface_kit_dependency.py ensure
       - run: python3 configs/ci_prepare_inputs.py
       - run: swift build --build-path build/swiftpm --build-tests
-      - name: Original complete native suite, J3 independent oracle and J4 full current/cold proof
+      - name: Complete native suite and temporary scheduler current/cold comparison
         id: proof
         run: python3 configs/macos_workflow.py test --precompiled-tests
       - name: Retain sufficient proof evidence and hash large traces

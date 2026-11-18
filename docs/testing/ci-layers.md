@@ -1,3 +1,56 @@
+# CI coverage after O-2 retirement
+
+Baseline `acf86040f61665f3446e0f226ac9d88fcbcdbc93`: normal run `44218823842` succeeded in **281 seconds** (created→updated, including queue). New commit cloud result remains pending.
+
+## Removal and unique-coverage review
+
+Only completed J2/J3/J4 migration machinery is retired. All J-before product tests, scenario executors, three G-6 golden samples, product regressions and safety tests remain. The six removed wrong-result children (capture, dispatch, authorization, preflight, receipt, summary) mutated a Tests-only comparator result copy. They checked that comparator detects a mismatch, not that a production safety gate rejects an unsafe operation; existing production tests in FeedbackCorePrimaryTests, DisplayTransactionReentrancyTests, FeedbackScopeTests, FeedbackSchedulerTests and the unchanged golden paths remain.
+
+Rows count physical lines removed/added (including comments and whitespace), not algorithmic savings. Mixed files retain the behavior tests listed below.
+
+| File / test group | Removed / added lines | What it proved; coverage disposition |
+| --- | ---: | --- |
+| `.github/workflows/full-proof.yml` | 1 / 1 | Rename step to accurately describe remaining scheduler proof; triggers, deadline, command and artifacts unchanged. |
+| `Sources/BCRSurfaceDomain/FeedbackScheduler.swift` | 23 / 0 | Remove already accepted J3 FIFO-index observation only; keep complete scheduler candidate input/output for O4. |
+| `Sources/BCRSurfaceDomain/SurfaceConfiguration.swift` | 78 / 0 | Remove J3 diagnostic memo and tap; keep actual binding lookup, cache invalidation and value semantics. |
+| `Sources/BCRSurfaceDomain/SurfaceKernelTrace.swift` | 99 / 0 | J3 input/result recorder only; no decision or product gate. |
+| `Sources/BCRSurfaceDomain/SurfaceSession.swift` | 89 / 0 | Remove J3 scope/connection observation only; keep actual Core calls and every transport safety branch. |
+| `Tests/BCRAgentCoreTests/SurfaceKernelAudit.swift` | 88 / 0 | Tests-only new/old mismatch recorder and trap, not a product safety test. |
+| `Tests/BCRAgentCoreTests/SurfaceKernelBindingCacheTests.swift` | 48 / 0 | Remove two tests only for retired diagnostic memo/Observation side effects; keep all six other tests, including product cache/value isolation and empty lookup observation. |
+| `Tests/BCRAgentCoreTests/SurfaceKernelShadowTests.swift` | 51 / 0 | Remove one comparator corruption self-test; keep both unique first-match and FIFO/optional-scope product tests unchanged. |
+| `Tests/BuildWorkflowTests/test_feedback_native_oracle.py` | 141 / 0 | J4 retired feedback leaf oracle self-tests only; native product feedback tests remain. |
+| `Tests/BuildWorkflowTests/test_j3_legacy_verification.py` | 258 / 0 | J3 archive integrity/oracle corruption self-tests only; no product execution. |
+| `Tests/BuildWorkflowTests/test_j4_shadow_verification.py` | 55 / 1 | Remove two retired plan-comparator self-tests and comparator-only assertions; retain mixed JSON corruption admission checks and scheduler fixture paths; keep all scheduler schema, causal and fail-closed tests. |
+| `Tests/J3Support/ORACLE_MAPPING.md` | 32 / 0 | Provenance map for removed J3 comparator, not a product specification. |
+| `Tests/J3Support/verify_runtime_shadow.py` | 211 / 0 | Frozen J3 ordered-first-match/scope/connection/index oracle; product behavior covered directly by native binding, scope, connection, FIFO tests. |
+| `Tests/J4Support/MigrationTools/J4ASTMigrationVerificationTests.swift.txt` | 138 / 0 | Offline whole-codec bytes migration export/probe, completed and signed; no product regression or safety coverage. |
+| `Tests/J4Support/MigrationTools/J4AnyMigrationExportTests.swift.txt` | 88 / 0 | Offline whole-codec bytes migration export/probe, completed and signed; no product regression or safety coverage. |
+| `Tests/J4Support/MigrationTools/J4FoundationPayloadProbeTests.swift.txt` | 266 / 0 | Offline whole-codec bytes migration export/probe, completed and signed; no product regression or safety coverage. |
+| `Tests/J4Support/MigrationTools/J4OldCodecMigrationExportTests.swift.txt` | 88 / 0 | Offline whole-codec bytes migration export/probe, completed and signed; no product regression or safety coverage. |
+| `Tests/J4Support/MigrationTools/README.md` | 19 / 0 | Offline whole-codec bytes migration export/probe, completed and signed; no product regression or safety coverage. |
+| `Tests/J4Support/ORACLE_MAPPING.md` | 39 / 9 | Replace completed feedback-leaf map with remaining temporary scheduler baseline rationale. |
+| `Tests/J4Support/verify_feedback_runtime.py` | 392 / 0 | J4 old feedback leaf oracle only; runtime feedback product and safety tests remain. |
+| `configs/ci_native_layers.py` | 7 / 4 | Remove J3 capture/verify; all-regression discovery and exact seven-case scheduler representative capture remain. |
+| `configs/freecm.commands.jsonc` | 2 / 0 | Remove deleted J3 proof inputs from Config manifest; product commands unchanged. |
+| `configs/j3_legacy_verification.py` | 80 / 0 | Capture/verify orchestration only for removed J3 oracle. |
+| `configs/j4_shadow_verification.py` | 232 / 3 | Remove only feedback leaf comparison, validate_plans and six wrong-result children; retain full scheduler current/cold plus strict source/causal/output checks. |
+| `configs/macos_workflow.py` | 6 / 2 | Remove J3 post-suite capture/verify; full native suites and temporary scheduler proof remain mandatory. |
+
+| `Sources/BCRSurfaceDomain/SurfaceKernelProjection.swift` | 52 / 2 | Remove six unused J3 JSON-only projections. Keep controlValue because the temporary O4 scheduler I/O archive still calls it; production typed projections remain. |
+| `Sources/BCRFoundation/Localization.swift` | 21 / 0 | Remove only DEBUG diagnostic language revision/snapshot used by the retired J3 memo; keep language locking, observation and localization product behavior unchanged. |
+
+Native XCTest declarations decrease by **3** (one mismatch-comparator self-test and two retired diagnostic-memo self-tests). Python test declarations decrease by **13**, entirely retired proof/oracle self-tests; no product test is converted into a skip or weakened. Two direct product methods remain unchanged in `SurfaceKernelShadowTests` despite the historical class name.
+
+## Remaining temporary scheduler proof
+
+`J4SchedulerArchiveReplayTests`, `J4SessionSchedulerArchiveReplayTests`, `J4ExactJSON`, `J4PayloadCodec`, `J4LosslessCatalog`, their corruption tests, `expand_catalog.py`, native3b text provenance, `FeedbackJ4Trace` and the associated Session inputs remain because the **scheduler has not switched**. They supply complete input-only current/cold runs, strict source/namespace/causal checks and separate output comparisons required by O4. They must retire in the same round after both schedulers are accepted. Feedback projections retained by this archive preserve its exact input/output format; they are not a second production owner.
+
+`.github/workflows/full-proof.yml` therefore remains (manual, nightly, relevant paths; 30-minute limit). Its original full native suite and scheduler archive execution are mandatory on the exact source SHA. Normal CI retains all native regressions and the same seven fixed representatives, including all applicable scenarios, original G6 methods, FIFO replacement and failure cooldown. Capture and offline scheduler verification remain separate from the uninstrumented full suite; errors from either fail the job.
+
+## Historical CI classification
+
+The pre-retirement F-1 classification and all older measurements remain below as historical evidence. Its references to removed J3/J4 leaf proof are superseded by the removal map above.
+
 # CI 分层（F-1，监督已批准分类）
 
 基线：`297dbc1f3c0085ad508a145f5f1f39622e764f53`，失败 run `44116922210`，created→updated **658 秒**。只改执行入口、过滤和缓存配置；所有产品源码、诊断源码、锁、断言与阈值保留。

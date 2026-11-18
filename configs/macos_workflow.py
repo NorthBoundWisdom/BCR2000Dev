@@ -134,12 +134,9 @@ def _run_tests(command: list[str | Path], *, precompiled: bool = False) -> None:
     directory = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
     started = time.monotonic()
     options = {"precompiled": True} if precompiled else {}
-    from configs import j3_legacy_verification, j4_shadow_verification
+    from configs import j4_shadow_verification
 
-    with (
-        j3_legacy_verification.capture(REPO_ROOT, directory) as trace,
-        j4_shadow_verification.capture(REPO_ROOT, directory) as feedback_trace,
-    ):
+    with j4_shadow_verification.capture(REPO_ROOT, directory) as feedback_trace:
         xunit, code = run(
             [str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S, **options
         )
@@ -149,7 +146,6 @@ def _run_tests(command: list[str | Path], *, precompiled: bool = False) -> None:
         )
         if not summarize_xunit([xunit], modules, code):
             raise RuntimeError(f"Swift test bundle verification failed; see {directory}")
-        j3_legacy_verification.verify(REPO_ROOT, directory, trace, TEST_TIMEOUT_S - (time.monotonic() - started))
         j4_shadow_verification.verify(
             REPO_ROOT, directory, feedback_trace, TEST_TIMEOUT_S - (time.monotonic() - started)
         )

@@ -36,8 +36,6 @@
             "configs/build_environment.py",
             "configs/app_build.py",
             "configs/macos_workflow.py",
-            "configs/j3_legacy_verification.py",
-            "Tests/J3Support/verify_runtime_shadow.py",
             "assets/AppIcon.png",
             "build.local.json"
           ],

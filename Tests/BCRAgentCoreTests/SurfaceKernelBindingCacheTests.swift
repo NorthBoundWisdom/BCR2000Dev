@@ -135,37 +135,6 @@ final class SurfaceKernelBindingCacheTests: XCTestCase {
         XCTAssertEqual(changedDecoded.activePageID, "alternate")
     }
 
-    @MainActor
-    func testDiagnosticMemoTracksActualLanguageABAAndValueCopies() async throws {
-        let previous = L10n.language
-        defer { L10n.setLanguage(previous) }
-        L10n.setLanguage(.english)
-        let original = fixture()
-        check(original, one)
-        let enabled = ProcessInfo.processInfo.environment["BCR_J3_SHADOW_ROOT"] != nil
-        XCTAssertEqual(original.bindingDiagnosticPreparationCount, enabled ? 1 : 0)
-        check(original, two)
-        XCTAssertEqual(original.bindingDiagnosticPreparationCount, enabled ? 1 : 0)
-        let first = L10n.diagnosticLanguageSnapshot
-        L10n.setLanguage(.chinese)
-        L10n.setLanguage(.english)
-        let second = L10n.diagnosticLanguageSnapshot
-        XCTAssertEqual(first.language, second.language)
-        XCTAssertNotEqual(first.revision, second.revision)
-        check(original, one)
-        XCTAssertEqual(original.bindingDiagnosticPreparationCount, enabled ? 2 : 0)
-        var copied = original
-        try copied.assign(.init(control: one, target: .parameter("q")))
-        check(copied, one); check(original, one)
-        XCTAssertEqual(copied.bindingDiagnosticPreparationCount, enabled ? 1 : 0)
-        XCTAssertEqual(original.bindingDiagnosticPreparationCount, enabled ? 2 : 0)
-        let decoded = try JSONDecoder().decode(SurfaceConfiguration.self, from: JSONEncoder().encode(copied))
-        check(decoded, one)
-        XCTAssertEqual(decoded.bindingDiagnosticPreparationCount, enabled ? 1 : 0)
-        XCTAssertEqual(original.assignment(for: one)?.target, .parameter("p"))
-        XCTAssertEqual(decoded.assignment(for: one)?.target, .parameter("q"))
-    }
-
     func testJ4MapMemoUsesFullBytesAndRemainsBoundedAcrossCopiesAndMutations() throws {
         let enabled = ProcessInfo.processInfo.environment["BCR_J4_SHADOW_ROOT"] != nil
         let initial = FeedbackJ4Trace.hardwareMapMemoStatistics
@@ -197,23 +166,6 @@ final class SurfaceKernelBindingCacheTests: XCTestCase {
         }
         XCTAssertEqual(original.version, HardwareMap.currentVersion)
         XCTAssertEqual(copied.version, original.version + 1000)
-    }
-
-    @MainActor
-    func testWarmDiagnosticHitPreservesOriginalTrackedLanguageDependency() async throws {
-        let originalLanguage = L10n.language
-        defer { L10n.setLanguage(originalLanguage) }
-        L10n.setLanguage(.english)
-        let configuration = fixture()
-        _ = configuration.assignment(for: one) // Warm outside the tracking scope.
-        let changed = DiagnosticChangeCount()
-        let result = withObservationTracking {
-            configuration.assignment(for: one)
-        } onChange: { changed.increment() }
-        XCTAssertEqual(result?.target, .parameter("p"))
-        L10n.setLanguage(.chinese)
-        let enabled = ProcessInfo.processInfo.environment["BCR_J3_SHADOW_ROOT"] != nil
-        XCTAssertEqual(changed.value, enabled ? 1 : 0)
     }
 
     @MainActor
