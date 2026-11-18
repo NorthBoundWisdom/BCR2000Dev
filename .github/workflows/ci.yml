@@ -151,8 +151,6 @@ jobs:
       - run: python3 -m compileall -q configs
       - name: Run all Python workflows and precompiled native suites independently
         if: ${{ !cancelled() && steps.compile.outputs.native_build_succeeded == 'true' && steps.compile.outputs.audit_helpers_succeeded == 'true' && steps.boundaries.outcome == 'success' }}
-        env:
-          BCR_CI_NATIVE_LAYERS: representative
         run: python3 configs/ci_parallel_checks.py tests --native-precompiled
       - run: git diff --check
       - name: Confirm native and isolated MCP products exited

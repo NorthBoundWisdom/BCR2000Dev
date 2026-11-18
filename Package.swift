@@ -220,7 +220,6 @@ let package = Package(
             dependencies: [
                 "BCRProviderMCPAdapter",
                 .product(name: "SurfaceDeviceContracts", package: "ControlSurfaceKit"),
-                .product(name: "SurfaceDeviceConformance", package: "ControlSurfaceKit"),
                 .product(name: "SurfaceFeedbackPlanning", package: "ControlSurfaceKit"),
                 "BCRFoundation",
                 "BCRCodexAdapter",

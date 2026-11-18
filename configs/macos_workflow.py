@@ -137,21 +137,15 @@ def _run_tests(command: list[str | Path], *, precompiled: bool = False) -> None:
     directory = Path(tempfile.mkdtemp(prefix="run-", dir=runs))
     started = time.monotonic()
     options = {"precompiled": True} if precompiled else {}
-    from configs import j4_shadow_verification
-
-    with j4_shadow_verification.capture(REPO_ROOT, directory) as feedback_trace:
-        xunit, code = run(
-            [str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S, **options
-        )
-        print(
-            f"Test log: {directory / 'swift-test.log'} ({time.monotonic() - started:.1f}s, {workers} workers)",
-            flush=True,
-        )
-        if not summarize_xunit([xunit], modules, code):
-            raise RuntimeError(f"Swift test bundle verification failed; see {directory}")
-        j4_shadow_verification.verify(
-            REPO_ROOT, directory, feedback_trace, TEST_TIMEOUT_S - (time.monotonic() - started)
-        )
+    xunit, code = run(
+        [str(part) for part in command], modules, REPO_ROOT, directory, workers, TEST_TIMEOUT_S, **options
+    )
+    print(
+        f"Test log: {directory / 'swift-test.log'} ({time.monotonic() - started:.1f}s, {workers} workers)",
+        flush=True,
+    )
+    if not summarize_xunit([xunit], modules, code):
+        raise RuntimeError(f"Swift test bundle verification failed; see {directory}")
 
 
 def _architectures(architecture: str) -> tuple[str, ...]:

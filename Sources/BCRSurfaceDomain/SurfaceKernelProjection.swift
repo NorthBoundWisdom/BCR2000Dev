@@ -82,10 +82,3 @@ struct BCRConnectionRuntime: Sendable {
 
     mutating func publish(_ next: MIDIConnectionSnapshot) { snapshot = BCRKernelProjection.connection(next) }
 }
-
-// Temporary O-4 scheduler I/O archive projection; removed with FeedbackJ4Trace.
-extension BCRKernelProjection {
-    static func controlValue(_ value: BCRControlID) -> [String: Any] {
-        ["section": value.section.rawValue, "row": value.row, "index": value.index]
-    }
-}

@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
-from configs import ci_native_layers, ci_prepare_inputs, xctest_runner
+from configs import ci_prepare_inputs, xctest_runner
 
 
 class CILayerIntegrityTests(unittest.TestCase):
@@ -61,20 +61,6 @@ class CILayerIntegrityTests(unittest.TestCase):
                     (cases[0],),
                 )[1]
             )
-
-    def test_regression_layer_never_accepts_inherited_trace_capture(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "Package.swift").write_text('.testTarget(name: "First")')
-            with (
-                patch.object(ci_native_layers, "ROOT", root),
-                patch.object(ci_native_layers.macos_workflow, "REQUIRED_TEST_MODULES", frozenset()),
-                patch.dict(os.environ, {"BCR_J3_SHADOW_ROOT": "external"}),
-                patch.object(xctest_runner, "run") as run,
-                self.assertRaisesRegex(RuntimeError, "inherited"),
-            ):
-                ci_native_layers.execute(False)
-            run.assert_not_called()
 
     def test_dirty_or_wrong_dependency_identity_is_fatal_before_timestamp_write(self):
         with (

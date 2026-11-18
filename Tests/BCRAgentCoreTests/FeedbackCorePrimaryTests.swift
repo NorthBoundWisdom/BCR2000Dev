@@ -45,37 +45,4 @@ final class FeedbackCorePrimaryTests: XCTestCase {
             XCTAssertTrue(inputs.isEmpty, phase)
         }
     }
-
-    #if os(macOS)
-        func testDisabledDiagnosticTapDoesNotEvaluateSerializationArguments() throws {
-            if FeedbackJ4Trace.enabled {
-                let process = Process(), output = Pipe()
-                process
-                    .executableURL = URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin/xctest")
-                process.arguments = [
-                    "-XCTest",
-                    "BCRAgentCoreTests.FeedbackCorePrimaryTests/testDisabledDiagnosticTapDoesNotEvaluateSerializationArguments",
-                    Bundle(for: Self.self).bundleURL.path
-                ]
-                var environment = ProcessInfo.processInfo.environment
-                environment.removeValue(forKey: "BCR_J4_SHADOW_ROOT")
-                environment.removeValue(forKey: "BCR_J3_SHADOW_ROOT")
-                process.environment = environment
-                process.standardOutput = output; process.standardError = output
-                try process.run(); process.waitUntilExit()
-                XCTAssertEqual(
-                    process.terminationStatus,
-                    0,
-                    String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-                )
-                return
-            }
-            var evaluations = 0
-            let recorded = FeedbackJ4Trace.actual(owner: "disabled-probe", operation: "must-not-evaluate",
-                                                  input: { evaluations += 1; return ["invalid": Double.nan] }(),
-                                                  actual: { evaluations += 1; return ["invalid": Double.infinity] }())
-            XCTAssertNil(recorded)
-            XCTAssertEqual(evaluations, 0)
-        }
-    #endif
 }

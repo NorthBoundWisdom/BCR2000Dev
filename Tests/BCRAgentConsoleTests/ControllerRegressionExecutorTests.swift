@@ -48,38 +48,6 @@ private func regressionNumber(_ value: [String: Any], _ key: String) throws -> D
 }
 
 private func regressionValue<T>(_ value: T?) -> Any { value.map { $0 as Any } ?? regressionNull }
-private func regressionEqual(_ a: Any, _ b: Any) -> Bool {
-    if a is NSNull || b is NSNull { return a is NSNull && b is NSNull }
-    if let a = a as? NSNumber, let b = b as? NSNumber {
-        return (CFGetTypeID(a) == CFBooleanGetTypeID()) == (CFGetTypeID(b) == CFBooleanGetTypeID()) && a
-            .doubleValue == b.doubleValue
-    }
-    return (a as? String) != nil && (a as? String) == (b as? String)
-}
-
-private func regressionExpect(_ row: [String: Any], instance: String,
-                              before: [String: [String: Any]], after: [String: [String: Any]]) -> Bool
-{
-    let id = row["instance_id"] as? String ?? instance
-    guard let metric = row["metric"] as? String, let a = after[id]?[metric],
-          let relation = row["relation"] as? String else { return false }
-    let b = before[id]?[metric]
-    switch relation {
-    case "equals": return row["value"].map { regressionEqual(a, $0) } ?? false
-    case "not_equals": return row["value"].map { !regressionEqual(a, $0) } ?? false
-    case "unchanged": return b.map { regressionEqual(a, $0) } ?? false
-    case "increased": return (a as? NSNumber)
-        .flatMap { aa in (b as? NSNumber).map { aa.doubleValue > $0.doubleValue } } ?? false
-    case "at_least": return (a as? NSNumber)
-        .flatMap { aa in (row["value"] as? NSNumber).map { aa.doubleValue >= $0.doubleValue } } ?? false
-    case "increased_by":
-        guard let a = a as? NSNumber, let b = b as? NSNumber,
-              let increment = row["value"] as? NSNumber else { return false }
-        return a.doubleValue - b.doubleValue == increment.doubleValue
-    default: return false
-    }
-}
-
 private func regressionProcess(_ arguments: [String], input: Data = Data()) async throws -> (Int32, Data, Data) {
     try await Task.detached {
         let process = Process(), stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
@@ -179,22 +147,17 @@ private final class RegressionInstance {
     let clock = RegressionClock()
     let identities = RegressionIdentitySequence()
     var monitor: [MonitorEvent] = []
-    var neutralInputs: [DeviceInputEvent] = []
-    var acceptedNative: [(
-        BCRControlID,
-        MIDIVoiceMessage,
-        EncoderMode,
-        String,
-        UInt64,
-        MIDIEndpointSource?,
-        BCRSurfaceDomain.DeviceSource,
-        Double,
-        String?,
-        HardwarePressMode?
-    )] = []
     var principals: SurfaceControlPrincipals!
     var successfulWriteFacts = 0
     var writeFactObservationError: String?
+    var parameterWriteEvidenceCount: Int {
+        get throws {
+            if let writeFactObservationError { throw RegressionError.shape(writeFactObservationError) }
+            // Count actual append callbacks, not the bounded journal's retained inventory.
+            return successfulWriteFacts
+        }
+    }
+
     let device = RegressionMIDI()
     var session: SurfaceSession
     var gateway: MCPApplicationGateway
@@ -325,22 +288,6 @@ private final class RegressionInstance {
                 }
                 if kind == "parameter.write" { successfulWriteFacts += 1 }
             }
-        }
-        _ = session.observeNeutralInputs(instanceID: id) { [weak self] event in self?.neutralInputs.append(event) }
-        _ = session.observeAcceptedInput { [weak self] control, message, _, _ in
-            guard let self else { return }
-            acceptedNative.append((
-                control,
-                message,
-                session.engine.configuration.assignment(for: control)?.encoderMode ?? .absolute,
-                session.inputEvents.generation,
-                session.mappingContextRevision,
-                monitor.last(where: { $0.direction == .input })?.endpoint,
-                session.source,
-                clock.monotonic,
-                monitor.last(where: { $0.direction == .input })?.context?.knownDeviceContextID,
-                monitor.last(where: { $0.direction == .input })?.inputPressMode
-            ))
         }
     }
 
@@ -1196,355 +1143,6 @@ private func shadowScalar(_ value: Any) throws -> TraceValue {
     throw RegressionError.shape("non-scalar native observation")
 }
 
-private func shadowCanonical(_ value: Any) throws -> String {
-    String(
-        decoding: try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]),
-        as: UTF8.self
-    )
-}
-
-private func shadowEndpoint(_ endpoint: MIDIEndpointSource?) -> Any {
-    guard let endpoint else { return regressionNull }
-    return ["endpoint_id": endpoint.endpointID, "device_id": regressionValue(endpoint.deviceID),
-            "connection_generation": endpoint.connectionGeneration,
-            "origin": endpoint.provenance.rawValue] as [String: Any]
-}
-
-private func shadowMonitor(_ event: MonitorEvent) throws -> String {
-    guard let context = event.context else { throw RegressionError.shape("missing captured native event context") }
-    return try shadowCanonical([
-        "event_id": event.id, "wall_at": event.time.timeIntervalSinceReferenceDate,
-        "monotonic_at": event.monotonicTime, "direction": event.direction.rawValue,
-        "source": event.source.rawValue, "bytes": event.message.midi1Bytes,
-        "wire_kind": event.message.controlID.kind.rawValue, "channel": event.message.controlID.channel,
-        "number": event.message.controlID.number, "raw_value": event.message.dataValue,
-        "control": event.control
-            .map { ["section": $0.section.rawValue, "row": $0.row, "index": $0.index] } ?? regressionNull,
-        "ignored": event.ignored, "writer_origin": event.origin.rawValue,
-        "delivery": regressionValue(event.delivery?.rawValue), "endpoint": shadowEndpoint(event.endpoint),
-        "context_generation": context.generation, "mapping_generation": context.mappingGeneration,
-        "known_device_context": regressionValue(context.knownDeviceContextID),
-        "input_press_mode": regressionValue(event.inputPressMode?.rawValue)
-    ] as [String: Any])
-}
-
-private func shadowQueueItem(_ item: ScheduledFeedback) throws -> String {
-    guard let source = item.source, let context = item.context, let endpoint = item.endpoint,
-          let mappingRevision = item.mappingRevision
-    else {
-        throw RegressionError.shape("missing captured queue source/context/endpoint")
-    }
-    return try shadowCanonical(["bytes": item.message.midi1Bytes, "writer_origin": item.origin.rawValue,
-                                "endpoint": shadowEndpoint(endpoint), "source": source.rawValue,
-                                "context_generation": context.generation,
-                                "context_binding_generation": context.mappingGeneration,
-                                "known_device_context": regressionValue(context.knownDeviceContextID),
-                                "mapping_generation": mappingRevision] as [String: Any])
-}
-
-@MainActor
-private struct RegressionShadowMark {
-    let monitor: Int
-    let input: Int
-    let raw: Int
-    let transport: Int
-    let presets: Int
-    let pending: [ScheduledFeedback]
-    let writes: Int
-    init(_ instance: RegressionInstance) throws {
-        monitor = instance.monitor.count; input = instance.neutralInputs.count; raw = instance.raw.count
-        transport = instance.device.records.count; presets = instance.device.batches.count
-        pending = instance.session.pendingFeedbackItems
-        writes = try instance.parameterWriteEvidenceCount
-    }
-}
-
-@MainActor
-private extension RegressionInstance {
-    var parameterWriteEvidenceCount: Int {
-        get throws {
-            if let writeFactObservationError { throw RegressionError.shape(writeFactObservationError) }
-            // Count actual append callbacks, not the bounded journal's retained inventory.
-            return successfulWriteFacts
-        }
-    }
-
-    func shadowDecision(_ action: ScenarioAction, mark: RegressionShadowMark,
-                        failure: String?) throws -> ShadowDecision
-    {
-        if let failure { return .rejected(reason: failure) }
-        if action.operation == "write_parameter", try parameterWriteEvidenceCount == mark.writes {
-            return .rejected(reason: "no_successful_parameter_write")
-        }
-        if action.operation.hasPrefix("receive_"), neutralInputs.count == mark.input {
-            return .ignored(reason: "no_accepted_native_input")
-        }
-        if action.operation == "remote_input", manualAuthority == false {
-            return .rejected(reason: "hardware_remote_input_denied")
-        }
-        if device.records.dropFirst(mark.transport).contains(where: { !$0.1 }) {
-            return .rejected(reason: "native_transport_rejected")
-        }
-        return .accepted
-    }
-
-    func shadowSample(_ action: ScenarioAction, step: Int, mark: RegressionShadowMark,
-                      failure: String?) throws -> ShadowSample
-    {
-        let events = Array(monitor.dropFirst(mark.monitor))
-        let inputs = Array(neutralInputs.dropFirst(mark.input))
-        let context = try session.neutralContext(instanceID: id)
-        var feedback: [EffectDescriptor] = [], transmissions: [TransmissionEvidence] = []
-        for event in events where event.direction == .output {
-            guard let captured = event.context else { throw RegressionError.shape("output lost original context") }
-            let eventContext = try BCRNeutralSurfaceProjection.context(instanceID: id,
-                                                                       generation: captured.generation,
-                                                                       mappingGeneration: captured.mappingGeneration)
-            guard let effect = try BCRNeutralSurfaceProjection.feedback(event, context: eventContext) else {
-                throw RegressionError.shape("output projection missing")
-            }
-            feedback.append(effect)
-            if let transmission = try BCRNeutralSurfaceProjection.transmission(event, effect: effect) {
-                transmissions.append(transmission)
-            }
-        }
-        let remaining = try session.pendingFeedbackItems.map(shadowQueueItem)
-        let previous = try mark.pending.map(shadowQueueItem)
-        let attempts = events.filter { $0.delivery == .sent || $0.delivery == .failed }
-        let revoked = zip(mark.pending, previous).filter { pending, identity in
-            !remaining.contains(identity) && !attempts.contains { event in
-                event.message == pending.message && event.origin == pending.origin &&
-                    event.source == pending.source && event.endpoint == pending.endpoint &&
-                    event.context == pending.context && event.context?.mappingGeneration == pending.mappingRevision
-            }
-        }.map(\.1)
-        var transport = try events.map(shadowMonitor)
-        // Retain every original native diagnostic/API result. No epoch/writer normalization.
-        transport.append("native-raw:" + (try shadowCanonical(Array(raw.dropFirst(mark.raw)))))
-        transport.append("device-attempts:" + (try shadowCanonical(device.records.dropFirst(mark.transport).map {
-            ["bytes": $0.0.midi1Bytes, "accepted": $0.1] as [String: Any]
-        })))
-        transport.append("preset-frames:" + (try shadowCanonical(Array(device.batches.dropFirst(mark.presets)))))
-        transport.append("neutral-capabilities:" + String(reflecting: try session.neutralCapabilities()))
-        return try ShadowSample(stepIndex: step, operationID: action.operation,
-                                decision: shadowDecision(action, mark: mark, failure: failure), context: context,
-                                endpoint: session.neutralEndpoint(direction: .input), pendingQueueItems: remaining,
-                                revokedQueueItems: revoked,
-                                observations: inputs.map(BCRNeutralSurfaceProjection.observation),
-                                feedback: feedback, transmissions: transmissions, transportSequence: transport)
-    }
-}
-
-extension ControllerRegressionExecutorTests {
-    func testIndependentNativeAndTypedOwnersMatchEveryApplicableScenarioStep() async throws {
-        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent()
-        let kit = repo.appending(path: "build/seed/ControlSurfaceKit")
-        let fixture = kit.appending(path: "fixtures/controller-regression-v1.json")
-        let bytes = try Data(contentsOf: fixture)
-        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-        XCTAssertEqual(digest, regressionFixtureSHA)
-        let catalog = try ScenarioCatalog.decode(data: bytes)
-        let nativeCatalog = try regressionRows(regressionObject(JSONSerialization.jsonObject(with: bytes))["scenarios"])
-        let output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["BCR_J2_SHADOW_ROOT"] ??
-            repo.appending(path: "build/j/j2/shadow").path)
-        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-        var rows: [[String: Any]] = [], compared = 0, assertions = 0, applicable = 0, notApplicable = 0
-        var ownerPairs = 0, actionSteps = 0, ownerExecutions = 0
-        var differences: [[String: Any]] = []
-        for (scene, native) in zip(catalog.scenarios, nativeCatalog) {
-            let absent = Set(scene.requiresFeatures).subtracting(regressionFeatures)
-            if !absent.isEmpty {
-                notApplicable += 1
-                rows.append(["scenario": scene.id, "status": "not_applicable", "missing": absent.sorted()])
-                continue
-            }
-            applicable += 1
-            let setup = try regressionObject(native["setup"])
-            let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-            defer { try? FileManager.default.removeItem(at: directory) }
-            var reference: [String: RegressionInstance] = [:], candidate: [String: RegressionInstance] = [:]
-            for instance in try regressionRows(setup["instances"]) {
-                let id = try regressionString(instance, "id"), source = try regressionString(instance, "source")
-                reference[id] = try RegressionInstance(id: id, source: source, scenario: scene.id, setup: setup,
-                                                       directory: directory.appending(path: "native/\(id)"))
-                candidate[id] = try RegressionInstance(id: id, source: source, scenario: scene.id, setup: setup,
-                                                       directory: directory.appending(path: "typed/\(id)"))
-                ownerPairs += 1
-                XCTAssertFalse(reference[id]!.session === candidate[id]!.session)
-                XCTAssertFalse(reference[id]!.device === candidate[id]!.device)
-                XCTAssertFalse(reference[id]!.identities === candidate[id]!.identities)
-            }
-            for (index, action) in scene.steps.enumerated() {
-                let absent = Set(action.requiresFeatures).subtracting(regressionFeatures)
-                if !absent.isEmpty {
-                    rows.append([
-                        "scenario": scene.id,
-                        "step": index,
-                        "status": "not_applicable",
-                        "missing": absent.sorted()
-                    ])
-                    continue
-                }
-                let beforeReference = reference.mapValues { $0.observations() }
-                let beforeCandidate = candidate.mapValues { $0.observations() }
-                let referenceMarks = try reference.mapValues(RegressionShadowMark.init)
-                let candidateMarks = try candidate.mapValues(RegressionShadowMark.init)
-                let originalAction = try regressionRows(native["steps"])[index]
-                actionSteps += 1
-                let a = try await reference[action.instanceID]!.execute(originalAction, repo: repo)
-                ownerExecutions += 1
-                let b = try await candidate[action.instanceID]!.execute(action, repo: repo)
-                ownerExecutions += 1
-                let afterReference = reference.mapValues { $0.observations() }
-                let afterCandidate = candidate.mapValues { $0.observations() }
-                for owner in Array(reference.values) + Array(candidate.values) {
-                    XCTAssertEqual(owner.acceptedNative.count, owner.neutralInputs.count)
-                    for (nativeInput, projected) in zip(owner.acceptedNative, owner.neutralInputs) {
-                        let (control, message, mode, generation, binding, endpoint, source, at,
-                             knownContext, pressMode) = nativeInput
-                        let physicalRole: String
-                        switch control.section {
-                        case .pushEncoder: physicalRole = "pushEncoder.rotate.\(control.index)"
-                        case .pushEncoderButton: physicalRole = "pushEncoder.press.\(control.index)"
-                        case .encoder, .button, .userButton:
-                            physicalRole = "\(control.section.rawValue).\(control.row).\(control.index)"
-                        }
-                        XCTAssertEqual(projected.elementID, physicalRole)
-                        let kind: InputKind = control.isContinuous ? (mode == .absolute ? .absolute : .relative) :
-                            (pressMode == .momentary ? (message.isPositiveActivation ? .press : .release) : .absolute)
-                        XCTAssertEqual(projected.kind, kind)
-                        let value: DeviceValue = control
-                            .isContinuous ? .number(mode == .absolute ? Double(message.dataValue) :
-                                Double(mode.delta(value: message.dataValue, maximum: message.maximumDataValue))) :
-                            .flag(message.isPositiveActivation)
-                        XCTAssertEqual(projected.value, value)
-                        XCTAssertEqual(
-                            projected.context.id,
-                            owner
-                                .id +
-                                "|binding-facet=\(control.section.rawValue).\(control.row).\(control.index)|device-context=" +
-                                (knownContext ?? "unknown")
-                        )
-                        if source == .hardware { XCTAssertNil(knownContext) }
-                        XCTAssertEqual(projected.context.generation, "\(generation):binding:\(binding)")
-                        XCTAssertNil(projected.context.mappingRevision)
-                        XCTAssertEqual(projected.source, source == .mock ? .simulation : .hardware)
-                        XCTAssertEqual(projected.at, at)
-                        XCTAssertEqual(
-                            projected.endpoint.endpointID,
-                            endpoint.flatMap { $0.endpointID == "unknown" ? nil : $0.endpointID }
-                        )
-                        XCTAssertEqual(projected.endpoint.deviceID, endpoint?.deviceID)
-                        XCTAssertEqual(projected.endpoint.connectionGeneration, endpoint?.connectionGeneration ?? 0)
-                        XCTAssertEqual(
-                            projected.endpoint.transportOrigin.rawValue,
-                            endpoint?.provenance.rawValue ?? "unknown"
-                        )
-                    }
-                }
-                let nativeBefore = try beforeReference.mapValues { try $0.mapValues(shadowScalar) }
-                let typedBefore = try beforeCandidate.mapValues { try $0.mapValues(shadowScalar) }
-                let nativeAfter = try afterReference.mapValues { try $0.mapValues(shadowScalar) }
-                let typedAfter = try afterCandidate.mapValues { try $0.mapValues(shadowScalar) }
-                if a != b { differences.append([
-                    "scenario": scene.id,
-                    "step": index,
-                    "field": "native_operation_error",
-                    "native": regressionValue(a),
-                    "typed": regressionValue(b)
-                ]) }
-                if nativeBefore != typedBefore { differences.append([
-                    "scenario": scene.id,
-                    "step": index,
-                    "field": "complete_before_observations"
-                ]) }
-                if nativeAfter != typedAfter { differences.append([
-                    "scenario": scene.id,
-                    "step": index,
-                    "field": "complete_after_observations"
-                ]) }
-                for (expectation, nativeExpectation) in zip(
-                    action.expect,
-                    try regressionRows(originalAction["expect"])
-                ) {
-                    let old = regressionExpect(
-                        nativeExpectation,
-                        instance: action.instanceID,
-                        before: beforeReference,
-                        after: afterReference
-                    )
-                    let new = try AssertionEvaluator.evaluate(
-                        expectation,
-                        instanceID: action.instanceID,
-                        before: typedBefore,
-                        after: typedAfter
-                    )
-                    assertions += 1
-                    XCTAssertEqual(old, new, "\(scene.id)/\(index) assertion \(expectation.metric)")
-                    XCTAssertTrue(old, "\(scene.id)/\(index) original assertion \(expectation.metric)")
-                    XCTAssertTrue(new, "\(scene.id)/\(index) typed assertion \(expectation.metric)")
-                }
-                for id in reference.keys.sorted() {
-                    let left = try reference[id]!.shadowSample(
-                        action,
-                        step: index,
-                        mark: referenceMarks[id]!,
-                        failure: a
-                    )
-                    let right = try candidate[id]!.shadowSample(
-                        action,
-                        step: index,
-                        mark: candidateMarks[id]!,
-                        failure: b
-                    )
-                    let delta = ShadowComparator.compare(reference: [left], candidate: [right])
-                    differences += delta.map { [
-                        "scenario": scene.id,
-                        "step": index,
-                        "instance": id,
-                        "field": $0.field,
-                        "native": $0.reference,
-                        "typed": $0.candidate
-                    ] as [String: Any] }
-                    compared += 1
-                    rows.append(["scenario": scene.id, "step": index, "instance": id, "operation": action.operation,
-                                 "native": String(reflecting: left), "typed": String(reflecting: right),
-                                 "native_before": beforeReference[id]!, "typed_before": beforeCandidate[id]!,
-                                 "native_after": afterReference[id]!, "typed_after": afterCandidate[id]!,
-                                 "differences": delta.count])
-                }
-            }
-            for instance in reference.values { await instance.drainHeldReplies(); XCTAssertEqual(
-                instance.device.starts,
-                0
-            ) }
-            for instance in candidate.values { await instance.drainHeldReplies(); XCTAssertEqual(
-                instance.device.starts,
-                0
-            ) }
-        }
-        let report: [String: Any] = ["fixture_sha256": digest,
-                                     "hardware_accessed": false,
-                                     "independent_scenario_pairs": applicable,
-                                     "independent_owner_pairs": ownerPairs,
-                                     "paired_action_steps": actionSteps,
-                                     "executed_owner_actions": ownerExecutions,
-                                     "not_applicable_scenarios": notApplicable,
-                                     "compared_owner_steps": compared,
-                                     "assertions": assertions,
-                                     "differences": differences,
-                                     "product_behavior": "native runtime unchanged; primary Kit contract/action/assertions adopted; independent native reference retained",
-                                     "steps": rows]
-        try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
-            .write(to: output.appending(path: "j2-independent-shadow.json"))
-        print(
-            "J2_SHADOW scenario_pairs=\(applicable) owner_pairs=\(ownerPairs) actions=\(actionSteps) owner_executions=\(ownerExecutions) owner_steps=\(compared) assertions=\(assertions) differences=\(differences.count)"
-        )
-        XCTAssertTrue(differences.isEmpty, "See j2-independent-shadow.json for complete step/field differences")
-    }
-}
-
 extension ControllerRegressionExecutorTests {
     func testRouteReplacementRevokesOldHardwareItemsDespiteSameBytesFromMock() async throws {
         let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -1563,19 +1161,33 @@ extension ControllerRegressionExecutorTests {
             directory: directory
         )
         _ = try await owner.execute(XCTUnwrap(scene.steps.first { $0.operation == "prepare_display" }), repo: repo)
-        let mark = try RegressionShadowMark(owner)
-        XCTAssertEqual(mark.pending.count, 2)
+        let previousPending = owner.session.pendingFeedbackItems
+        let monitorCount = owner.monitor.count
+        XCTAssertEqual(previousPending.count, 2)
+        for item in previousPending {
+            XCTAssertEqual(item.source, .hardware)
+            XCTAssertNotNil(item.context)
+            XCTAssertNotNil(item.endpoint)
+            XCTAssertNotNil(item.mappingRevision)
+        }
         let action = try XCTUnwrap(scene.steps.first { $0.operation == "replace_route" })
         _ = try await owner.execute(action, repo: repo)
-        let newEvents = owner.monitor.dropFirst(mark.monitor)
-        XCTAssertTrue(newEvents
-            .contains { $0.source == .mock && $0.delivery == .sent && mark.pending.map(\.message).contains($0.message)
+        let attempts = owner.monitor.dropFirst(monitorCount).filter { $0.delivery == .sent || $0.delivery == .failed }
+        XCTAssertTrue(attempts
+            .contains {
+                $0.source == .mock && $0.delivery == .sent && previousPending.map(\.message).contains($0.message)
             })
-        XCTAssertFalse(newEvents
-            .contains { $0.source == .hardware && ($0.delivery == .sent || $0.delivery == .failed) })
-        let sample = try owner.shadowSample(action, step: 1, mark: mark, failure: nil)
-        XCTAssertTrue(sample.pendingQueueItems.isEmpty)
-        XCTAssertEqual(sample.revokedQueueItems.count, mark.pending.count)
+        XCTAssertFalse(attempts.contains { $0.source == .hardware })
+        let remaining = owner.session.pendingFeedbackItems
+        XCTAssertTrue(remaining.isEmpty)
+        let revoked = previousPending.filter { pending in
+            !remaining.contains(pending) && !attempts.contains { event in
+                event.message == pending.message && event.origin == pending.origin &&
+                    event.source == pending.source && event.endpoint == pending.endpoint &&
+                    event.context == pending.context && event.context?.mappingGeneration == pending.mappingRevision
+            }
+        }
+        XCTAssertEqual(revoked, previousPending)
     }
 
     func testSuccessfulWriteDecisionSurvivesFullBoundedJournal() async throws {
@@ -1595,11 +1207,18 @@ extension ControllerRegressionExecutorTests {
             directory: directory
         )
         for value in 0 ..< 600 { owner.session.setParameter("p1", to: Double(value % 127)) }
-        XCTAssertGreaterThan(owner.session.inputEvents.dropped, 0)
-        let mark = try RegressionShadowMark(owner)
+        let journal = owner.session.inputEvents
+        let retained = try XCTUnwrap(journal.snapshot().objectValue?["events"]?.arrayValue)
+        XCTAssertGreaterThan(journal.dropped, 0)
+        XCTAssertEqual(retained.count, 512)
+        let previousWrites = try owner.parameterWriteEvidenceCount
+        let previousAttempts = owner.device.records.count
         let action = try XCTUnwrap(scene.steps.first { $0.operation == "write_parameter" })
-        _ = try await owner.execute(action, repo: repo)
+        let failure = try await owner.execute(action, repo: repo)
+        XCTAssertNil(failure)
+        XCTAssertEqual(journal.snapshot().objectValue?["events"]?.arrayValue?.count, retained.count)
+        XCTAssertEqual(try owner.parameterWriteEvidenceCount, previousWrites + 1)
+        XCTAssertFalse(owner.device.records.dropFirst(previousAttempts).contains { !$0.1 })
         XCTAssertEqual(owner.session.engine.value(of: "p1"), 64)
-        XCTAssertEqual(try owner.shadowDecision(action, mark: mark, failure: nil), .accepted)
     }
 }

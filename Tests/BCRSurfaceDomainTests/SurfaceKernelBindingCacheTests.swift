@@ -135,35 +135,10 @@ final class SurfaceKernelBindingCacheTests: XCTestCase {
         XCTAssertEqual(changedDecoded.activePageID, "alternate")
     }
 
-    func testJ4MapMemoUsesFullBytesAndRemainsBoundedAcrossCopiesAndMutations() throws {
-        let enabled = ProcessInfo.processInfo.environment["BCR_J4_SHADOW_ROOT"] != nil
-        let initial = FeedbackJ4Trace.hardwareMapMemoStatistics
+    func testHardwareMapVersionMutationKeepsTheOriginalVersion() {
         let original = HardwareMap.mockPreset()
-        func checkMap(_ map: HardwareMap) throws {
-            let actual = FeedbackJ4Trace.hardwareMap(map)
-            if enabled {
-                let expected = try JSONSerialization.jsonObject(with: JSONEncoder().encode(map))
-                XCTAssertEqual(try JSONSerialization.data(withJSONObject: actual, options: [.sortedKeys]),
-                               try JSONSerialization.data(withJSONObject: expected, options: [.sortedKeys]))
-            } else { XCTAssertTrue(actual is NSNull) }
-        }
-        try checkMap(original)
-        try checkMap(original)
         var copied = original
         copied.version = original.version + 1000
-        try checkMap(copied); try checkMap(original)
-        for version in 2000 ..< 2020 {
-            var overflow = original; overflow.version = version
-            try checkMap(overflow)
-        }
-        let final = FeedbackJ4Trace.hardwareMapMemoStatistics
-        if enabled {
-            XCTAssertGreaterThanOrEqual(final.hits - initial.hits, 2)
-            XCTAssertGreaterThanOrEqual(final.misses - initial.misses, 21)
-            XCTAssertEqual(final.entries, 16)
-        } else {
-            XCTAssertEqual(final.hits, 0); XCTAssertEqual(final.misses, 0); XCTAssertEqual(final.entries, 0)
-        }
         XCTAssertEqual(original.version, HardwareMap.currentVersion)
         XCTAssertEqual(copied.version, original.version + 1000)
     }

@@ -65,14 +65,13 @@ final class FeedbackPlanner {
 /// Invocation-local receipt. Nested operations never inherit or overwrite this collector.
 @MainActor
 final class FeedbackReceipt {
-    private var records: [(fact: FeedbackReceiptFact<BCRFeedbackPlan>, delivery: FeedbackDelivery?)] = []
-    var deliveries: [FeedbackDelivery?] { records.map(\.delivery) }
-    var summary: FeedbackReceiptSummary { FeedbackReceiptSummary(records.map { $0.fact.result }) }
+    private var records: [FeedbackReceiptFact<BCRFeedbackPlan>] = []
+    var summary: FeedbackReceiptSummary { FeedbackReceiptSummary(records.map(\.result)) }
     var completionError: (any Error)?
     let accepted: (@MainActor () throws -> Void)?
     init(accepted: (@MainActor () throws -> Void)? = nil) { self.accepted = accepted }
-    func record(_ fact: FeedbackReceiptFact<BCRFeedbackPlan>, delivery: FeedbackDelivery?) {
-        records.append((fact, delivery))
+    func record(_ fact: FeedbackReceiptFact<BCRFeedbackPlan>) {
+        records.append(fact)
         if fact.successfulSend {
             do { try accepted?() } catch { completionError = error }
         }
@@ -92,7 +91,6 @@ public struct ScheduledFeedback: Equatable, Sendable {
 public struct FeedbackScheduler: Sendable {
     public let policy: FeedbackPolicy
     private var queue: FeedbackQueue<MIDIControlID, ScheduledFeedback>
-    private let kernelTraceID = UUID().uuidString
     private enum ClockFault: Sendable {
         case drain(any Error)
         case failure(any Error)
@@ -106,8 +104,6 @@ public struct FeedbackScheduler: Sendable {
 
     private var clockFault: ClockFault?
     var clockIssue: (any Error)? { clockFault?.error }
-    private(set) var j4LastDrainOrdinal: UInt64?
-    var j4Owner: String { kernelTraceID }
     public var count: Int { queue.count }
     public var pendingItems: [ScheduledFeedback] { queue.orderedEntries.map(\.item) }
     public init(policy: FeedbackPolicy) throws {
@@ -115,57 +111,19 @@ public struct FeedbackScheduler: Sendable {
         self.policy = policy
         queue = try FeedbackQueue(rate: .bucket(perSecond: Double(policy.messagesPerSecond), burst: policy.burst,
                                                 failureCooldown: policy.errorCooldown))
-        let ordinal = FeedbackJ4Trace.schedulerInput(
-            owner: kernelTraceID,
-            operation: "initialize",
-            context: ["native_policy": FeedbackJ4Trace.policy(policy)]
-        ) {
-            ["rate": ["kind": "bucket", "per_second": Double(policy.messagesPerSecond),
-                      "burst": policy.burst, "error_cooldown": policy.errorCooldown]]
-        }
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() }
-    }
-
-    private func j4Output(drained: [ScheduledFeedback] = [], removed: [String] = [],
-                          replaced: [String] = []) -> [String: Any]
-    {
-        ["pending": pendingItems.map(FeedbackJ4Trace.entry), "drained": drained.map(FeedbackJ4Trace.entry),
-         "removed_keys": removed, "replaced_keys": replaced,
-         "tokens": queue.tokens as Any? ?? NSNull(), "refill": queue.lastRefill as Any? ?? NSNull(),
-         "retry": queue.retryAfter as Any? ?? NSNull()]
     }
 
     public mutating func enqueue(_ message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
                                  endpoint: MIDIEndpointSource? = nil, mappingRevision: UInt64? = nil,
-                                 source: DeviceSource? = nil, context: SurfaceEventContext? = nil,
-                                 callerRequeueCauseOrdinal: UInt64? = nil, parentIntent: UInt64? = nil,
-                                 parentSession: String? = nil)
+                                 source: DeviceSource? = nil, context: SurfaceEventContext? = nil)
     {
         let argument = ScheduledFeedback(message: message, origin: origin, endpoint: endpoint,
                                          mappingRevision: mappingRevision, source: source, context: context)
-        let ordinal = FeedbackJ4Trace.schedulerInput(
-            owner: kernelTraceID,
-            operation: "enqueue",
-            context: ["parent_intent": parentSession
-                .map { FeedbackJ4Trace.reference(owner: $0, ordinal: parentIntent) } ?? NSNull()]
-        ) {
-            ["item": FeedbackJ4Trace.entry(argument), "ingress": callerRequeueCauseOrdinal.map {
-                ["kind": "derived_caller_requeue", "cause_ordinal": String($0)]
-            } ?? ["kind": "external_request"]]
-        }
-        let previous = queue.enqueue(argument, for: message.controlID)
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
-            j4Output(replaced: previous.map { [FeedbackJ4Trace.key($0.message.controlID)] } ?? [])
-        }
+        queue.enqueue(argument, for: message.controlID)
     }
 
     public mutating func cancel(_ control: MIDIControlID) {
-        let ordinal = FeedbackJ4Trace
-            .schedulerInput(owner: kernelTraceID, operation: "cancel") { ["key": FeedbackJ4Trace.key(control)] }
-        let previous = queue.cancel(control)
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
-            j4Output(removed: previous.map { [FeedbackJ4Trace.key($0.message.controlID)] } ?? [])
-        }
+        queue.cancel(control)
     }
 
     public mutating func drain(at now: Date) -> [ScheduledFeedback] {
@@ -173,7 +131,6 @@ public struct FeedbackScheduler: Sendable {
     }
 
     mutating func drainForFlush(at now: Date) -> (items: [ScheduledFeedback], failure: (any Error)?) {
-        j4LastDrainOrdinal = nil
         if case .failure? = clockFault { return ([], nil) }
         let instant = now.timeIntervalSinceReferenceDate
         let drained: [FeedbackQueueEntry<MIDIControlID, ScheduledFeedback>]
@@ -184,14 +141,7 @@ public struct FeedbackScheduler: Sendable {
             clockFault = .drain(error)
             return ([], error)
         }
-        let ordinal = FeedbackJ4Trace
-            .schedulerInput(owner: kernelTraceID, operation: "drain") { ["at": instant] }
-        j4LastDrainOrdinal = ordinal.map(UInt64.init)
-        let result = drained.map(\.item)
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
-            j4Output(drained: result, removed: drained.map { FeedbackJ4Trace.key($0.key) })
-        }
-        return (result, nil)
+        return (drained.map(\.item), nil)
     }
 
     public mutating func noteFailure(at now: Date) {
@@ -205,18 +155,11 @@ public struct FeedbackScheduler: Sendable {
             clockFault = .failure(error)
             return
         }
-        let ordinal = FeedbackJ4Trace
-            .schedulerInput(owner: kernelTraceID, operation: "failure") { ["at": instant] }
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) { j4Output() }
     }
 
     public mutating func clear() {
-        let ordinal = FeedbackJ4Trace.schedulerInput(owner: kernelTraceID, operation: "clear") { [:] }
-        let removed = queue.clear()
+        queue.clear()
         clockFault = nil
-        FeedbackJ4Trace.schedulerOutput(owner: kernelTraceID, ordinal: ordinal) {
-            j4Output(removed: removed.map(FeedbackJ4Trace.key))
-        }
     }
 }
 

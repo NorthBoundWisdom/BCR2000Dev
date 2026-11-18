@@ -83,7 +83,6 @@ public final class SurfaceSession {
     private var connectionScopeRevision: UInt64 = 0
     private var unpublishedConnectionRevision: UInt64?
     private var kernelConnection: BCRConnectionRuntime
-    private let kernelTraceID = UUID().uuidString
 
     /// Explicit host operation; remote role settings do not implicitly revoke local input.
     public func configureParameterWrites(allowsWrite: Bool, allowsDisplay: Bool,
@@ -304,12 +303,7 @@ public final class SurfaceSession {
     private func clearFeedbackQueue() {
         feedbackQueueGeneration &+= 1
         scheduler?.clear()
-        _ = FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "clear_queue") {
-            [
-                "scheduler_owner": scheduler?.j4Owner as Any? ?? NSNull(),
-                "queue_generation": String(feedbackQueueGeneration)
-            ]
-        }; notifyFeedbackQueue()
+        notifyFeedbackQueue()
     }
 
     private var writeOrigin: SurfaceWriteOrigin = .software
@@ -492,10 +486,6 @@ public final class SurfaceSession {
         engine.recordFeedbackWhenGenerated = !policy.enabled && source == .mock
         feedbackPolicy = policy
         scheduler = updated
-        _ = FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "attach_scheduler") {
-            ["scheduler_owner": updated.j4Owner, "queue_generation": String(feedbackQueueGeneration),
-             "policy": FeedbackJ4Trace.policy(policy)]
-        }
         notifyFeedbackQueue()
         if source == .hardware { performLifecycleFeedback(engine.fullFeedback(at: now())) }
         publishChange()
@@ -508,9 +498,7 @@ public final class SurfaceSession {
         let originalGeneration = inputEvents.generation
         let originalMapping = mappingContextRevision
         let originalEndpoint = endpointSource(source: source, direction: .output)
-        let j4OriginScheduler = scheduler?.j4Owner
         let (batch, drainFailure) = scheduler?.drainForFlush(at: now()) ?? ([], nil)
-        let j4DrainOrdinal = scheduler?.j4LastDrainOrdinal
         if let drainFailure, !reportingFeedbackDrainFailure {
             // A synchronous event observer can flush again before this call has notified the queue observers.
             reportingFeedbackDrainFailure = true
@@ -522,8 +510,7 @@ public final class SurfaceSession {
                 value.message,
                 expectedEndpoint: value.endpoint,
                 expectedMappingRevision: value.mappingRevision,
-                legacyQueued: value,
-                originScheduler: j4OriginScheduler
+                legacyQueued: value
             ) }
             if result == .failed {
                 if matchesScope("queue.requeue", source: originalSource, generation: originalGeneration,
@@ -536,7 +523,7 @@ public final class SurfaceSession {
                         endpoint: remaining.endpoint,
                         mappingRevision: remaining.mappingRevision,
                         source: remaining.source,
-                        context: remaining.context, callerRequeueCauseOrdinal: j4DrainOrdinal
+                        context: remaining.context
                     ) }
                 }
                 break
@@ -903,7 +890,6 @@ public final class SurfaceSession {
         try feedbackPlanner.withBatch(plan) {
             withWriteOrigin(plan.origin) { perform(plan.effects, receipt: receipt) }
             let summary = receipt.summary
-            FeedbackRuntime.summary(owner: kernelTraceID, receipt: receipt, summary: summary)
             guard summary.allAccepted, receipt.completionError == nil, sameScope() else {
                 if !summary.anyAccepted {
                     engine.undoDisplayFeedback(update.undo, restorePrevious: sameScope())
@@ -1260,10 +1246,10 @@ public final class SurfaceSession {
         }
     }
 
-    private func j4Evidence(context: SurfaceEventContext, endpoint: MIDIEndpointSource?,
-                            expectedEndpoint: MIDIEndpointSource? = nil, expectedMapping: UInt64? = nil,
-                            receipt: FeedbackReceipt? = nil, legacyQueued: ScheduledFeedback? = nil,
-                            generationTiming: FeedbackTiming? = nil) -> BCRFeedbackEvidence
+    private func feedbackEvidence(context: SurfaceEventContext, endpoint: MIDIEndpointSource?,
+                                  expectedEndpoint: MIDIEndpointSource? = nil, expectedMapping: UInt64? = nil,
+                                  receipt: FeedbackReceipt? = nil, legacyQueued: ScheduledFeedback? = nil,
+                                  generationTiming: FeedbackTiming? = nil) -> BCRFeedbackEvidence
     {
         .init(source: source, context: context, endpoint: endpoint, expectedEndpoint: expectedEndpoint,
               expectedMapping: expectedMapping, connection: connection, parameterContext: parameterWriteContext,
@@ -1273,57 +1259,7 @@ public final class SurfaceSession {
               resolvedGenerationTiming: generationTiming)
     }
 
-    private func j4DispatchEnvironment(
-        phase: String,
-        captured: BCRFeedbackEvidence,
-        current: BCRFeedbackEvidence,
-        device: MIDIConnectionSnapshot?,
-        intent: UInt64?,
-        originScheduler: String?,
-        entry: UInt64? = nil,
-        capture: Int? = nil
-    ) -> UInt64? {
-        FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "dispatch_environment") {
-            [
-                "phase": phase, "plan_capture": capture.map(String.init) as Any? ?? NSNull(),
-                "entry": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: entry),
-                "parent_intent": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: intent),
-                "origin_scheduler_owner": originScheduler as Any? ?? NSNull(),
-                "current_scheduler_owner": scheduler?.j4Owner as Any? ?? NSNull(),
-                "captured_evidence": FeedbackRuntime.value(captured),
-                "current_evidence": FeedbackRuntime.value(current),
-                "hardware_map": FeedbackJ4Trace.hardwareMap(engine.hardwareMap),
-                "feedback_policy": FeedbackJ4Trace.policy(feedbackPolicy),
-                "device_connection": device
-                    .map { ["state": "read", "value": FeedbackJ4Trace.connection($0)] as [String: Any] } ??
-                    ["state": "not_run", "reason": "original branch did not execute device getter"]
-            ]
-        }
-    }
-
-    private func j4BoundaryResult(message: MIDIVoiceMessage, origin: SurfaceWriteOrigin,
-                                  captured: BCRFeedbackEvidence, result: [String: Any],
-                                  currentScope: SurfaceBindingContext.ContextScope?,
-                                  intent: UInt64?, originScheduler: String?, environment: UInt64?, entry: UInt64?,
-                                  entered: Bool, capture: Int? = nil)
-    {
-        _ = FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "actual_boundary_result") {
-            ["plan_capture": capture.map(String.init) as Any? ?? NSNull(),
-             "parent_intent": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: intent),
-             "origin_scheduler_owner": originScheduler as Any? ?? NSNull(),
-             "current_scheduler_owner": scheduler?.j4Owner as Any? ?? NSNull(),
-             "environment": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: environment),
-             "entry": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: entry),
-             "message": FeedbackJ4Trace.message(message), "origin": origin.rawValue,
-             "captured_evidence": FeedbackRuntime.value(captured), "layer": "SurfaceDevice.send admission call",
-             "entered": entered, "result": result,
-             "current_scope_at_original_bookkeeping": currentScope.map(FeedbackRuntime.value) as Any? ?? NSNull(),
-             "underlying_native_transport_attempt": NSNull(), "physical_bytes_written": NSNull(),
-             "actual_observation": false]
-        }
-    }
-
-    private func j4CurrentScope(capturedSource: DeviceSource) -> SurfaceBindingContext.ContextScope {
+    private func currentFeedbackScope(capturedSource: DeviceSource) -> SurfaceBindingContext.ContextScope {
         BCRKernelProjection.scope(source: source, generation: inputEvents.generation, mapping: mappingContextRevision,
                                   endpoint: endpointSource(source: capturedSource, direction: .output))
     }
@@ -1331,61 +1267,27 @@ public final class SurfaceSession {
     private func transmit(_ message: MIDIVoiceMessage, timing: FeedbackTiming? = nil, receipt: FeedbackReceipt? = nil) {
         let resolvedTiming = feedbackPlanner.resolvedTiming(requested: timing)
         let origin = writeOrigin
-        let generationEvidence = j4Evidence(context: .init(generation: inputEvents.generation,
-                                                           mappingGeneration: mappingContextRevision,
-                                                           knownDeviceContextID: source == .mock ?
-                                                               "simulation.encoder-group.\(mock.activeGroup)" : nil),
-                                            endpoint: endpointSource(source: source, direction: .output),
-                                            receipt: receipt, generationTiming: resolvedTiming)
-        let generationScheduler = scheduler?.j4Owner
-        let generationIntent = FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "message_intent") {
-            ["message": FeedbackJ4Trace.message(message), "origin": origin.rawValue,
-             "resolved_timing": resolvedTiming == .coalesced ? "coalesced" : "synchronous",
-             "evidence": FeedbackRuntime.value(generationEvidence),
-             "hardware_map": FeedbackJ4Trace.hardwareMap(engine.hardwareMap),
-             "scheduler_owner": generationScheduler as Any? ?? NSNull(),
-             "routing_facts": ["source": source.rawValue, "feedback_policy": FeedbackJ4Trace.policy(feedbackPolicy),
-                               "connected_destination": connection.connectedDestination as Any? ?? NSNull()]]
-        }
+        let generationEvidence = feedbackEvidence(context: .init(generation: inputEvents.generation,
+                                                                 mappingGeneration: mappingContextRevision,
+                                                                 knownDeviceContextID: source == .mock ?
+                                                                     "simulation.encoder-group.\(mock.activeGroup)" :
+                                                                     nil),
+                                                  endpoint: endpointSource(source: source, direction: .output),
+                                                  receipt: receipt, generationTiming: resolvedTiming)
         let plan = FeedbackRuntime.plan(message: message, origin: origin, timing: resolvedTiming,
                                         control: nil, evidence: generationEvidence)
-        let capture = FeedbackRuntime.capture(owner: kernelTraceID, plan: plan, phase: "generation",
-                                              nativeMessage: message, nativeOrigin: origin,
-                                              nativeTiming: resolvedTiming,
-                                              nativeControl: nil, evidence: generationEvidence, map: engine.hardwareMap)
         let generationAuthorization = FeedbackRuntime.generationAuthorization(generationEvidence)
         let stage = FeedbackAuthorizationCheck.evaluate(requirements: plan.requiredDirections,
                                                         authorization: generationAuthorization)
-        FeedbackJ4Trace.actual(owner: kernelTraceID, operation: "generation_authorization",
-                               input: ["plan_capture": capture.map(String.init) as Any? ?? NSNull(),
-                                       "plan": FeedbackRuntime.value(plan),
-                                       "authorization": FeedbackRuntime.value(generationAuthorization),
-                                       "requirements": plan.requiredDirections.map(\.rawValue).sorted()],
-                               actual: ["allowed": stage == .sufficient])
         if stage != .sufficient {
-            FeedbackJ4Trace
-                .sessionOutput(owner: kernelTraceID, ordinal: generationIntent) { ["disposition": "suppressed_observe"]
-                }
             log(.output, message, source: source, control: engine.hardwareMap.control(for: message.controlID),
                 ignored: true, delivery: .suppressed)
             let fact = FeedbackReceiptFact(plan: plan, result: .notAttempted(reason: "observe"))
-            receipt?.record(fact, delivery: .suppressed)
-            FeedbackRuntime.skipped(owner: kernelTraceID, plan: plan, capture: capture, reason: "observe")
-            FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture, currentScope: nil)
+            receipt?.record(fact)
             return
         }
         let canCoalesce = source == .hardware && feedbackPolicy.enabled && connection.connectedDestination != nil
         let dispatch = plan.dispatchChoice(canCoalesce: canCoalesce)
-        FeedbackJ4Trace.actual(owner: kernelTraceID, operation: "dispatch", input: [
-            "plan_capture": capture.map(String.init) as Any? ?? NSNull(), "plan": FeedbackRuntime.value(plan),
-            "can_coalesce": canCoalesce,
-            "native_feedback_policy": FeedbackJ4Trace.policy(feedbackPolicy)
-        ],
-        actual: ["decision": dispatch == .enqueue ? "enqueue" : "send"])
-        FeedbackJ4Trace
-            .sessionOutput(owner: kernelTraceID, ordinal: generationIntent) {
-                ["disposition": dispatch == .enqueue ? "enqueue" : "send"]
-            }
         switch dispatch {
         case .enqueue:
             scheduler?.enqueue(plan.payload, origin: plan.origin,
@@ -1394,19 +1296,15 @@ public final class SurfaceSession {
                                context: .init(
                                    generation: inputEvents.generation,
                                    mappingGeneration: mappingContextRevision
-                               ),
-                               parentIntent: generationIntent, parentSession: kernelTraceID)
+                               ))
             let fact = FeedbackReceiptFact(plan: plan, result: .notAttempted(reason: "queued"))
-            receipt?.record(fact, delivery: nil)
-            FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture, currentScope: nil)
+            receipt?.record(fact)
             notifyFeedbackQueue()
         case .send:
             _ = withWriteOrigin(plan.origin) { transmitNow(
                 plan.payload,
                 receipt: receipt,
-                generationTiming: resolvedTiming,
-                intent: generationIntent,
-                originScheduler: generationScheduler
+                generationTiming: resolvedTiming
             ) }
         }
     }
@@ -1414,8 +1312,8 @@ public final class SurfaceSession {
     @discardableResult
     private func transmitNow(_ message: MIDIVoiceMessage, expectedEndpoint: MIDIEndpointSource? = nil,
                              expectedMappingRevision: UInt64? = nil, receipt: FeedbackReceipt? = nil,
-                             legacyQueued: ScheduledFeedback? = nil, generationTiming: FeedbackTiming? = nil,
-                             intent: UInt64? = nil, originScheduler: String? = nil) -> FeedbackDelivery
+                             legacyQueued: ScheduledFeedback? = nil,
+                             generationTiming: FeedbackTiming? = nil) -> FeedbackDelivery
     {
         let sendSource = source
         let sendControl = engine.hardwareMap.control(for: message.controlID)
@@ -1427,27 +1325,13 @@ public final class SurfaceSession {
                                                mappingGeneration: mappingContextRevision,
                                                knownDeviceContextID: sendSource == .mock ?
                                                    "simulation.encoder-group.\(mock.activeGroup)" : nil)
-        let evidence = j4Evidence(context: eventContext, endpoint: endpoint, expectedEndpoint: expectedEndpoint,
-                                  expectedMapping: expectedMappingRevision, receipt: receipt,
-                                  legacyQueued: legacyQueued,
-                                  generationTiming: generationTiming)
+        let evidence = feedbackEvidence(context: eventContext, endpoint: endpoint, expectedEndpoint: expectedEndpoint,
+                                        expectedMapping: expectedMappingRevision, receipt: receipt,
+                                        legacyQueued: legacyQueued,
+                                        generationTiming: generationTiming)
         let plan = FeedbackRuntime.plan(message: message, origin: sendOrigin, timing: .synchronous,
                                         control: sendControl, evidence: evidence)
-        let capture = FeedbackRuntime.capture(owner: kernelTraceID, plan: plan, phase: "dispatch",
-                                              nativeMessage: message, nativeOrigin: sendOrigin,
-                                              nativeTiming: .synchronous,
-                                              nativeControl: sendControl, evidence: evidence, map: engine.hardwareMap)
-        var environment = j4DispatchEnvironment(phase: "entry", captured: evidence, current: evidence,
-                                                device: nil, intent: intent, originScheduler: originScheduler,
-                                                capture: capture)
-        let admissionEntry = environment
-        defer { _ = FeedbackJ4Trace.sessionInput(owner: kernelTraceID, operation: "admission_completed") {
-            ["entry": FeedbackJ4Trace.reference(owner: kernelTraceID, ordinal: admissionEntry)]
-        } }
         func reject(_ reason: String, logOutput: Bool, logExpectedEndpoint: Bool = false) -> FeedbackDelivery {
-            environment = j4DispatchEnvironment(phase: "early_return", captured: evidence, current: evidence,
-                                                device: nil, intent: intent, originScheduler: originScheduler,
-                                                entry: admissionEntry, capture: capture)
             if logOutput {
                 if reason == "unpublished_connection" {
                     log(.output, message, source: sendSource, control: sendControl, ignored: true,
@@ -1460,9 +1344,7 @@ public final class SurfaceSession {
                 }
             }
             let fact = FeedbackReceiptFact(plan: plan, result: .notAttempted(reason: reason))
-            receipt?.record(fact, delivery: .suppressed)
-            FeedbackRuntime.skipped(owner: kernelTraceID, plan: plan, capture: capture, reason: reason)
-            FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture, currentScope: nil)
+            receipt?.record(fact)
             return .suppressed
         }
         if sendSource == .hardware, unpublishedConnectionRevision != nil { return reject(
@@ -1489,30 +1371,21 @@ public final class SurfaceSession {
             requirements: plan.requiredDirections,
             authorization: authorization
         )
-        FeedbackJ4Trace.actual(owner: kernelTraceID, operation: "authorization", input: [
-            "plan_capture": capture.map(String.init) as Any? ?? NSNull(), "plan": FeedbackRuntime.value(plan),
-            "authorization": FeedbackRuntime.value(authorization),
-            "requirements": plan.requiredDirections.map(\.rawValue).sorted()
-        ],
-        actual: ["allowed": stage == .sufficient])
         if stage != .sufficient { return reject("parameter_context", logOutput: true) }
         if let expectedMappingRevision, expectedMappingRevision != mappingContextRevision { return reject(
             "expected_mapping",
             logOutput: false
         ) }
         let actualDeviceConnection = device.connection // Exactly the original getter, only after all old early gates.
-        let currentEvidence = j4Evidence(context: .init(generation: inputEvents.generation,
-                                                        mappingGeneration: mappingContextRevision,
-                                                        knownDeviceContextID: source == .mock ?
-                                                            "simulation.encoder-group.\(mock.activeGroup)" : nil),
-                                         endpoint: endpointSource(source: source, direction: .output),
-                                         expectedEndpoint: expectedEndpoint,
-                                         expectedMapping: expectedMappingRevision, receipt: receipt,
-                                         legacyQueued: legacyQueued,
-                                         generationTiming: generationTiming)
-        environment = j4DispatchEnvironment(phase: "preflight", captured: evidence, current: currentEvidence,
-                                            device: actualDeviceConnection, intent: intent,
-                                            originScheduler: originScheduler, entry: admissionEntry, capture: capture)
+        let currentEvidence = feedbackEvidence(context: .init(generation: inputEvents.generation,
+                                                              mappingGeneration: mappingContextRevision,
+                                                              knownDeviceContextID: source == .mock ?
+                                                                  "simulation.encoder-group.\(mock.activeGroup)" : nil),
+                                               endpoint: endpointSource(source: source, direction: .output),
+                                               expectedEndpoint: expectedEndpoint,
+                                               expectedMapping: expectedMappingRevision, receipt: receipt,
+                                               legacyQueued: legacyQueued,
+                                               generationTiming: generationTiming)
         let nativeSnapshot = BCRFeedbackNativeSnapshot(evidence: evidence, deviceConnection: actualDeviceConnection)
         let currentSnapshot = BCRFeedbackNativeSnapshot(
             evidence: currentEvidence,
@@ -1527,21 +1400,8 @@ public final class SurfaceSession {
             safety: safety
         )
         let decision = FeedbackPreflight.evaluate(plan: plan, proof: proof,
-                                                  currentScope: j4CurrentScope(capturedSource: sendSource),
+                                                  currentScope: currentFeedbackScope(capturedSource: sendSource),
                                                   currentNativeSnapshot: currentSnapshot)
-        FeedbackJ4Trace.actual(owner: kernelTraceID, operation: "preflight", input: [
-            "plan_capture": capture.map(String.init) as Any? ?? NSNull(), "plan": FeedbackRuntime.value(plan),
-            "proof_plan": FeedbackRuntime.value(proof.plan),
-            "native_snapshot": FeedbackRuntime.value(nativeSnapshot),
-            "authorization": FeedbackRuntime.value(authorization),
-            "native_safety": FeedbackRuntime.value(safety),
-            "required_directions": plan.requiredDirections.map(\.rawValue).sorted(),
-            "current_scope": FeedbackRuntime.value(j4CurrentScope(capturedSource: sendSource)),
-            "current_native_snapshot": FeedbackRuntime.value(currentSnapshot)
-        ], actual: [
-            "allowed": decision == .permitted,
-            "result": FeedbackRuntime.value(decision)
-        ])
         let delivery: FeedbackDelivery
         let fact: FeedbackReceiptFact<BCRFeedbackPlan>
         if decision != .permitted {
@@ -1551,49 +1411,21 @@ public final class SurfaceSession {
             } else {
                 delivery = .suppressed; fact = .init(plan: plan, result: .notAttempted(reason: "preflight_rejected"))
             }
-            FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture, currentScope: nil)
         } else {
             do {
                 try device.send(plan.payload)
                 fact = .init(plan: plan, result: .accepted)
-                let acceptedScope = j4CurrentScope(capturedSource: sendSource)
+                let acceptedScope = currentFeedbackScope(capturedSource: sendSource)
                 let current = FeedbackReceiptEligibility.acceptedInCurrentScope(fact, currentScope: acceptedScope)
-                let currentEndpoint = endpointSource(source: sendSource, direction: .output)
-                let bookkeepingEvidence = j4Evidence(context: .init(
-                    generation: inputEvents.generation,
-                    mappingGeneration: mappingContextRevision,
-                    knownDeviceContextID: source == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
-                ), endpoint: currentEndpoint)
-                j4BoundaryResult(
-                    message: message,
-                    origin: sendOrigin,
-                    captured: evidence,
-                    result: ["state": "accepted"],
-                    currentScope: acceptedScope,
-                    intent: intent,
-                    originScheduler: originScheduler,
-                    environment: environment,
-                    entry: admissionEntry,
-                    entered: true,
-                    capture: capture
-                )
-                FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture,
-                                        currentScope: acceptedScope, currentEvidence: bookkeepingEvidence)
                 if current { engine.noteFeedbackSent(message, at: now()) }
                 delivery = .sent
             } catch {
-                let failureScope = j4CurrentScope(capturedSource: sendSource)
+                let failureScope = currentFeedbackScope(capturedSource: sendSource)
                 // Failure bookkeeping depends on scope matching, never on success eligibility.
                 let current = FeedbackReceiptEligibility.matchesCurrentScope(
                     FeedbackReceiptFact(plan: plan, result: .rejected(reason: "native_send_rejected")),
                     currentScope: failureScope
                 )
-                let currentEndpoint = endpointSource(source: sendSource, direction: .output)
-                let bookkeepingEvidence = j4Evidence(context: .init(
-                    generation: inputEvents.generation,
-                    mappingGeneration: mappingContextRevision,
-                    knownDeviceContextID: source == .mock ? "simulation.encoder-group.\(mock.activeGroup)" : nil
-                ), endpoint: currentEndpoint)
                 if current {
                     droppedFeedbackCount += 1; connection.lastError = error.localizedDescription
                     if feedbackQueueGeneration == sendQueueGeneration { scheduler?.noteFailure(at: now()) }
@@ -1601,27 +1433,10 @@ public final class SurfaceSession {
                 let eventFailure = error.localizedDescription
                 onEvent?(.failed(.feedback, eventFailure))
                 fact = .init(plan: plan, result: .rejected(reason: eventFailure))
-                j4BoundaryResult(message: message, origin: sendOrigin, captured: evidence,
-                                 result: ["state": "rejected", "reason": eventFailure], currentScope: failureScope,
-                                 intent: intent,
-                                 originScheduler: originScheduler, environment: environment, entry: admissionEntry,
-                                 entered: true, capture: capture)
-                FeedbackRuntime.receipt(owner: kernelTraceID, fact: fact, capture: capture,
-                                        currentScope: failureScope, currentEvidence: bookkeepingEvidence)
                 delivery = .failed
             }
         }
-        FeedbackRuntime.boundary(owner: kernelTraceID, phase: "before_receipt_hook", plan: plan, capture: capture,
-                                 currentScope: j4CurrentScope(capturedSource: sendSource), delivery: delivery,
-                                 queueGeneration: feedbackQueueGeneration,
-                                 nextEventID: nextEventID, echoIDs: engine.transportEvidenceIDsForTrace,
-                                 receipt: receipt)
-        receipt?.record(fact, delivery: delivery)
-        FeedbackRuntime.boundary(owner: kernelTraceID, phase: "after_receipt_hook", plan: plan, capture: capture,
-                                 currentScope: j4CurrentScope(capturedSource: sendSource), delivery: delivery,
-                                 queueGeneration: feedbackQueueGeneration,
-                                 nextEventID: nextEventID, echoIDs: engine.transportEvidenceIDsForTrace,
-                                 receipt: receipt)
+        receipt?.record(fact)
         log(.output, message, source: sendSource, control: sendControl, ignored: false, delivery: delivery,
             endpoint: endpoint, context: eventContext, writeCause: sendOrigin)
         return delivery
@@ -1691,7 +1506,6 @@ public final class SurfaceSession {
                                    context: context ?? .init(generation: inputEvents.generation,
                                                              mappingGeneration: mappingContextRevision),
                                    inputPressMode: inputPressMode))
-        if FeedbackJ4Trace.enabled, let event = events.last { FeedbackJ4Trace.io(owner: kernelTraceID, event: event) }
         let echo = direction == .input && engine.isFeedbackEcho(message, at: now())
         if let event = events.last {
             for observer in Array(monitorObservers.values) { observer(event, echo) }

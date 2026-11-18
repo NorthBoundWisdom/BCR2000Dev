@@ -1,4 +1,25 @@
-# CI coverage after O-2 retirement
+# CI coverage after W-2 scheduler proof retirement
+
+Cutover `9006a8cc5856f7bcbfdc4e696cf1c090fe800e8f` completed normal run `44236847568` with all functions passing and a final elapsed 302 seconds. Its separate complete proof `44236847593` succeeded in 489 seconds. The live budget guard remained active. The independent pre-cut native comparison on `34fe9af` covered 744 operations across 216 queue owners with zero differences. The cutover proof covered 771 operations across 220 owners with zero differences.
+
+Normal CI runs each native regression once alongside Python and portable checks. All product regressions, scenarios, G-6 goldens, hardware boundaries, and the old opt-in hardware skip remain. The 300-second guard is unchanged.
+
+Physical line counts include whitespace and comments.
+
+| Retired or adapted paths | Removed / added lines | Coverage disposition |
+| --- | ---: | --- |
+| `.github/workflows/full-proof.yml`, `configs/ci_proof_evidence.py` | 106 / 0 | Remove the dedicated migration workflow and its archive retention. Its exact successful cutover run was 44236847593. |
+| `.github/workflows/ci.yml`, `configs/ci_native_layers.py`, `configs/ci_parallel_checks.py`, `configs/macos_workflow.py` | 155 / 11 | Remove temporary representative capture and replay. Keep the same native runner and all product tests in one regression pass. |
+| `Sources/BCRSurfaceDomain/FeedbackJ4Trace.swift`, `Sources/BCRSurfaceDomain/FeedbackRuntime.swift`, `Sources/BCRSurfaceDomain/FeedbackScheduler.swift`, `Sources/BCRSurfaceDomain/SurfaceSession.swift`, `Sources/BCRSurfaceDomain/SurfaceEngine.swift`, `Sources/BCRSurfaceDomain/SurfaceKernelProjection.swift` | 787 / 51 | Remove archive-only taps, identifiers, serializers and receipt delivery copies. Preserve the shared queue, complete typed evidence, transport gates and receipts, in-scope accepted echo, failure cooldown and drain event reentry. |
+| `Tests/BCRAgentCoreTests/J4SchedulerArchiveReplayTests.swift`, `Tests/BCRAgentCoreTests/J4SessionSchedulerArchiveReplayTests.swift`, `Tests/BCRAgentCoreTests/O4RuntimeQueueArchiveTests.swift`, `Tests/J4Support/ORACLE_MAPPING.md`, `Tests/J4Support/native3b/FeedbackScheduler.swift.txt`, `Tests/J4Support/native3b/SurfaceSession.swift.txt`, `Tests/J4Support/native3b/SOURCE_MAPPING.json` | 1560 / 0 | Remove original and extracted scheduler replay drivers, comparison seed and provenance map. Keep direct FIFO, cancellation, cooldown, clock, acceptance and transport scope regressions. |
+| `Tests/BCRAgentCoreTests/J4ExactJSON.swift`, `Tests/BCRAgentCoreTests/J4PayloadCodec.swift`, `Tests/BCRAgentCoreTests/J4PayloadCodecTests.swift`, `Tests/BCRAgentCoreTests/J4LosslessCatalog.swift`, `Tests/BCRAgentCoreTests/J4LosslessCatalogTests.swift`, `Tests/J4Support/expand_catalog.py`, `configs/j4_shadow_verification.py`, `Tests/BuildWorkflowTests/test_j4_shadow_verification.py` | 1741 / 0 | Remove archive-only exact encoding/decoding, output expansion and corruption tests. Product codec and safety fixtures remain. |
+| `Tests/BCRAgentCoreTests/FeedbackCorePrimaryTests.swift`, `Tests/BCRSurfaceDomainTests/SurfaceKernelBindingCacheTests.swift` | 59 / 1 | Remove the disabled-recorder exercise and obsolete memo assertions. Preserve the direct product negative environment regression and both map-copy version assertions, with the latter retained under their direct test name. |
+| `Tests/BCRAgentConsoleTests/ControllerRegressionExecutorTests.swift` | 424 / 43 | Remove the paired native/typed J2 runner and its sample, observer and old assertion-evaluator chain. Keep the original 30-scenario direct runner and the T12/T18 selectors. T12 directly checks old hardware revocation despite identical mock bytes. T18 directly checks a full journal and exactly one new write to p1=64, with no rejected transport attempt in the new records. |
+| `Tests/BuildWorkflowTests/test_ci_layers.py`, `Package.swift` | 16 / 1 | Remove the retired capture-environment self-test and the unused conformance dependency from the archive tests target. Keep generic native selector and dependency timestamp tests and the console scenario dependency. |
+
+Native discovery decreases from 925 to 913 cases, portable discovery from 576 to 566 cases, and Python workflow tests from 246 to 239. Every removal is from an approved temporary proof, archive or recorder. The hardware-map memo case maps to its direct copy-isolation test.
+
+## Historical O-2 retirement
 
 Baseline `acf86040f61665f3446e0f226ac9d88fcbcdbc93`: normal run `44218823842` succeeded in **281 seconds**. Retirement commit `a2558a121b797f05c74ea91958198bb106c114ef`: normal run `44223143648` took **340 seconds**, failing the whole-run budget after all functional steps succeeded. Its independent complete-proof run `44223143693` succeeded in **385 seconds**. These times run from creation to completion and include queue time.
 
@@ -39,7 +60,6 @@ Rows count physical lines removed/added (including comments and whitespace), not
 | `configs/j3_legacy_verification.py` | 80 / 0 | Capture/verify orchestration only for removed J3 oracle. |
 | `configs/j4_shadow_verification.py` | 232 / 3 | Remove only feedback leaf comparison, validate_plans and six wrong-result children; retain full scheduler current/cold plus strict source/causal/output checks. |
 | `configs/macos_workflow.py` | 6 / 2 | Remove J3 post-suite capture/verify; full native suites and temporary scheduler proof remain mandatory. |
-
 | `Sources/BCRSurfaceDomain/SurfaceKernelProjection.swift` | 52 / 2 | Remove six unused J3 JSON-only projections. Keep controlValue because the temporary O4 scheduler I/O archive still calls it; production typed projections remain. |
 | `Sources/BCRFoundation/Localization.swift` | 21 / 0 | Remove only DEBUG diagnostic language revision/snapshot used by the retired J3 memo; keep language locking, observation and localization product behavior unchanged. |
 
