@@ -17,6 +17,9 @@ TRACE_ENV = "BCR_J4_SHADOW_ROOT"
 REPLAY_ENV = "BCR_J4_REPLAY_ARCHIVE"
 REPLAY_CASE = "BCRAgentCoreTests.J4SchedulerArchiveReplayTests/testReplayRecordedNativeSchedulerInputs"
 SESSION_REPLAY_CASE = "BCRAgentCoreTests.J4SessionSchedulerArchiveReplayTests/testReplayRecordedSessionInputs"
+PRODUCT_QUEUE_REPLAY_CASE = (
+    "BCRAgentCoreTests.O4RuntimeQueueArchiveTests/testReplayOriginalBCRQueueInputsWithProductQueue"
+)
 
 
 def _object(pairs):
@@ -316,6 +319,33 @@ def _bundle(binary: Path, module: str):
     return candidates[0]
 
 
+def verify_product_queue(root, directory, trace, executable, binary, environment, historical, remaining):
+    """Replay the actual product queue independently, after the historical proof has run."""
+    report_path = directory / "o4-product-queue-proof.json"
+    env = {**environment, "BCR_O4_QUEUE_ARCHIVE": str(trace), "BCR_O4_QUEUE_REPORT": str(report_path)}
+    result = measured_child(
+        [executable, "-XCTest", PRODUCT_QUEUE_REPLAY_CASE, str(_bundle(binary, "BCRAgentCoreTests"))],
+        root=root,
+        environment=env,
+        log_path=directory / "o4-product-queue-replay.log",
+        timeout=remaining,
+    )
+    if result["exit_code"] or not report_path.is_file():
+        raise RuntimeError("O4 product queue replay failed or produced no proof")
+    report = _load(report_path.read_text())
+    if (
+        report.get("input_operations") != historical["input_operations"]
+        or report.get("compared_operations") != historical["input_operations"]
+        or report.get("operation_counts") != historical["operation_counts"]
+        or report.get("owners") != historical["owners"]
+        or report.get("exact_bucket_differences") != 0
+        or report.get("input_only_cold_replay") is not True
+        or report.get("native_used_as_state_seed") is not False
+    ):
+        raise RuntimeError("O4 product queue replay did not prove the same complete scheduler input family")
+    print("Verified O4 independent product queue replay: " + str(report_path), flush=True)
+
+
 def verify(root: Path, directory: Path, trace: Path | None, remaining: float):
     if trace is None:
         return
@@ -416,6 +446,16 @@ def verify(root: Path, directory: Path, trace: Path | None, remaining: float):
     print(
         "Verified temporary scheduler input-only current/cold replay: " + str(directory / "feedback-shadow-proof.json"),
         flush=True,
+    )
+    verify_product_queue(
+        root,
+        directory,
+        trace,
+        executable,
+        binary,
+        environment,
+        report,
+        max(0.001, remaining - (time.monotonic() - began)),
     )
 
 
