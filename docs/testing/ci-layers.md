@@ -128,3 +128,7 @@ delivery 没取得 hosted runner，steps 为空而被取消；GitHub 原注释�
 独立自动 proof run `44136715097` 也因未取得 hosted runner 被取消，未执行原完整证明。
 按本轮规则，不继续性能优化循环；F-2 切换和 F-5 交付不放行。
 同 SHA 另行手动触发的证明及后续提交的精确终态记录在工作区 `reports/B.md`，不以新 run 回填上述失败。
+
+## 逐推送 macOS runner
+
+常规 `checks` 和 `delivery` 使用 `macos-26-intel` 的独立虚拟机。上轮 `2e9693b` 的两项逐推送作业均未取得 arm64 runner，GitHub 容量注释见 run `44143231642`。Intel 的编译缓存、桌面辅助程序缓存与 arm64 分开。独立完整证明继续使用 arm64，发布 workflow 沿用现有架构矩阵。普通 CI 以实际完成的整套运行核对 300 秒，包含排队与冷编译。

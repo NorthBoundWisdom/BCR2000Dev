@@ -113,11 +113,11 @@ class CIJobBudgetTests(unittest.TestCase):
     def test_native_binary_cache_is_scoped_to_selected_runner_image(self):
         text = (Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml").read_text()
         native, delivery = text.split("  checks:\n")[1].split("  delivery:\n")
-        self.assertEqual(text.count("runs-on: macos-26"), 2)
-        self.assertEqual(native.count("swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}"), 3)
+        self.assertEqual(text.count("runs-on: macos-26-intel\n"), 2)
+        self.assertEqual(native.count("swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}"), 3)
         self.assertNotIn("swiftpm-${{ runner.os }}-${{ env.SWIFT_ID }}", text)
-        self.assertIn("swiftpm-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}-", delivery)
-        self.assertIn("key: delivery-${{ runner.os }}-macos-26-${{ env.SWIFT_ID }}", delivery)
+        self.assertIn("swiftpm-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}-", delivery)
+        self.assertIn("key: delivery-${{ runner.os }}-macos-26-intel-${{ env.SWIFT_ID }}", delivery)
         self.assertNotIn("key: swiftpm-", delivery)
         for recipe in (
             "tools/desktop_audit.swift",
