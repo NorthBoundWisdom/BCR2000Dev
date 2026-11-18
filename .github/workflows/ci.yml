@@ -81,7 +81,7 @@ jobs:
           RESTORED_BUILD_KEY: ${{ steps.build-cache.outputs.cache-matched-key }}
         run: python3 configs/ci_job_budget.py --cache-key "$RESTORED_BUILD_KEY"
   checks:
-    # Keep the native test and GUI critical path on arm64; delivery runs independently on Intel.
+    # Run native regressions on arm64; Intel delivery also runs foreground GUI acceptance.
     runs-on: macos-26
     timeout-minutes: 20
     steps:
@@ -154,14 +154,11 @@ jobs:
         env:
           BCR_CI_NATIVE_LAYERS: representative
         run: python3 configs/ci_parallel_checks.py tests --native-precompiled
-      - run: python3 configs/macos_workflow.py build --distribution ad-hoc
-      - run: python3 configs/macos_workflow.py smoke
-      - run: python3 tools/mcp_integration.py
       - run: git diff --check
       - name: Confirm native and isolated MCP products exited
         if: ${{ !cancelled() }}
         run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/native-processes-exited.json
-      - name: Preserve test and MCP acceptance logs
+      - name: Preserve native regression and proof logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -170,10 +167,6 @@ jobs:
             build/ci-status-panel-demo/
             build/test-runs/
             build/ci-verification/
-            build/mcp-integration/*/*.log
-            build/mcp-integration/*/*.json
-            build/mcp-integration/*/*.jsonl
-            build/mcp-integration/*/*.txt
           retention-days: 7
           if-no-files-found: error
       - name: Report whole-run wall time and enforce 300s budget
@@ -245,7 +238,14 @@ jobs:
         run: python3 configs/verify_display_budget.py --binary build/ci-surface-provider/BCRProviderService --output build/ci-display-budget
       - name: Isolated real-time synthetic status demo acceptance
         run: python3 build/ci-surface-provider/diagnostics/verify_status_panel_demo.py --artifact build/ci-surface-provider --output build/ci-status-panel-demo
-      - name: Preserve delivery acceptance and timing evidence
+      - run: python3 configs/macos_workflow.py build --distribution ad-hoc
+      - run: python3 configs/macos_workflow.py smoke
+      - run: python3 tools/mcp_integration.py
+      - run: git diff --check
+      - name: Confirm GUI smoke and isolated MCP products exited
+        if: ${{ !cancelled() }}
+        run: python3 configs/assert_ci_processes_exited.py --output build/ci-verification/native-processes-exited.json
+      - name: Preserve delivery, GUI and timing evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -258,6 +258,10 @@ jobs:
             build/ci-surface-client-roles/
             build/ci-surface-hardware-roles/
             build/ci-multiple-displays/
+            build/mcp-integration/*/*.log
+            build/mcp-integration/*/*.json
+            build/mcp-integration/*/*.jsonl
+            build/mcp-integration/*/*.txt
       - name: Report whole-run wall time and enforce 300s budget
         if: always()
         env:
