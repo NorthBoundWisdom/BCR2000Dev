@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
+import runpy
 from pathlib import Path
 import shutil
 import subprocess
@@ -116,16 +116,22 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     if not binary.is_file() or not bundle.is_dir() or not profile_tool.is_file():
         raise ValueError("Provider executable or resource bundle missing")
     output.mkdir(parents=True)
+    stage = output.resolve(strict=True)
+    shared = shared.resolve(strict=True)
+    support = runpy.run_path(str(kit / "tools/delivery_support.py"))
     shutil.copy2(binary, output / "BCRProviderService")
     shutil.copy2(profile_tool, output / "BCRProfileTool")
     shutil.copytree(bundle, output / bundle.name)
     sdk = output / "bcr-provider-sdk-1.0.0.zip"
-    with zipfile.ZipFile(sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted((ROOT / "Clients/Python/bcr_provider").glob("*.py")):
-            info = zipfile.ZipInfo("bcr_provider/" + path.name, date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, path.read_bytes())
+    support["write_zip"](
+        ROOT,
+        stage,
+        sdk.name,
+        (
+            (path.relative_to(ROOT), "bcr_provider/" + path.name)
+            for path in sorted((ROOT / "Clients/Python/bcr_provider").glob("*.py"))
+        ),
+    )
     surface_sdk = output / f"surface-control-sdk-{SURFACE_SDK}.zip"
     sdk_sources = sorted(
         path
@@ -135,12 +141,12 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
     )
     if not any(path.parent.name == "surface_conformance" for path in sdk_sources):
         raise ValueError("Locked shared package has no conformance checker")
-    with zipfile.ZipFile(surface_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sdk_sources:
-            info = zipfile.ZipInfo(str(path.relative_to(shared / "clients/python")), date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, path.read_bytes())
+    support["write_zip"](
+        shared,
+        stage,
+        surface_sdk.name,
+        ((path.relative_to(shared), path.relative_to(shared / "clients/python")) for path in sdk_sources),
+    )
     metadata = sdk_metadata(
         output, SURFACE_SDK, json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"]
     )
@@ -152,19 +158,18 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         for path in (shared / "clients/python/surface_control_testing").rglob("*")
         if path.is_file() and path.suffix in (".py", ".md")
     )
-    with zipfile.ZipFile(testing_sdk, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in test_support_sources:
-            info = zipfile.ZipInfo(str(path.relative_to(shared / "clients/python")), date_time=(1980, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            archive.writestr(info, path.read_bytes())
+    support["write_zip"](
+        shared,
+        stage,
+        testing_sdk.name,
+        ((path.relative_to(shared), path.relative_to(shared / "clients/python")) for path in test_support_sources),
+    )
     with zipfile.ZipFile(surface_sdk) as archive:
         if any(name.startswith("surface_control_testing/") for name in archive.namelist()):
             raise ValueError("Runtime SDK must not contain test doubles")
     shutil.copy2(ROOT / "docs/provider-tool-compatibility.json", output / "provider-tool-compatibility.json")
     shutil.copy2(ROOT / "configs/surface_conformance_roles.json", output / "conformance-roles.json")
-    for published, source in SURFACE_FILES.items():
-        shutil.copy2(shared / source, output / published)
+    support["copy_files"](shared, stage, ((source, name) for name, source in SURFACE_FILES.items()))
     # Static description of the --simulation-profile configuration, printed by the delivered binary.
     contract = subprocess.run(
         [str(output / "BCRProviderService"), "--describe-surface"], check=True, capture_output=True, cwd=output
@@ -356,11 +361,7 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
         shutil.copy2(ROOT / "LICENSE", output / "LICENSE")
 
     def hashes():
-        return {
-            str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(output.rglob("*"))
-            if path.is_file()
-        }
+        return support["inventory"](stage)
 
     source_commit, dirty = run("git", "rev-parse", "HEAD"), bool(run("git", "status", "--porcelain"))
     source_unpushed = int(run("git", "rev-list", "--count", "origin/main..HEAD")) > 0
@@ -468,15 +469,15 @@ def package(output, configuration="release", skip_build=False, hardware_map=None
             else []
         ),
         "surface_plugins_revision": json.loads((ROOT / "configs/surface_plugins.lock.json").read_text())["revision"],
-        "surface_plugins_files_sha256": {
-            source: hashlib.sha256((shared / source).read_bytes()).hexdigest()
-            for source in sorted(
+        "surface_plugins_files_sha256": support["hash_files"](
+            shared,
+            sorted(
                 [
                     *SURFACE_FILES.values(),
-                    *(str(path.relative_to(shared)) for path in [*sdk_sources, *test_support_sources]),
+                    *(path.relative_to(shared).as_posix() for path in [*sdk_sources, *test_support_sources]),
                 ]
-            )
-        },
+            ),
+        ),
     }
     # `artifact` is the one common field that collides with Provider 1.0 (its consumers require
     # "BCRProviderService"), so a surface-only manifest carries the neutral value. It lists every
