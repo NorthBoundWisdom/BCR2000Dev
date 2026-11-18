@@ -106,6 +106,21 @@ def startup_failure(app, directory, reason):
     return RuntimeError(report)
 
 
+def wait_for_listener(app, client, directory):
+    deadline = time.monotonic() + 15
+    while (remaining := deadline - time.monotonic()) > 0:
+        if app.poll() is not None:
+            raise startup_failure(app, directory, "isolated app exited before listening")
+        try:
+            status, _ = client.rpc("ping", timeout=min(5, remaining))
+        except (TimeoutError, ConnectionError, urllib.error.URLError):
+            status = None
+        if status == 200 and time.monotonic() < deadline:
+            return
+        time.sleep(min(0.1, max(0, deadline - time.monotonic())))
+    raise startup_failure(app, directory, "isolated listener did not start on the configured port")
+
+
 def main(argv=None):
     args = parse_arguments(argv)
     offscreen = uses_offscreen(args)
@@ -179,18 +194,7 @@ def main(argv=None):
             (directory / "app-pid.txt").write_text(str(app.pid))
             try:
                 client = Client(environment["BCR_MCP_URL"], token)
-                deadline = time.monotonic() + 15
-                while time.monotonic() < deadline:
-                    if app.poll() is not None:
-                        raise startup_failure(app, directory, "isolated app exited before listening")
-                    try:
-                        if client.rpc("ping")[0] == 200:
-                            break
-                    except urllib.error.URLError:
-                        pass
-                    time.sleep(0.1)
-                else:
-                    raise startup_failure(app, directory, "isolated listener did not start on the configured port")
+                wait_for_listener(app, client, directory)
                 (directory / "lifecycle-phase.txt").write_text("protocol")
                 for flags in ([], ["--legacy"]):
                     subprocess.run(

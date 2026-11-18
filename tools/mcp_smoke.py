@@ -21,7 +21,7 @@ class Client:
         self.source = None
         self.require_mock = False
 
-    def rpc(self, method, params=None, notification=False, token=None, extra_headers=None):
+    def rpc(self, method, params=None, notification=False, token=None, extra_headers=None, *, timeout=5):
         self.request_id += 1
         params = dict(params or {})
         version = LEGACY if self.legacy else CURRENT
@@ -51,7 +51,7 @@ class Client:
             headers["X-BCR-Require-Source"] = "mock"
         request = urllib.request.Request(self.url, json.dumps(body, allow_nan=False).encode(), headers, method="POST")
         try:
-            with urllib.request.urlopen(request, timeout=5) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 self.source = response.headers.get("X-BCR-Source")
                 if response.headers.get("Mcp-Session-Id"):
                     self.session = response.headers["Mcp-Session-Id"]
