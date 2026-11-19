@@ -35,6 +35,7 @@ final class ButtonPreviewTests: XCTestCase {
         let button = BCRControlID.button(row: 1, 1)
         XCTAssertTrue(plan.hardwareMap.isVisualizationOnly(button))
         XCTAssertNotNil(plan.hardwareMap.midi(for: .userButton(1)))
+        XCTAssertEqual(plan.hardwareMap.pressMode(for: .userButton(1)), .momentary)
         XCTAssertEqual(plan.hardwareMap.pressMode(for: .pushEncoderButton(group: 1, 1)), .momentary)
         XCTAssertEqual(plan.hardwareMap.pressMode(for: .button(row: 1, 1)), .pulse)
         var engine = SurfaceEngine(hardwareMap: plan.hardwareMap, configuration: .robotArmDemo())
@@ -42,6 +43,34 @@ final class ButtonPreviewTests: XCTestCase {
         XCTAssertTrue(engine.fullFeedback().isEmpty)
         let decoded = try JSONDecoder().decode(HardwareMap.self, from: JSONEncoder().encode(plan.hardwareMap))
         XCTAssertEqual(decoded, plan.hardwareMap)
+    }
+
+    func testLearnsStandardNoteButtonsAndReportsDuplicatesAndCustomOutput() async throws {
+        let lines = [
+            "$rev R1", "$preset", ".egroups 4",
+            "$button 33", ".easypar NOTE 3 60 64 toggleoff",
+            "$button 34", ".easypar NOTE 3 61 127 toggleon",
+            "$button 35", ".easypar NOTE 3 60 127 toggleoff",
+            "$button 36", ".easypar NOTE 3 62 127 toggleoff", ".tx $93 $3E $01",
+            "$button 37", ".easypar NOTE 3 63 128 toggleoff", "$end"
+        ]
+        let bytes = dump(lines)
+        let plan = try BCRPresetButtonLearning.prepare(dump: bytes, existingMap: HardwareMap())
+        let momentary = BCRControlID.button(row: 1, 1)
+        let latch = BCRControlID.button(row: 1, 2)
+        XCTAssertEqual(plan.hardwareMap.midi(for: momentary), .init(kind: .note, channel: 2, number: 60))
+        XCTAssertEqual(plan.hardwareMap.pressMode(for: momentary), .momentary)
+        XCTAssertEqual(plan.hardwareMap.midi(for: latch), .init(kind: .note, channel: 2, number: 61))
+        XCTAssertEqual(plan.hardwareMap.pressMode(for: latch), .pulse)
+        XCTAssertTrue(plan.hardwareMap.isVisualizationOnly(momentary))
+        XCTAssertTrue(plan.hardwareMap.isVisualizationOnly(latch))
+        XCTAssertEqual(plan.unsupported, (3 ... 5).map { .button(row: 1, $0) })
+
+        let report = try BCRPresetInspection.inspect(bytes, format: .sysEx)
+        let inspectedAddress = try XCTUnwrap(report.presets.first?.elements.first?.bindings.first?.address)
+        XCTAssertEqual(inspectedAddress.message, .note)
+        XCTAssertEqual(inspectedAddress.channel, 3)
+        XCTAssertEqual(inspectedAddress.number, 60)
     }
 
     func testExistingFunctionalBindingRemainsFunctionalAndConflictingIdentityIsRejected() async throws {

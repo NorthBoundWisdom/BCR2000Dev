@@ -72,6 +72,38 @@ final class BCRPresetInspectionTests: XCTestCase {
         XCTAssertThrowsError(try BCRPresetInspection.inspect(bytes, format: .sysEx))
     }
 
+    func testWrappedArchiveKeepsAbsoluteLineNumbersAndRejectsIncorrectWireIndex() throws {
+        let prefix = ["$rev R1", "$global"] + Array(repeating: ".rxch off", count: 0x4000 - 2)
+        let bytes = BCLFixtures.dump(prefix + [".deadtime 20", "$preset", ".egroups 4", "$end"])
+        let report = try BCRPresetInspection.inspect(bytes, format: .sysEx)
+        XCTAssertEqual(report.sysExIndexWrapLines, [0x4001])
+        XCTAssertEqual(report.globalTimingSettings?.first?.line, 0x4001)
+        XCTAssertEqual(report.presets.first?.line, 0x4002)
+        XCTAssertThrowsError(try BCRPresetButtonLearning.prepare(dump: bytes, existingMap: HardwareMap()))
+
+        var invalid = bytes
+        invalid[BCLFixtures.dump(prefix).count + 8] = 1
+        XCTAssertThrowsError(try BCRPresetInspection.inspect(invalid, format: .sysEx))
+    }
+
+    func testGlobalTimingReportsMissingAndInvalidSettingsWithoutDefaultingValues() throws {
+        let text = [
+            "$rev R1", "$global", ".deadtime 0", ".txinterval 5", "$preset",
+            ".deadtime 100", "$global", ".deadtime 1001", ".txinterval 3",
+            ".deadtime malformed", "$end"
+        ].joined(separator: "\n")
+        let report = try BCRPresetInspection.inspect(Data(text.utf8), format: .text)
+        let settings = try XCTUnwrap(report.globalTimingSettings)
+        XCTAssertEqual(settings.map(\.kind), [.deadTime, .transmitInterval, .deadTime, .transmitInterval, .deadTime])
+        XCTAssertEqual(settings.map(\.line), [3, 4, 8, 9, 10])
+        XCTAssertEqual(settings.map(\.milliseconds), [0, 5, 1001, 3, nil])
+        XCTAssertEqual(settings.map(\.valid), [true, true, false, false, false])
+        XCTAssertNil(report.sysExIndexWrapLines)
+        let bare = try BCRPresetInspection.inspect(BCLFixtures.dump(["$rev R1", "$preset", "$end"]), format: .sysEx)
+        XCTAssertNil(bare.globalTimingSettings)
+        XCTAssertNil(bare.sysExIndexWrapLines)
+    }
+
     func testInventoriesNoteVelocityAndButtonsWithNoReleaseValue() throws {
         let preset = BCLFixtures.dump([
             "$rev R1", "$preset", "$button 1", ".easypar NOTE 2 64 100 toggleoff",

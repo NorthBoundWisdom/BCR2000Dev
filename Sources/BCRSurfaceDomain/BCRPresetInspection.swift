@@ -66,9 +66,21 @@ public enum BCRPresetInspection {
         public let slot: Int?
     }
 
+    public struct TimingSetting: Encodable, Sendable {
+        public enum Kind: String, Encodable, Sendable { case deadTime, transmitInterval }
+        public let line: Int
+        public let kind: Kind
+        public let milliseconds: Int?
+        public let valid: Bool
+    }
+
     public struct Report: Encodable, Sendable {
         public fileprivate(set) var presets: [Preset] = []
         public fileprivate(set) var directives: [Directive] = []
+        /// A nil value means the input did not declare either global timing setting.
+        public fileprivate(set) var globalTimingSettings: [TimingSetting]?
+        /// One-based archive line numbers where the 14-bit wire index returned to zero.
+        public fileprivate(set) var sysExIndexWrapLines: [Int]?
     }
 
     public static func inspect(_ data: Data, format: Format) throws -> Report {
@@ -81,10 +93,14 @@ public enum BCRPresetInspection {
             let text = source.first == "\u{FEFF}" ? source.dropFirst() : source[...]
             lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
         case .sysEx:
-            lines = try BCRPresetEncoderLearning.decodeLines(data, allowFileBroadcastAddress: true)
+            lines = try BCRPresetEncoderLearning.decodeLines(data, source: .offlineArchive)
         }
 
-        var report = Report(), inBlock = false
+        var report = Report(), inBlock = false, inGlobal = false
+        var timingSettings: [TimingSetting] = []
+        if format == .sysEx, lines.count > 0x4000 {
+            report.sysExIndexWrapLines = Array(stride(from: 0x4001, through: lines.count, by: 0x4000))
+        }
         var preset: Int?, element: Int?
         for (index, line) in lines.enumerated() {
             let lineNumber = index + 1
@@ -100,10 +116,12 @@ public enum BCRPresetInspection {
             case "$end":
                 guard words.count == 1 else { throw Failure.incompleteBlock }
                 inBlock = false
+                inGlobal = false
                 preset = nil
                 element = nil
             case "$preset":
                 guard words.count == 1 else { throw Failure.incompleteBlock }
+                inGlobal = false
                 preset = report.presets.count
                 report.presets.append(Preset(line: lineNumber))
                 element = nil
@@ -111,6 +129,7 @@ public enum BCRPresetInspection {
                 let kind: Directive.Kind = command == "$store" ? .store : (command == "$recall" ? .recall : .global)
                 let slot = words.count == 2 ? number(words[1]) : nil
                 report.directives.append(Directive(line: lineNumber, kind: kind, slot: slot))
+                inGlobal = kind == .global
                 preset = nil
                 element = nil
             case "$encoder", "$button":
@@ -122,6 +141,9 @@ public enum BCRPresetInspection {
                 report.presets[preset].elements.append(Element(line: lineNumber, kind: kind, number: id))
             default:
                 if command.hasPrefix("$") { throw Failure.incompleteBlock }
+                if inGlobal, let setting = timingSetting(words, line: lineNumber) {
+                    timingSettings.append(setting)
+                }
                 guard let preset else { continue }
                 if let element {
                     inspect(words, line: lineNumber, element: &report.presets[preset].elements[element])
@@ -133,6 +155,7 @@ public enum BCRPresetInspection {
             }
         }
         guard !inBlock, !report.presets.isEmpty || !report.directives.isEmpty else { throw Failure.incompleteBlock }
+        if !timingSettings.isEmpty { report.globalTimingSettings = timingSettings }
         for index in report.presets.indices { report.presets[index].findDuplicates() }
         return report
     }
@@ -154,17 +177,19 @@ public enum BCRPresetInspection {
         }
     }
 
-    private static func binding(_ words: [Substring], line: Int, kind: Element.Kind) -> Binding? {
-        guard words.count >= 4, let message = Address.Message(rawValue: String(words[1])),
+    static func binding(_ words: [Substring], line: Int, kind: Element.Kind) -> Binding? {
+        guard words.count >= 4, words[0] == ".easypar", let message = Address.Message(rawValue: String(words[1])),
               let channel = number(words[2]), (1 ... 16).contains(channel),
               let id = number(words[3]), (0 ... (message == .nrpn ? 16383 : 127)).contains(id)
         else { return nil }
         let address = Address(message: message, channel: channel, number: id)
         if message == .note {
-            guard kind == .button, words.count == 6, let velocity = number(words[4]), (0 ... 127).contains(velocity),
-                  ["toggleon", "toggleoff"].contains(words[5])
+            // Also accept the explicit zero release field recognized by older profile tools.
+            guard kind == .button, words.count == 6 || (words.count == 7 && number(words[5]) == 0),
+                  let velocity = number(words[4]), (0 ... 127).contains(velocity),
+                  let mode = words.last, ["toggleon", "toggleoff"].contains(mode)
             else { return nil }
-            return Binding(line: line, address: address, mode: String(words[5]), dataBits: 7,
+            return Binding(line: line, address: address, mode: String(mode), dataBits: 7,
                            value1: 0, value2: velocity, incrementStep: nil)
         }
         guard words.count >= 7, let first = number(words[4]) else { return nil }
@@ -201,6 +226,19 @@ public enum BCRPresetInspection {
 
     private static func number(_ word: Substring) -> Int? {
         word.first == "$" ? Int(word.dropFirst(), radix: 16) : Int(word)
+    }
+
+    private static func timingSetting(_ words: [Substring], line: Int) -> TimingSetting? {
+        let value = words.count == 2 ? number(words[1]) : nil
+        switch words[0] {
+        case ".deadtime":
+            return TimingSetting(line: line, kind: .deadTime, milliseconds: value,
+                                 valid: value.map { (0 ... 1000).contains($0) } ?? false)
+        case ".txinterval":
+            return TimingSetting(line: line, kind: .transmitInterval, milliseconds: value,
+                                 valid: value.map { [2, 5, 10, 20, 50, 100].contains($0) } ?? false)
+        default: return nil
+        }
     }
 
     private static func statement(in line: String) -> Substring {

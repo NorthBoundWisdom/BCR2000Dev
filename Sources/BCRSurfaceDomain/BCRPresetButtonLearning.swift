@@ -14,9 +14,9 @@ public enum BCRPresetButtonLearning {
         guard lines.first == "$rev R1", lines.last == "$end",
               lines.filter({ $0 == "$preset" }).count == 1,
               lines.filter({ $0.hasPrefix(".egroups ") }) == [".egroups 4"] else { throw HardwareSnapshotError.invalid }
-        var blocks: [Int: [String]] = [:]
+        var blocks: [Int: [(line: Int, text: String)]] = [:]
         var button: Int?
-        for line in lines {
+        for (offset, line) in lines.enumerated() {
             if line.hasPrefix("$") {
                 button = nil
                 if line.hasPrefix("$button ") {
@@ -25,7 +25,7 @@ public enum BCRPresetButtonLearning {
                     }
                     blocks[number] = []; button = number
                 }
-            } else if let button { blocks[button, default: []].append(line) }
+            } else if let button { blocks[button, default: []].append((offset + 1, line)) }
         }
         var map = try existingMap.migrated()
         var missing: [BCRControlID] = [], unsupported: [BCRControlID] = []
@@ -34,17 +34,19 @@ public enum BCRPresetButtonLearning {
                 ? .pushEncoderButton(group: (number - 1) / 8 + 1, (number - 1) % 8 + 1)
                 : (number <= 48 ? .button(row: (number - 33) / 8 + 1, (number - 33) % 8 + 1) : .userButton(number - 48))
             guard let block = blocks[number], !block.isEmpty else { missing.append(control); continue }
-            let definitions = block.filter { $0.hasPrefix(".easypar ") }
-            let words = definitions.first?.split(separator: " ").map(String.init) ?? []
-            guard definitions.count == 1, !block.contains(where: { $0.hasPrefix(".tx ") }),
-                  words.count >= 7, ["CC", "NOTE"].contains(words[1]),
-                  let channel = UInt8(words[2]), (1 ... 16).contains(channel),
-                  let id = UInt8(words[3]), id < 128,
-                  ["toggleon", "toggleoff", "increment"].contains(words[6])
+            let definitions = block.filter { $0.text.hasPrefix(".easypar ") }
+            guard definitions.count == 1, let definition = definitions.first,
+                  !block.contains(where: { $0.text == ".tx" || $0.text.hasPrefix(".tx ") }),
+                  let binding = BCRPresetInspection.binding(
+                      definition.text.split(whereSeparator: \.isWhitespace), line: definition.line, kind: .button
+                  ),
+                  binding.address.message == .cc || binding.address.message == .note
             else {
                 unsupported.append(control); continue
             }
-            let midi = MIDIControlID(kind: words[1] == "CC" ? .controlChange : .note, channel: channel - 1, number: id)
+            let address = binding.address
+            let midi = MIDIControlID(kind: address.message == .cc ? .controlChange : .note,
+                                     channel: UInt8(address.channel - 1), number: UInt8(address.number))
             if let other = map.control(for: midi), other != control {
                 unsupported.append(control); continue
             }
@@ -52,8 +54,9 @@ public enum BCRPresetButtonLearning {
                 guard previous == midi else { throw HardwareSnapshotError.invalid }
             }
             let preview = map.midi(for: control) == nil || map.isVisualizationOnly(control)
-            let pressMode: HardwarePressMode = words[6] == "toggleoff" && words[4] == "127" && words[5] == "0" ?
-                .momentary : .pulse
+            let sendsPressAndRelease = address.message == .note
+                ? (binding.value2 ?? 0) > 0 : binding.value1 == 127 && binding.value2 == 0
+            let pressMode: HardwarePressMode = binding.mode == "toggleoff" && sendsPressAndRelease ? .momentary : .pulse
             try map.bind(control, to: midi, visualizationOnly: preview, pressMode: pressMode)
         }
         return Plan(hardwareMap: map, unconfigured: missing, unsupported: unsupported)

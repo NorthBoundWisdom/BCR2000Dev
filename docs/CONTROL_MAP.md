@@ -395,8 +395,9 @@ BCR 按钮灯不闪烁，`blink` 只是语义状态，Mock 中静态显示为 96
 不改变其他按键、MIDI 身份、灯环或按压模式，不同步或写入设备。确认期间身份变化时拒绝旧请求。
 旧映射的身份、灯环模式和功能保持原语义，迁移通过既有保护文件流程显示提示并备份。
 
-`BCRProfileTool --buttons <capture-directory> <profile-directory>` 仅暂存由当前预设回读生成的按钮映射，
-不安装本机文件、不向硬件写入。不支持的消息定义、缺少定义和与其他控件同址的按键分别报告，
+`BCRProfileTool --buttons <capture-directory> <profile-directory>` 仅暂存由当前预设回读生成的按钮映射。
+标准 Note 定义使用一项 velocity，`toggleoff` 在松开时返回零。工具不安装本机文件、不向硬件写入。
+不支持的消息定义、缺少定义和与其他控件同址的按键分别报告，
 不按面板位置猜 MIDI 地址、不覆盖旧身份。未发消息的硬件按键无法触发软件动画；修改设备预设需单独确认。
 
 

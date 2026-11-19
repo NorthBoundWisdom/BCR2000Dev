@@ -9,9 +9,17 @@ swift run --build-path build/swiftpm BCRProfileTool --inspect-preset /path/to/pr
 
 工具也接受文本 `.bcr` 和 `.txt`。它读取本地文件，将 BCR2000 `$rev R1` 预设清单输出为 JSON。报告包含每个预设的编码器组数、CC／Note／NRPN 地址、已识别模式和数据位宽、`.minmax`、自定义发送所在行，以及同一预设内的重复地址。命令列表单独标出 `$store`、`$recall` 和 `$global`。行号从 1 开始，文本按文件行号，SysEx 按传输行号。预设名、自定义输出载荷和源文件内容不进入报告。
 
+整库 SysEx 回读的 14 位传输索引在 16,383 之后回到 0。预检用 `sysExIndexWrapLines` 标出回绕的文件行，报告中的其他行号继续递增。固件将收到的索引 0 当作新传输的开始，因此设备回读的回绕文件应保留为离线档案。 [B-Control MIDI Implementation §7.2](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)
+
 `$store` 会覆盖指定的设备存储槽。重复的 `.easypar` 地址也可能是预设作者有意设置的同步关系。工具仅提供离线清单，设备映射仍须通过 Quick Learn 或当前临时预设与设备快照核对。批量旋钮学习目前以四组、56 个身份唯一的普通绝对 CC 为边界。 [B-Control MIDI Implementation §§14.9、19](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)
 
 遇到设备拒绝或超时，预设对齐和恢复会显示传输行号、BCL 命令及此前已确认的行数。设备拒绝还显示原始错误码和已知含义。设备 ACK 是该行的传输证据，整次操作以完整回读为准。 [BCR2000_Master](https://github.com/christofmuc/BCR2000_Master) · [B-Control MIDI Implementation §21](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)
+
+## 旋钮回写时序诊断
+
+将设备的只读全局设置回读（Request Global Setup，`0x41`）保存为本地 BCL 或 SysEx 后，用同一个 `--inspect-preset` 命令检查。报告的 `globalTimingSettings` 逐行列出 `.deadtime` 和 `.txinterval` 的毫秒声明值，并标示数值是否有效。缺少声明的设置在报告中留空。实际配置以设备回读为准。 [B-Control MIDI Implementation §§6.1、12.6–12.7](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)
+
+现场核对同一个已学旋钮的输入时间、App 发送结果和灯环变化。记录转动后立即反馈、停止后超过 `Dead Time` 再反馈的差别。设备端 `Dead Time` 可令旋钮暂时忽略收到的消息，主机发送成功仍须用灯环或快照确认。按键不受这个设备设置影响。 `Transmission Interval` 限制旋钮输入的发送频率，App 的回显过滤处理主机收到的消息。 [darktable 实机说明](https://docs.darktable.org/usermanual/development/en/special-topics/midi-device-support/#behringer-bcr2000--bcf2000) · [B-Control MIDI Implementation §§12.6–12.7](https://mountainutilities.eu/system/files/download/BC-MIDI-Implementation-1.2.9.pdf)
 
 ## 编码器验收样本
 

@@ -110,8 +110,18 @@ public enum BCRPresetEncoderLearning {
         return Plan(hardwareMap: map, configuration: result)
     }
 
-    static func decodeLines(_ data: Data, allowFileBroadcastAddress: Bool = false) throws -> [String] {
+    enum DumpSource {
+        case livePreset, offlineArchive
+
+        /// The firmware wraps its 14-bit index when returning the full bank.
+        func wireIndex(for offset: Int) -> Int {
+            self == .offlineArchive ? offset % 0x4000 : offset
+        }
+    }
+
+    static func decodeLines(_ data: Data, source: DumpSource = .livePreset) throws -> [String] {
         guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { throw Failure.invalidMessage("预设大小无效") }
+        let acceptsBroadcast = source == .offlineArchive
         let bytes = Array(data)
         var offset = 0
         var lines: [String] = []
@@ -123,10 +133,10 @@ public enum BCRPresetEncoderLearning {
             }
             let frame = Array(bytes[offset ... end])
             guard frame[0 ... 3] == [0xF0, 0, 0x20, 0x32],
-                  frame[4] < 16 || (allowFileBroadcastAddress && frame[4] == 0x7F),
-                  frame[5] == 0x15 || (allowFileBroadcastAddress && frame[5] == 0x7F), frame[6] == 0x20,
+                  frame[4] < 16 || (acceptsBroadcast && frame[4] == 0x7F),
+                  frame[5] == 0x15 || (acceptsBroadcast && frame[5] == 0x7F), frame[6] == 0x20,
                   frame[1 ..< frame.count - 1].allSatisfy({ $0 < 128 }),
-                  Int(frame[7]) * 128 + Int(frame[8]) == lines.count,
+                  Int(frame[7]) * 128 + Int(frame[8]) == source.wireIndex(for: lines.count),
                   device == nil || device == frame[4], model == nil || model == frame[5],
                   frame[9 ..< frame.count - 1].allSatisfy({ (32 ... 126).contains($0) }),
                   let text = String(bytes: frame[9 ..< frame.count - 1], encoding: .ascii)

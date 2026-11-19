@@ -4,8 +4,8 @@ import Foundation
 /// Synthetic preset data shared by test targets; never a learned physical-device profile.
 public enum BCLFixtures {
     public static func dump(_ lines: [String], device: UInt8 = 0) -> Data {
-        Data(lines.enumerated().flatMap { index, line in
-            [0xF0, 0, 0x20, 0x32, device, 0x15, 0x20, UInt8(index >> 7), UInt8(index & 127)]
+        Data(lines.enumerated().flatMap { offset, line in
+            [0xF0, 0, 0x20, 0x32, device, 0x15, 0x20, UInt8((offset >> 7) & 127), UInt8(offset & 127)]
                 + Array(line.utf8) + [0xF7]
         })
     }
