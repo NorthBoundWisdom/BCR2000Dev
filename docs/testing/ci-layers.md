@@ -1,6 +1,6 @@
 # CI coverage
 
-The regular `checks`, `delivery`, and `gui` jobs run independently on Apple Silicon (`macos-26`). They run native and Python regressions, provider delivery acceptance, and GUI startup and MCP integration, respectively. The regular workflow enforces the 300-second whole-run budget. The release workflow uses Apple Silicon (`macos-15`) and verifies both slices of the universal packages. [Local commands for the portable targets](linux-targets.md) remain available.
+The regular `checks`, `delivery`, and `gui` jobs run independently on Apple Silicon (`macos-26`). They run native and Python regressions, provider delivery acceptance, and GUI startup and MCP integration, respectively. The regular workflow enforces the 300-second whole-run budget. The release workflow also uses Apple Silicon (`macos-26`) and verifies both slices of the universal packages. [Local commands for the portable targets](linux-targets.md) remain available.
 
 ## Historical W-2 scheduler proof retirement
 
