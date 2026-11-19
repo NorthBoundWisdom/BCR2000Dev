@@ -415,19 +415,23 @@ public final class CoreMIDIService: MIDIService, SurfaceSysExObserving, SurfaceI
             guard connection.hasSameRoute(as: route),
                   inputGeneration == generation else { throw CoreMIDIServiceError.outputUnavailable }
             let ack = UUID()
-            try await withTaskCancellationHandler {
-                try Task.checkCancellation()
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
-                    ackID = ack; ackIndex = index; ackContinuation = continuation
-                    do { try transport.sendBytes(frame, expectedGeneration: generation) }
-                    catch { finishAck(ack, result: .failure(error)); return }
-                    ackTimeout = Task { @MainActor [weak self] in
-                        do { try await Task.sleep(for: .seconds(2)) } catch { return }
-                        self?.finishAck(ack, result: .failure(MIDIStartupError.noReply))
+            do {
+                try await withTaskCancellationHandler {
+                    try Task.checkCancellation()
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                        ackID = ack; ackIndex = index; ackContinuation = continuation
+                        do { try transport.sendBytes(frame, expectedGeneration: generation) }
+                        catch { finishAck(ack, result: .failure(error)); return }
+                        ackTimeout = Task { @MainActor [weak self] in
+                            do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                            self?.finishAck(ack, result: .failure(MIDIStartupError.noReply))
+                        }
                     }
+                } onCancel: {
+                    Task { @MainActor [weak self] in self?.finishAck(ack, result: .failure(CancellationError())) }
                 }
-            } onCancel: {
-                Task { @MainActor [weak self] in self?.finishAck(ack, result: .failure(CancellationError())) }
+            } catch let cause as MIDIStartupError {
+                throw BCLPresetWriteFailure(index: index, frame: frame, cause: cause)
             }
             progress(index + 1)
         }

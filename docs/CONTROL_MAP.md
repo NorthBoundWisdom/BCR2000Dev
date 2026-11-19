@@ -66,6 +66,8 @@ Mock 模式下实体输入只记录在 MIDI 监视器中，不执行。
 
 ### 全台旋钮批量学习
 
+开发时可用 [离线预检](BCR_PRESET_DEVELOPMENT.md) 查看第三方 BCL／SysEx 的 MIDI 地址、模式和存储槽写入指令。
+
 除逐个 Quick Learn 外，可显式从**实体当前临时预设的完整 BCL 回读**学习全部旋钮，
 仍保存到同一个 `hardware-map.json`，不是应用 Mock 预设或推测出厂 CC。
 `BCRPresetEncoderLearning` 在 Core 校验连续行号、设备一致性、完整首尾、56 个唯一旋钮定义，

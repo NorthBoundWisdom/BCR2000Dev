@@ -173,6 +173,35 @@ final class MonotonicReceiptTests: XCTestCase {
         output.stop(); await process.stop()
     }
 
+    func testProductionOSCPeerRestartRequiresFreshStateAndAnExplicitEnableEdge() async throws {
+        let (process, port) = try await peer(.osc, flags: ["--restart-on-second-ping"])
+        let wall = ReceiptWall(manualMonotonic: true), source = adapter(.osc, wall: wall), counts = ReceiptCounts()
+        let (output, session) = controller(source, kind: .osc, port: port, wall: wall)
+        count(source, counts)
+        output.start()
+        try await wait { counts.heartbeats == 1 && counts.samples == 1 }
+        output.tick()
+        session.setParameter("enable", to: 1); output.tick()
+        XCTAssertEqual(output.status, .ready)
+
+        wall.advance(0.11); output.tick()
+        try await wait { counts.heartbeats == 2 && output.droppedPackets == 1 }
+        output.tick()
+        XCTAssertEqual(counts.samples, 1, "The late packet from the first peer must be discarded")
+        XCTAssertNotEqual(output.status, .ready)
+
+        wall.advance(0.11); output.tick()
+        try await wait { counts.heartbeats == 3 && counts.samples == 2 && output.droppedPackets == 3 }
+        output.tick()
+        XCTAssertEqual(output.actual["arm.j1"], -0.25)
+        XCTAssertNotEqual(output.status, .ready, "Fresh state alone must not re-enable output")
+        session.setParameter("enable", to: 0); output.tick()
+        session.setParameter("enable", to: 1); output.tick()
+        XCTAssertEqual(output.status, .ready)
+        XCTAssertEqual(output.outputs["arm.j1"], -0.25)
+        output.stop(); await process.stop()
+    }
+
     func testRealIOReceiptRetainsItsAgeWhileMainActorIsBlocked() async throws {
         for kind in [OutputTransportKind.osc, .webSocket] {
             let (process, port) = try await peer(kind, flags: ["--receipt-marker", "--delay-reply"])

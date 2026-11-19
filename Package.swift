@@ -213,7 +213,7 @@ let package = Package(
         ),
         .testTarget(
             name: "BCRNativeTransportTests",
-            dependencies: ["BCRCoreMIDIDriver", "BCRHTTPTransport"]
+            dependencies: ["BCRFoundation", "BCRCoreMIDIDriver", "BCRHTTPTransport"]
         ),
         .testTarget(
             name: "BCRAgentCoreTests",

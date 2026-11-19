@@ -33,7 +33,9 @@ private final class PresetDevice: MIDIService {
     func sendPresetFrames(_ frames: [[UInt8]], progress: @escaping @MainActor (Int) -> Void) async throws {
         for (index, frame) in frames.enumerated() {
             try Task.checkCancellation()
-            if let failAfter, index >= failAfter { throw MIDIStartupError.noReply }
+            if let failAfter, index >= failAfter {
+                throw BCLPresetWriteFailure(index: index, frame: frame, cause: .rejected(11))
+            }
             written.append(frame); progress(index + 1)
         }
         preset = Data(frames.joined())
@@ -89,6 +91,14 @@ final class PresetAlignmentFlowTests: XCTestCase {
         try await wait(model) { $0 == .preview }
         model.applyPresetAlignment()
         try await wait(model) { if case .failed = $0 { true } else { false } }
+        guard case let .failed(message) = model.presetAlignment?.phase else {
+            return XCTFail("Expected a preset write failure")
+        }
+        let error = L10n.text(message, language: .english)
+        XCTAssertTrue(error.contains("BCL line 11"), error)
+        XCTAssertTrue(error.contains("Confirmed lines: 10"), error)
+        XCTAssertEqual(model.mcp.service.call("get_preset_alignment").value.objectValue?["error"],
+                       .string(L10n.text(message)))
         XCTAssertEqual(model.presetAlignment?.canRestore, true)
         XCTAssertEqual(model.engine.hardwareMap, mapBefore)
         device.failAfter = nil

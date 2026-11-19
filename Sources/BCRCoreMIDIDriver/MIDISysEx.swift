@@ -13,6 +13,54 @@ public enum MIDIStartupError: LocalizedMessageError {
     }
 }
 
+struct BCLPresetWriteFailure: LocalizedMessageError {
+    let line: Int
+    let command: String
+    let cause: MIDIStartupError
+
+    init(index: Int, frame: [UInt8], cause: MIDIStartupError) {
+        line = index + 1
+        let payload = String(decoding: frame.dropFirst(9).dropLast(), as: UTF8.self)
+        let token = payload.split(whereSeparator: \.isWhitespace).first ?? ""
+        command = (2 ... 24).contains(token.count) && (token.first == "." || token.first == "$") &&
+            token.dropFirst().utf8.allSatisfy { (97 ... 122).contains($0) } ? String(token) : "BCL"
+        self.cause = cause
+    }
+
+    var localizedMessage: LocalizedMessage {
+        switch cause {
+        case .noReply:
+            "BCL 第 \(line) 行（\(command)）未收到应答，已确认 \(line - 1) 行"
+        case let .rejected(code):
+            "设备拒绝 BCL 第 \(line) 行（\(command)），错误 \(code)（\(Self.reason(code))），已确认 \(line - 1) 行"
+        case .invalidProgram:
+            cause.localizedMessage
+        }
+    }
+
+    private static func reason(_ code: Int) -> LocalizedMessage {
+        switch code {
+        case 1: "未知命令"
+        case 2: "缺少命令"
+        case 3: "缺少 MIDI 数据参数"
+        case 4: "设备型号无效"
+        case 5: "修订版本无效"
+        case 6: "缺少修订版本声明"
+        case 8: "缺少区块声明"
+        case 9: "控件编号超出范围"
+        case 10: "数字参数无效"
+        case 11: "参数值超出范围"
+        case 12: "文本参数无效"
+        case 13: "当前区块不支持此设定"
+        case 14: "参数个数无效"
+        case 15: "MIDI 输出数据超限"
+        case 18: "预设过于复杂"
+        case 22: "消息序号无效"
+        default: "设备未提供详细说明"
+        }
+    }
+}
+
 struct MIDISysEx7Chunk: Sendable {
     let group: UInt8
     let status: UInt8

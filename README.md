@@ -45,7 +45,7 @@ and the [hardware connection checklist](HARDWARE_CONNECT_TEST.md) for on-site pr
 | 🔁 **Bidirectional synchronization** | Software parameters are the source of truth: hardware input changes parameters, and parameters determine feedback. Sliders, knobs, and agent writes use the same pipeline. |
 | 🧪 **Works without hardware** | In Mock Device mode, the panel itself acts as simulated hardware. Drag knobs and press buttons to try the full workflow. |
 | 🔐 **Confirm synchronization before connecting** | With an existing mapping, choose to read hardware, write software values and connect, or defer connection. The device stays unchanged until confirmation. |
-| 🎓 **Learning and explicit preset alignment** | Learn individual controls or read existing mappings with bulk knob learning. Preset alignment starts with a backup and preview; only confirmation writes the temporary preset and verifies it by readback. Restoration survives app restarts. |
+| 🎓 **Learning and explicit preset alignment** | Learn individual controls or read existing mappings with bulk knob learning. Alignment backs up and previews changes before a confirmed temporary-preset write, verifies by readback, and reports the BCL line if the device rejects a write or times out. [Inspect third-party preset files offline.](docs/BCR_PRESET_DEVELOPMENT.md) |
 | 🤖 **Agent slots and MCP** | Eight slots can be started or interrupted by physical buttons. Connect a local Codex backend, review approvals on the Agent page, or use the local MCP service to read and write parameters from any client. |
 
 ## Interface tour

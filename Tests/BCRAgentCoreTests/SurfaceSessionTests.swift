@@ -92,6 +92,34 @@ final class SurfaceSessionTests: XCTestCase {
     private let a = BCRControlID.pushEncoder(group: 1, 1)
     private let b = BCRControlID.encoder(row: 1, 1)
 
+    func testMockPageNavigationKeepsPhysicalIdentityAndRestoresEachPagesFeedback() throws {
+        let next = BCRControlID.userButton(1)
+        var configuration = SurfaceConfiguration.starter()
+        try configuration.addPage(.init(id: "second", name: "Second", assignments: [
+            .init(control: a, target: .parameter("general.2")),
+            .init(control: next, target: .switchPage(SurfaceConfiguration.basePageID))
+        ]))
+        try configuration.assign(.init(control: next, target: .switchPage("second")))
+        let f = SessionFixture(configuration: configuration)
+        let map = f.session.engine.hardwareMap
+        let initialFeedback = f.mockDevice.model.value(of: a)
+        f.session.setParameter("general.2", to: 75)
+        f.mockDevice.press(next)
+        f.mockDevice.release(next)
+        XCTAssertEqual(f.session.engine.configuration.activePageID, "second")
+        XCTAssertEqual(f.mockDevice.model.value(of: a), 95)
+        f.mockDevice.move(a, to: 64)
+        let secondPageValue = 6400.0 / 127
+        XCTAssertEqual(try XCTUnwrap(f.session.engine.value(of: "general.2")), secondPageValue, accuracy: 1e-9)
+        f.state.time.addTimeInterval(0.3)
+        f.mockDevice.press(next)
+        f.mockDevice.release(next)
+        XCTAssertNil(f.session.engine.configuration.activePageID)
+        XCTAssertEqual(f.mockDevice.model.value(of: a), initialFeedback)
+        XCTAssertEqual(try XCTUnwrap(f.session.engine.value(of: "general.2")), secondPageValue, accuracy: 1e-9)
+        XCTAssertEqual(f.session.engine.hardwareMap, map)
+    }
+
     func testParameterObserversSeeBatchesAndCanUnsubscribe() async {
         let f = SessionFixture(configuration: mirroredConfiguration())
         var batches: [ParameterChangeBatch] = []

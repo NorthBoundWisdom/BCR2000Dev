@@ -96,6 +96,8 @@ R5 的安全门同时约束硬件、滑块和 MCP 三种来源的写入。
 
 ## R1 实机闭环验证（P0）
 
+Relative／NRPN 和非当前组灯环的验收样本见 [BCR2000 预设开发与兼容性](docs/BCR_PRESET_DEVELOPMENT.md)。
+
 1. 在实体模式下逐区学习全部 108 个控件，记录当前 Preset 的实际消息（CC / Note、通道）。
 2. 测量并记录 BCR2000 在 U-1 下的行为：
    - 收到反馈后是否回显（决定 `echoWindow` 是否保留 180 ms）；

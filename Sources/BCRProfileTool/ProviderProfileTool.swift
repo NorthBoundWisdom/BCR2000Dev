@@ -16,8 +16,22 @@ struct BCRProfileTool {
         }
         if args.count == 2, args[1] == "--help" {
             print(
-                "BCRProfileTool --describe-mock-map | <capture-directory> <profile-directory> | --stage-hardware-candidate <map> <roles> <new-dir> [--configuration PATH] | --verify-hardware-candidate <dir> | --buttons <capture> <profile> | --check-hardware-roles <learned-map.json> <role-request.json> [--configuration PATH] [--hardware-output observe|write] [--allow-surface-feedback]"
+                "BCRProfileTool --describe-mock-map | --inspect-preset <file> | <capture-directory> <profile-directory> | --stage-hardware-candidate <map> <roles> <new-dir> [--configuration PATH] | --verify-hardware-candidate <dir> | --buttons <capture> <profile> | --check-hardware-roles <learned-map.json> <role-request.json> [--configuration PATH] [--hardware-output observe|write] [--allow-surface-feedback]"
             )
+            return
+        }
+        if args.count >= 2, args[1] == "--inspect-preset" {
+            guard args.count == 3 else {
+                FileHandle.standardError.write(Data("Usage: BCRProfileTool --inspect-preset <file>\n".utf8))
+                exit(2)
+            }
+            do {
+                let report = try ProfileConversion.inspectPreset(file: URL(fileURLWithPath: args[2]))
+                print(String(decoding: report, as: UTF8.self))
+            } catch {
+                FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))
+                exit(2)
+            }
             return
         }
         if args.count >= 2, ["--stage-hardware-candidate", "--verify-hardware-candidate"].contains(args[1]) {

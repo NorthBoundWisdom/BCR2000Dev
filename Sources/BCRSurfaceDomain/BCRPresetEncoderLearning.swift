@@ -110,26 +110,29 @@ public enum BCRPresetEncoderLearning {
         return Plan(hardwareMap: map, configuration: result)
     }
 
-    static func decodeLines(_ data: Data) throws -> [String] {
+    static func decodeLines(_ data: Data, allowFileBroadcastAddress: Bool = false) throws -> [String] {
         guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { throw Failure.invalidMessage("预设大小无效") }
         let bytes = Array(data)
         var offset = 0
         var lines: [String] = []
         var device: UInt8?
+        var model: UInt8?
         while offset < bytes.count {
             guard let end = bytes[offset...].firstIndex(of: 0xF7), end - offset >= 10 else {
                 throw Failure.invalidMessage("SysEx 帧不完整")
             }
             let frame = Array(bytes[offset ... end])
-            guard frame[0 ... 3] == [0xF0, 0, 0x20, 0x32], frame[4] < 16,
-                  frame[5] == 0x15, frame[6] == 0x20,
+            guard frame[0 ... 3] == [0xF0, 0, 0x20, 0x32],
+                  frame[4] < 16 || (allowFileBroadcastAddress && frame[4] == 0x7F),
+                  frame[5] == 0x15 || (allowFileBroadcastAddress && frame[5] == 0x7F), frame[6] == 0x20,
                   frame[1 ..< frame.count - 1].allSatisfy({ $0 < 128 }),
                   Int(frame[7]) * 128 + Int(frame[8]) == lines.count,
-                  device == nil || device == frame[4],
+                  device == nil || device == frame[4], model == nil || model == frame[5],
                   frame[9 ..< frame.count - 1].allSatisfy({ (32 ... 126).contains($0) }),
                   let text = String(bytes: frame[9 ..< frame.count - 1], encoding: .ascii)
             else { throw Failure.invalidMessage("设备、行序号或 BCL 帧无效") }
             device = frame[4]
+            model = frame[5]
             lines.append(text.trimmingCharacters(in: .whitespaces))
             offset = end + 1
         }

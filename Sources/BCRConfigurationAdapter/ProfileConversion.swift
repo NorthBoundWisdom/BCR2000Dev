@@ -11,6 +11,25 @@ public enum ProfileConversion {
         return try encoder.encode(HardwareMap.mockPreset())
     }
 
+    public static func inspectPreset(file: URL) throws -> Data {
+        let format: BCRPresetInspection.Format
+        switch file.pathExtension.lowercased() {
+        case "bcl", "bcr", "txt": format = .text
+        case "syx": format = .sysEx
+        default:
+            throw NSError(domain: "BCRProfileTool", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Expected a .bcl, .bcr, .txt, or .syx preset file."
+            ])
+        }
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: BCRPresetInspection.maximumFileBytes + 1) ?? Data()
+        let report = try BCRPresetInspection.inspect(data, format: format)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(report)
+    }
+
     public static func prepareButtons(capture: URL,
                                       profile: URL) throws -> (mappings: Int, missing: Int, unsupported: Int)
     {
